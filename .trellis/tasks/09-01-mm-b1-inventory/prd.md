@@ -12,9 +12,9 @@
 
 ## Acceptance Criteria
 
-- [ ] Inventory covers every direct POC import from the product router and all transitive local dependencies.
-- [ ] Each source module has one target/disposition and test mapping.
-- [ ] The next migration slice is small, dependency-safe, and explicitly named.
+- [x] Inventory covers every direct POC import from the product router and all transitive local dependencies.
+- [x] Each source module has one target/disposition and test mapping.
+- [x] The next migration slice is small, dependency-safe, and explicitly named.
 
 ## Constraints
 
