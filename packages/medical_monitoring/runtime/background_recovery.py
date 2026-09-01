@@ -507,7 +507,7 @@ class BackgroundRecoveryAdapter:
                 build_preflight_diagnosis,
                 persist_preflight_diagnosis,
             )
-            from mm_r6.agent_harness import PreflightResult
+            from .agent_harness import PreflightResult
 
             bridge = getattr(runtime, "bridge", None)
             if bridge is None:

@@ -80,7 +80,7 @@ _ERROR_MESSAGES: Dict[str, str] = {
     "revision_not_found": "未找到指定修订的执行配置。",
     "append_conflict": "追加执行配置修订时发生冲突。",
     "store_closed": "存储已关闭，无法继续操作。",
-    "mm_r6_unavailable_for_builtin_seed": "无法加载内置默认执行配置（相邻适配层不可用）。",
+    "agent_harness_unavailable_for_builtin_seed": "无法加载内置默认执行配置（相邻适配层不可用）。",
     "unsupported_schema_version": "执行配置存储架构版本不受支持。",
     "invalid_payload_type": "执行配置载荷类型无效。",
     "unknown_mode": "不支持的监查运行模式。",

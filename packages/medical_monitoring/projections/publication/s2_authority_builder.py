@@ -3,8 +3,9 @@
 Derives one frozen :class:`mm_r5.s2_contracts.R5S2AuthorityPacket` from a
 synthetic D10 envelope through the REAL R4 typed pipeline (read-only):
 
-* :mod:`mm_r4.d10_adapter` ``build_typed_input`` turns the synthetic envelope
-  dict into the immutable :class:`mm_r4.d10_contracts.D10TypedInput`;
+* :mod:`medical_monitoring.risks.d10_typed_input` ``build_typed_input`` turns
+  the synthetic envelope dict into the immutable
+  :class:`mm_r4.d10_contracts.D10TypedInput` (package-native contracts);
 * :mod:`mm_r4.d10_evaluator` ``evaluate`` runs the deterministic evaluator
   against a :class:`mm_r4.d10_contracts.D10EvaluationAuthority` derived from
   the same envelope (this module reads no frozen artifact files -- the
@@ -67,6 +68,7 @@ from ...risks.d10_contracts import (
     d10_sha256_text,
 )
 from ...risks.d10_evaluator import D10RunResult, evaluate
+from ...risks.d10_typed_input import build_typed_input
 from ..d10 import (
     D10DeepLinkTarget,
     D10ProjectProjection,
@@ -616,11 +618,9 @@ def _query_decision_core(query: Mapping[str, Any]) -> Dict[str, Any]:
 
 
 def build_synthetic_d10_envelope() -> D10TypedInput:
-    """Build the synthetic D10 envelope through the REAL R4 test-only
-    adapter (``build_typed_input``), the same path the frozen catalog uses."""
-    from mm_r4 import d10_adapter as r4_adapter  # local import: test-only
-    return r4_adapter.build_typed_input(
-        build_synthetic_d10_envelope_dict())
+    """Build the synthetic D10 envelope through the pure structural mapping
+    converter (``build_typed_input``), the same path the frozen catalog uses."""
+    return build_typed_input(build_synthetic_d10_envelope_dict())
 
 
 def derive_d10_authority(typed: D10TypedInput) -> D10EvaluationAuthority:
