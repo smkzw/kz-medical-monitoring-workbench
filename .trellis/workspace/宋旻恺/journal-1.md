@@ -360,3 +360,11 @@
 - Every D03 source is below the 1,500-line hard limit (largest: `ip_types.py`, 1,172 lines). No drug, indication, study, threshold or listing-layout constant was introduced; those remain typed source-derived inputs.
 - Verification: original D03 slice, projection, challenge-matrix and shared-domain suites pass `279 passed`; the broader product surface passes `141 passed`; the protected medical-writing adjacent gate passes `156 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `risks/visit_schedule.py` typed contracts and deterministic schedule primitives, then continue through remaining files above the hard limit.
+
+## 2026-09-02 — B3 D05 visit-schedule domain decomposition
+
+- Split the 3,939-line D05 domain authority into immutable plan/type contracts, actual-record and cutoff/bundle logic, assignment and typed-anchor binding, and gate/evaluation-unit/Journey value-object modules behind the existing `risks.visit_schedule` facade.
+- Preserved the dual snapshot/cutoff boundary, stable identity versus lineage hashes, exact typed producer-anchor matching, closed gate accounting, and separate planned/actual/risk Journey marker schemas.
+- Every D05 domain source is below the 1,500-line hard limit (largest: `visit_schedule_types.py`, 1,382 lines). The first focused run exposed one private regex group omitted from the extracted imports and the original late `ScheduleGate` lookup; both were restored without changing contract behavior.
+- Verification: original D05 slice, projection and challenge-matrix suites pass `173 passed`; the broader product surface passes `141 passed`; the protected medical-writing adjacent gate passes `156 passed`; `py_compile` and `git diff --check` pass.
+- Next slice: split `runtime/project_backup.py` or the next dependency-safe oversized authority, preserving archive validation and one restore transaction boundary.
