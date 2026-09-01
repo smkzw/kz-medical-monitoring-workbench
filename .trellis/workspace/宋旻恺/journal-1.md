@@ -513,3 +513,11 @@
 - Verification: the live agent-harness behavior excluding obsolete static/optimizer gates passes `24 passed`; R7 harness-runtime and run-binding adjacency passes `58 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate passes `297 passed`; both modules pass `py_compile`, and `git diff --check` passes.
 - The full historical R6 file reports 11 expected obsolete failures: nine isolated optimizer/hash-seed probes cannot import the post-consolidation `packages` authority from their frozen POC-only path, one frozen medical-writing file count is stale, and one create-only file allowlist is stale. These stage-B removal targets were recorded and not repinned.
 - Next slice: split the final oversized `risks/d10_evaluator.py`, preserving the single D10 evaluation authority, candidate/fact separation and provider-independent evidence contracts.
+
+## 2026-09-02 — B3 D10 result-contract decomposition
+
+- Split the final 1,504-line D10 evaluator into a 1,412-line single evaluation/decision authority and a 99-line immutable result-record module, with all six result types still re-exported from `risks.d10_evaluator` for existing consumers.
+- Preserved contract-ordered fail-closed gates, expected-set evaluation, exact numerator/denominator planes, change-cause derivation, visibility algebra, query redundancy, stable content identity and deterministic replay. Candidate evidence remains distinct from established facts, and result records add no mutation or publication authority.
+- The result contract contains no study, indication, drug, score threshold, project identifier or listing-format branch; D10 evaluation continues to consume only closed typed inputs and the explicit evaluation authority.
+- Verification: the complete D10 adapter, mutation, projection, replay, runtime-closure, runtime-contract, verifier-probe and artifact-generator suites pass `293 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; both D10 modules pass `py_compile`, and `git diff --check` passes.
+- Authoritative Python inventory is now clear: no file under `packages/medical_monitoring` exceeds the 1,500-line hard limit; the largest is `risks/d08_evaluator.py` at 1,493 lines. Next action: close B3 acceptance with the consolidated behavior and protected-boundary evidence, then begin B4.
