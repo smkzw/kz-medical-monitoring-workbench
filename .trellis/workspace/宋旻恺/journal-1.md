@@ -170,3 +170,13 @@
 - Downstream compatibility exposed the old R1 Store star export omitting `_runtime_schema_shape`; the legacy Store path now aliases the authoritative module object, preserving both the private migration probe and monkeypatch semantics.
 - Verification: dependency/runtime/API focused suite `143 passed`; profile/run binding/entry after standalone-package import repair `65 passed`. The complete original R7 suite produced `492 passed`, `1 skipped`, `19 failed`: 15 explicitly abolished optimizer/hash-seed matrix cells, one R6 whole-file SHA pin, one POC allowlist, and two old-source AST/text location assertions. No runtime behavior failure remained outside those Phase B7 removals.
 - Next slice: cut the product routers from POC imports and dynamic path insertion to `packages.medical_monitoring`, then run product-route and adjacent medical-writing route checks before closing B2.
+
+## 2026-09-01 — B2 product import cutover and phase closure
+
+- Cut both live medical-monitoring product routers directly to `packages.medical_monitoring`; removed R7 router POC source-root insertion and changed lazy R5/R6/R7 publication, continuity and harness imports to consolidated authorities.
+- Migrated the active R5/R7 product test helpers to package-native imports. R7 legacy modules remain temporary relative compatibility entries only; no product path needs a top-level `mm_r*` package or POC path mutation.
+- Product-route behavior passes `141 passed`; consolidated authorities and routers pass `py_compile`; `services.api.app.main` imports with 352 registered paths and retains both medical-writing and medical-monitoring route families.
+- Adjacent medical-writing checks pass `127 passed` across the manifest and frontend writing contracts. The diff contains no medical-writing source or asset file.
+- Final R4 closure rerun after all consolidated import repairs passes `4396 passed` in 199.51 seconds. `git diff --check` passes.
+- B2 is complete: domain, graph, intelligence, risks, projections, reports, runtime and thin API now have one package authority. Compatibility shims stay until B6; abolished frozen SHA/path/allowlist gates remain assigned to B7.
+- Next safe action: enter B3 and split the oversized product/API modules by capability without changing routes, payloads, Chinese audience wording or medical semantics.

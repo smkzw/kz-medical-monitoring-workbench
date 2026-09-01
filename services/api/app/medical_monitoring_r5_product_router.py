@@ -9,7 +9,7 @@ from typing import Any, Callable, Mapping, Optional
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import ORJSONResponse
 
-from .medical_monitoring_r5_product_adapter import (
+from packages.medical_monitoring.projections.product_adapter import (
     R5ProductAdapter,
     R5ProductAdapterError,
     build_response_envelope,

@@ -7,16 +7,16 @@ from unittest.mock import Mock
 
 import pytest
 
-from mm_r5 import s4_contracts as s4
-from mm_r5.r5_publication_authority import (
+from packages.medical_monitoring.projections.publication import s4_contracts as s4
+from packages.medical_monitoring.projections.publication.r5_publication_authority import (
     R5AuthorityPacket,
     R5PublicationAuthorityBridge,
     R5PublicationAuthorityError,
     R5PublicationAuthorityInputAssembler,
     R5PublicationRunIdentity,
 )
-from mm_r5.s4_projection import build_s4_authority_packet
-from mm_r5.s4_validator import validate_s4_authority_packet
+from packages.medical_monitoring.projections.publication.s4_projection import build_s4_authority_packet
+from packages.medical_monitoring.projections.publication.s4_validator import validate_s4_authority_packet
 from s4_runtime_fixtures import build_runtime_input
 
 
