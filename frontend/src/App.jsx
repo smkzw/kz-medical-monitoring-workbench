@@ -123,7 +123,6 @@ import {
   resolveMedicalMonitoringProjectRoute,
   resolveMedicalMonitoringRiskRoute,
   resolveMedicalMonitoringSiteRoute,
-  resolveMedicalMonitoringSubjectRoute,
   serializeMedicalMonitoringRouteState,
 } from "./features/medical-monitoring/medicalMonitoringRouteState.mjs";
 import {
@@ -134,6 +133,7 @@ import {
   useMedicalMonitoringBrowserSync,
 } from "./features/medical-monitoring/useMedicalMonitoringBrowserState.js";
 import { useMedicalMonitoringProjectIsolation } from "./features/medical-monitoring/useMedicalMonitoringProjectIsolation.js";
+import { useMedicalMonitoringData } from "./features/medical-monitoring/useMedicalMonitoringData.js";
 import MedicalMonitoringRouteOutlet from "./features/medical-monitoring/MedicalMonitoringRouteOutlet.jsx";
 import { isMedicalMonitoringPage } from "./features/medical-monitoring/medicalMonitoringRouteOutletState.mjs";
 import { WritingReferencePanel } from "./features/writing-reference/WritingReferencePanel";
@@ -15055,15 +15055,7 @@ export function App() {
   const [sourceManifestReadErrors, setSourceManifestReadErrors] = useState({});
   const [workbenchInbox, setWorkbenchInbox] = useState(null);
   const [workbenchInboxReadError, setWorkbenchInboxReadError] = useState(null);
-  const [monitoringWorkbenchInbox, setMonitoringWorkbenchInbox] = useState(null);
   const [selectedSubject, setSelectedSubject] = useState(monitoringBrowserState.initialSubjectId);
-  const [monitoringSubjectCatalog, setMonitoringSubjectCatalog] = useState([]);
-  const [subjectProfiles, setSubjectProfiles] = useState({});
-  const [monitoringDataError, setMonitoringDataError] = useState("");
-  const [monitoringSubjectRouteError, setMonitoringSubjectRouteError] = useState("");
-  const [monitoringReadError, setMonitoringReadError] = useState(null);
-  const [monitoringSubjectReadError, setMonitoringSubjectReadError] = useState(null);
-  const [monitoringProfileReadError, setMonitoringProfileReadError] = useState(null);
   const [aiGatewayStatus, setAiGatewayStatus] = useState(null);
   const [aiRuns, setAiRuns] = useState([]);
   const [aiRunsReadError, setAiRunsReadError] = useState(null);
@@ -15102,10 +15094,31 @@ export function App() {
   const activeProjectIdRef = useRef(activeProjectId);
   activeProjectIdRef.current = activeProjectId;
   const {
-    responseProjectIdRef: monitoringResponseProjectIdRef,
+    workbenchInbox: monitoringWorkbenchInbox,
+    setWorkbenchInbox: setMonitoringWorkbenchInbox,
+    refreshWorkbenchInbox: refreshMonitoringWorkbenchInbox,
+    subjectCatalog: monitoringSubjectCatalog,
+    selectedSubjectProfile,
+    dataError: monitoringDataError,
+    setDataError: setMonitoringDataError,
+    subjectRouteError: monitoringSubjectRouteError,
+    setSubjectRouteError: setMonitoringSubjectRouteError,
+    readError: monitoringReadError,
+    subjectReadError: monitoringSubjectReadError,
+    profileReadError: monitoringProfileReadError,
+  } = useMedicalMonitoringData({
+    activeProjectId,
+    monitoringProjectId: monitoringRouteProjectId,
+    monitoringReady: monitoringExecutionReady,
+    isProductRoute: isMedicalMonitoringProductRoute,
+    requestedSubjectId: monitoringRouteState.subject_id || "",
+    selectedSubject,
+    setSelectedSubject,
+    defaultSubjectId: DEFAULT_SUBJECT_ID,
+  });
+  const {
     resetProjectState: resetMedicalMonitoringProjectState,
   } = useMedicalMonitoringProjectIsolation({
-    activeProjectId,
     setProductRouteState: setMedicalMonitoringProductRouteState,
     setRouteState: setMonitoringRouteState,
     setFocusRiskId: setMonitoringFocusRiskId,
@@ -15463,33 +15476,6 @@ export function App() {
       .catch((error) => setWorkbenchInboxReadError(error));
   };
 
-  const refreshMonitoringWorkbenchInbox = (payload) => {
-    if (payload) {
-      if (payload.project_id === monitoringResponseProjectIdRef.current) {
-        setMonitoringWorkbenchInbox(payload);
-        setMonitoringReadError(null);
-      }
-      return;
-    }
-    if (!monitoringRouteProjectId || !monitoringExecutionReady) {
-      setMonitoringWorkbenchInbox(null);
-      setMonitoringReadError(null);
-      return;
-    }
-    setMonitoringReadError(null);
-    fetch(`/api/projects/${monitoringRouteProjectId}/workbench-inbox`)
-      .then((response) => readJsonOrThrow(response))
-      .then((data) => {
-        if (data.project_id !== monitoringResponseProjectIdRef.current) {
-          setMonitoringReadError(monitoringReadContractError("医学监查工作收件箱响应项目身份不匹配，未更新当前页面。"));
-          return;
-        }
-        setMonitoringWorkbenchInbox(data);
-        setMonitoringReadError(null);
-      })
-      .catch((error) => setMonitoringReadError(error));
-  };
-
   useEffect(() => {
     setWorkbenchInbox(null);
     setWorkbenchInboxReadError(null);
@@ -15516,140 +15502,6 @@ export function App() {
       cancelled = true;
     };
   }, [activeProjectId, isMedicalMonitoringProductRoute]);
-
-  useEffect(() => {
-    if (isMedicalMonitoringProductRoute || !monitoringRouteProjectId || !monitoringExecutionReady) {
-      setMonitoringWorkbenchInbox(null);
-      setMonitoringReadError(null);
-      return undefined;
-    }
-    let cancelled = false;
-    setMonitoringReadError(null);
-    fetch(`/api/projects/${monitoringRouteProjectId}/workbench-inbox`)
-      .then((response) => readJsonOrThrow(response))
-      .then((data) => {
-        if (cancelled) return;
-        if (data?.project_id !== monitoringResponseProjectIdRef.current) {
-          setMonitoringReadError(monitoringReadContractError("医学监查工作收件箱响应项目身份不匹配，未更新当前页面。"));
-          return;
-        }
-        setMonitoringWorkbenchInbox(data);
-        setMonitoringReadError(null);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setMonitoringWorkbenchInbox(null);
-          setMonitoringReadError(error);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [monitoringRouteProjectId, monitoringExecutionReady, isMedicalMonitoringProductRoute]);
-
-  useEffect(() => {
-    setSubjectProfiles({});
-    setMonitoringSubjectCatalog([]);
-    setMonitoringDataError("");
-    setMonitoringSubjectRouteError("");
-    setMonitoringSubjectReadError(null);
-    if (isMedicalMonitoringProductRoute || !monitoringRouteProjectId || !monitoringExecutionReady) return undefined;
-    let cancelled = false;
-    fetch(`/api/projects/${monitoringRouteProjectId}/monitoring/subjects`)
-      .then((response) => readJsonOrThrow(response))
-      .then((data) => {
-        if (cancelled) return;
-        if (data?.project_id !== monitoringResponseProjectIdRef.current) {
-          setMonitoringSubjectCatalog([]);
-          setMonitoringSubjectReadError(monitoringReadContractError("受试者目录响应项目身份不匹配，已阻止写入当前项目。"));
-          return;
-        }
-        const nextSubjects = Array.isArray(data.subjects) ? data.subjects : [];
-        const requestedSubjectId = monitoringRouteState.subject_id || "";
-        const requestedSubjectResolution = resolveMedicalMonitoringSubjectRoute(
-          requestedSubjectId,
-          nextSubjects,
-          "",
-          DEFAULT_SUBJECT_ID,
-        );
-        setMonitoringSubjectCatalog(nextSubjects);
-        setMonitoringSubjectReadError(null);
-        setMonitoringSubjectRouteError(
-          requestedSubjectResolution.status === "unavailable"
-            ? `医学监查链接中的受试者“${requestedSubjectId}”当前项目目录中不存在。`
-            : "",
-        );
-        setSelectedSubject((current) => {
-          if (requestedSubjectId) return requestedSubjectResolution.subjectId;
-          return resolveMedicalMonitoringSubjectRoute(
-            "",
-            nextSubjects,
-            current,
-            DEFAULT_SUBJECT_ID,
-          ).subjectId;
-        });
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setMonitoringSubjectCatalog([]);
-          setMonitoringSubjectRouteError("");
-          setMonitoringSubjectReadError(error);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [monitoringRouteProjectId, monitoringExecutionReady, monitoringRouteState.subject_id, isMedicalMonitoringProductRoute]);
-
-  const selectedSubjectProfileKey = monitoringRouteProjectId && selectedSubject
-    ? `${monitoringRouteProjectId}::${selectedSubject}`
-    : "";
-  const selectedSubjectProfile = selectedSubjectProfileKey
-    ? subjectProfiles[selectedSubjectProfileKey]
-    : null;
-
-  useEffect(() => {
-    if (isMedicalMonitoringProductRoute || !monitoringRouteProjectId || !selectedSubject || !monitoringExecutionReady) {
-      setMonitoringProfileReadError(null);
-      return undefined;
-    }
-    if (selectedSubjectProfile) {
-      setMonitoringProfileReadError(null);
-      return undefined;
-    }
-    let cancelled = false;
-    const requestedProfileKey = `${monitoringRouteProjectId}::${selectedSubject}`;
-    setMonitoringProfileReadError(null);
-    fetch(`/api/projects/${monitoringRouteProjectId}/subjects/${selectedSubject}/monitoring`)
-      .then((response) => readJsonOrThrow(response))
-      .then((data) => {
-        if (
-          cancelled
-        ) return;
-        if (
-          data?.project_id !== monitoringResponseProjectIdRef.current
-          || data?.subject_id !== selectedSubject
-        ) {
-          setSubjectProfiles((current) => {
-            if (!(requestedProfileKey in current)) return current;
-            const next = { ...current };
-            delete next[requestedProfileKey];
-            return next;
-          });
-          setMonitoringProfileReadError(monitoringReadContractError("受试者画像响应项目或受试者身份不匹配，已阻止写入当前个例。"));
-          setMonitoringDataError("受试者画像响应项目或受试者身份不匹配，已阻止写入当前个例。");
-          return;
-        }
-        setSubjectProfiles((current) => ({ ...current, [requestedProfileKey]: data }));
-        setMonitoringProfileReadError(null);
-      })
-      .catch((error) => {
-        if (!cancelled) setMonitoringProfileReadError(error);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [monitoringRouteProjectId, selectedSubject, selectedSubjectProfile, monitoringExecutionReady, isMedicalMonitoringProductRoute]);
 
   const requestMonitoringWorkspace = useCallback((nextPage) => {
     if (nextPage === "monitoring") {

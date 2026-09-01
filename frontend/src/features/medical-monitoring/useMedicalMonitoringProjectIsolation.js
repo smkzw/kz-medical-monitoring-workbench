@@ -1,11 +1,10 @@
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import {
   EMPTY_MEDICAL_MONITORING_PRODUCT_ROUTE,
   clearMedicalMonitoringProductRouteState,
 } from "./medicalMonitoringBrowserRoute.mjs";
 
 export function useMedicalMonitoringProjectIsolation({
-  activeProjectId,
   setProductRouteState,
   setRouteState,
   setFocusRiskId,
@@ -18,9 +17,6 @@ export function useMedicalMonitoringProjectIsolation({
   returnScopeRef,
   returnSiteIdRef,
 }) {
-  const responseProjectIdRef = useRef(activeProjectId);
-  responseProjectIdRef.current = activeProjectId;
-
   const resetProjectState = useCallback((nextPage) => {
     setProductRouteState(EMPTY_MEDICAL_MONITORING_PRODUCT_ROUTE);
     setRouteState({});
@@ -57,5 +53,5 @@ export function useMedicalMonitoringProjectIsolation({
     setWorkbenchInbox,
   ]);
 
-  return { responseProjectIdRef, resetProjectState };
+  return { resetProjectState };
 }
