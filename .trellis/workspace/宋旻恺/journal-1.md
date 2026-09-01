@@ -238,6 +238,15 @@
 - Verification: both authorities and facade pass `py_compile`; all nine facade identities match; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `git diff --check` passes.
 - Next slice: isolate provider-neutral invocation adapters while keeping `_build_r5_publication_packet` and `_read_publication_gate` late-bound in the facade, then start capability route-context extraction.
 
+## 2026-09-02 — B5 product-native synthetic profile
+
+- Externalized the deterministic R5 authority data, R7 setup data and run seed into validated JSON fixtures under `tests/fixtures/medical_monitoring`; product Python now contains assembly and derivation only. R5 packet identities across all six variants and R7 opaque tokens remained unchanged.
+- Added one product startup command, `python3 -m services.api.app --synthetic`, which selects the synthetic profile before the real app imports, scopes the synthetic principal to the synthetic project, and idempotently seeds a two-step deterministic run through the actual R7 product routes. The old environment-variable seam was removed.
+- Deleted `deploy/medical_monitoring_local` and all 10 tests whose only subject was that parallel G6 application. The wider dependency scan corrected the planning-time five-file estimate; no live product consumer remains.
+- Verification: governed execution audit passed on three `zcode/GLM-5.3-Flash:max` workers without fallback; focused product set `161 passed`; medical-monitoring regression `315 passed`; all 62 medical-monitoring frontend node suites passed; Vite build passed; Codex reran compilation plus the fixture/startup/adapter/allowlist gate with `28 passed` and a clean residual-reference scan.
+- Two medical-writing contract failures and one medical-writing collection error were independently reproduced as pre-existing and remain untouched under the subsystem protection boundary. They do not arise from B5.
+- Next safe action: close and archive B5, then start B6 to remove remaining POC compatibility shims and the temporary R6 import bridge without changing routes, payloads or medical semantics.
+
 ## 2026-09-02 — B4 frontend single-generation closure
 
 - Lifted the medical-monitoring product, progress, continuity, Journey, browser-route, project-isolation and data-read ownership into generation-neutral feature modules; `App.jsx` now delegates rendering through one `MedicalMonitoringRouteOutlet` and one `MedicalMonitoringPage` mount.

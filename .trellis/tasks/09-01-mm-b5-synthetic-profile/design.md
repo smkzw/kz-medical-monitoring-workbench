@@ -78,7 +78,7 @@ tests/fixtures/medical_monitoring/
 
 - 删除 `deploy/medical_monitoring_local` 整树（git 已留档）。
 - **前端测试夹具不动**：`frontend/src/features/medical-monitoring/medicalMonitoringProductFixtures.mjs`（522 行）及其 `.test.mjs` 消费方是前端单元测试的本地 mock 包（身份为 `synthetic-project-r5-s7` 等，与后端 S7 身份无关，纯 node:assert 脚本）。它们不属于本合同，不在 B5 统一或后端化。
-- 依赖该树的测试随删：`tests/test_medical_monitoring_g6_entry_lifecycle.py`、`test_medical_monitoring_g6_synthetic_bundle_endpoint.py`、`test_medical_monitoring_local_distribution.py`、`test_medical_monitoring_r8_gate4_distribution.py`、`test_medical_monitoring_r8_gate6_synthetic_ego.py`（已 grep 确认为 import deploy/synthetic_ego/g6_* 的全集）。
+- 依赖该树的测试随删。实施前的窄模式扫描识别出 5 个直接引用文件；删除前按 `DEPLOY_DIR` 与全部模块名复核后，确认实际共有 10 个测试依赖该平行应用。除上述 5 个外，还包括 `test_medical_monitoring_r8_gate4_15_4.py`、`test_medical_monitoring_r8_gate4_notification.py`、`test_medical_monitoring_source_access_profile.py`、`test_medical_monitoring_synthetic_lifecycle.py`、`test_medical_monitoring_synthetic_manifest.py`。这 10 个测试均验证已废止的 G6 平行运行、manifest、通知矩阵或发布摘要机制，不迁移至产品链。
 - 不移植：binding/notification-matrix/user-task-evidence/bundle/observer/digest-release 机件；不新增平行 runtime。
 - 医学写作（`services/api/app` 其余路由与 assets）与旧链 `monitoring_*` 冻结不动；`main.py` 仅动医学监查合成缝。
 

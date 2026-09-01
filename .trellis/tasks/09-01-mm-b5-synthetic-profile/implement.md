@@ -48,7 +48,7 @@
 ## B. worker_03：删除与回归（等 A 全绿后）
 
 1. `git rm -r deploy/medical_monitoring_local`。
-2. 删除依赖该树的测试（`design.md` §5 清单，共 5 个文件）。
+2. 删除依赖该树的测试（以删除前完整 `DEPLOY_DIR`/模块名扫描为准；最终确认 10 个，详见 `design.md` §5）。
 3. 回归：A7 聚焦集＋`python3 -m pytest tests/ -q -k medical_monitoring`（允许长跑）；确认无残留 import（`rg -n "deploy.medical_monitoring_local|synthetic_ego|g6_runtime|g6_manifests|g6_observer|actual_app" packages/ services/ tests/ frontend/src` 仅允许命中历史归档目录）。
 4. 前端不回归：`cd frontend && npm run build`；医学监查前端单元测试是独立 node 脚本（`node:assert` 计数式，逐文件直接运行），逐个执行 `node src/features/medical-monitoring/*.test.mjs`（或按 git 改动范围挑受影响文件），确认各文件末尾 `N checks passed` 无断言失败。
 5. 医学写作非回归：跑 `services/api/app` 相关既有医学写作路由测试子集（以 B4 验证用过的集合为准）。
