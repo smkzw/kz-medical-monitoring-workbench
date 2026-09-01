@@ -9,6 +9,9 @@
 - [x] Runtime primitives: R1 adapters/capability/audience progress.
 - [x] Intelligence: R3 normalization/primitives/schema registry.
 - [ ] Risks and projections: R4 modules, with fixture data externalized separately.
+  - [x] Shared contracts, coverage, lifecycle and ensemble foundation.
+  - [ ] Domain evaluators and renderer-neutral projections.
+  - [ ] Fixture externalization and compatibility cleanup.
 - [ ] Projection authority: R5 modules and product adapter.
 - [ ] Reports and harness: R6 modules.
 - [ ] Product runtime: R7 modules.
