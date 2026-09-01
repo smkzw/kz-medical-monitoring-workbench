@@ -130,12 +130,12 @@ import {
   resolveMedicalMonitoringSubjectRoute,
   serializeMedicalMonitoringRouteState,
 } from "./features/medical-monitoring/medicalMonitoringRouteState.mjs";
-import MedicalMonitoringR5Page from "./features/medical-monitoring/r5/MedicalMonitoringR5Page.jsx";
+import MedicalMonitoringPage from "./features/medical-monitoring/MedicalMonitoringPage.jsx";
 import {
-  normalizeMedicalMonitoringR5RouteState,
-  parseMedicalMonitoringR5RouteState,
-  serializeMedicalMonitoringR5RouteState,
-} from "./features/medical-monitoring/r5/medicalMonitoringR5RouteState.mjs";
+  normalizeMedicalMonitoringProductRouteState,
+  parseMedicalMonitoringProductRouteState,
+  serializeMedicalMonitoringProductRouteState,
+} from "./features/medical-monitoring/medicalMonitoringProductRouteState.mjs";
 import { WritingReferencePanel } from "./features/writing-reference/WritingReferencePanel";
 import { StructuredTableDesigner } from "./features/medical-writing/StructuredTableDesigner";
 import { MedicalWritingAuthoringJourneySetup } from "./features/medical-writing/MedicalWritingAuthoringJourneySetup";
@@ -574,7 +574,7 @@ const pageToModule = {
   evidenceDesign: "evidence_design",
   eligibility: "eligibility_review",
   monitoring: "medical_monitoring",
-  monitoringR5: "medical_monitoring",
+  monitoringProduct: "medical_monitoring",
   subjectTimeline: "medical_monitoring",
   patientProfile: "medical_monitoring",
   tfl: "data_analysis_tfl",
@@ -1281,7 +1281,7 @@ function AppShell({
     protocol_version: "-",
   }) : null;
   const latestBatch = hasActiveProject ? dashboard.latest_batch || null : null;
-  const visibleActivePage = ["subjectTimeline", "patientProfile", "monitoringR5"].includes(activePage) ? "monitoring" : activePage;
+  const visibleActivePage = ["subjectTimeline", "patientProfile", "monitoringProduct"].includes(activePage) ? "monitoring" : activePage;
   const activeBatch = hasActiveProject && sourceContext.displayBatch?.batch_label
     ? sourceContext.displayBatch
     : latestBatch;
@@ -1347,7 +1347,7 @@ function AppShell({
     }
   };
   return (
-    <div className={`app ${activePage === "writing" ? "writing-active" : ""} ${activePage === "monitoringR5" ? "monitoring-r5-active" : ""}`}>
+    <div className={`app ${activePage === "writing" ? "writing-active" : ""} ${activePage === "monitoringProduct" ? "monitoring-r5-active" : ""}`}>
       <aside className="sidebar">
         <button className="brand" onClick={() => setActivePage("overview")} aria-label="返回项目总看板">
           <img src={logo} alt="康哲药业" />
@@ -2343,11 +2343,11 @@ function initialMonitoringBrowserState() {
   return parseMedicalMonitoringRouteState(window.location.search);
 }
 
-function initialMedicalMonitoringR5BrowserState() {
+function initialMedicalMonitoringProductBrowserState() {
   if (typeof window === "undefined" || window.location.pathname !== "/monitoring") {
-    return { isR5: false, status: "legacy", valid: false, canonical: {} };
+    return { isProduct: false, status: "legacy", valid: false, canonical: {} };
   }
-  return parseMedicalMonitoringR5RouteState(window.location.search);
+  return parseMedicalMonitoringProductRouteState(window.location.search);
 }
 function clearMedicalMonitoringProductRouteState(search = "") {
   const params = new URLSearchParams(clearMedicalMonitoringRouteState(search).replace(/^\?/, ""));
@@ -15075,7 +15075,7 @@ function MedicalWritingRuntimeGate({ readiness, onRetry }) {
 }
 
 export function App() {
-  const initialMedicalMonitoringR5RouteRef = useRef(initialMedicalMonitoringR5BrowserState());
+  const initialMedicalMonitoringProductRouteRef = useRef(initialMedicalMonitoringProductBrowserState());
   const initialMonitoringRouteRef = useRef(initialMonitoringBrowserState());
   const monitoringReturnScopeRef = useRef(
     initialMonitoringRouteRef.current.scope || "trial",
@@ -15084,14 +15084,14 @@ export function App() {
     initialMonitoringRouteRef.current.site_id || "",
   );
   const [activePage, setActivePage] = useState(() => (
-    initialMedicalMonitoringR5RouteRef.current.isR5
-      ? "monitoringR5"
+    initialMedicalMonitoringProductRouteRef.current.isProduct
+      ? "monitoringProduct"
       : typeof window !== "undefined" && window.location.pathname === "/monitoring"
       ? activePageFromMonitoringRoute(initialMonitoringRouteRef.current)
       : "overview"
   ));
-  const [medicalMonitoringR5RouteState, setMedicalMonitoringR5RouteState] = useState(
-    initialMedicalMonitoringR5RouteRef.current,
+  const [medicalMonitoringProductRouteState, setMedicalMonitoringProductRouteState] = useState(
+    initialMedicalMonitoringProductRouteRef.current,
   );
   const [monitoringRouteState, setMonitoringRouteState] = useState(initialMonitoringRouteRef.current);
   const [monitoringFocusRiskId, setMonitoringFocusRiskId] = useState(
@@ -15106,7 +15106,7 @@ export function App() {
   const [monitoringProjectRouteError, setMonitoringProjectRouteError] = useState("");
   const [projectsRequestNonce, setProjectsRequestNonce] = useState(0);
   const [activeProjectId, setActiveProjectId] = useState(
-    initialMedicalMonitoringR5RouteRef.current.canonical?.project_ref || "",
+    initialMedicalMonitoringProductRouteRef.current.canonical?.project_ref || "",
   );
   const [dashboard, setDashboard] = useState({ project: null, modules: [], latest_batch: null, pending_approvals: [], recent_risks: [] });
   const [dashboardReadError, setDashboardReadError] = useState(null);
@@ -15131,10 +15131,10 @@ export function App() {
   const [runtimeReadiness, setRuntimeReadiness] = useState({ status: "checking", assessment: null });
   const [writingNavigationGuard, setWritingNavigationGuard] = useState(null);
   const [pendingWritingNavigation, setPendingWritingNavigation] = useState(null);
-  const isR5MonitoringRoute = Boolean(
+  const isMedicalMonitoringProductRoute = Boolean(
     typeof window !== "undefined"
       && window.location.pathname === "/monitoring"
-      && medicalMonitoringR5RouteState?.isR5,
+      && medicalMonitoringProductRouteState?.isProduct,
   );
   const activeManifest = sourceManifests[activeProjectId] || null;
   const activeSourceManifestReadError = activeProjectId
@@ -15183,16 +15183,16 @@ export function App() {
         return;
       }
       if (!isMonitoringPath) {
-        if (["monitoring", "monitoringR5", "subjectTimeline", "patientProfile"].includes(activePage)) {
+        if (["monitoring", "monitoringProduct", "subjectTimeline", "patientProfile"].includes(activePage)) {
           setActivePage("overview");
         }
         return;
       }
-      const nextR5Route = parseMedicalMonitoringR5RouteState(window.location.search);
-      if (nextR5Route.isR5) {
-        setMedicalMonitoringR5RouteState(nextR5Route);
-        if (nextR5Route.canonical?.project_ref) setActiveProjectId(nextR5Route.canonical.project_ref);
-        setActivePage("monitoringR5");
+      const nextProductRoute = parseMedicalMonitoringProductRouteState(window.location.search);
+      if (nextProductRoute.isProduct) {
+        setMedicalMonitoringProductRouteState(nextProductRoute);
+        if (nextProductRoute.canonical?.project_ref) setActiveProjectId(nextProductRoute.canonical.project_ref);
+        setActivePage("monitoringProduct");
         return;
       }
       const nextRoute = parseMedicalMonitoringRouteState(window.location.search);
@@ -15212,12 +15212,12 @@ export function App() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (isR5MonitoringRoute || activePage === "monitoringR5") {
-      const nextCanonical = normalizeMedicalMonitoringR5RouteState({
-        ...(medicalMonitoringR5RouteState?.canonical || {}),
-        project_ref: activeProjectId || medicalMonitoringR5RouteState?.canonical?.project_ref || "",
+    if (isMedicalMonitoringProductRoute || activePage === "monitoringProduct") {
+      const nextCanonical = normalizeMedicalMonitoringProductRouteState({
+        ...(medicalMonitoringProductRouteState?.canonical || {}),
+        project_ref: activeProjectId || medicalMonitoringProductRouteState?.canonical?.project_ref || "",
       });
-      const nextSearch = serializeMedicalMonitoringR5RouteState(nextCanonical);
+      const nextSearch = serializeMedicalMonitoringProductRouteState(nextCanonical);
       const nextUrl = `/monitoring${nextSearch}${window.location.hash}`;
       const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       if (nextUrl !== currentUrl) window.history.replaceState(window.history.state, "", nextUrl);
@@ -15264,7 +15264,7 @@ export function App() {
       const nextSerialized = serializeMedicalMonitoringRouteState(nextRoute);
       return currentSerialized === nextSerialized ? current : nextRoute;
     });
-  }, [activePage, activeProjectId, selectedSubject, monitoringRouteState, isR5MonitoringRoute, medicalMonitoringR5RouteState]);
+  }, [activePage, activeProjectId, selectedSubject, monitoringRouteState, isMedicalMonitoringProductRoute, medicalMonitoringProductRouteState]);
 
   const refreshRuntimeReadiness = useCallback(async () => {
     setRuntimeReadiness({ status: "checking", assessment: null });
@@ -15285,10 +15285,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (isR5MonitoringRoute) return undefined;
+    if (isMedicalMonitoringProductRoute) return undefined;
     refreshRuntimeReadiness();
     return undefined;
-  }, [isR5MonitoringRoute, refreshRuntimeReadiness]);
+  }, [isMedicalMonitoringProductRoute, refreshRuntimeReadiness]);
 
   const requestApplicationNavigation = useCallback((label, run) => {
     if (activePage !== "writing" || !writingNavigationGuard?.dirty) {
@@ -15306,8 +15306,8 @@ export function App() {
     if (!nextPage || nextPage === activePage) return;
     const label = navItems.find((item) => item.key === nextPage)?.label || "其他工作区";
     requestApplicationNavigation(`离开医学写作并进入“${label}”`, () => {
-      if (isR5MonitoringRoute || activePage === "monitoringR5") {
-        setMedicalMonitoringR5RouteState({ isR5: false, status: "legacy", valid: false, canonical: {} });
+      if (isMedicalMonitoringProductRoute || activePage === "monitoringProduct") {
+        setMedicalMonitoringProductRouteState({ isProduct: false, status: "legacy", valid: false, canonical: {} });
         if (nextPage === "monitoring") {
           setMonitoringRouteState((current) => ({
             ...current,
@@ -15319,23 +15319,23 @@ export function App() {
       }
       setActivePage(nextPage);
     });
-  }, [activePage, activeProjectId, isR5MonitoringRoute, requestApplicationNavigation]);
+  }, [activePage, activeProjectId, isMedicalMonitoringProductRoute, requestApplicationNavigation]);
 
-  const requestMedicalMonitoringR5RouteChange = useCallback((nextState) => {
-    const canonical = normalizeMedicalMonitoringR5RouteState(nextState?.canonical || nextState || {});
-    setMedicalMonitoringR5RouteState({
-      isR5: true,
+  const requestMedicalMonitoringProductRouteChange = useCallback((nextState) => {
+    const canonical = normalizeMedicalMonitoringProductRouteState(nextState?.canonical || nextState || {});
+    setMedicalMonitoringProductRouteState({
+      isProduct: true,
       status: "valid",
       valid: Boolean(canonical.project_ref),
       canonical,
     });
     if (canonical.project_ref) setActiveProjectId(canonical.project_ref);
     if (canonical.subject_ref) setSelectedSubject(canonical.subject_ref);
-    setActivePage("monitoringR5");
+    setActivePage("monitoringProduct");
   }, []);
 
-  const returnFromMedicalMonitoringR5 = useCallback(() => {
-    setMedicalMonitoringR5RouteState({ isR5: false, status: "legacy", valid: false, canonical: {} });
+  const returnFromMedicalMonitoringProduct = useCallback(() => {
+    setMedicalMonitoringProductRouteState({ isProduct: false, status: "legacy", valid: false, canonical: {} });
     setMonitoringRouteState((current) => ({
       ...current,
       project_id: activeProjectId || current.project_id || "",
@@ -15350,7 +15350,7 @@ export function App() {
   }, [activeProjectId]);
 
   const resetMedicalMonitoringProjectState = useCallback((nextPage) => {
-    setMedicalMonitoringR5RouteState({ isR5: false, status: "legacy", valid: false, canonical: {} });
+    setMedicalMonitoringProductRouteState({ isProduct: false, status: "legacy", valid: false, canonical: {} });
     setMonitoringRouteState({});
     setMonitoringFocusRiskId("");
     setSubjectViewFocusRiskId("");
@@ -15397,12 +15397,12 @@ export function App() {
   };
 
   useEffect(() => {
-    if (isR5MonitoringRoute) {
+    if (isMedicalMonitoringProductRoute) {
       setProjects([]);
       setProjectsLoaded(true);
       setProjectsLoadError("");
       setMonitoringProjectRouteError("");
-      setActiveProjectId((current) => medicalMonitoringR5RouteState?.canonical?.project_ref || current);
+      setActiveProjectId((current) => medicalMonitoringProductRouteState?.canonical?.project_ref || current);
       return undefined;
     }
     let cancelled = false;
@@ -15414,18 +15414,18 @@ export function App() {
         if (cancelled) return;
         const canonicalProjects = Array.isArray(payload) ? payload : [];
         setProjects(canonicalProjects);
-        const requestedR5ProjectId = initialMedicalMonitoringR5RouteRef.current.canonical?.project_ref || "";
+        const requestedProductProjectId = initialMedicalMonitoringProductRouteRef.current.canonical?.project_ref || "";
         const requestedMonitoringProjectId = initialMonitoringRouteRef.current.project_id || "";
         const requestedProjectAvailable = requestedMonitoringProjectId
           && canonicalProjects.some((item) => item?.project_id === requestedMonitoringProjectId);
         setMonitoringProjectRouteError(
-          !initialMedicalMonitoringR5RouteRef.current.isR5
+          !initialMedicalMonitoringProductRouteRef.current.isProduct
             && requestedMonitoringProjectId && !requestedProjectAvailable
             ? `医学监查链接中的项目“${requestedMonitoringProjectId}”当前不可访问或不在项目列表中。`
             : "",
         );
         setActiveProjectId((current) => {
-          if (initialMedicalMonitoringR5RouteRef.current.isR5) return requestedR5ProjectId || current;
+          if (initialMedicalMonitoringProductRouteRef.current.isProduct) return requestedProductProjectId || current;
           if (!canonicalProjects.length) return "";
           return resolveMedicalMonitoringProjectRoute(
             requestedMonitoringProjectId,
@@ -15439,7 +15439,7 @@ export function App() {
       .catch(() => {
         if (!cancelled) {
           setProjects([]);
-          setActiveProjectId((current) => initialMedicalMonitoringR5RouteRef.current.isR5 ? current : "");
+          setActiveProjectId((current) => initialMedicalMonitoringProductRouteRef.current.isProduct ? current : "");
           setMonitoringProjectRouteError("");
           setProjectsLoadError("工作台服务未连接或项目列表暂不可用；未将未知状态当作“无项目”。");
           setProjectsLoaded(true);
@@ -15448,10 +15448,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [projectsRequestNonce, isR5MonitoringRoute, medicalMonitoringR5RouteState]);
+  }, [projectsRequestNonce, isMedicalMonitoringProductRoute, medicalMonitoringProductRouteState]);
 
   useEffect(() => {
-    if (isR5MonitoringRoute || !activeProjectId) {
+    if (isMedicalMonitoringProductRoute || !activeProjectId) {
       setDashboard({ project: null, modules: [], latest_batch: null, pending_approvals: [], recent_risks: [] });
       setDashboardReadError(null);
       return undefined;
@@ -15485,10 +15485,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeProjectId, isR5MonitoringRoute]);
+  }, [activeProjectId, isMedicalMonitoringProductRoute]);
 
   useEffect(() => {
-    if (isR5MonitoringRoute || !activeProjectId) return undefined;
+    if (isMedicalMonitoringProductRoute || !activeProjectId) return undefined;
     let cancelled = false;
     setSourceManifestReadErrors((current) => ({ ...current, [activeProjectId]: null }));
     fetch(`/api/projects/${activeProjectId}/source-manifest`)
@@ -15515,10 +15515,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeProjectId, isR5MonitoringRoute]);
+  }, [activeProjectId, isMedicalMonitoringProductRoute]);
 
   useEffect(() => {
-    if (isR5MonitoringRoute) {
+    if (isMedicalMonitoringProductRoute) {
       setAiGatewayStatus(null);
       return undefined;
     }
@@ -15534,10 +15534,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [isR5MonitoringRoute]);
+  }, [isMedicalMonitoringProductRoute]);
 
   useEffect(() => {
-    if (isR5MonitoringRoute || !activeProjectId) {
+    if (isMedicalMonitoringProductRoute || !activeProjectId) {
       setAiRuns([]);
       setAiRunsReadError(null);
       return undefined;
@@ -15568,10 +15568,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeProjectId, isR5MonitoringRoute]);
+  }, [activeProjectId, isMedicalMonitoringProductRoute]);
 
   const refreshDashboard = () => {
-    if (isR5MonitoringRoute || !activeProjectId) return Promise.resolve();
+    if (isMedicalMonitoringProductRoute || !activeProjectId) return Promise.resolve();
     setDashboardReadError(null);
     return fetch(`/api/projects/${activeProjectId}/dashboard`)
       .then((response) => readJsonOrThrow(response))
@@ -15594,7 +15594,7 @@ export function App() {
   };
 
   const refreshWorkbenchInbox = (payload) => {
-    if (isR5MonitoringRoute) return;
+    if (isMedicalMonitoringProductRoute) return;
     if (payload) {
       if (payload.project_id === activeProjectIdRef.current) {
         setWorkbenchInbox(payload);
@@ -15647,7 +15647,7 @@ export function App() {
   useEffect(() => {
     setWorkbenchInbox(null);
     setWorkbenchInboxReadError(null);
-    if (isR5MonitoringRoute || !activeProjectId) return undefined;
+    if (isMedicalMonitoringProductRoute || !activeProjectId) return undefined;
     let cancelled = false;
     fetch(`/api/projects/${activeProjectId}/workbench-inbox`)
       .then((response) => readJsonOrThrow(response))
@@ -15669,10 +15669,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeProjectId, isR5MonitoringRoute]);
+  }, [activeProjectId, isMedicalMonitoringProductRoute]);
 
   useEffect(() => {
-    if (isR5MonitoringRoute || !monitoringRouteProjectId || !monitoringExecutionReady) {
+    if (isMedicalMonitoringProductRoute || !monitoringRouteProjectId || !monitoringExecutionReady) {
       setMonitoringWorkbenchInbox(null);
       setMonitoringReadError(null);
       return undefined;
@@ -15699,7 +15699,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [monitoringRouteProjectId, monitoringExecutionReady, isR5MonitoringRoute]);
+  }, [monitoringRouteProjectId, monitoringExecutionReady, isMedicalMonitoringProductRoute]);
 
   useEffect(() => {
     setSubjectProfiles({});
@@ -15707,7 +15707,7 @@ export function App() {
     setMonitoringDataError("");
     setMonitoringSubjectRouteError("");
     setMonitoringSubjectReadError(null);
-    if (isR5MonitoringRoute || !monitoringRouteProjectId || !monitoringExecutionReady) return undefined;
+    if (isMedicalMonitoringProductRoute || !monitoringRouteProjectId || !monitoringExecutionReady) return undefined;
     let cancelled = false;
     fetch(`/api/projects/${monitoringRouteProjectId}/monitoring/subjects`)
       .then((response) => readJsonOrThrow(response))
@@ -15753,7 +15753,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [monitoringRouteProjectId, monitoringExecutionReady, monitoringRouteState.subject_id, isR5MonitoringRoute]);
+  }, [monitoringRouteProjectId, monitoringExecutionReady, monitoringRouteState.subject_id, isMedicalMonitoringProductRoute]);
 
   const selectedSubjectProfileKey = monitoringRouteProjectId && selectedSubject
     ? `${monitoringRouteProjectId}::${selectedSubject}`
@@ -15763,7 +15763,7 @@ export function App() {
     : null;
 
   useEffect(() => {
-    if (isR5MonitoringRoute || !monitoringRouteProjectId || !selectedSubject || !monitoringExecutionReady) {
+    if (isMedicalMonitoringProductRoute || !monitoringRouteProjectId || !selectedSubject || !monitoringExecutionReady) {
       setMonitoringProfileReadError(null);
       return undefined;
     }
@@ -15803,7 +15803,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [monitoringRouteProjectId, selectedSubject, selectedSubjectProfile, monitoringExecutionReady, isR5MonitoringRoute]);
+  }, [monitoringRouteProjectId, selectedSubject, selectedSubjectProfile, monitoringExecutionReady, isMedicalMonitoringProductRoute]);
 
   const requestMonitoringWorkspace = useCallback((nextPage) => {
     if (nextPage === "monitoring") {
@@ -15937,12 +15937,12 @@ export function App() {
         ? <EligibilityPage projectId={activeProjectId} routeProjectId={eligibilityRouteProjectId} />
         : <ModuleUnavailablePage moduleKey="eligibility_review" />;
     }
-    if (activePage === "monitoringR5") {
+    if (activePage === "monitoringProduct") {
       return (
-        <MedicalMonitoringR5Page
-          routeState={medicalMonitoringR5RouteState}
-          onRouteChange={requestMedicalMonitoringR5RouteChange}
-          onReturn={returnFromMedicalMonitoringR5}
+        <MedicalMonitoringPage
+          routeState={medicalMonitoringProductRouteState}
+          onRouteChange={requestMedicalMonitoringProductRouteChange}
+          onReturn={returnFromMedicalMonitoringProduct}
         />
       );
     }
@@ -16065,7 +16065,7 @@ export function App() {
       return <SourceRegistryPage projectId={activeProjectId} onOpenModule={(module) => requestActivePage(moduleToPage[module] || "overview")} />;
     }
     return <ApprovalPage projectId={activeProjectId} dashboard={dashboard} refreshDashboard={refreshDashboard} />;
-  }, [activePage, activeProjectId, activeManifest, activeSourceManifestReadError, dashboard, dashboardReadError, sourceManifests, sourceManifestReadErrors, workbenchInbox, workbenchInboxReadError, monitoringWorkbenchInbox, monitoringReadError, monitoringSubjectReadError, monitoringSubjectRouteError, monitoringProfileReadError, selectedSubject, selectedSubjectProfile, monitoringSubjectCatalog, monitoringDataError, aiGatewayStatus, aiRuns, aiRunsReadError, eligibilityRouteProjectId, monitoringRouteProjectId, monitoringMetricConfigurationContext, monitoringFocusRiskId, subjectViewFocusRiskId, runtimeReadiness, refreshRuntimeReadiness, requestActivePage, requestMedicalMonitoringR5RouteChange, returnFromMedicalMonitoringR5, medicalMonitoringR5RouteState, requestMonitoringWorkspace, requestMonitoringSubjectView, requestMonitoringRiskScope, requestMonitoringRiskFocus, requestMonitoringRiskFocusClear, requestMonitoringChecklistQuery, requestMonitoringScrollTop]);
+  }, [activePage, activeProjectId, activeManifest, activeSourceManifestReadError, dashboard, dashboardReadError, sourceManifests, sourceManifestReadErrors, workbenchInbox, workbenchInboxReadError, monitoringWorkbenchInbox, monitoringReadError, monitoringSubjectReadError, monitoringSubjectRouteError, monitoringProfileReadError, selectedSubject, selectedSubjectProfile, monitoringSubjectCatalog, monitoringDataError, aiGatewayStatus, aiRuns, aiRunsReadError, eligibilityRouteProjectId, monitoringRouteProjectId, monitoringMetricConfigurationContext, monitoringFocusRiskId, subjectViewFocusRiskId, runtimeReadiness, refreshRuntimeReadiness, requestActivePage, requestMedicalMonitoringProductRouteChange, returnFromMedicalMonitoringProduct, medicalMonitoringProductRouteState, requestMonitoringWorkspace, requestMonitoringSubjectView, requestMonitoringRiskScope, requestMonitoringRiskFocus, requestMonitoringRiskFocusClear, requestMonitoringChecklistQuery, requestMonitoringScrollTop]);
 
   const shellUsesMonitoringInbox = Boolean(
     monitoringRouteProjectId
@@ -16097,7 +16097,7 @@ export function App() {
           aiGatewayStatus={aiGatewayStatus}
           onAiGatewayStatusChange={setAiGatewayStatus}
           onProjectCreated={handleProjectCreated}
-          forceRenderChildren={activePage === "monitoringR5"}
+          forceRenderChildren={activePage === "monitoringProduct"}
         >
         <WorkbenchErrorBoundary resetKey={`${activeProjectId}:${activePage}`}>
           {page}
