@@ -6,6 +6,7 @@
   - [x] Move request contracts and publication error to one authoritative module.
   - [x] Move continuity response contracts and semantic projection helpers.
   - [ ] Move shared public-text sanitization and remaining pure projections.
+    - [x] Move backup, restore and preflight audience projections.
 - [ ] Extract project lifecycle, backup and restore capability router.
 - [ ] Extract setup, special-risk rule and profile capability router.
 - [ ] Extract run preparation, execution and progress capability router.
