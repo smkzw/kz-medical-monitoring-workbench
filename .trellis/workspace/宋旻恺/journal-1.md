@@ -68,3 +68,10 @@
 - Added a temporary R4 compatibility bridge that preserves private legacy test probes while keeping the inspected D08 runtime shims limited to allowed `mm_r4` imports; it does not mutate `sys.path`.
 - Verification: package and compatibility files pass `py_compile`; all D08 tests plus package compatibility pass `190 passed`.
 - Next slice: repeat the same evaluator/projection separation for D09, then D10, without moving their challenge fixtures into product authority.
+
+## 2026-09-01 — B2 D09 risk/projection family
+
+- Moved the D09 center-pattern contracts/evaluator into `risks` and its audience/Query/hotspot/R2-handoff projection into `projections`.
+- Preserved D09's closed denominator, count-surface, Query-draft and lifecycle-handoff behavior; no center threshold, disease rule, drug rule or listing column was introduced.
+- Verification: D09 authorities and compatibility modules pass `py_compile`; the complete D09 suite passes `243 passed`.
+- Next slice: migrate D10 adapter/contracts/evaluator/projection, then proceed through D07 and D01-D06 families while leaving frozen challenge catalogs outside product authority.
