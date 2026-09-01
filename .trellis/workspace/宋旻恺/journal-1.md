@@ -441,3 +441,11 @@
 - Verification: the complete independent project-verifier suite passes `15 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
 - The old R8 parallel-release inventory tests still require a static file list that excludes the new internal modules. Stage B removes that parallel application and its release gate, so the obsolete inventory was not refreshed.
 - Next slice: split `projections/publication/contracts.py`, preserving publication-state orthogonality, immutable receipts, accepted-snapshot authority and audience/audit separation.
+
+## 2026-09-02 — B3 R5 publication-contract decomposition
+
+- Split the 2,123-line exact publication contract into canonical constants/invariants, immutable typed objects, canonical registration/audience registries, and the existing `publication.contracts` public facade.
+- Preserved the accepted-snapshot authority receipt, immutable content identities, publication-state orthogonality, deferred-leaf honesty, audience/audit separation, closed enums and deterministic canonical validation. The historical explicit `SourceRevisionContentPair` import remains available even though the original deliberately closed `__all__` omitted it.
+- The first focused collection exposed that explicit import as a facade-only compatibility edge; it is now re-exported directly while `__all__` stays byte-for-byte equivalent in membership to the original contract surface. Every publication-contract source is below the 1,500-line hard limit (largest: `contracts_objects.py`, 1,060 lines).
+- Verification: the live package facade compiles, all 95 declared public exports resolve, and the core contract/authority/S2 behavior run passes `291 passed` with one obsolete POC module-name assertion; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`. The old S2/S4 pinned-source/hash inventory reports expected drift and was not refreshed because stage B removes that static parallel-release gate.
+- Next slice: split `domain/risk.py`, preserving stable risk identity, lifecycle state transitions, candidate/fact separation and source provenance without adding study-specific rules.
