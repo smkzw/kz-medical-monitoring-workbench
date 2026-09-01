@@ -424,3 +424,11 @@
 - Verification: background recovery and harness integration pass `53 passed`; project lifecycle behavior passes `29 passed, 1 deselected`; R5/R7 product routes plus protected medical-writing adjacent checks pass `297 passed`; `py_compile` and `git diff --check` pass.
 - A deliberately broader legacy scan reported only already-classified v2.0-obsolete optimizer/hash-seed subprocess probes, pinned-source/create-only checks and source-text facade inspection; they were not refreshed or restored.
 - Next slice: split `projections/product_adapter.py`, preserving the single renderer-neutral product projection and all audience-language, source-jump and risk-count contracts.
+
+## 2026-09-02 — B3 R5 product read-model decomposition
+
+- Split the 2,282-line product projection authority into immutable authority/read-model contracts, explicitly isolated synthetic fixture builders, pure renderer-neutral projection helpers, and the three-surface product adapter/envelope facade.
+- Preserved exact authority packet identity and hash rules, distinct event domains and visual encodings, subject-flow conservation and coverage states, source-jump bindings, independent risk/change/count planes, read-only response digest and the rule that synthetic data is available only through explicit fixture mode.
+- The first focused run exposed one fixture dependency omitted at the extraction boundary (`canonical_sha256`); the import was restored without changing fixture or authority semantics. Every product projection source is below the 1,500-line hard limit (largest: `product_types.py`, 695 lines).
+- Verification: R5 product adapter, subject-flow and route suites pass `49 passed`; the R7 product route suite passes `92 passed`; the protected medical-writing adjacent gate passes `156 passed`; `py_compile` and `git diff --check` pass.
+- Next slice: split `runtime/project_verifier.py`, preserving independent read-only verification, closure evidence and fail-closed verdict boundaries.
