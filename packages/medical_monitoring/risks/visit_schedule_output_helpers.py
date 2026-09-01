@@ -643,4 +643,3 @@ def _priority_or_unknown(verdict: Optional[D05PriorityVerdict]) -> str:
     if verdict is None:
         return _PRIORITY_UNKNOWN
     return verdict.priority
-

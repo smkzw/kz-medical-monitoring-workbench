@@ -592,4 +592,3 @@ def build_consumption_ledgers(
             source_locator_ids=_canonical_sorted(
                 loc for d in decisions for loc in d.source_locator_ids)))
     return tuple(ledgers)
-

@@ -1141,4 +1141,3 @@ class ActivityAssignmentContext:
     actual_activities: Tuple[ActualActivityRecord, ...] = ()
     allow_unscheduled_activities: bool = False
     activity_evidence_complete: bool = True
-
