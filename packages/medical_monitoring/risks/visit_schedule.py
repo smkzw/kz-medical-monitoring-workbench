@@ -59,7 +59,7 @@ import re
 from dataclasses import dataclass, fields, is_dataclass
 from typing import (Any, Dict, List, Optional, Sequence, Set, Tuple)
 
-from mm_r3.normalization import normalize_partial_date
+from ..intelligence.normalization import normalize_partial_date
 
 from .contracts import (
     CrossDomainEvidenceRef,

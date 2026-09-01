@@ -45,7 +45,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Mapping, Optional, Sequence, Tuple
 
-from mm_r2.risk import AdjudicationOutcome
+from ..domain.risk import AdjudicationOutcome
 
 from .contracts import (
     MONITORING_PRIORITIES,

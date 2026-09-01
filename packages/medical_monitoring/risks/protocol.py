@@ -44,9 +44,9 @@ from decimal import Decimal, ROUND_HALF_UP, ROUND_FLOOR, ROUND_CEILING
 from typing import (Any, Dict, List, Mapping, Optional, Sequence, Set,
                     Tuple)
 
-from mm_r2.identity import make_risk_identity
-from mm_r2.risk import RiskCandidate, RiskIdentity
-from mm_r3.normalization import normalize_partial_date
+from ..domain.identity import make_risk_identity
+from ..domain.risk import RiskCandidate, RiskIdentity
+from ..intelligence.normalization import normalize_partial_date
 
 from .contracts import (
     CrossDomainEvidenceRef,

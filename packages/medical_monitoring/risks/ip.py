@@ -46,9 +46,9 @@ from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP
 from fractions import Fraction
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from mm_r2.identity import make_risk_identity
-from mm_r2.risk import RiskCandidate, RiskIdentity
-from mm_r3.normalization import NormalizedValue, normalize_partial_date
+from ..domain.identity import make_risk_identity
+from ..domain.risk import RiskCandidate, RiskIdentity
+from ..intelligence.normalization import NormalizedValue, normalize_partial_date
 
 from .contracts import (
     L0CoverageStatus,
