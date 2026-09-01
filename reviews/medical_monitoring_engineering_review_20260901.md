@@ -142,7 +142,7 @@ R4-D09 发生过评审后追认的过拟合事故：evaluator 靠读取 `mutatio
 1. **五项目完成门**：原"双角色×连续两轮零 P0-P4×五项目＋clean-streak 重置"是商业出厂级门槛，对单用户内部工具过重。调整为：每项目至少一次真实全量 Run ＋ 用户本人按验收清单确认。P0-P4 语义保留作缺陷分级语言，clean-streak 机制取消。
 2. **视觉验收边界**：原 1920×1080–4K 三视口矩阵降为用户主力分辨率一档＋关键页截图存档。
 3. **ensemble/adjudication**：设计保留，默认 `ensemble_size=1`，多模型裁决作为用户可选配置，不作为任何门禁。
-4. **workbench AGENTS.md 的执行模块/会商条款**：与本次治理精简冲突（要求 per-slice 会商编排）。建议用户在 Trellis 初始化后，把该文件中医学监查工程部分的路由要求改为"阶段边界评审"口径；此文件为用户所有，本 review 不代改。
+4. **workbench AGENTS.md 的执行模块/会商条款**：与本次治理精简冲突，已于 2026-09-01 应用户要求直接修订——原"Codex x Hermes Workflow Entrypoint""Current Execution Module Override (2026-07-17)""CodeBuddy Hy3 Override"三节合并替换为"Execution Routing And Review (2026-09-01)"一节：Codex 默认直接执行，外部 harness 降为可选工具，独立评审只在阶段边界/临床法规级交付/用户点名时进行，任务记录进 git＋Trellis，不再向 context/ 新增过程记录。Trellis 初始化时注意其 TRELLIS 标记块只会追加，不会覆盖此节。
 
 ### 建议新增（都很小）
 
