@@ -457,3 +457,11 @@
 - The shared module contains only closed lifecycle/action vocabularies, transition legality, multilingual SAE/AESI negation-aware semantic helpers and immutable transition/evidence records. No study, drug, indication, score, threshold or listing-layout rule was added.
 - Verification: original R2 risk authority passes `148 passed`; compatibility shims pass `4 passed`; R4 lifecycle plus AE/MH, CM, visit-schedule, protocol and shared-domain suites pass `538 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `reports/report_review.py`, preserving source-locatable external-report findings, candidate/fact separation, Chinese-native review wording and draft-only action semantics.
+
+## 2026-09-02 — B3 external-report review decomposition
+
+- Split the 1,947-line R6 report-review runtime into a 1,292-line immutable report-source/object construction surface and a 669-line coverage-accounting/full-review eligibility surface behind the existing `reports.report_review` import path.
+- Preserved raw-byte content identity, report lineage and parent revision linkage, report-unit/claim/issue many-to-many identity, source-locatable evidence, distinct run versus report source revisions, accumulated blocking reasons and the two independent gates: accounting coverage closure versus full-report-reviewed eligibility.
+- The coverage module reuses the source/object validators and canonical hashing rather than introducing a second identity or evidence framework. No external report statement is promoted to a monitoring fact, and no Query/PD send, close or user-confirmation action was added.
+- Verification: report source/object/coverage behavior passes `60 passed`; report bundle and three-mode output behavior passes `409 passed` with one obsolete medical-writing file-count pin; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass. Old POC source hashes, create-only allowlists and aggregate file counts were not refreshed under stage B.
+- Next slice: split `projections/publication/s2_contracts.py`, preserving frozen authority bindings, renderer-neutral projections and accepted-snapshot dual-baseline semantics.
