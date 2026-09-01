@@ -1,3 +1,5 @@
-"""Compatibility import for consolidated risk lifecycle."""
+"""Compatibility alias for consolidated risk lifecycle."""
 
-from packages.medical_monitoring.risks.lifecycle import *  # noqa: F401,F403
+from mm_r4.compat import alias
+
+alias(__name__, "packages.medical_monitoring.risks.lifecycle")
