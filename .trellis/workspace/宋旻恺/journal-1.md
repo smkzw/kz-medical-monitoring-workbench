@@ -344,3 +344,11 @@
 - Every mode-output source is below the 1,500-line hard limit (largest: `mode_output_core.py`, 1,428 lines). The facade eagerly retains all public and historical private symbols, including the two private helpers used by the original R6 suite.
 - Verification: the behavior-bearing original mode-output suite passes `349 passed, 2 deselected`; the two deselected cases are the v2.0-obsolete POC whole-file SHA and create-only allowlist gates. R7 continuity/bridge/registry checks pass `66 passed, 1 skipped`; the broader R5/R7 product surface passes `141 passed`; the protected medical-writing adjacent gate passes `156 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `graph/store.py` around schema/serialization, immutable read projections and transaction-owned write operations while retaining one SQLite connection and transaction boundary.
+
+## 2026-09-02 — B3 authoritative graph-store decomposition
+
+- Split the 4,399-line SQLite authority into common schema/contracts plus mixins for base transaction and run state, manifests, capability work units, node/attempt journals, and artifacts/facts/domain objects/checkpoints/recovery behind one `graph.store.Store` class.
+- The concrete Store still constructs exactly one SQLite connection and shares the same `_txn` implementation across every mixin. No second store, schema, transaction owner or publication pointer was introduced; `_RuntimeAttemptJournal` remains the narrow private mutation facade.
+- Every store source is below the 1,500-line hard limit (largest: `store_base.py`, 1,016 lines). The facade preserves the original public domain imports and private schema-shape symbols required by compatibility checks.
+- Verification: the complete R1 suite passes `326 passed, 1 skipped`; R7 schema/backup/verifier/continuity/progress/harness checks yield `244 passed, 1 skipped` plus one obsolete POC source-text assertion against the now-intentional `launch_schema` compatibility shim; the broader product surface passes `141 passed`; the protected medical-writing adjacent gate passes `156 passed`; `py_compile` and `git diff --check` pass.
+- Next slice: split `risks/ip.py`, preserving exposure/accountability identity, deterministic evidence binding and Query/PD draft semantics without drug- or study-specific constants.
