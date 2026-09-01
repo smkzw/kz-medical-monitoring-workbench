@@ -1,25 +1,21 @@
-// R7 Slice-08C-2 continuity list filtering and same-identity routing helpers.
+// Continuity list filtering and same-identity routing helpers.
 // Pure functions only: the component keeps filter state here as page-local
 // state, filtering preserves the server-authoritative row order, and the
 // Journey/source gates never fabricate identity from internal references.
-// Contract sources:
-// - context/medical_monitoring_r7_slice08c2_frontend_vertical_contract_20260829.md
-// - reviews/medical_monitoring_r7_slice08c_chinese_continuity_visual_contract_v0_2_20260829.md (v0.2 wins)
-
 import {
-  R7_CONTINUITY_CHANGE_KIND_TEXTS,
-  R7_CONTINUITY_CHANGE_KINDS,
-  R7_CONTINUITY_OBJECT_TYPE_TEXTS,
-  R7_CONTINUITY_OBJECT_TYPES,
-  R7_CONTINUITY_ROW_LIMIT,
+  MONITORING_CONTINUITY_CHANGE_KIND_TEXTS,
+  MONITORING_CONTINUITY_CHANGE_KINDS,
+  MONITORING_CONTINUITY_OBJECT_TYPE_TEXTS,
+  MONITORING_CONTINUITY_OBJECT_TYPES,
+  MONITORING_CONTINUITY_ROW_LIMIT,
 } from "./medicalMonitoringContinuityProjection.mjs";
 
-export const R7_CONTINUITY_SEVERITY_CONFIRM_TEXT = "等级变化待确认";
+export const MONITORING_CONTINUITY_SEVERITY_CONFIRM_TEXT = "等级变化待确认";
 
 // Risk-level filter is a closed five-state set; the default view is
 // "中高风险" (current severity 高/中). Non-risk rows never carry severity,
 // so they only appear under "全部".
-export const R7_CONTINUITY_SEVERITY_FILTERS = Object.freeze([
+export const MONITORING_CONTINUITY_SEVERITY_FILTERS = Object.freeze([
   { value: "mid_high", label: "中高风险" },
   { value: "all", label: "全部" },
   { value: "high", label: "高" },
@@ -28,24 +24,24 @@ export const R7_CONTINUITY_SEVERITY_FILTERS = Object.freeze([
 ]);
 
 // Change-kind filter is the frozen seven-kind closed set.
-export const R7_CONTINUITY_CHANGE_FILTERS = Object.freeze([
+export const MONITORING_CONTINUITY_CHANGE_FILTERS = Object.freeze([
   { value: "all", label: "全部变化" },
-  ...R7_CONTINUITY_CHANGE_KINDS.map((value) => ({
+  ...MONITORING_CONTINUITY_CHANGE_KINDS.map((value) => ({
     value,
-    label: R7_CONTINUITY_CHANGE_KIND_TEXTS[value],
+    label: MONITORING_CONTINUITY_CHANGE_KIND_TEXTS[value],
   })),
 ]);
 
 // Object-category filter is the frozen three-type closed set.
-export const R7_CONTINUITY_OBJECT_FILTERS = Object.freeze([
+export const MONITORING_CONTINUITY_OBJECT_FILTERS = Object.freeze([
   { value: "all", label: "全部类别" },
-  ...R7_CONTINUITY_OBJECT_TYPES.map((value) => ({
+  ...MONITORING_CONTINUITY_OBJECT_TYPES.map((value) => ({
     value,
-    label: R7_CONTINUITY_OBJECT_TYPE_TEXTS[value],
+    label: MONITORING_CONTINUITY_OBJECT_TYPE_TEXTS[value],
   })),
 ]);
 
-export const R7_CONTINUITY_DEFAULT_FILTER = Object.freeze({
+export const MONITORING_CONTINUITY_DEFAULT_FILTER = Object.freeze({
   severity: "mid_high",
   changeKind: "all",
   objectType: "all",
@@ -53,8 +49,8 @@ export const R7_CONTINUITY_DEFAULT_FILTER = Object.freeze({
   subjectQuery: "",
 });
 
-export function createR7ContinuityFilterState() {
-  return { ...R7_CONTINUITY_DEFAULT_FILTER };
+export function createMonitoringContinuityFilterState() {
+  return { ...MONITORING_CONTINUITY_DEFAULT_FILTER };
 }
 
 function clean(value, fallback = "") {
@@ -73,7 +69,7 @@ function matchesSeverityFilter(row, severity) {
 
 // Filters only; never reorders. Server order is authoritative and the
 // projection validator guarantees it is already non-decreasing.
-export function filterR7ContinuityRows(rows, filter = {}) {
+export function filterMonitoringContinuityRows(rows, filter = {}) {
   const source = filter && typeof filter === "object" ? filter : {};
   const severity = source.severity || "mid_high";
   const changeKind = source.changeKind || "all";
@@ -100,28 +96,28 @@ export function filterR7ContinuityRows(rows, filter = {}) {
 // defensive display guard, but only needs_rejudgment may legitimately lack a
 // current level after strict projection validation.
 // Non-risk rows must never carry a level badge (contract §4).
-export function r7ContinuityRowSeverityLabel(row) {
+export function monitoringContinuityRowSeverityLabel(row) {
   if (!row || typeof row !== "object" || row.object_type !== "risk") return "";
   const kind = clean(row?.change_kind);
   const before = clean(row?.severity_before_text);
   const after = clean(row?.severity_after_text);
-  if (kind === "new") return after || R7_CONTINUITY_SEVERITY_CONFIRM_TEXT;
-  if (kind === "closed") return before ? `${before}（已关闭）` : R7_CONTINUITY_SEVERITY_CONFIRM_TEXT;
+  if (kind === "new") return after || MONITORING_CONTINUITY_SEVERITY_CONFIRM_TEXT;
+  if (kind === "closed") return before ? `${before}（已关闭）` : MONITORING_CONTINUITY_SEVERITY_CONFIRM_TEXT;
   if (kind === "upgraded" || kind === "downgraded" || kind === "continued") {
-    return before && after ? `${before} → ${after}` : R7_CONTINUITY_SEVERITY_CONFIRM_TEXT;
+    return before && after ? `${before} → ${after}` : MONITORING_CONTINUITY_SEVERITY_CONFIRM_TEXT;
   }
   if (kind === "reopened" || kind === "needs_rejudgment") {
-    return after || R7_CONTINUITY_SEVERITY_CONFIRM_TEXT;
+    return after || MONITORING_CONTINUITY_SEVERITY_CONFIRM_TEXT;
   }
   return "";
 }
 
 // Journey gate (frozen contract §2.4, v0.1 §7.2): a risk row may enter the
-// Patient Journey only when the current R5 result projection confirms the
+// Patient Journey only when the current result projection confirms the
 // same subject/site/spine and exposes a usable Journey window containing the
 // risk row window. The narrower risk window remains the route window. Never
 // fabricates subject/site Chinese names from internal references.
-export function r7ContinuityRowJourneyTarget(row, resultPayload) {
+export function monitoringContinuityRowJourneyTarget(row, resultPayload) {
   if (!row || typeof row !== "object") return null;
   if (row.object_type !== "risk") return null;
   const subjectRef = clean(row.subject_ref);
@@ -186,7 +182,7 @@ export function r7ContinuityRowJourneyTarget(row, resultPayload) {
 // carries a usable risk_instance_ref + source_locator_ref pair; reuses the
 // existing public source route. Empty-source rows stay disabled with the
 // "原始记录位置待确认" hint and never perform an empty jump.
-export function r7ContinuityRowSourceTarget(row) {
+export function monitoringContinuityRowSourceTarget(row) {
   if (!row || typeof row !== "object") return null;
   const riskInstanceRef = clean(row.risk_instance_ref);
   const sourceLocatorRef = clean(row.source_locator_ref);
@@ -195,9 +191,9 @@ export function r7ContinuityRowSourceTarget(row) {
 }
 
 // Truncation hint (v0.1 §6): explicit "共 N 条，当前显示前 M 条" wording.
-export function r7ContinuityTruncationText(comparison) {
+export function monitoringContinuityTruncationText(comparison) {
   if (!comparison || comparison.truncated !== true) return "";
   const total = Number.isInteger(comparison.total_count) ? comparison.total_count : 0;
   const shown = Number.isInteger(comparison.shown_count) ? comparison.shown_count : 0;
-  return `变化较多，共 ${total} 条，当前显示前 ${shown} 条（服务端最多返回 ${R7_CONTINUITY_ROW_LIMIT} 条）。`;
+  return `变化较多，共 ${total} 条，当前显示前 ${shown} 条（服务端最多返回 ${MONITORING_CONTINUITY_ROW_LIMIT} 条）。`;
 }

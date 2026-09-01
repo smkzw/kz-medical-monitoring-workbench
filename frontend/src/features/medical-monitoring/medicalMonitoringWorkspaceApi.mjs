@@ -1,10 +1,10 @@
 import {
-  MEDICAL_MONITORING_R5_CANONICAL_KEYS,
-  r5SubjectView,
+  MEDICAL_MONITORING_WORKSPACE_CANONICAL_KEYS,
+  monitoringSubjectView,
 } from "./medicalMonitoringWorkspaceRouteState.mjs";
 
-export const MEDICAL_MONITORING_R5_SCHEMA = "medical-monitoring-r5-s7-product-read-model-v0.1";
-export const MEDICAL_MONITORING_R5_API_PREFIX = "/api/projects";
+export const MEDICAL_MONITORING_WORKSPACE_SCHEMA = "medical-monitoring-r5-s7-product-read-model-v0.1";
+export const MEDICAL_MONITORING_WORKSPACE_API_PREFIX = "/api/projects";
 
 const HASH_KEYS = [
   "target_projection_content_hash",
@@ -130,10 +130,10 @@ const FLOW_STAGE_CHANGE_KINDS = Object.freeze({
   not_comparable: "暂不可比较",
 });
 
-export class MedicalMonitoringR5AdapterError extends Error {
+export class MedicalMonitoringWorkspaceApiError extends Error {
   constructor(code, message, details = {}) {
     super(message);
-    this.name = "MedicalMonitoringR5AdapterError";
+    this.name = "MedicalMonitoringWorkspaceApiError";
     this.code = code;
     this.details = details;
     this.status = details.status || 0;
@@ -147,7 +147,7 @@ function clean(value) {
 
 function required(value, name) {
   if (value === null || value === undefined || value === "") {
-    throw new MedicalMonitoringR5AdapterError("REQUIRED_FIELD_MISSING", `R5 response field missing: ${name}`, { field: name });
+    throw new MedicalMonitoringWorkspaceApiError("REQUIRED_FIELD_MISSING", `医学监查响应 field missing: ${name}`, { field: name });
   }
   return value;
 }
@@ -158,14 +158,14 @@ function hasOwn(value, key) {
 
 function hash(value, name) {
   if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) {
-    throw new MedicalMonitoringR5AdapterError("DIGEST_INVALID", `R5 response digest invalid: ${name}`, { field: name });
+    throw new MedicalMonitoringWorkspaceApiError("DIGEST_INVALID", `医学监查响应 digest invalid: ${name}`, { field: name });
   }
   return value;
 }
 
 function requiredString(value, name) {
   if (typeof value !== "string" || !value.trim()) {
-    throw new MedicalMonitoringR5AdapterError("REQUIRED_STRING_MISSING", `R5 response string missing: ${name}`, { field: name });
+    throw new MedicalMonitoringWorkspaceApiError("REQUIRED_STRING_MISSING", `医学监查响应 string missing: ${name}`, { field: name });
   }
   return value;
 }
@@ -192,19 +192,19 @@ function stripResponseDigest(value, parentKey = "") {
 
 async function sha256Hex(text) {
   if (!globalThis.crypto?.subtle || typeof TextEncoder !== "function") {
-    throw new MedicalMonitoringR5AdapterError("DIGEST_UNAVAILABLE", "R5 response digest verification is unavailable in this runtime.");
+    throw new MedicalMonitoringWorkspaceApiError("DIGEST_UNAVAILABLE", "医学监查响应 digest verification is unavailable in this runtime.");
   }
   const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-export async function computeMedicalMonitoringR5ResponseDigest(envelope) {
+export async function computeMedicalMonitoringWorkspaceResponseDigest(envelope) {
   return sha256Hex(JSON.stringify(canonicalize(stripResponseDigest(envelope))));
 }
 
 function array(value, name) {
   if (!Array.isArray(value)) {
-    throw new MedicalMonitoringR5AdapterError("SCHEMA_FIELD_INVALID", `R5 response array invalid: ${name}`, { field: name });
+    throw new MedicalMonitoringWorkspaceApiError("SCHEMA_FIELD_INVALID", `医学监查响应 array invalid: ${name}`, { field: name });
   }
   return value;
 }
@@ -214,11 +214,11 @@ function queryEntries(values, allowed, requiredKeys = []) {
   const entries = [];
   const unknown = Object.keys(source).filter((key) => !allowed.has(key));
   if (unknown.length) {
-    throw new MedicalMonitoringR5AdapterError("QUERY_KEY_INVALID", "R5 request query is outside the closed read surface.", { fields: unknown });
+    throw new MedicalMonitoringWorkspaceApiError("QUERY_KEY_INVALID", "医学监查请求 query is outside the closed read surface.", { fields: unknown });
   }
   for (const key of requiredKeys) {
     if (!clean(source[key])) {
-      throw new MedicalMonitoringR5AdapterError("QUERY_FIELD_MISSING", `R5 request field missing: ${key}`, { field: key });
+      throw new MedicalMonitoringWorkspaceApiError("QUERY_FIELD_MISSING", `医学监查请求 field missing: ${key}`, { field: key });
     }
   }
   for (const [key, value] of Object.entries(source)) {
@@ -231,14 +231,14 @@ function queryEntries(values, allowed, requiredKeys = []) {
 function rejectOptionKeys(options, allowed) {
   const unknown = Object.keys(options || {}).filter((key) => !allowed.has(key));
   if (unknown.length) {
-    throw new MedicalMonitoringR5AdapterError("QUERY_OPTION_INVALID", "R5 adapter options are outside the closed read surface.", { fields: unknown });
+    throw new MedicalMonitoringWorkspaceApiError("QUERY_OPTION_INVALID", "医学监查数据适配器 options are outside the closed read surface.", { fields: unknown });
   }
 }
 
 function createPath(projectId, suffix) {
   const project = clean(projectId);
-  if (!project) throw new TypeError("R5 project identity is required.");
-  return `${MEDICAL_MONITORING_R5_API_PREFIX}/${encodeURIComponent(project)}/modules/medical-monitoring/r5/${suffix}`;
+  if (!project) throw new TypeError("医学监查项目标识 is required.");
+  return `${MEDICAL_MONITORING_WORKSPACE_API_PREFIX}/${encodeURIComponent(project)}/modules/medical-monitoring/r5/${suffix}`;
 }
 
 function endpointUrl(baseUrl, path, entries) {
@@ -251,7 +251,7 @@ async function readResponse(response) {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const detail = payload?.detail?.message || payload?.detail || payload?.message || `HTTP ${response.status}`;
-    throw new MedicalMonitoringR5AdapterError("HTTP_READ_FAILED", String(detail), {
+    throw new MedicalMonitoringWorkspaceApiError("HTTP_READ_FAILED", String(detail), {
       status: response.status,
       payload,
     });
@@ -263,17 +263,17 @@ function validateIdentity(identity, expected = {}) {
   required(identity, "identity");
   for (const key of IDENTITY_KEYS) {
     if (!hasOwn(identity, key)) {
-      throw new MedicalMonitoringR5AdapterError("IDENTITY_FIELD_MISSING", `R5 identity field missing: ${key}`, { field: key });
+      throw new MedicalMonitoringWorkspaceApiError("IDENTITY_FIELD_MISSING", `医学监查数据标识 field missing: ${key}`, { field: key });
     }
   }
   for (const key of REQUIRED_IDENTITY_STRINGS) requiredString(identity[key], `identity.${key}`);
   if (!["present", "absent"].includes(identity.cutoff_state)) {
-    throw new MedicalMonitoringR5AdapterError("IDENTITY_FIELD_INVALID", "R5 identity cutoff_state is invalid.", { field: "cutoff_state" });
+    throw new MedicalMonitoringWorkspaceApiError("IDENTITY_FIELD_INVALID", "医学监查数据标识 cutoff_state is invalid.", { field: "cutoff_state" });
   }
   if (identity.cutoff_state === "present") requiredString(identity.cutoff_ref, "identity.cutoff_ref");
   for (const key of HASH_KEYS) hash(identity[key], `identity.${key}`);
   if (clean(expected.projectRef) && identity.project_ref !== expected.projectRef) {
-    throw new MedicalMonitoringR5AdapterError("IDENTITY_PROJECT_MISMATCH", "R5 response project identity does not match the requested project.");
+    throw new MedicalMonitoringWorkspaceApiError("IDENTITY_PROJECT_MISMATCH", "医学监查响应 project identity does not match the requested project.");
   }
   for (const [expectedKey, identityKey] of [
     ["runRef", "run_ref"],
@@ -288,7 +288,7 @@ function validateIdentity(identity, expected = {}) {
   ]) {
     const expectedValue = clean(expected[expectedKey]);
     if (expectedValue && identity[identityKey] !== expectedValue) {
-      throw new MedicalMonitoringR5AdapterError("IDENTITY_TARGET_MISMATCH", `R5 response target identity does not match: ${identityKey}`, { field: identityKey });
+      throw new MedicalMonitoringWorkspaceApiError("IDENTITY_TARGET_MISMATCH", `医学监查响应 target identity does not match: ${identityKey}`, { field: identityKey });
     }
   }
   return identity;
@@ -296,55 +296,55 @@ function validateIdentity(identity, expected = {}) {
 
 async function validateEnvelope(payload, expected = {}) {
   required(payload, "response");
-  if (payload.schema !== MEDICAL_MONITORING_R5_SCHEMA) {
-    throw new MedicalMonitoringR5AdapterError("SCHEMA_MISMATCH", "R5 response schema is not accepted.");
+  if (payload.schema !== MEDICAL_MONITORING_WORKSPACE_SCHEMA) {
+    throw new MedicalMonitoringWorkspaceApiError("SCHEMA_MISMATCH", "医学监查响应 schema is not accepted.");
   }
   for (const key of ["authority_receipt", "identity", "projection", "counts", "source_refs", "read_handoff"]) {
     if (!hasOwn(payload, key)) {
-      throw new MedicalMonitoringR5AdapterError("SCHEMA_FIELD_MISSING", `R5 response field missing: ${key}`, { field: key });
+      throw new MedicalMonitoringWorkspaceApiError("SCHEMA_FIELD_MISSING", `医学监查响应 field missing: ${key}`, { field: key });
     }
   }
   if (payload.read_only !== true || payload.mutation_applied !== false || payload.persisted !== false) {
-    throw new MedicalMonitoringR5AdapterError("READ_FLAGS_INVALID", "R5 response is not marked as an immutable read.");
+    throw new MedicalMonitoringWorkspaceApiError("READ_FLAGS_INVALID", "医学监查响应 is not marked as an immutable read.");
   }
   if (hasOwn(payload, "cas_version_before") && payload.cas_version_before !== payload.cas_version_after) {
-    throw new MedicalMonitoringR5AdapterError("CAS_CHANGED", "R5 response aggregate changed during the read.");
+    throw new MedicalMonitoringWorkspaceApiError("CAS_CHANGED", "医学监查响应 aggregate changed during the read.");
   }
   if (hasOwn(payload, "aggregate_version_before") && payload.aggregate_version_before !== payload.aggregate_version_after) {
-    throw new MedicalMonitoringR5AdapterError("AGGREGATE_CHANGED", "R5 response aggregate changed during the read.");
+    throw new MedicalMonitoringWorkspaceApiError("AGGREGATE_CHANGED", "医学监查响应 aggregate changed during the read.");
   }
   const responseHash = hash(payload.response_snapshot_sha256, "response_snapshot_sha256");
-  const recomputedResponseHash = await computeMedicalMonitoringR5ResponseDigest(payload);
+  const recomputedResponseHash = await computeMedicalMonitoringWorkspaceResponseDigest(payload);
   if (recomputedResponseHash !== responseHash) {
-    throw new MedicalMonitoringR5AdapterError("RESPONSE_DIGEST_MISMATCH", "R5 response bytes are not bound to response_snapshot_sha256.");
+    throw new MedicalMonitoringWorkspaceApiError("RESPONSE_DIGEST_MISMATCH", "医学监查响应内容与响应摘要不一致。");
   }
   const identity = validateIdentity(payload.identity, expected);
   if (identity.response_snapshot_sha256 !== responseHash) {
-    throw new MedicalMonitoringR5AdapterError("DIGEST_IDENTITY_MISMATCH", "R5 response digest is not bound to its identity trace.");
+    throw new MedicalMonitoringWorkspaceApiError("DIGEST_IDENTITY_MISMATCH", "医学监查响应 digest is not bound to its identity trace.");
   }
   const receipt = required(payload.authority_receipt, "authority_receipt");
   for (const key of ["project_ref", "run_ref", "snapshot_ref", "cutoff_ref"]) {
     if (!hasOwn(receipt, key)) {
-      throw new MedicalMonitoringR5AdapterError("RECEIPT_FIELD_MISSING", `R5 authority receipt field missing: ${key}`, { field: key });
+      throw new MedicalMonitoringWorkspaceApiError("RECEIPT_FIELD_MISSING", `医学监查依据凭据 field missing: ${key}`, { field: key });
     }
     if (receipt[key] !== identity[key]) {
-      throw new MedicalMonitoringR5AdapterError("RECEIPT_IDENTITY_MISMATCH", `R5 authority receipt mismatch: ${key}`, { field: key });
+      throw new MedicalMonitoringWorkspaceApiError("RECEIPT_IDENTITY_MISMATCH", `医学监查依据凭据 mismatch: ${key}`, { field: key });
     }
   }
   const projectionHash = hash(payload.projection.content_hash, "projection.content_hash");
   if (identity.target_projection_content_hash !== projectionHash) {
-    throw new MedicalMonitoringR5AdapterError("PROJECTION_DIGEST_MISMATCH", "R5 projection content is not bound to its identity trace.");
+    throw new MedicalMonitoringWorkspaceApiError("PROJECTION_DIGEST_MISMATCH", "医学监查数据视图 content is not bound to its identity trace.");
   }
   if (hasOwn(receipt, "authority_hash")) hash(receipt.authority_hash, "authority_receipt.authority_hash");
   if (hasOwn(receipt, "source_snapshot_sha256")) hash(receipt.source_snapshot_sha256, "authority_receipt.source_snapshot_sha256");
   if (hasOwn(receipt, "projectable") && receipt.projectable !== true) {
-    throw new MedicalMonitoringR5AdapterError("PROJECTION_NOT_PROJECTABLE", "R5 authority receipt does not permit this projection.");
+    throw new MedicalMonitoringWorkspaceApiError("PROJECTION_NOT_PROJECTABLE", "医学监查依据凭据 does not permit this projection.");
   }
   array(payload.source_refs, "source_refs");
   const readHandoff = required(payload.read_handoff, "read_handoff");
   const handoffResponseHash = hash(readHandoff.response_snapshot_sha256, "read_handoff.response_snapshot_sha256");
   if (handoffResponseHash !== responseHash) {
-    throw new MedicalMonitoringR5AdapterError("DIGEST_HANDOFF_MISMATCH", "R5 read handoff is not bound to response_snapshot_sha256.");
+    throw new MedicalMonitoringWorkspaceApiError("DIGEST_HANDOFF_MISMATCH", "医学监查读取结果 is not bound to response_snapshot_sha256.");
   }
   return { ...payload, identity, response_snapshot_sha256: responseHash };
 }
@@ -367,11 +367,11 @@ function changeLabel(value) {
 
 function domainEncoding(value = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new MedicalMonitoringR5AdapterError("DOMAIN_ENCODING_INVALID", "R5 projection domain encoding must be an object.");
+    throw new MedicalMonitoringWorkspaceApiError("DOMAIN_ENCODING_INVALID", "医学监查数据视图 domain encoding must be an object.");
   }
   const domain = requiredString(value.domain, "domain_encoding.domain");
   if (!DOMAINS[domain]) {
-    throw new MedicalMonitoringR5AdapterError("DOMAIN_UNKNOWN", "R5 projection contains a domain outside the accepted eight-domain registry.", { domain });
+    throw new MedicalMonitoringWorkspaceApiError("DOMAIN_UNKNOWN", "医学监查数据视图 contains a domain outside the accepted eight-domain registry.", { domain });
   }
   return {
     domain,
@@ -383,7 +383,7 @@ function domainEncoding(value = {}) {
 
 function normalizeRisk(value = {}, domainRegistry = new Map()) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new MedicalMonitoringR5AdapterError("RISK_SCHEMA_INVALID", "R5 current-risk row must be an object.");
+    throw new MedicalMonitoringWorkspaceApiError("RISK_SCHEMA_INVALID", "当前风险 row must be an object.");
   }
   const riskRef = requiredString(value.risk_key || value.risk_ref, "current_risk.risk_ref");
   const riskInstanceRef = requiredString(value.risk_instance_ref || value.risk_instance_id, "current_risk.risk_instance_ref");
@@ -392,15 +392,15 @@ function normalizeRisk(value = {}, domainRegistry = new Map()) {
   const spineRef = requiredString(value.spine_ref, "current_risk.spine_ref");
   const severity = requiredString(value.severity, "current_risk.severity").toLowerCase();
   if (!Object.prototype.hasOwnProperty.call(SEVERITIES, severity)) {
-    throw new MedicalMonitoringR5AdapterError("RISK_SEVERITY_UNKNOWN", "R5 current-risk severity is outside the accepted registry.", { severity });
+    throw new MedicalMonitoringWorkspaceApiError("RISK_SEVERITY_UNKNOWN", "当前风险 severity is outside the accepted registry.", { severity });
   }
   const dateState = requiredString(value.date_state, "current_risk.date_state");
   if (!Object.prototype.hasOwnProperty.call(DATE_STATES, dateState)) {
-    throw new MedicalMonitoringR5AdapterError("RISK_DATE_STATE_UNKNOWN", "R5 current-risk date state is outside the accepted registry.", { dateState });
+    throw new MedicalMonitoringWorkspaceApiError("RISK_DATE_STATE_UNKNOWN", "当前风险 date state is outside the accepted registry.", { dateState });
   }
   const changeKind = requiredString(value.change_kind, "current_risk.change_kind");
   if (!Object.prototype.hasOwnProperty.call(CHANGE_KINDS, changeKind)) {
-    throw new MedicalMonitoringR5AdapterError("RISK_CHANGE_KIND_UNKNOWN", "R5 current-risk change kind is outside the accepted registry.", { changeKind });
+    throw new MedicalMonitoringWorkspaceApiError("RISK_CHANGE_KIND_UNKNOWN", "当前风险 change kind is outside the accepted registry.", { changeKind });
   }
   const riskType = requiredString(value.risk_type_zh || value.risk_type || value.title, "current_risk.risk_type_zh");
   const riskAnchorRef = requiredString(value.risk_anchor_ref, "current_risk.risk_anchor_ref");
@@ -408,10 +408,10 @@ function normalizeRisk(value = {}, domainRegistry = new Map()) {
     ? domainEncoding(value.domain)
     : domainRegistry.get(requiredString(value.domain, "current_risk.domain"));
   if (!domain) {
-    throw new MedicalMonitoringR5AdapterError("DOMAIN_ENCODING_MISSING", "R5 current-risk domain has no authoritative encoding.", { domain: value.domain });
+    throw new MedicalMonitoringWorkspaceApiError("DOMAIN_ENCODING_MISSING", "当前风险 domain has no authoritative encoding.", { domain: value.domain });
   }
   if (value.source_locator_refs !== undefined && !Array.isArray(value.source_locator_refs)) {
-    throw new MedicalMonitoringR5AdapterError("RISK_SOURCE_REFS_INVALID", "R5 current-risk source locator refs must be an array.");
+    throw new MedicalMonitoringWorkspaceApiError("RISK_SOURCE_REFS_INVALID", "当前风险 source locator refs must be an array.");
   }
   return {
     ...value,
@@ -455,7 +455,7 @@ function normalizeMeasure(value = {}) {
 
 function normalizeCenter(value = {}, measureCatalog = new Map(), domainRegistry = new Map()) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new MedicalMonitoringR5AdapterError("CENTER_CELL_INVALID", "R5 center_map cell must be an object.");
+    throw new MedicalMonitoringWorkspaceApiError("CENTER_CELL_INVALID", "中心数据 cell must be an object.");
   }
   const siteRef = requiredString(value.site_ref || value.site_id, "center_map.cells.site_ref");
   const measures = Array.isArray(value.measures)
@@ -463,7 +463,7 @@ function normalizeCenter(value = {}, measureCatalog = new Map(), domainRegistry 
     : Array.isArray(value.measure_refs)
       ? value.measure_refs.map((ref) => {
         const measure = measureCatalog.get(ref);
-        if (!measure) throw new MedicalMonitoringR5AdapterError("MEASURE_NOT_BOUND", "R5 center measure ref is not bound to a measure.", { measureRef: ref });
+        if (!measure) throw new MedicalMonitoringWorkspaceApiError("MEASURE_NOT_BOUND", "中心指标 ref is not bound to a measure.", { measureRef: ref });
         return normalizeMeasure({ ...measure, measure_ref: ref });
       })
       : [];
@@ -484,14 +484,14 @@ function normalizeEvent(value = {}) {
   const subtype = requiredString(value.subtype, "event.subtype");
   const dateState = requiredString(value.date_state, "event.date_state");
   if (!Object.prototype.hasOwnProperty.call(DATE_STATES, dateState)) {
-    throw new MedicalMonitoringR5AdapterError("EVENT_DATE_STATE_UNKNOWN", "R5 event date state is outside the accepted registry.", { dateState });
+    throw new MedicalMonitoringWorkspaceApiError("EVENT_DATE_STATE_UNKNOWN", "医学事件 date state is outside the accepted registry.", { dateState });
   }
   const eventLabel = requiredString(value.event_label || value.label_zh || value.label, "event.label_zh");
   if (value.risk_anchor_refs !== undefined && !Array.isArray(value.risk_anchor_refs)) {
-    throw new MedicalMonitoringR5AdapterError("EVENT_RISK_ANCHORS_INVALID", "R5 event risk anchors must be an array.");
+    throw new MedicalMonitoringWorkspaceApiError("EVENT_RISK_ANCHORS_INVALID", "医学事件 risk anchors must be an array.");
   }
   if (value.source_locator_refs !== undefined && !Array.isArray(value.source_locator_refs)) {
-    throw new MedicalMonitoringR5AdapterError("EVENT_SOURCE_REFS_INVALID", "R5 event source locator refs must be an array.");
+    throw new MedicalMonitoringWorkspaceApiError("EVENT_SOURCE_REFS_INVALID", "医学事件 source locator refs must be an array.");
   }
   return {
     ...value,
@@ -511,17 +511,17 @@ function normalizeEvent(value = {}) {
 
 function normalizeIndicator(value = {}, index = 0) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new MedicalMonitoringR5AdapterError("INDICATOR_SCHEMA_INVALID", "R5 indicator must be an object.", { index });
+    throw new MedicalMonitoringWorkspaceApiError("INDICATOR_SCHEMA_INVALID", "监查指标 must be an object.", { index });
   }
   const indicatorRef = requiredString(value.indicator_ref || value.metric_ref || value.id, `indicator[${index}].indicator_ref`);
   const label = requiredString(value.label || value.label_zh || value.indicator_label, `indicator[${index}].label`);
   const rawPoints = value.points ?? value.trend_points ?? value.values;
   if (!Array.isArray(rawPoints)) {
-    throw new MedicalMonitoringR5AdapterError("INDICATOR_POINTS_INVALID", "R5 indicator trend points are missing or invalid.", { index });
+    throw new MedicalMonitoringWorkspaceApiError("INDICATOR_POINTS_INVALID", "监查指标 trend points are missing or invalid.", { index });
   }
   const points = rawPoints.map((point, pointIndex) => {
     if (!point || typeof point !== "object" || Array.isArray(point)) {
-      throw new MedicalMonitoringR5AdapterError("INDICATOR_POINT_INVALID", "R5 indicator point is invalid.", { index, pointIndex });
+      throw new MedicalMonitoringWorkspaceApiError("INDICATOR_POINT_INVALID", "监查指标 point is invalid.", { index, pointIndex });
     }
     return {
       ...point,
@@ -535,18 +535,18 @@ function normalizeIndicator(value = {}, index = 0) {
 function countValue(value, name) {
   if (value === null || value === undefined || value === "") return null;
   if (!Number.isInteger(value) || value < 0) {
-    throw new MedicalMonitoringR5AdapterError("COUNT_INVALID", `R5 authoritative count invalid: ${name}`, { field: name });
+    throw new MedicalMonitoringWorkspaceApiError("COUNT_INVALID", `监查统计数值 invalid: ${name}`, { field: name });
   }
   return value;
 }
 
 function normalizeCounts(value = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new MedicalMonitoringR5AdapterError("COUNTS_SCHEMA_INVALID", "R5 authoritative counts must be an object.");
+    throw new MedicalMonitoringWorkspaceApiError("COUNTS_SCHEMA_INVALID", "监查统计数值s must be an object.");
   }
   const current = value.current_risk || value.currentRisk || value.current_risk_counts || {};
   if (!current || typeof current !== "object" || Array.isArray(current)) {
-    throw new MedicalMonitoringR5AdapterError("COUNTS_SCHEMA_INVALID", "R5 current-risk counts must be an object.");
+    throw new MedicalMonitoringWorkspaceApiError("COUNTS_SCHEMA_INVALID", "当前风险 counts must be an object.");
   }
   return {
     ...value,
@@ -570,14 +570,14 @@ function normalizeCounts(value = {}) {
 
 function flowCount(value, name) {
   if (!Number.isInteger(value) || value < 0) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_FIELD_INVALID", `R5 subject_flow count invalid: ${name}`, { field: name });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_FIELD_INVALID", `受试者流向 count invalid: ${name}`, { field: name });
   }
   return value;
 }
 
 function flowBoolean(value, name) {
   if (typeof value !== "boolean") {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_FIELD_INVALID", `R5 subject_flow flag invalid: ${name}`, { field: name });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_FIELD_INVALID", `受试者流向 flag invalid: ${name}`, { field: name });
   }
   return value;
 }
@@ -585,7 +585,7 @@ function flowBoolean(value, name) {
 function flowEnum(value, registry, name, errorSuffix) {
   const text = requiredString(value, name);
   if (!registry.includes(text)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_FIELD_INVALID", `R5 subject_flow ${errorSuffix} is outside the accepted registry: ${name}`, { field: name, value: text });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_FIELD_INVALID", `受试者流向 ${errorSuffix} is outside the accepted registry: ${name}`, { field: name, value: text });
   }
   return text;
 }
@@ -597,7 +597,7 @@ function flowLocatorRefs(value, name) {
 
 function normalizeSubjectFlowStage(stage) {
   if (!stage || typeof stage !== "object" || Array.isArray(stage)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_FIELD_INVALID", "R5 subject_flow stage must be an object.", { field: "subject_flow.stages" });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_FIELD_INVALID", "受试者流向 stage must be an object.", { field: "subject_flow.stages" });
   }
   const stageRef = requiredString(stage.stage_ref, "subject_flow.stages[].stage_ref");
   return {
@@ -617,13 +617,13 @@ function normalizeSubjectFlowStage(stage) {
 
 function normalizeSubjectFlowLink(link, stageRefs) {
   if (!link || typeof link !== "object" || Array.isArray(link)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_FIELD_INVALID", "R5 subject_flow link must be an object.", { field: "subject_flow.links" });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_FIELD_INVALID", "受试者流向 link must be an object.", { field: "subject_flow.links" });
   }
   const linkRef = requiredString(link.link_ref, "subject_flow.links[].link_ref");
   const fromStageRef = requiredString(link.from_stage_ref, `subject_flow.links.${linkRef}.from_stage_ref`);
   const toStageRef = requiredString(link.to_stage_ref, `subject_flow.links.${linkRef}.to_stage_ref`);
   if (!stageRefs.has(fromStageRef) || !stageRefs.has(toStageRef)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_REF_UNRESOLVED", `R5 subject_flow link does not resolve to a declared stage: ${linkRef}`, { field: `subject_flow.links.${linkRef}` });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_REF_UNRESOLVED", `受试者流向 link does not resolve to a declared stage: ${linkRef}`, { field: `subject_flow.links.${linkRef}` });
   }
   return {
     linkRef,
@@ -636,49 +636,49 @@ function normalizeSubjectFlowLink(link, stageRefs) {
 
 function normalizeSubjectFlowSubject(row, stageRefs, scopeSiteRef) {
   if (!row || typeof row !== "object" || Array.isArray(row)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_FIELD_INVALID", "R5 subject_flow subject row must be an object.", { field: "subject_flow.subjects" });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_FIELD_INVALID", "受试者流向 subject row must be an object.", { field: "subject_flow.subjects" });
   }
   const subjectRef = requiredString(row.subject_ref, "subject_flow.subjects[].subject_ref");
   const siteRef = requiredString(row.site_ref, `subject_flow.subjects.${subjectRef}.site_ref`);
   if (scopeSiteRef && siteRef !== scopeSiteRef) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_IDENTITY_MISMATCH", `R5 subject_flow subject row is outside the scoped center: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.site_ref` });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_IDENTITY_MISMATCH", `受试者流向 subject row is outside the scoped center: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.site_ref` });
   }
   const currentStageRef = requiredString(row.current_stage_ref, `subject_flow.subjects.${subjectRef}.current_stage_ref`);
   if (!stageRefs.has(currentStageRef)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_REF_UNRESOLVED", `R5 subject_flow subject row does not resolve to a declared stage: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.current_stage_ref` });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_REF_UNRESOLVED", `受试者流向 subject row does not resolve to a declared stage: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.current_stage_ref` });
   }
   const priorStageRef = clean(row.prior_stage_ref);
   if (priorStageRef && !stageRefs.has(priorStageRef)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_REF_UNRESOLVED", `R5 subject_flow subject prior stage does not resolve to a declared stage: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.prior_stage_ref` });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_REF_UNRESOLVED", `受试者流向 subject prior stage does not resolve to a declared stage: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.prior_stage_ref` });
   }
   const dateState = clean(row.date_state);
   if (dateState && !Object.prototype.hasOwnProperty.call(DATE_STATES, dateState)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_FIELD_INVALID", `R5 subject_flow subject date state is outside the accepted registry: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.date_state` });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_FIELD_INVALID", `受试者流向 subject date state is outside the accepted registry: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.date_state` });
   }
   const stageChangeKind = clean(row.stage_change_kind);
   if (stageChangeKind && !Object.prototype.hasOwnProperty.call(FLOW_STAGE_CHANGE_KINDS, stageChangeKind)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_FIELD_INVALID", `R5 subject_flow stage change kind is outside the accepted registry: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.stage_change_kind` });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_FIELD_INVALID", `受试者流向 stage change kind is outside the accepted registry: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.stage_change_kind` });
   }
   const riskChangeKind = clean(row.risk_change_kind);
   if (riskChangeKind && !Object.prototype.hasOwnProperty.call(CHANGE_KINDS, riskChangeKind)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_FIELD_INVALID", `R5 subject_flow risk change kind is outside the accepted registry: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.risk_change_kind` });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_FIELD_INVALID", `受试者流向 risk change kind is outside the accepted registry: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.risk_change_kind` });
   }
   let currentMidHighRisk = false;
   if (typeof row.current_mid_high_risk === "boolean") currentMidHighRisk = row.current_mid_high_risk;
   else if (row.current_mid_high_risk_count !== undefined && row.current_mid_high_risk_count !== null) {
     currentMidHighRisk = flowCount(row.current_mid_high_risk_count, `subject_flow.subjects.${subjectRef}.current_mid_high_risk_count`) > 0;
   } else if (row.current_mid_high_risk !== undefined && row.current_mid_high_risk !== null) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_FIELD_INVALID", `R5 subject_flow subject risk flag invalid: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.current_mid_high_risk` });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_FIELD_INVALID", `受试者流向 subject risk flag invalid: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.current_mid_high_risk` });
   }
   const jumpWindowStart = clean(row.jump_window_start);
   const jumpWindowEnd = clean(row.jump_window_end);
   if (Boolean(jumpWindowStart) !== Boolean(jumpWindowEnd)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_WINDOW_INVALID", `R5 subject_flow journey window must be provided as a closed pair: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.jump_window` });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_WINDOW_INVALID", `受试者流向 journey window must be provided as a closed pair: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.jump_window` });
   }
   const pathStageRefs = flowLocatorRefs(row.path_stage_refs, `subject_flow.subjects.${subjectRef}.path_stage_refs`);
   const pathLinkRefs = flowLocatorRefs(row.path_link_refs, `subject_flow.subjects.${subjectRef}.path_link_refs`);
   if (pathStageRefs.some((ref) => !stageRefs.has(ref))) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_REF_UNRESOLVED", `R5 subject_flow subject path does not resolve to declared stages: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.path_stage_refs` });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_REF_UNRESOLVED", `受试者流向 subject path does not resolve to declared stages: ${subjectRef}`, { field: `subject_flow.subjects.${subjectRef}.path_stage_refs` });
   }
   return {
     subjectRef,
@@ -711,16 +711,16 @@ function normalizeSubjectFlowSubject(row, stageRefs, scopeSiteRef) {
 function normalizeSubjectFlow(value, identity) {
   if (value === undefined || value === null) return null;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_SCHEMA_INVALID", "R5 subject_flow projection must be an object.");
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_SCHEMA_INVALID", "受试者流向 projection must be an object.");
   }
   const availability = requiredString(value.availability, "subject_flow.availability");
   if (!["available", "not_provided"].includes(availability)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_AVAILABILITY_INVALID", "R5 subject_flow availability is outside the accepted registry.", { field: "subject_flow.availability", value: availability });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_AVAILABILITY_INVALID", "受试者流向 availability is outside the accepted registry.", { field: "subject_flow.availability", value: availability });
   }
   if (availability === "not_provided") {
     const reasonZh = clean(value.reason_zh || value.not_provided_reason_zh);
     if (!reasonZh) {
-      throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_REASON_MISSING", "R5 subject_flow not-provided state must carry a Chinese reason.", { field: "subject_flow.reason_zh" });
+      throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_REASON_MISSING", "受试者流向 not-provided state must carry a Chinese reason.", { field: "subject_flow.reason_zh" });
     }
     return {
       raw: value,
@@ -738,15 +738,15 @@ function normalizeSubjectFlow(value, identity) {
   }
   const visualKind = requiredString(value.visual_kind, "subject_flow.visual_kind");
   if (visualKind !== "path_throughput_sankey") {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_FIELD_INVALID", "R5 subject_flow visual kind is not the frozen path-throughput surface.", { field: "subject_flow.visual_kind", value: visualKind });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_FIELD_INVALID", "受试者流向 visual kind is not the frozen path-throughput surface.", { field: "subject_flow.visual_kind", value: visualKind });
   }
   const scope = value.scope;
   if (!scope || typeof scope !== "object" || Array.isArray(scope)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_SCHEMA_INVALID", "R5 subject_flow scope must be an object.");
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_SCHEMA_INVALID", "受试者流向 scope must be an object.");
   }
   for (const scopeKey of ["project_ref", "run_ref", "snapshot_ref", "cutoff_ref", "site_ref"]) {
     if (clean(scope[scopeKey]) !== clean(identity[scopeKey])) {
-      throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_IDENTITY_MISMATCH", `R5 subject_flow scope is not bound to the response identity: ${scopeKey}`, { field: `subject_flow.scope.${scopeKey}` });
+      throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_IDENTITY_MISMATCH", `受试者流向 scope is not bound to the response identity: ${scopeKey}`, { field: `subject_flow.scope.${scopeKey}` });
     }
   }
   const normalizedScope = {
@@ -758,16 +758,16 @@ function normalizeSubjectFlow(value, identity) {
   };
   const reconciliation = value.reconciliation;
   if (!reconciliation || typeof reconciliation !== "object" || Array.isArray(reconciliation)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_SCHEMA_INVALID", "R5 subject_flow reconciliation must be an object.");
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_SCHEMA_INVALID", "受试者流向 reconciliation must be an object.");
   }
   const reconciliationState = requiredString(reconciliation.state, "subject_flow.reconciliation.state");
   if (!["matched", "blocked"].includes(reconciliationState)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_FIELD_INVALID", "R5 subject_flow reconciliation state is outside the accepted registry.", { field: "subject_flow.reconciliation.state", value: reconciliationState });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_FIELD_INVALID", "受试者流向 reconciliation state is outside the accepted registry.", { field: "subject_flow.reconciliation.state", value: reconciliationState });
   }
   const blockedReasonZh = clean(reconciliation.gap_zh || reconciliation.reason_zh || value.blocked_reason_zh || value.reason_zh);
   if (reconciliationState === "blocked") {
     if (!blockedReasonZh) {
-      throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_GAP_MISSING", "R5 subject_flow blocked state must carry a Chinese gap explanation.", { field: "subject_flow.reconciliation.gap_zh" });
+      throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_GAP_MISSING", "受试者流向 blocked state must carry a Chinese gap explanation.", { field: "subject_flow.reconciliation.gap_zh" });
     }
     return {
       raw: value,
@@ -798,25 +798,25 @@ function normalizeSubjectFlow(value, identity) {
   const stages = rawStages.map(normalizeSubjectFlowStage);
   const stageRefs = new Set(stages.map((stage) => stage.stageRef));
   if (stageRefs.size !== stages.length) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_REF_DUPLICATE", "R5 subject_flow declares a duplicated stage ref.", { field: "subject_flow.stages" });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_REF_DUPLICATE", "受试者流向 declares a duplicated stage ref.", { field: "subject_flow.stages" });
   }
   const links = rawLinks.map((link) => normalizeSubjectFlowLink(link, stageRefs));
   const linkRefs = new Set(links.map((link) => link.linkRef));
   if (linkRefs.size !== links.length) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_REF_DUPLICATE", "R5 subject_flow declares a duplicated link ref.", { field: "subject_flow.links" });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_REF_DUPLICATE", "受试者流向 declares a duplicated link ref.", { field: "subject_flow.links" });
   }
   const linkPairs = new Set(links.map((link) => `${link.fromStageRef}->${link.toStageRef}`));
   if (linkPairs.size !== links.length) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_REF_DUPLICATE", "R5 subject_flow declares a duplicated stage pair.", { field: "subject_flow.links" });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_REF_DUPLICATE", "受试者流向 declares a duplicated stage pair.", { field: "subject_flow.links" });
   }
   const subjects = rawSubjects.map((row) => normalizeSubjectFlowSubject(row, stageRefs, normalizedScope.siteRef));
   const subjectRefs = new Set(subjects.map((row) => row.subjectRef));
   if (subjectRefs.size !== subjects.length) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_REF_DUPLICATE", "R5 subject_flow declares a duplicated subject ref.", { field: "subject_flow.subjects" });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_REF_DUPLICATE", "受试者流向 declares a duplicated subject ref.", { field: "subject_flow.subjects" });
   }
   const rawCoverage = value.coverage === undefined || value.coverage === null ? {} : value.coverage;
   if (!rawCoverage || typeof rawCoverage !== "object" || Array.isArray(rawCoverage)) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_SCHEMA_INVALID", "R5 subject_flow coverage must be an object.");
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_SCHEMA_INVALID", "受试者流向 coverage must be an object.");
   }
   const coverage = {};
   for (const [key, count] of Object.entries(rawCoverage)) coverage[key] = flowCount(count, `subject_flow.coverage.${key}`);
@@ -829,7 +829,7 @@ function normalizeSubjectFlow(value, identity) {
   if (subjects.length !== totalSubjectCount || totalSubjectCount !== detailCount
     || entryCount !== totalSubjectCount || currentStayCount !== totalSubjectCount
     || !nodeConservationMatched || !linkConservationMatched) {
-    throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_RECONCILIATION_MISMATCH", "R5 subject_flow reconciliation does not conserve the scoped subject set.", { field: "subject_flow.reconciliation" });
+    throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_RECONCILIATION_MISMATCH", "受试者流向 reconciliation does not conserve the scoped subject set.", { field: "subject_flow.reconciliation" });
   }
   const rowsByCurrentStage = new Map();
   const riskRowsByCurrentStage = new Map();
@@ -840,7 +840,7 @@ function normalizeSubjectFlow(value, identity) {
   for (const stage of stages) {
     if ((rowsByCurrentStage.get(stage.stageRef) || 0) !== stage.currentCount
       || (riskRowsByCurrentStage.get(stage.stageRef) || 0) !== stage.currentMidHighRiskCount) {
-      throw new MedicalMonitoringR5AdapterError("SUBJECT_FLOW_RECONCILIATION_MISMATCH", `R5 subject_flow node counts do not match the scoped subject rows: ${stage.stageRef}`, { field: `subject_flow.stages.${stage.stageRef}` });
+      throw new MedicalMonitoringWorkspaceApiError("SUBJECT_FLOW_RECONCILIATION_MISMATCH", `受试者流向 node counts do not match the scoped subject rows: ${stage.stageRef}`, { field: `subject_flow.stages.${stage.stageRef}` });
     }
   }
   return {
@@ -879,7 +879,7 @@ function mergeRiskRows(rows) {
 
 function sourceRefMatchesEvidence(source, evidence, identity, projection) {
   if (!source || typeof source !== "object" || Array.isArray(source)) {
-    throw new MedicalMonitoringR5AdapterError("SOURCE_EVIDENCE_SOURCE_INVALID", "R5 source-evidence source ref must be an object.");
+    throw new MedicalMonitoringWorkspaceApiError("SOURCE_EVIDENCE_SOURCE_INVALID", "来源依据 source ref must be an object.");
   }
   for (const field of ["locator_ref", "snapshot_ref", "source_file_ref", "source_revision_ref", "record_ref", "canonical_location"]) {
     requiredString(source[field], `source_refs[0].${field}`);
@@ -889,31 +889,31 @@ function sourceRefMatchesEvidence(source, evidence, identity, projection) {
   requiredString(source.excerpt, "source_refs[0].excerpt");
   hash(source.source_revision_content_hash, "source_refs[0].source_revision_content_hash");
   if (source.locator_ref !== projection.source_locator_ref || source.locator_ref !== identity.source_locator_ref) {
-    throw new MedicalMonitoringR5AdapterError("SOURCE_EVIDENCE_SOURCE_MISMATCH", "R5 source-evidence locator is not bound to the requested source.");
+    throw new MedicalMonitoringWorkspaceApiError("SOURCE_EVIDENCE_SOURCE_MISMATCH", "来源依据 locator is not bound to the requested source.");
   }
   if (source.snapshot_ref !== identity.snapshot_ref || source.source_revision_ref !== evidence.source_revision_ref || source.source_revision_content_hash !== evidence.source_revision_content_hash || source.record_ref !== evidence.record_ref || source.canonical_location !== evidence.canonical_location || source.excerpt !== evidence.excerpt || JSON.stringify(source.lineage) !== JSON.stringify(evidence.lineage)) {
-    throw new MedicalMonitoringR5AdapterError("SOURCE_EVIDENCE_SOURCE_MISMATCH", "R5 source-evidence fields are not bound to the exact source ref.");
+    throw new MedicalMonitoringWorkspaceApiError("SOURCE_EVIDENCE_SOURCE_MISMATCH", "来源依据 fields are not bound to the exact source ref.");
   }
 }
 
 function normalizeSourceEvidenceProjection(projection, identity, sourceRefs, receipt) {
   if (!projection || typeof projection !== "object" || Array.isArray(projection) || projection.kind !== "source_evidence") {
-    throw new MedicalMonitoringR5AdapterError("SOURCE_EVIDENCE_PROJECTION_INVALID", "R5 source-evidence projection kind is invalid.");
+    throw new MedicalMonitoringWorkspaceApiError("SOURCE_EVIDENCE_PROJECTION_INVALID", "来源依据 projection kind is invalid.");
   }
   for (const field of ["risk_ref", "risk_instance_ref", "source_locator_ref", "authority_receipt_ref"]) {
     requiredString(projection[field], `projection.${field}`);
   }
   for (const [projectionKey, identityKey] of [["risk_ref", "risk_ref"], ["risk_instance_ref", "risk_instance_ref"], ["source_locator_ref", "source_locator_ref"]]) {
     if (projection[projectionKey] !== identity[identityKey]) {
-      throw new MedicalMonitoringR5AdapterError("SOURCE_EVIDENCE_IDENTITY_MISMATCH", `R5 source-evidence identity mismatch: ${projectionKey}`, { field: projectionKey });
+      throw new MedicalMonitoringWorkspaceApiError("SOURCE_EVIDENCE_IDENTITY_MISMATCH", `来源依据 identity mismatch: ${projectionKey}`, { field: projectionKey });
     }
   }
   if (receipt?.receipt_id && projection.authority_receipt_ref !== receipt.receipt_id) {
-    throw new MedicalMonitoringR5AdapterError("SOURCE_EVIDENCE_RECEIPT_MISMATCH", "R5 source-evidence authority receipt is not bound.");
+    throw new MedicalMonitoringWorkspaceApiError("SOURCE_EVIDENCE_RECEIPT_MISMATCH", "来源依据 authority receipt is not bound.");
   }
   const evidence = required(projection.evidence, "projection.evidence");
   if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
-    throw new MedicalMonitoringR5AdapterError("SOURCE_EVIDENCE_FIELDS_INVALID", "R5 source-evidence evidence must be an object.");
+    throw new MedicalMonitoringWorkspaceApiError("SOURCE_EVIDENCE_FIELDS_INVALID", "来源依据 evidence must be an object.");
   }
   for (const field of ["excerpt", "record_ref", "canonical_location", "source_revision_ref"]) {
     requiredString(evidence[field], `projection.evidence.${field}`);
@@ -922,7 +922,7 @@ function normalizeSourceEvidenceProjection(projection, identity, sourceRefs, rec
   for (const [index, value] of evidence.lineage.entries()) requiredString(value, `projection.evidence.lineage[${index}]`);
   hash(evidence.source_revision_content_hash, "projection.evidence.source_revision_content_hash");
   if (!Array.isArray(sourceRefs) || sourceRefs.length !== 1) {
-    throw new MedicalMonitoringR5AdapterError("SOURCE_EVIDENCE_SOURCE_INVALID", "R5 source-evidence must bind exactly one source ref.");
+    throw new MedicalMonitoringWorkspaceApiError("SOURCE_EVIDENCE_SOURCE_INVALID", "来源依据 must bind exactly one source ref.");
   }
   sourceRefMatchesEvidence(sourceRefs[0], evidence, identity, projection);
   return {
@@ -938,7 +938,7 @@ function currentRiskRefs(projection) {
   const set = projection.current_risk_set;
   if (set === undefined || set === null) return [];
   if (!set || typeof set !== "object" || Array.isArray(set)) {
-    throw new MedicalMonitoringR5AdapterError("CURRENT_RISK_SET_INVALID", "R5 current_risk_set must be an object.");
+    throw new MedicalMonitoringWorkspaceApiError("CURRENT_RISK_SET_INVALID", "当前风险集 must be an object.");
   }
   const refs = [];
   for (const [key, values] of [["high_risk_refs", set.high_risk_refs], ["medium_risk_refs", set.medium_risk_refs], ["low_risk_cluster_refs", set.low_risk_cluster_refs]]) {
@@ -989,27 +989,27 @@ function normalizeProjection(projection = {}, identity = {}, options = {}) {
       ? projection.domain_tracks.map((track) => ({ ...(track.encoding || {}), domain: track.domain }))
       : null);
   if (!Array.isArray(domainValues) || domainValues.length === 0) {
-    throw new MedicalMonitoringR5AdapterError("DOMAIN_ENCODING_MISSING", "R5 projection must provide the accepted eight-domain encoding registry.");
+    throw new MedicalMonitoringWorkspaceApiError("DOMAIN_ENCODING_MISSING", "医学监查数据视图 must provide the accepted eight-domain encoding registry.");
   }
   const domains = domainValues.map((value) => domainEncoding(value));
   const domainRegistry = new Map(domains.map((domain) => [domain.domain, domain]));
   const domainSet = new Set(domains.map((domain) => domain.domain));
   if (domains.length !== Object.keys(DOMAINS).length || domainSet.size !== domains.length || Object.keys(DOMAINS).some((domain) => !domainSet.has(domain))) {
-    throw new MedicalMonitoringR5AdapterError("DOMAIN_ENCODING_SET_INVALID", "R5 projection domain encoding must contain each accepted domain exactly once.");
+    throw new MedicalMonitoringWorkspaceApiError("DOMAIN_ENCODING_SET_INVALID", "医学监查数据视图 domain encoding must contain each accepted domain exactly once.");
   }
 
   if (!hasOwn(projection, "current_risks") || !Array.isArray(projection.current_risks)) {
-    throw new MedicalMonitoringR5AdapterError("CURRENT_RISKS_REQUIRED", "R5 overview and subject projections must provide current_risks as an array.");
+    throw new MedicalMonitoringWorkspaceApiError("CURRENT_RISKS_REQUIRED", "项目概览 and subject projections must provide current_risks as an array.");
   }
   const explicitCurrentValues = projection.current_risks;
   const rawRiskAnchors = projection.risk_anchors ?? projection.temporal_spine?.risk_anchors;
   if (rawRiskAnchors !== undefined && rawRiskAnchors !== null && !Array.isArray(rawRiskAnchors)) {
-    throw new MedicalMonitoringR5AdapterError("RISK_ANCHORS_INVALID", "R5 risk_anchors must be an array.");
+    throw new MedicalMonitoringWorkspaceApiError("RISK_ANCHORS_INVALID", "风险定位信息 must be an array.");
   }
   const normalizedRiskAnchors = (rawRiskAnchors || []).map((risk) => normalizeRisk(risk, domainRegistry));
   const riskRefs = currentRiskRefs(projection);
   if (!explicitCurrentValues.length && authorityHasCurrentRisks(options.counts, riskRefs)) {
-    throw new MedicalMonitoringR5AdapterError("CURRENT_RISKS_REQUIRED", "R5 authority indicates current risks exist but projection.current_risks is empty.");
+    throw new MedicalMonitoringWorkspaceApiError("CURRENT_RISKS_REQUIRED", "医学监查依据显示存在当前风险，但风险列表为空。");
   }
   const normalizedCurrentRisks = explicitCurrentValues.map((risk) => normalizeRisk(risk, domainRegistry));
   const currentRisks = mergeRiskRows([...normalizedCurrentRisks, ...normalizedRiskAnchors]);
@@ -1018,13 +1018,13 @@ function normalizeProjection(projection = {}, identity = {}, options = {}) {
   if (hasOwn(projection, "center_map")) {
     if (Array.isArray(projection.center_map)) centerValues = projection.center_map;
     else if (projection.center_map && Array.isArray(projection.center_map.cells)) centerValues = projection.center_map.cells;
-    else throw new MedicalMonitoringR5AdapterError("CENTER_MAP_INVALID", "R5 center_map must be an object containing cells.");
+    else throw new MedicalMonitoringWorkspaceApiError("CENTER_MAP_INVALID", "中心数据 must be an object containing cells.");
   } else if (Array.isArray(projection.centers)) centerValues = projection.centers;
   else if (Array.isArray(projection.centerMap?.cells)) centerValues = projection.centerMap.cells;
   else if (Array.isArray(projection.center_map_projection?.cells)) centerValues = projection.center_map_projection.cells;
 
   const eventValues = projection.events ?? projection.temporal_spine?.events ?? [];
-  if (!Array.isArray(eventValues)) throw new MedicalMonitoringR5AdapterError("EVENTS_SCHEMA_INVALID", "R5 events must be an array.");
+  if (!Array.isArray(eventValues)) throw new MedicalMonitoringWorkspaceApiError("EVENTS_SCHEMA_INVALID", "医学事件s must be an array.");
   const temporalSpine = projection.temporal_spine || projection.spine || {};
   const visits = projection.visits || temporalSpine.visits || [];
   const pendingDates = (projection.pending_dates ?? projection.date_pending_refs ?? temporalSpine.pending_dates ?? []).map((item) => (
@@ -1110,8 +1110,8 @@ async function adaptEnvelope(payload, expected) {
   });
 }
 
-export function createMedicalMonitoringR5Adapter({ baseUrl = "", fetchImpl = globalThis.fetch } = {}) {
-  if (typeof fetchImpl !== "function") throw new TypeError("R5 adapter requires a fetch implementation.");
+export function createMedicalMonitoringWorkspaceApi({ baseUrl = "", fetchImpl = globalThis.fetch } = {}) {
+  if (typeof fetchImpl !== "function") throw new TypeError("医学监查数据适配器 requires a fetch implementation.");
 
   const get = async (path, query, allowed, requiredKeys, expected, signal) => {
     const url = endpointUrl(baseUrl, path, queryEntries(query, allowed, requiredKeys));
@@ -1129,7 +1129,7 @@ export function createMedicalMonitoringR5Adapter({ baseUrl = "", fetchImpl = glo
       const { projectId, runRef = "", snapshotRef = "", cutoffRef = "", siteRef = "", signal } = options;
       const authorityRefs = [runRef, snapshotRef, cutoffRef].filter(Boolean);
       if (authorityRefs.length > 0 && authorityRefs.length < 3) {
-        throw new MedicalMonitoringR5AdapterError("QUERY_GROUP_INCOMPLETE", "R5 overview identity refs must be supplied together.");
+        throw new MedicalMonitoringWorkspaceApiError("QUERY_GROUP_INCOMPLETE", "项目概览 identity refs must be supplied together.");
       }
       const allowed = new Set(["run_ref", "snapshot_ref", "cutoff_ref", "site_ref"]);
       return get(
@@ -1196,12 +1196,12 @@ export function createMedicalMonitoringR5Adapter({ baseUrl = "", fetchImpl = glo
   });
 }
 
-export function projectR5SubjectView(payload, view) {
+export function projectMonitoringSubjectView(payload, view) {
   const normalized = payload?.projection || payload;
-  return { ...normalized, activeView: r5SubjectView(view) };
+  return { ...normalized, activeView: monitoringSubjectView(view) };
 }
 
-export const medicalMonitoringR5IdentityKeys = Object.freeze([...IDENTITY_KEYS]);
-export const medicalMonitoringR5DomainRegistry = Object.freeze({ ...DOMAINS });
-export const medicalMonitoringR5SeverityLabels = Object.freeze({ ...SEVERITIES });
-export const medicalMonitoringR5CanonicalKeys = Object.freeze([...MEDICAL_MONITORING_R5_CANONICAL_KEYS]);
+export const medicalMonitoringWorkspaceIdentityKeys = Object.freeze([...IDENTITY_KEYS]);
+export const medicalMonitoringWorkspaceDomainRegistry = Object.freeze({ ...DOMAINS });
+export const medicalMonitoringWorkspaceSeverityLabels = Object.freeze({ ...SEVERITIES });
+export const medicalMonitoringWorkspaceCanonicalKeys = Object.freeze([...MEDICAL_MONITORING_WORKSPACE_CANONICAL_KEYS]);

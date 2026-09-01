@@ -13,19 +13,19 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DomainTracks, RiskRow } from "./MedicalMonitoringWorkspace.jsx";
 import {
   MedicalMonitoringJourneyDrawer,
-  R7JourneyChangeMarker,
-  r7JourneyDrawerSections,
+  MonitoringJourneyChangeMarker,
+  monitoringJourneyDrawerSections,
 } from "./MedicalMonitoringJourneyDrawer.jsx";
 import {
-  bindR7ContinuityRowsToJourney,
-  r7EventChangeMarker,
+  bindMonitoringContinuityRowsToJourney,
+  monitoringEventChangeMarker,
 } from "./medicalMonitoringJourneyChanges.mjs";
 import {
-  R7_CONTINUITY_CHANGE_KIND_TEXTS,
-  R7_CONTINUITY_CHANGE_KINDS,
-  R7_CONTINUITY_FIRST_ANALYSIS_TEXT,
+  MONITORING_CONTINUITY_CHANGE_KIND_TEXTS,
+  MONITORING_CONTINUITY_CHANGE_KINDS,
+  MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT,
 } from "./medicalMonitoringContinuityProjection.mjs";
-import { R7_JOURNEY_CHANGE_KIND_VISUAL } from "./medicalMonitoringJourneyChanges.mjs";
+import { MONITORING_JOURNEY_CHANGE_KIND_VISUAL } from "./medicalMonitoringJourneyChanges.mjs";
 
 const DOMAIN_KEYS = [
   "ae",
@@ -354,13 +354,13 @@ const JOURNEY_ROWS = [
 ];
 
 const projection = journeyProjection();
-const binding = bindR7ContinuityRowsToJourney(
+const binding = bindMonitoringContinuityRowsToJourney(
   JOURNEY_ROWS,
   projection.events,
   projection.currentRisks,
 );
 const markersByEvent = new Map(
-  binding.events.map((group) => [group.eventRef, r7EventChangeMarker(group.rows)]),
+  binding.events.map((group) => [group.eventRef, monitoringEventChangeMarker(group.rows)]),
 );
 // Mirrors the page: the right-side risk list aggregates every journey row of
 // one risk_instance_ref, whether bound to an event or by risk_instance_ref.
@@ -378,7 +378,7 @@ for (const group of binding.risks) {
   rowsByRiskInstance.get(group.riskInstanceRef).push(...group.rows);
 }
 const markersByRisk = new Map(
-  [...rowsByRiskInstance.entries()].map(([instance, rows]) => [instance, r7EventChangeMarker(rows)]),
+  [...rowsByRiskInstance.entries()].map(([instance, rows]) => [instance, monitoringEventChangeMarker(rows)]),
 );
 
 const axis = renderToStaticMarkup(
@@ -403,7 +403,7 @@ const riskRowWithMarker = renderToStaticMarkup(
 );
 
 const comparison = { comparison_text: "已与上次监查结果比较" };
-const firstAnalysisComparison = { comparison_text: R7_CONTINUITY_FIRST_ANALYSIS_TEXT };
+const firstAnalysisComparison = { comparison_text: MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT };
 
 const aeEvent = {
   ...projection.events[0],
@@ -411,31 +411,31 @@ const aeEvent = {
   visitLabel: "第 2 次访视",
 };
 
-const eventSections = r7JourneyDrawerSections({
+const eventSections = monitoringJourneyDrawerSections({
   event: aeEvent,
   risk: projection.currentRisks[0],
   currentRow: JOURNEY_ROWS[0],
   comparison,
 });
-const closedSections = r7JourneyDrawerSections({
+const closedSections = monitoringJourneyDrawerSections({
   event: null,
   risk: null,
   currentRow: JOURNEY_ROWS[4],
   comparison,
 });
-const riskOnlySections = r7JourneyDrawerSections({
+const riskOnlySections = monitoringJourneyDrawerSections({
   event: null,
   risk: projection.currentRisks[3],
   currentRow: JOURNEY_ROWS[3],
   comparison,
 });
-const fallbackSections = r7JourneyDrawerSections({
+const fallbackSections = monitoringJourneyDrawerSections({
   event: null,
   risk: null,
   currentRow: null,
   comparison: null,
 });
-const firstAnalysisSections = r7JourneyDrawerSections({
+const firstAnalysisSections = monitoringJourneyDrawerSections({
   event: null,
   risk: projection.currentRisks[0],
   currentRow: JOURNEY_ROWS[0],
@@ -504,14 +504,14 @@ const firstAnalysisDrawer = renderToStaticMarkup(
 
 const sevenMarkers = renderToStaticMarkup(
   <>
-    {R7_CONTINUITY_CHANGE_KINDS.map((kind) => (
-      <R7JourneyChangeMarker
+    {MONITORING_CONTINUITY_CHANGE_KINDS.map((kind) => (
+      <MonitoringJourneyChangeMarker
         key={kind}
         marker={{
           changeKind: kind,
-          changeText: R7_JOURNEY_CHANGE_KIND_VISUAL[kind].label,
-          icon: R7_JOURNEY_CHANGE_KIND_VISUAL[kind].icon,
-          tone: R7_JOURNEY_CHANGE_KIND_VISUAL[kind].tone,
+          changeText: MONITORING_JOURNEY_CHANGE_KIND_VISUAL[kind].label,
+          icon: MONITORING_JOURNEY_CHANGE_KIND_VISUAL[kind].icon,
+          tone: MONITORING_JOURNEY_CHANGE_KIND_VISUAL[kind].tone,
           total: 1,
           countSuffix: "",
         }}
@@ -533,8 +533,8 @@ export const renders = {
 };
 
 export const expected = {
-  changeKindTexts: R7_CONTINUITY_CHANGE_KIND_TEXTS,
-  changeKinds: R7_CONTINUITY_CHANGE_KINDS,
+  changeKindTexts: MONITORING_CONTINUITY_CHANGE_KIND_TEXTS,
+  changeKinds: MONITORING_CONTINUITY_CHANGE_KINDS,
   eventSections,
   closedSections,
   riskOnlySections,

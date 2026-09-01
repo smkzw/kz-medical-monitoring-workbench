@@ -1,12 +1,12 @@
 import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  createMedicalMonitoringR5Adapter,
-  MedicalMonitoringR5AdapterError,
+  createMedicalMonitoringWorkspaceApi,
+  MedicalMonitoringWorkspaceApiError,
 } from "./medicalMonitoringWorkspaceApi.mjs";
 import {
-  MEDICAL_MONITORING_R5_VIEWS,
-  normalizeMedicalMonitoringR5RouteState,
-  routeStateForMedicalMonitoringR5View,
+  MEDICAL_MONITORING_WORKSPACE_VIEWS,
+  normalizeMedicalMonitoringWorkspaceRouteState,
+  routeStateForMedicalMonitoringWorkspaceView,
 } from "./medicalMonitoringWorkspaceRouteState.mjs";
 import { layoutJourneyTimeline, parseTimelineDate, visitAxisDate } from "./medicalMonitoringJourneyTimeline.mjs";
 import { DomainIcon } from "./DomainIcon.jsx";
@@ -14,18 +14,18 @@ import { MedicalMonitoringProgressPanel } from "./MedicalMonitoringProgressPanel
 import { MedicalMonitoringProductLoop } from "./MedicalMonitoringProductLoop.jsx";
 import {
   MedicalMonitoringJourneyDrawer,
-  R7_JOURNEY_AXIS_TITLE_ID,
-  R7JourneyChangeMarker,
-  r7JourneyDrawerLayoutMode,
-  r7JourneyDrawerSections,
+  MONITORING_JOURNEY_AXIS_TITLE_ID,
+  MonitoringJourneyChangeMarker,
+  monitoringJourneyDrawerLayoutMode,
+  monitoringJourneyDrawerSections,
 } from "./MedicalMonitoringJourneyDrawer.jsx";
 import {
-  bindR7ContinuityRowsToJourney,
-  r7EventChangeMarker,
-  r7JourneyContinuityRows,
-  r7JourneyDrawerClosePatch,
-  r7JourneyDrawerCurrentRow,
-  r7JourneyTruncationText,
+  bindMonitoringContinuityRowsToJourney,
+  monitoringEventChangeMarker,
+  monitoringJourneyContinuityRows,
+  monitoringJourneyDrawerClosePatch,
+  monitoringJourneyDrawerCurrentRow,
+  monitoringJourneyTruncationText,
 } from "./medicalMonitoringJourneyChanges.mjs";
 import "./medicalMonitoringWorkspace.css";
 
@@ -181,11 +181,11 @@ function riskSort(left, right) {
 }
 
 function routeCanonical(routeState) {
-  return normalizeMedicalMonitoringR5RouteState(routeState?.canonical || routeState || {});
+  return normalizeMedicalMonitoringWorkspaceRouteState(routeState?.canonical || routeState || {});
 }
 
 function unavailableMessage(error) {
-  if (error instanceof MedicalMonitoringR5AdapterError) {
+  if (error instanceof MedicalMonitoringWorkspaceApiError) {
     if (["IDENTITY_PROJECT_MISMATCH", "IDENTITY_TARGET_MISMATCH", "DIGEST_IDENTITY_MISMATCH", "SCHEMA_MISMATCH"].includes(error.code)) {
       return "当前定位无法确认，请返回上一级。";
     }
@@ -497,14 +497,14 @@ function flowLabelLines(label) {
 
 function DomainLegend({ domains }) {
   return (
-    <section className="r5-domain-legend" aria-label="八域编码">
-      <div className="r5-section-heading">
-        <span className="r5-eyebrow">图例</span>
+    <section className="monitoring-domain-legend" aria-label="八域编码">
+      <div className="monitoring-section-heading">
+        <span className="monitoring-eyebrow">图例</span>
         <h2>事件类别与风险标记</h2>
       </div>
-      <div className="r5-domain-grid">
+      <div className="monitoring-domain-grid">
         {domains.map((domain) => (
-          <div className="r5-domain-key" key={domain.domain}>
+          <div className="monitoring-domain-key" key={domain.domain}>
             <DomainIcon domain={domain.domain} encoding={domain} size="legend" title={DOMAIN_LABELS[domain.domain] || domain.shortLabel} />
             <span>
               <strong>{DOMAIN_LABELS[domain.domain] || domain.shortLabel}</strong>
@@ -512,8 +512,8 @@ function DomainLegend({ domains }) {
             </span>
           </div>
         ))}
-        <div className="r5-risk-key">
-          <span className="r5-risk-overlay" aria-hidden="true">AE·高</span>
+        <div className="monitoring-risk-key">
+          <span className="monitoring-risk-overlay" aria-hidden="true">AE·高</span>
           <span><strong>风险提示</strong><small>外圈、徽标与文字共同标示风险等级</small></span>
         </div>
       </div>
@@ -524,9 +524,9 @@ function DomainLegend({ domains }) {
 function ZoomControls({ zoomLevel, onZoomChange }) {
   const setZoom = (nextZoom) => onZoomChange?.(Math.max(-1, Math.min(1, nextZoom)));
   return (
-    <div className="r5-zoom-controls" aria-label="语义缩放控制">
-      <span className="r5-zoom-label">语义缩放</span>
-      <div className="r5-zoom-buttons" role="group" aria-label="语义缩放级别">
+    <div className="monitoring-zoom-controls" aria-label="语义缩放控制">
+      <span className="monitoring-zoom-label">语义缩放</span>
+      <div className="monitoring-zoom-buttons" role="group" aria-label="语义缩放级别">
         <button type="button" aria-label="缩小到精简视图" aria-pressed={zoomLevel === -1} onClick={() => setZoom(zoomLevel - 1)}>-</button>
         <button type="button" aria-label="还原标准视图" aria-pressed={zoomLevel === 0} onClick={() => setZoom(0)}>0</button>
         <button type="button" aria-label="放大到详细视图" aria-pressed={zoomLevel === 1} onClick={() => setZoom(zoomLevel + 1)}>+</button>
@@ -582,7 +582,7 @@ function timelineMonthTicks(scale) {
 function focusAdjacentTimelineEvent(keyboardEvent) {
   if (keyboardEvent.key !== "ArrowLeft" && keyboardEvent.key !== "ArrowRight") return;
   const lane = keyboardEvent.currentTarget.closest?.("[data-lane-canvas]");
-  const events = Array.from(lane?.querySelectorAll?.("button.r5-track-event") || []);
+  const events = Array.from(lane?.querySelectorAll?.("button.monitoring-track-event") || []);
   const current = events.indexOf(keyboardEvent.currentTarget);
   if (current < 0 || events.length < 2) return;
   const next = keyboardEvent.key === "ArrowRight"
@@ -626,24 +626,24 @@ export function DomainTracks({
     return { ...mark, showLabel, labelSide: index % 2 ? "below" : "above" };
   });
   return (
-    <section className="r5-domain-tracks" aria-label="共享横向时间轴与八域泳道" data-timeline-mode="shared-horizontal">
-      <div className="r5-axis-heading">
+    <section className="monitoring-domain-tracks" aria-label="共享横向时间轴与八域泳道" data-timeline-mode="shared-horizontal">
+      <div className="monitoring-axis-heading">
         <div>
-          <span className="r5-eyebrow">共享时间轴</span>
-          <h2 id={journeyEnabled ? R7_JOURNEY_AXIS_TITLE_ID : undefined} tabIndex={journeyEnabled ? -1 : undefined}>{axisMode}</h2>
+          <span className="monitoring-eyebrow">共享时间轴</span>
+          <h2 id={journeyEnabled ? MONITORING_JOURNEY_AXIS_TITLE_ID : undefined} tabIndex={journeyEnabled ? -1 : undefined}>{axisMode}</h2>
         </div>
-        <span className="r5-axis-window">{text(projection.temporalSpine?.windowStart, layout.scale.windowStartIso)} — {text(projection.temporalSpine?.windowEnd, layout.scale.windowEndIso)}</span>
+        <span className="monitoring-axis-window">{text(projection.temporalSpine?.windowStart, layout.scale.windowStartIso)} — {text(projection.temporalSpine?.windowEnd, layout.scale.windowEndIso)}</span>
       </div>
-      {journeyTruncationText ? <p className="r7-journey-truncation" role="status" data-journey-truncation>{journeyTruncationText}</p> : null}
-      <div className="r5-density-summary" aria-label="高密度医学旅程摘要">
+      {journeyTruncationText ? <p className="monitoring-journey-truncation" role="status" data-journey-truncation>{journeyTruncationText}</p> : null}
+      <div className="monitoring-density-summary" aria-label="高密度医学旅程摘要">
         <strong>{(projection.events || []).length} 条事件 · {(projection.temporalSpine?.visits || []).length} 次访视 · {(projection.currentRisks || []).length} 个风险锚点</strong>
         <span>
           高风险 {riskCounts.high || 0} · 中风险 {riskCounts.medium || 0}；中高风险逐项显示，低风险与常规记录
-          <span className="r5-phrase-keep">按缩放级别聚合</span>
+          <span className="monitoring-phrase-keep">按缩放级别聚合</span>
           。
         </span>
       </div>
-      <div className="r5-lane-index" aria-label="八类医学事件泳道概览">
+      <div className="monitoring-lane-index" aria-label="八类医学事件泳道概览">
         {layout.lanes.map((lane) => (
           <span key={lane.domain}>
             <DomainIcon domain={lane.domain} size="summary" />
@@ -654,39 +654,39 @@ export function DomainTracks({
       </div>
       <TimelineScrollShell>
         <div
-          className="r5-timeline-canvas"
+          className="monitoring-timeline-canvas"
           style={{ "--timeline-plot-width": `${layout.scale.width}px`, width: `calc(${layout.scale.width}px + var(--timeline-label-width))` }}
           data-timeline-width={layout.scale.width}
         >
-          <div className="r5-time-grid" aria-hidden="true">
+          <div className="monitoring-time-grid" aria-hidden="true">
             {monthTicks.map((tick) => <span key={tick.iso} style={{ left: `calc(var(--timeline-label-width) + ${tick.x}px)` }}><small>{tick.label}</small></span>)}
           </div>
-          <div className="r5-axis-track" aria-label="访视节点">
-            <div className="r5-axis-label"><strong>访视</strong><small>按实际日期定位</small></div>
-            <div className="r5-axis-baseline" aria-hidden="true" />
+          <div className="monitoring-axis-track" aria-label="访视节点">
+            <div className="monitoring-axis-label"><strong>访视</strong><small>按实际日期定位</small></div>
+            <div className="monitoring-axis-baseline" aria-hidden="true" />
             {labeledVisits.map((mark, index) => {
               const visit = mark.visit;
               return (
                 <div
-                  className={`r5-visit-node r5-visit-label-${mark.labelSide}${mark.showLabel ? " is-labeled" : ""}`}
+                  className={`monitoring-visit-node monitoring-visit-label-${mark.labelSide}${mark.showLabel ? " is-labeled" : ""}`}
                   data-visit-ref={mark.visitRef}
                   key={mark.visitRef || `${mark.iso}-${index}`}
                   style={{ left: `calc(var(--timeline-label-width) + ${mark.x}px)` }}
                   title={visitDateLabel(visit)}
                 >
-                  <span className="r5-visit-dot" aria-hidden="true" />
+                  <span className="monitoring-visit-dot" aria-hidden="true" />
                   {mark.showLabel ? <><strong>{text(visit.visit_label || visit.visit_name || visit.visit_code, visit.visit_kind === "unscheduled" ? "非计划访视" : `第 ${visit.visit_number || index + 1} 次访视`)}</strong><small>{visitDateLabel(visit)}</small></> : null}
                 </div>
               );
             })}
           </div>
-          <div className="r5-domain-track-grid" role="list" aria-label="八域事件泳道">
+          <div className="monitoring-domain-track-grid" role="list" aria-label="八域事件泳道">
             {layout.lanes.map((lane) => {
               const displayStackRows = lane.stackRows + (lane.aggregates.length ? 1 : 0);
               const eventRowOffset = lane.aggregates.length ? 1 : 0;
               return (
               <article
-                className="r5-domain-track"
+                className="monitoring-domain-track"
                 data-domain-track={lane.domain}
                 data-stack-rows={displayStackRows}
                 aria-label={`${DOMAIN_LABELS[lane.domain] || lane.encoding.shortLabel}事件泳道`}
@@ -694,15 +694,15 @@ export function DomainTracks({
                 role="listitem"
                 style={{ "--lane-stack-rows": displayStackRows }}
               >
-                <div className="r5-domain-track-head">
+                <div className="monitoring-domain-track-head">
                   <DomainIcon domain={lane.domain} encoding={lane.encoding} size="lane" title={DOMAIN_LABELS[lane.domain] || lane.encoding.shortLabel} />
                   <div>
                     <strong>{DOMAIN_LABELS[lane.domain] || lane.encoding.shortLabel}</strong>
                     <small>{lane.eventCount ? `${lane.eventCount} 条` : "当前无事件"}{lane.riskAnchorCount ? ` · ${lane.riskAnchorCount} 个风险` : ""}</small>
                   </div>
                 </div>
-                <div className="r5-domain-track-events" data-lane-canvas="true">
-                  {lane.marks.length === 0 && lane.aggregates.length === 0 ? <span className="r5-domain-track-empty">当前范围无该域记录</span> : null}
+                <div className="monitoring-domain-track-events" data-lane-canvas="true">
+                  {lane.marks.length === 0 && lane.aggregates.length === 0 ? <span className="monitoring-domain-track-empty">当前范围无该域记录</span> : null}
                   {lane.marks.map((mark) => {
                     const event = mark.event;
                     const selected = event.eventRef === selectedRef || (selectedRiskAnchorRef && event.riskAnchorRefs?.includes(selectedRiskAnchorRef));
@@ -712,7 +712,7 @@ export function DomainTracks({
                       : "";
                     const commonProps = {
                       type: "button",
-                      className: `r5-track-event r5-track-event-${mark.geometry}${mark.x > layout.scale.width - 170 ? " is-near-end" : ""}${selected ? " is-selected" : ""}${event.risk ? ` has-risk r5-track-risk-${event.risk.severity}` : ""}`,
+                      className: `monitoring-track-event monitoring-track-event-${mark.geometry}${mark.x > layout.scale.width - 170 ? " is-near-end" : ""}${selected ? " is-selected" : ""}${event.risk ? ` has-risk monitoring-track-risk-${event.risk.severity}` : ""}`,
                       "data-event-ref": event.eventRef,
                       "data-timeline-geometry": mark.geometry,
                       "data-stack-row": mark.stackRow,
@@ -729,11 +729,11 @@ export function DomainTracks({
                           style={{ left: `${mark.x}px`, width: `${mark.width}px`, top: `${8 + (mark.stackRow + eventRowOffset) * 22}px` }}
                         >
                           <DomainIcon domain={event.domain} encoding={event.domainEncoding} size="track" title={DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel} />
-                          {event.risk ? <span className={`r5-compact-risk-label r5-track-risk-${event.risk.severity}`}>{riskSeverityLabel(event.risk.severity).slice(0, 1)}</span> : null}
-                          <span className="r5-track-event-title">{event.risk && <span className={`r5-track-risk r5-track-risk-${event.risk.severity}`}>{riskLabel}</span>}{event.eventLabel}</span>
-                          {marker ? <R7JourneyChangeMarker marker={marker} /> : null}
-                          <small className="r5-track-event-detail">{text(event.start)} — {text(event.end)}</small>
-                          <small className="r5-track-event-source">来源定位：{event.sourceLocatorRefs.length ? `已定位到 ${event.sourceLocatorRefs.length} 条原始记录` : "待确认"}</small>
+                          {event.risk ? <span className={`monitoring-compact-risk-label monitoring-track-risk-${event.risk.severity}`}>{riskSeverityLabel(event.risk.severity).slice(0, 1)}</span> : null}
+                          <span className="monitoring-track-event-title">{event.risk && <span className={`monitoring-track-risk monitoring-track-risk-${event.risk.severity}`}>{riskLabel}</span>}{event.eventLabel}</span>
+                          {marker ? <MonitoringJourneyChangeMarker marker={marker} /> : null}
+                          <small className="monitoring-track-event-detail">{text(event.start)} — {text(event.end)}</small>
+                          <small className="monitoring-track-event-source">来源定位：{event.sourceLocatorRefs.length ? `已定位到 ${event.sourceLocatorRefs.length} 条原始记录` : "待确认"}</small>
                         </button>
                       );
                     }
@@ -744,17 +744,17 @@ export function DomainTracks({
                         style={{ left: `${mark.x}px`, top: `${8 + (mark.stackRow + eventRowOffset) * 22}px` }}
                       >
                         <DomainIcon domain={event.domain} encoding={event.domainEncoding} size="track" title={DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel} />
-                        {event.risk ? <span className={`r5-compact-risk-label r5-track-risk-${event.risk.severity}`}>{riskSeverityLabel(event.risk.severity).slice(0, 1)}</span> : null}
-                        <span className="r5-track-event-title">{event.risk && <span className={`r5-track-risk r5-track-risk-${event.risk.severity}`}>{riskLabel}</span>}{zoomLevel === 1 ? event.eventLabel : ""}</span>
-                        {marker ? <R7JourneyChangeMarker marker={marker} /> : null}
-                        <small className="r5-track-event-detail">{event.dateState === "exact" ? text(event.start, "实际日期待确认") : event.dateLabel}</small>
-                        <small className="r5-track-event-source">来源定位：{event.sourceLocatorRefs.length ? `已定位到 ${event.sourceLocatorRefs.length} 条原始记录` : "待确认"}</small>
+                        {event.risk ? <span className={`monitoring-compact-risk-label monitoring-track-risk-${event.risk.severity}`}>{riskSeverityLabel(event.risk.severity).slice(0, 1)}</span> : null}
+                        <span className="monitoring-track-event-title">{event.risk && <span className={`monitoring-track-risk monitoring-track-risk-${event.risk.severity}`}>{riskLabel}</span>}{zoomLevel === 1 ? event.eventLabel : ""}</span>
+                        {marker ? <MonitoringJourneyChangeMarker marker={marker} /> : null}
+                        <small className="monitoring-track-event-detail">{event.dateState === "exact" ? text(event.start, "实际日期待确认") : event.dateLabel}</small>
+                        <small className="monitoring-track-event-source">来源定位：{event.sourceLocatorRefs.length ? `已定位到 ${event.sourceLocatorRefs.length} 条原始记录` : "待确认"}</small>
                       </button>
                     );
                   })}
                   {lane.aggregates.map((aggregate) => (
                     <span
-                      className="r5-domain-track-aggregate r5-timeline-aggregate"
+                      className="monitoring-domain-track-aggregate monitoring-timeline-aggregate"
                       data-aggregate-key={aggregate.aggregateKey}
                       key={aggregate.aggregateKey}
                       style={{ left: `${aggregate.x}px` }}
@@ -770,20 +770,20 @@ export function DomainTracks({
           </div>
         </div>
       </TimelineScrollShell>
-      <div className="r5-pending-date-zone" aria-label="日期待确认记录">
-        <div className="r5-section-heading">
-          <span className="r5-eyebrow">暂不定位到时间轴</span>
+      <div className="monitoring-pending-date-zone" aria-label="日期待确认记录">
+        <div className="monitoring-section-heading">
+          <span className="monitoring-eyebrow">暂不定位到时间轴</span>
           <h2>日期待确认记录</h2>
         </div>
         {!layout.pendingEvents.length && !layout.pendingVisits.length && !(layout.pendingDates || []).length ? (
-          <p className="r5-domain-track-empty">当前范围无日期缺失记录。</p>
+          <p className="monitoring-domain-track-empty">当前范围无日期缺失记录。</p>
         ) : null}
         {layout.pendingEvents.map((event) => {
           const marker = journeyMarkerFor(event.eventRef);
           return (
           <button
             type="button"
-            className={`r5-pending-date${event.eventRef === selectedRef ? " is-selected" : ""}`}
+            className={`monitoring-pending-date${event.eventRef === selectedRef ? " is-selected" : ""}`}
             data-event-ref={event.eventRef}
             data-timeline-geometry="pending"
             key={event.eventRef}
@@ -793,14 +793,14 @@ export function DomainTracks({
             <span>{DATE_STATE_LABELS[event.dateState] || "日期待确认"}</span>
             <strong>{DOMAIN_LABELS[event.domain] || event.domainEncoding?.shortLabel || "其他事件"} · {event.eventLabel}</strong>
             <small>不确定访视归属；未按实际日期吸附到共享时间轴，单独列示</small>
-            {event.risk ? <span className={`r5-track-risk r5-track-risk-${event.risk.severity}`}>{riskSeverityLabel(event.risk.severity)}</span> : null}
-            {marker ? <R7JourneyChangeMarker marker={marker} /> : null}
-            {marker ? <span className="r7-journey-sr-only">，本轮变化：{marker.changeText}{marker.countSuffix}</span> : null}
+            {event.risk ? <span className={`monitoring-track-risk monitoring-track-risk-${event.risk.severity}`}>{riskSeverityLabel(event.risk.severity)}</span> : null}
+            {marker ? <MonitoringJourneyChangeMarker marker={marker} /> : null}
+            {marker ? <span className="monitoring-journey-sr-only">，本轮变化：{marker.changeText}{marker.countSuffix}</span> : null}
           </button>
           );
         })}
         {layout.pendingVisits.map((visit) => (
-          <div className="r5-pending-date" data-visit-ref={visit.visit_ref || visit.visitRef} key={visit.visit_ref || visit.visitRef}>
+          <div className="monitoring-pending-date" data-visit-ref={visit.visit_ref || visit.visitRef} key={visit.visit_ref || visit.visitRef}>
             <span>{DATE_STATE_LABELS[visit.date_state] || "日期待确认"}</span>
             <strong>{text(visit.visit_label || visit.visit_name || visit.visit_code, visit.visit_kind === "unscheduled" ? "非计划访视" : "访视")} · 实际日期待确认</strong>
             <small>访视缺少实际日期，不进入共享横向时间轴定位</small>
@@ -814,7 +814,7 @@ export function DomainTracks({
           const domain = typeof item === "string" ? null : item.domain;
           const dateState = typeof item === "string" ? "missing" : item.date_state;
           return (
-            <div className="r5-pending-date" key={ref}>
+            <div className="monitoring-pending-date" key={ref}>
               {domain ? <DomainIcon domain={domain} size="summary" /> : null}
               <span>{DATE_STATE_LABELS[dateState] || "日期待确认"}</span>
               <strong>{DOMAIN_LABELS[domain] || "其他事件"} · 相关记录</strong>
@@ -834,11 +834,11 @@ function IdentityStrip({ identity = {}, project = {} }) {
   const projectLabel = rawProjectLabel.startsWith("s7-") ? "S7 医学监查合成项目" : text(rawProjectLabel, "项目待确认");
   const projectDisplay = projectCode && projectCode !== projectLabel ? `${projectLabel} · ${projectCode}` : projectLabel;
   return (
-    <div className="r5-identity-strip" aria-label="当前数据范围">
-      <div data-r5-identity-field="project_ref"><span>项目</span><strong>{projectDisplay}</strong><small>当前医学监查范围</small></div>
-      <div data-r5-identity-field="run_ref"><span>分析批次</span><strong>{analysisBatchLabel(identity.run_ref || identity.runRef)}</strong></div>
-      <div data-r5-identity-field="snapshot_ref"><span>数据版本</span><strong>{dataVersionLabel(identity.snapshot_ref || identity.snapshotRef)}</strong></div>
-      <div data-r5-identity-field="cutoff_ref"><span>数据截止</span><strong>{(identity.cutoff_state || identity.cutoffState) === "absent" ? "截止时间待确认" : text(identity.cutoff_ref || identity.cutoffRef, "截止时间待确认")}</strong></div>
+    <div className="monitoring-identity-strip" aria-label="当前数据范围">
+      <div data-monitoring-identity-field="project_ref"><span>项目</span><strong>{projectDisplay}</strong><small>当前医学监查范围</small></div>
+      <div data-monitoring-identity-field="run_ref"><span>分析批次</span><strong>{analysisBatchLabel(identity.run_ref || identity.runRef)}</strong></div>
+      <div data-monitoring-identity-field="snapshot_ref"><span>数据版本</span><strong>{dataVersionLabel(identity.snapshot_ref || identity.snapshotRef)}</strong></div>
+      <div data-monitoring-identity-field="cutoff_ref"><span>数据截止</span><strong>{(identity.cutoff_state || identity.cutoffState) === "absent" ? "截止时间待确认" : text(identity.cutoff_ref || identity.cutoffRef, "截止时间待确认")}</strong></div>
     </div>
   );
 }
@@ -846,11 +846,11 @@ function IdentityStrip({ identity = {}, project = {} }) {
 function RiskBadge({ risk }) {
   const encoding = risk?.domainEncoding;
   return (
-    <span className="r5-risk-badge" data-severity={risk?.severity || "unknown"}>
+    <span className="monitoring-risk-badge" data-severity={risk?.severity || "unknown"}>
       {encoding ? (
         <DomainIcon domain={encoding.domain} encoding={encoding} size="badge" title={DOMAIN_LABELS[encoding.domain] || encoding.shortLabel} />
-      ) : <span className="r5-risk-unresolved">域待确认</span>}
-      <span className="r5-risk-overlay">{text(DOMAIN_LABELS[encoding?.domain] || encoding?.shortLabel, "域待确认")}·{text(risk?.severityLabel, "等级待确认")}风险</span>
+      ) : <span className="monitoring-risk-unresolved">域待确认</span>}
+      <span className="monitoring-risk-overlay">{text(DOMAIN_LABELS[encoding?.domain] || encoding?.shortLabel, "域待确认")}·{text(risk?.severityLabel, "等级待确认")}风险</span>
     </span>
   );
 }
@@ -866,13 +866,13 @@ export const RiskRow = memo(function RiskRow({ risk, onSelect, marker = null, om
       type="button"
       role="option"
       aria-selected="false"
-      className={`r5-risk-row ${risk.riskStatus === "unresolved" ? "is-unresolved" : ""}`}
+      className={`monitoring-risk-row ${risk.riskStatus === "unresolved" ? "is-unresolved" : ""}`}
       data-risk-instance-ref={risk.riskInstanceRef}
       disabled={risk.riskStatus === "unresolved"}
       onClick={() => risk.riskStatus !== "unresolved" && onSelect?.(risk)}
     >
       <RiskBadge risk={risk} />
-      <span className="r5-risk-copy">
+      <span className="monitoring-risk-copy">
         <strong>{risk.riskType}</strong>
         <small>
           {metaParts.join(" · ")}
@@ -880,11 +880,11 @@ export const RiskRow = memo(function RiskRow({ risk, onSelect, marker = null, om
         </small>
       </span>
       {marker ? (
-        <span className="r5-risk-tail">
-          <R7JourneyChangeMarker marker={marker} />
-          <span className="r7-journey-sr-only">，本轮变化：{marker.changeText}{marker.countSuffix}</span>
+        <span className="monitoring-risk-tail">
+          <MonitoringJourneyChangeMarker marker={marker} />
+          <span className="monitoring-journey-sr-only">，本轮变化：{marker.changeText}{marker.countSuffix}</span>
         </span>
-      ) : omitChangeClaims ? null : <span className="r5-change-label">{risk.changeLabel}</span>}
+      ) : omitChangeClaims ? null : <span className="monitoring-change-label">{risk.changeLabel}</span>}
     </button>
   );
 });
@@ -901,29 +901,29 @@ function RiskList({ risks, onSelect, selectedRiskInstanceRef = "", emptyText = "
     />
   )), [markersByRiskInstance, omitChangeClaims, onSelect, risks]);
   useLayoutEffect(() => {
-    for (const row of listRef.current?.querySelectorAll("button.r5-risk-row") || []) {
+    for (const row of listRef.current?.querySelectorAll("button.monitoring-risk-row") || []) {
       const selected = row.dataset.riskInstanceRef === selectedRiskInstanceRef;
       row.classList.toggle("is-selected", selected);
       row.setAttribute("aria-selected", String(selected));
     }
   }, [selectedRiskInstanceRef, rows]);
-  if (!risks.length) return <div className="r5-empty-inline">{emptyText}</div>;
-  return <div className="r5-risk-list" role="listbox" aria-label="当前风险" ref={listRef}>{rows}</div>;
+  if (!risks.length) return <div className="monitoring-empty-inline">{emptyText}</div>;
+  return <div className="monitoring-risk-list" role="listbox" aria-label="当前风险" ref={listRef}>{rows}</div>;
 }
 
 function CenterTable({ centers, onSelect }) {
-  if (!centers.length) return <div className="r5-empty-inline">中心覆盖范围待确认。</div>;
+  if (!centers.length) return <div className="monitoring-empty-inline">中心覆盖范围待确认。</div>;
   return (
-    <div className="r5-center-table" role="table" aria-label="中心覆盖与风险模式">
-      <div className="r5-center-row r5-center-head" role="row">
+    <div className="monitoring-center-table" role="table" aria-label="中心覆盖与风险模式">
+      <div className="monitoring-center-row monitoring-center-head" role="row">
         <span>中心</span><span>风险数 / 记录数</span><span>数据完整性</span><span>统计单位</span>
       </div>
       {centers.map((center, index) => {
         const measure = center.measures[0] || {};
         return (
-          <button type="button" className="r5-center-row" role="row" key={center.siteRef} onClick={() => onSelect?.(center)}>
+          <button type="button" className="monitoring-center-row" role="row" key={center.siteRef} onClick={() => onSelect?.(center)}>
             <strong>{center.siteLabel || `中心 ${index + 1}`}</strong>
-            <span className="r5-center-pattern">{measure.denominator ? `${numberText(measure.numerator)} / ${numberText(measure.denominator)}` : "暂无法计算"}</span>
+            <span className="monitoring-center-pattern">{measure.denominator ? `${numberText(measure.numerator)} / ${numberText(measure.denominator)}` : "暂无法计算"}</span>
             <span>{center.coverageLabel}</span>
             <span>{text(measure.unit, "受试者")}</span>
           </button>
@@ -948,7 +948,7 @@ function useScrollMetrics(axis = "x") {
       const has = max > 2;
       setOverflow(has);
       if (!has) {
-        el.style.removeProperty("--r5-edge-clip");
+        el.style.removeProperty("--monitoring-edge-clip");
         return;
       }
       const size = Math.max(12, (el.clientWidth / el.scrollWidth) * 100);
@@ -965,7 +965,7 @@ function useScrollMetrics(axis = "x") {
           break;
         }
       }
-      el.style.setProperty("--r5-edge-clip", `${edgeClip}px`);
+      el.style.setProperty("--monitoring-edge-clip", `${edgeClip}px`);
       return;
     }
     const max = el.scrollHeight - el.clientHeight;
@@ -1007,7 +1007,7 @@ function useScrollMetrics(axis = "x") {
 
 function FlowTableScroll({ children }) {
   const { ref, overflow, thumb, scrollToRatio } = useScrollMetrics("x");
-  const wrapId = "r5-flow-table-scroll-pane";
+  const wrapId = "monitoring-flow-table-scroll-pane";
   const seekFromEvent = (event) => {
     const track = event.currentTarget;
     const rect = track.getBoundingClientRect();
@@ -1015,17 +1015,17 @@ function FlowTableScroll({ children }) {
     scrollToRatio((event.clientX - rect.left) / rect.width);
   };
   return (
-    <div className={`r5-flow-table-scroll${overflow ? " is-overflow" : ""}`} data-r5-table-scroll={overflow ? "overflow" : "fit"}>
+    <div className={`monitoring-flow-table-scroll${overflow ? " is-overflow" : ""}`} data-monitoring-table-scroll={overflow ? "overflow" : "fit"}>
       {overflow ? (
-        <p className="r5-flow-table-scroll-cue" data-r5-table-scroll-cue="true" id="r5-flow-table-scroll-cue">
+        <p className="monitoring-flow-table-scroll-cue" data-monitoring-table-scroll-cue="true" id="monitoring-flow-table-scroll-cue">
           左右滑动查看完整明细（含数据完整性、医学旅程）
         </p>
       ) : null}
-      <div className="r5-flow-table-wrap" id={wrapId} ref={ref}>{children}</div>
+      <div className="monitoring-flow-table-wrap" id={wrapId} ref={ref}>{children}</div>
       {overflow ? (
         <div
-          className="r5-flow-table-hrail"
-          data-r5-table-hrail="true"
+          className="monitoring-flow-table-hrail"
+          data-monitoring-table-hrail="true"
           role="scrollbar"
           aria-orientation="horizontal"
           aria-controls={wrapId}
@@ -1033,7 +1033,7 @@ function FlowTableScroll({ children }) {
           aria-valuemax={100}
           aria-valuenow={Math.round(thumb.start + thumb.size / 2)}
           aria-label="左右滑动查看完整明细"
-          aria-describedby="r5-flow-table-scroll-cue"
+          aria-describedby="monitoring-flow-table-scroll-cue"
           tabIndex={0}
           onPointerDown={(event) => {
             event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -1051,8 +1051,8 @@ function FlowTableScroll({ children }) {
             if (event.key === "End") { event.preventDefault(); scrollToRatio(1); }
           }}
         >
-          <div className="r5-flow-table-hrail-track">
-            <div className="r5-flow-table-hrail-thumb" style={{ width: `${thumb.size}%`, left: `${thumb.start}%` }} />
+          <div className="monitoring-flow-table-hrail-track">
+            <div className="monitoring-flow-table-hrail-thumb" style={{ width: `${thumb.size}%`, left: `${thumb.start}%` }} />
           </div>
         </div>
       ) : null}
@@ -1062,7 +1062,7 @@ function FlowTableScroll({ children }) {
 
 function TimelineScrollShell({ children }) {
   const { ref, overflow, thumb, scrollToRatio } = useScrollMetrics("y");
-  const paneId = "r5-timeline-scroll-pane";
+  const paneId = "monitoring-timeline-scroll-pane";
   const seekFromEvent = (event) => {
     const track = event.currentTarget;
     const rect = track.getBoundingClientRect();
@@ -1070,12 +1070,12 @@ function TimelineScrollShell({ children }) {
     scrollToRatio((event.clientY - rect.top) / rect.height);
   };
   return (
-    <div className={`r5-timeline-scroll-shell${overflow ? " is-overflow-y" : ""}`} data-r5-timeline-scroll={overflow ? "overflow" : "fit"}>
-      <div className="r5-timeline-scroll" id={paneId} ref={ref}>{children}</div>
+    <div className={`monitoring-timeline-scroll-shell${overflow ? " is-overflow-y" : ""}`} data-monitoring-timeline-scroll={overflow ? "overflow" : "fit"}>
+      <div className="monitoring-timeline-scroll" id={paneId} ref={ref}>{children}</div>
       {overflow ? (
         <div
-          className="r5-timeline-vrail"
-          data-r5-timeline-vrail="true"
+          className="monitoring-timeline-vrail"
+          data-monitoring-timeline-vrail="true"
           role="scrollbar"
           aria-orientation="vertical"
           aria-controls={paneId}
@@ -1100,8 +1100,8 @@ function TimelineScrollShell({ children }) {
             if (event.key === "End") { event.preventDefault(); scrollToRatio(1); }
           }}
         >
-          <div className="r5-timeline-vrail-track">
-            <div className="r5-timeline-vrail-thumb" style={{ height: `${thumb.size}%`, top: `${thumb.start}%` }} />
+          <div className="monitoring-timeline-vrail-track">
+            <div className="monitoring-timeline-vrail-thumb" style={{ height: `${thumb.size}%`, top: `${thumb.start}%` }} />
           </div>
         </div>
       ) : null}
@@ -1154,34 +1154,34 @@ export function SubjectFlowSection({
   const summaryLine = subjectFlowSelectionSummary(flow, selection);
   return (
     <section
-      className="r5-panel r5-flow-section"
-      data-r5-flow-state={flow.state}
-      data-r5-flow-scope="true"
+      className="monitoring-panel monitoring-flow-section"
+      data-monitoring-flow-state={flow.state}
+      data-monitoring-flow-scope="true"
       aria-label="受试者阶段流向"
       onKeyDown={handleFlowKeyDown}
     >
-      <div className="r5-section-heading"><span className="r5-eyebrow">受试者阶段流向</span><h2>阶段流向总览</h2></div>
-      <p className="r5-flow-note">连线表示截至本次截止点的规范阶段路径；节点同时显示累计到达人数和当前停留人数。退回或重新筛选情况见阶段较上次。</p>
+      <div className="monitoring-section-heading"><span className="monitoring-eyebrow">受试者阶段流向</span><h2>阶段流向总览</h2></div>
+      <p className="monitoring-flow-note">连线表示截至本次截止点的规范阶段路径；节点同时显示累计到达人数和当前停留人数。退回或重新筛选情况见阶段较上次。</p>
       {flow.state === "not_provided" && (
-        <div className="r5-flow-notice" role="status">
+        <div className="monitoring-flow-notice" role="status">
           <strong>本次数据未提供研究状态</strong>
           {flow.notice && flow.notice !== "本次数据未提供研究状态" ? <span>{flow.notice}</span> : null}
         </div>
       )}
       {flow.state === "blocked" && (
-        <div className="r5-flow-notice is-blocked" role="alert">
+        <div className="monitoring-flow-notice is-blocked" role="alert">
           <strong>阶段人数暂无法核对，请检查本次数据范围</strong>
           {flow.gap ? <span>{flow.gap}</span> : null}
         </div>
       )}
       {flow.state === "empty" && (
-        <div className="r5-flow-notice" role="status">
+        <div className="monitoring-flow-notice" role="status">
           <strong>当前项目/中心在本次截止点暂无受试者</strong>
         </div>
       )}
       {flow.state === "ready" && graph && (
         <>
-          <div className="r5-flow-controls">
+          <div className="monitoring-flow-controls">
             <label>
               阶段
               <select aria-label="按阶段筛选受试者" value={selection.stageRef} onChange={(event) => onStageSelect?.(event.target.value, selection.metric)}>
@@ -1197,11 +1197,11 @@ export function SubjectFlowSection({
               </select>
             </label>
             <button type="button" aria-pressed={selection.riskBand === "mid_high"} onClick={() => onRiskToggle?.()}>仅看中高风险</button>
-            {subjectFlowHasSelection(selection) && <button type="button" className="r5-flow-clear" onClick={() => onClear?.()}>清除筛选</button>}
-            {summaryLine && <span className="r5-flow-filter-hint">{summaryLine}</span>}
+            {subjectFlowHasSelection(selection) && <button type="button" className="monitoring-flow-clear" onClick={() => onClear?.()}>清除筛选</button>}
+            {summaryLine && <span className="monitoring-flow-filter-hint">{summaryLine}</span>}
           </div>
           <svg
-            className="r5-flow-svg"
+            className="monitoring-flow-svg"
             viewBox={`0 0 ${graph.width} ${graph.height}`}
             role="group"
             aria-label="受试者阶段流向图"
@@ -1224,9 +1224,9 @@ export function SubjectFlowSection({
                 }}
               >
                 <title>{`从${ribbon.fromLabel}到${ribbon.toLabel}：${ribbon.count} 人，该流向受试者中当前伴随中高风险 ${ribbon.risk} 人`}</title>
-                <path d={ribbon.ribbonPath} className="r5-flow-ribbon" />
-                <path d={ribbon.hitPath} className="r5-flow-link-hit" />
-                <text x={ribbon.labelX} y={ribbon.labelY} className="r5-flow-link-count">{ribbon.count}</text>
+                <path d={ribbon.ribbonPath} className="monitoring-flow-ribbon" />
+                <path d={ribbon.hitPath} className="monitoring-flow-link-hit" />
+                <text x={ribbon.labelX} y={ribbon.labelY} className="monitoring-flow-link-count">{ribbon.count}</text>
                 {/* Mid/high risk stays on nodes only. Ribbon “中高 N” sits on the stroke and
                     fails first-screen scan (conference R3 P2). Title/aria still carry the count. */}
               </g>
@@ -1255,14 +1255,14 @@ export function SubjectFlowSection({
                   }}
                 >
                   <title>{node.label}</title>
-                  <rect x={node.x} y={node.y} width={FLOW_LAYOUT.nodeWidth} height={FLOW_LAYOUT.nodeHeight} rx={10} className="r5-flow-node-box" />
-                  <text x={centerX} y={node.y + 18} className="r5-flow-node-label">{line1}</text>
-                  {line2 ? <text x={centerX} y={node.y + 34} className="r5-flow-node-label">{line2}</text> : null}
-                  <text x={centerX} y={node.y + 54} className="r5-flow-node-counts">{`到达 ${node.reached} · 当前 ${node.current}`}</text>
+                  <rect x={node.x} y={node.y} width={FLOW_LAYOUT.nodeWidth} height={FLOW_LAYOUT.nodeHeight} rx={10} className="monitoring-flow-node-box" />
+                  <text x={centerX} y={node.y + 18} className="monitoring-flow-node-label">{line1}</text>
+                  {line2 ? <text x={centerX} y={node.y + 34} className="monitoring-flow-node-label">{line2}</text> : null}
+                  <text x={centerX} y={node.y + 54} className="monitoring-flow-node-counts">{`到达 ${node.reached} · 当前 ${node.current}`}</text>
                   {node.risk > 0 && !node.emptyAtCutoff ? (
-                    <text x={centerX} y={node.y + FLOW_LAYOUT.nodeHeight + 18} className="r5-flow-node-risk">{`中高风险 ${node.risk}`}</text>
+                    <text x={centerX} y={node.y + FLOW_LAYOUT.nodeHeight + 18} className="monitoring-flow-node-risk">{`中高风险 ${node.risk}`}</text>
                   ) : null}
-                  {node.emptyAtCutoff && <text x={centerX} y={node.y + 72} className="r5-flow-node-empty">本截止点无人到达</text>}
+                  {node.emptyAtCutoff && <text x={centerX} y={node.y + 72} className="monitoring-flow-node-empty">本截止点无人到达</text>}
                   <g
                     role="button"
                     tabIndex={0}
@@ -1288,12 +1288,12 @@ export function SubjectFlowSection({
             })}
           </svg>
           {!hideIncremental ? (
-            <p className="r5-flow-risk-summary" data-r5-flow-risk-summary="true">
+            <p className="monitoring-flow-risk-summary" data-monitoring-flow-risk-summary="true">
               <strong>中高风险变化摘要</strong>
               <span>{`新增 ${flow.riskChanges.new} · 升级 ${flow.riskChanges.upgraded} · 持续 ${flow.riskChanges.continued}`}</span>
             </p>
           ) : null}
-          <p className="r5-flow-scope-bar">
+          <p className="monitoring-flow-scope-bar">
             <strong>{`范围受试者 ${flow.total} 人`}</strong>
             {flow.coverageList
               // When every subject is already “齐备”, the chip restates the total — drop it.
@@ -1301,8 +1301,8 @@ export function SubjectFlowSection({
               .map((item) => <span key={item.key}>{`${item.label} ${item.count}`}</span>)}
             <small>当前项目/中心整体范围</small>
           </p>
-          <div className="r5-flow-table" data-r5-flow-table="true">
-            <div className="r5-flow-table-summary">
+          <div className="monitoring-flow-table" data-monitoring-flow-table="true">
+            <div className="monitoring-flow-table-summary">
               <strong>受试者阶段流向明细</strong>
               <span>{subjectFlowHasSelection(selection) ? `共 ${flow.total} 人 · 当前筛选 ${filteredRows.length} 人` : `共 ${flow.total} 人`}</span>
               <button type="button" aria-expanded={tableOpen} onClick={() => setTableOpen((open) => !open)}>{tableOpen ? "收起明细" : "展开明细"}</button>
@@ -1335,7 +1335,7 @@ export function SubjectFlowSection({
                           <td>{row.currentLabel}</td>
                           <td>{row.priorLabel}</td>
                           <td>
-                            <span className={`r5-date-chip r5-date-${row.dateState}`}>{DATE_STATE_CHIPS[row.dateState] || "日期待核实"}</span>
+                            <span className={`monitoring-date-chip monitoring-date-${row.dateState}`}>{DATE_STATE_CHIPS[row.dateState] || "日期待核实"}</span>
                             {row.enteredDate || "日期待确认"}
                             {row.basisDate ? `（依据 ${row.basisDate}）` : ""}
                           </td>
@@ -1347,7 +1347,7 @@ export function SubjectFlowSection({
                           <td>
                             <button
                               type="button"
-                              className="r5-flow-jump-button"
+                              className="monitoring-flow-jump-button"
                               disabled={!canJump}
                               title={canJump ? "进入受试者医学旅程" : "时间窗待确认"}
                               onClick={() => canJump && onSubjectJump?.(row)}
@@ -1403,7 +1403,7 @@ function OverviewView({
     { key: "mid_high_total", label: "中高风险" },
   ];
   // Live continuity counts are the public comparable signal. prior_snapshot_ref is forbidden
-  // on R7 public envelopes (*_snapshot_ref), so incremental pages must not depend on it.
+  // on public result envelopes (*_snapshot_ref), so incremental pages must not depend on it.
   const liveContinuity = Boolean(continuityCounts)
     && keyCountItems.some((item) => Number(continuityCounts?.[item.key] || 0) > 0);
   const compared = liveContinuity || changes.some((item) => item.prior_snapshot_ref);
@@ -1413,17 +1413,17 @@ function OverviewView({
   const scopedMeasure = scopedCenter?.measures?.[0] || null;
   const showContinuityKpis = liveContinuity && !suppressVersionClaim;
   return (
-    <div className="r5-view-stack">
+    <div className="monitoring-view-stack">
       {!suppressVersionClaim ? (
-        <section className="r5-comparison-note" data-comparable={comparable ? "yes" : compared ? "no" : "initial"}>
+        <section className="monitoring-comparison-note" data-comparable={comparable ? "yes" : compared ? "no" : "initial"}>
           <strong>{comparable ? "已与上一数据版本比较" : compared ? "本次暂不作增减比较" : "当前为首个监查版本"}</strong>
           <span>{comparable ? "变化类别与原因已逐项标示。" : compared ? "前后数据覆盖范围不一致，以下仅展示当前风险。" : "以下展示当前全部中高风险，后续版本将保留增量变化。"}</span>
         </section>
       ) : null}
       {showContinuityKpis ? (
-        <section className="r5-summary-grid r5-summary-grid-continuity" data-r5-continuity-kpis="true" aria-label="本轮变化关键计数">
+        <section className="monitoring-summary-grid monitoring-summary-grid-continuity" data-monitoring-continuity-kpis="true" aria-label="本轮变化关键计数">
           {keyCountItems.map((item) => (
-            <article key={item.key} className={`r5-stat-card${item.key === "mid_high_total" ? " r5-stat-danger" : ""}`}>
+            <article key={item.key} className={`monitoring-stat-card${item.key === "mid_high_total" ? " monitoring-stat-danger" : ""}`}>
               <span>{item.label}</span>
               <strong data-count-key={item.key}>{numberText(continuityCounts[item.key], "0")}</strong>
               <small>本轮范围</small>
@@ -1431,11 +1431,11 @@ function OverviewView({
           ))}
         </section>
       ) : suppressVersionClaim ? null : (
-        <section className="r5-summary-grid">
-          <article className="r5-stat-card r5-stat-danger"><span>高风险</span><strong>{numberText(currentCounts.high)}</strong><small>{scopedCenter?.coverageState === "small_sample" ? "当前中心计数；比例暂不评价" : "当前范围"}</small></article>
-          <article className="r5-stat-card r5-stat-warning"><span>中风险</span><strong>{numberText(currentCounts.medium)}</strong><small>{scopedCenter?.coverageState === "small_sample" ? "当前中心计数；比例暂不评价" : "当前范围"}</small></article>
-          <article className="r5-stat-card"><span>覆盖情况</span><strong>{projection.coverage?.denominator ? `${numberText(projection.coverage?.numerator)} / ${numberText(projection.coverage?.denominator)}` : "暂无法计算"}</strong><small>{projection.coverage?.denominator ? text(projection.coverage?.label, projection.coverage?.coverage_state || "覆盖待确认") : "样本量较小，暂不评价"}</small></article>
-          <article className="r5-stat-card"><span>{compared && !comparable ? "当前风险总数" : "变化摘要"}</span><strong>{numberText(compared && !comparable ? currentCounts.total : payload.counts?.changeBand)}</strong><small>{scopedCenter?.coverageState === "small_sample" ? "当前中心计数；比例暂不评价" : compared && !comparable ? "本次不作增减比较" : "本次范围变化"}</small></article>
+        <section className="monitoring-summary-grid">
+          <article className="monitoring-stat-card monitoring-stat-danger"><span>高风险</span><strong>{numberText(currentCounts.high)}</strong><small>{scopedCenter?.coverageState === "small_sample" ? "当前中心计数；比例暂不评价" : "当前范围"}</small></article>
+          <article className="monitoring-stat-card monitoring-stat-warning"><span>中风险</span><strong>{numberText(currentCounts.medium)}</strong><small>{scopedCenter?.coverageState === "small_sample" ? "当前中心计数；比例暂不评价" : "当前范围"}</small></article>
+          <article className="monitoring-stat-card"><span>覆盖情况</span><strong>{projection.coverage?.denominator ? `${numberText(projection.coverage?.numerator)} / ${numberText(projection.coverage?.denominator)}` : "暂无法计算"}</strong><small>{projection.coverage?.denominator ? text(projection.coverage?.label, projection.coverage?.coverage_state || "覆盖待确认") : "样本量较小，暂不评价"}</small></article>
+          <article className="monitoring-stat-card"><span>{compared && !comparable ? "当前风险总数" : "变化摘要"}</span><strong>{numberText(compared && !comparable ? currentCounts.total : payload.counts?.changeBand)}</strong><small>{scopedCenter?.coverageState === "small_sample" ? "当前中心计数；比例暂不评价" : compared && !comparable ? "本次不作增减比较" : "本次范围变化"}</small></article>
         </section>
       )}
 
@@ -1452,9 +1452,9 @@ function OverviewView({
         hideIncremental={suppressVersionClaim}
       />
 
-      <div className="r5-overview-columns">
-        <section className="r5-panel r5-panel-wide">
-          <div className="r5-section-heading"><span className="r5-eyebrow">当前风险</span><h2>高、中风险定位</h2></div>
+      <div className="monitoring-overview-columns">
+        <section className="monitoring-panel monitoring-panel-wide">
+          <div className="monitoring-section-heading"><span className="monitoring-eyebrow">当前风险</span><h2>高、中风险定位</h2></div>
           <RiskList
             risks={risks.filter((risk) => ["critical", "high", "medium"].includes(risk.severity))}
             onSelect={onRiskSelect}
@@ -1462,10 +1462,10 @@ function OverviewView({
             omitChangeClaims={suppressVersionClaim}
           />
         </section>
-        <section className="r5-panel">
+        <section className="monitoring-panel">
           {selectedRisk ? (
-            <div className="r5-overview-inspector">
-              <div className="r5-section-heading"><span className="r5-eyebrow">风险证据</span><h2>{selectedRisk.riskType}</h2></div>
+            <div className="monitoring-overview-inspector">
+              <div className="monitoring-section-heading"><span className="monitoring-eyebrow">风险证据</span><h2>{selectedRisk.riskType}</h2></div>
               <RiskBadge risk={selectedRisk} />
               <dl>
                 <div><dt>受试者</dt><dd>{text(selectedRisk.subjectLabel, "待确认")}</dd></div>
@@ -1474,7 +1474,7 @@ function OverviewView({
                 {!suppressVersionClaim ? <div><dt>变化原因</dt><dd>{selectedRisk.changeCauseLabel}</dd></div> : null}
               </dl>
               {selectedRisk.evidenceSummary && (
-                <div className="r5-evidence-summary">
+                <div className="monitoring-evidence-summary">
                   <section><h3>为什么提醒</h3><p>{selectedRisk.evidenceSummary.why_reminded}</p></section>
                   <section><h3>依据</h3><p>{selectedRisk.evidenceSummary.basis}</p></section>
                   <section><h3>发现</h3><p>{selectedRisk.evidenceSummary.finding}</p></section>
@@ -1485,23 +1485,23 @@ function OverviewView({
                 </div>
               )}
               {selectedRisk.analysisDisagreement && (
-                <div className="r5-disagreement" aria-label="分析分歧">
+                <div className="monitoring-disagreement" aria-label="分析分歧">
                   <h3>分歧内容</h3><p>{selectedRisk.analysisDisagreement.disagreement}</p>
                   <div><strong>分析一</strong><span>{selectedRisk.analysisDisagreement.analysis_one}</span></div>
                   <div><strong>分析二</strong><span>{selectedRisk.analysisDisagreement.analysis_two}</span></div>
                   <div><strong>独立核对</strong><span>{selectedRisk.analysisDisagreement.independent_check}</span></div>
                   <p><strong>支持证据：</strong>{selectedRisk.analysisDisagreement.supporting_evidence}</p>
                   <p><strong>不支持证据：</strong>{selectedRisk.analysisDisagreement.counter_evidence}</p>
-                  <p className="r5-disagreement-status">{selectedRisk.analysisDisagreement.status_zh}</p>
+                  <p className="monitoring-disagreement-status">{selectedRisk.analysisDisagreement.status_zh}</p>
                 </div>
               )}
-              <button type="button" className="r5-source-button" onClick={() => onRiskSelect?.(selectedRisk)}>进入受试者医学旅程</button>
-              <button type="button" className="r5-back-button" disabled={!selectedRisk.sourceLocatorRef} onClick={() => onSource?.(selectedRisk)}>查看原始来源</button>
+              <button type="button" className="monitoring-source-button" onClick={() => onRiskSelect?.(selectedRisk)}>进入受试者医学旅程</button>
+              <button type="button" className="monitoring-back-button" disabled={!selectedRisk.sourceLocatorRef} onClick={() => onSource?.(selectedRisk)}>查看原始来源</button>
             </div>
           ) : (
             <>
-              <div className="r5-section-heading"><span className="r5-eyebrow">受试者入口</span><h2>查看受试者医学旅程</h2></div>
-              <div className="r5-subject-list">
+              <div className="monitoring-section-heading"><span className="monitoring-eyebrow">受试者入口</span><h2>查看受试者医学旅程</h2></div>
+              <div className="monitoring-subject-list">
                 {(projection.subjects || []).map((subject) => (
                   <button type="button" key={subject.subject_ref || subject.subject_id} onClick={() => onSubjectSelect?.(subject)}>
                     <span>{text(subject.label, subject.subject_ref || subject.subject_id)}</span>
@@ -1515,9 +1515,9 @@ function OverviewView({
       </div>
 
       {scopedCenter && (
-        <section className="r5-panel r5-center-summary" aria-label="中心模式与计算口径">
-          <div className="r5-section-heading"><span className="r5-eyebrow">中心风险图谱</span><h2>{text(scopedCenter.siteLabel, centerLabel(scopedCenter.siteRef, "当前中心"))}</h2></div>
-          <div className="r5-center-summary-grid">
+        <section className="monitoring-panel monitoring-center-summary" aria-label="中心模式与计算口径">
+          <div className="monitoring-section-heading"><span className="monitoring-eyebrow">中心风险图谱</span><h2>{text(scopedCenter.siteLabel, centerLabel(scopedCenter.siteRef, "当前中心"))}</h2></div>
+          <div className="monitoring-center-summary-grid">
             <div><span>重复模式</span><strong>{scopedMeasure?.denominator ? `${DOMAIN_LABELS[scopedCenter.domain] || "相关"}记录需关注` : "样本量不足，暂无法评价重复模式"}</strong></div>
             <div><span>受影响受试者</span><strong>{numberText(payload.counts?.affected_subject, "0")}</strong></div>
             <div><span>事件数</span><strong>{numberText(payload.counts?.event, "0")}</strong></div>
@@ -1525,12 +1525,12 @@ function OverviewView({
             <div><span>分母</span><strong>{scopedMeasure?.denominator ? numberText(scopedMeasure.denominator) : "暂无法计算"}</strong></div>
             <div><span>覆盖情况</span><strong>{text(scopedCenter.coverageLabel, "覆盖待确认")}</strong></div>
           </div>
-          {!scopedMeasure?.denominator && <p className="r5-center-explanation"><strong>原因：</strong>当前中心没有可用于计算比例的有效分母，样本量较小，暂不评价中心重复模式。</p>}
+          {!scopedMeasure?.denominator && <p className="monitoring-center-explanation"><strong>原因：</strong>当前中心没有可用于计算比例的有效分母，样本量较小，暂不评价中心重复模式。</p>}
         </section>
       )}
 
-      <section className="r5-panel r5-center-overview-panel">
-        <div className="r5-section-heading"><span className="r5-eyebrow">中心概览</span><h2>中心风险与数据覆盖</h2></div>
+      <section className="monitoring-panel monitoring-center-overview-panel">
+        <div className="monitoring-section-heading"><span className="monitoring-eyebrow">中心概览</span><h2>中心风险与数据覆盖</h2></div>
         <CenterTable centers={projection.centers} onSelect={onCenterSelect} />
       </section>
       <DomainLegend domains={projection.domains} />
@@ -1540,17 +1540,17 @@ function OverviewView({
 
 const EventRow = memo(function EventRow({ event, onSelect, marker = null }) {
   const select = (pointerEvent) => {
-    for (const row of pointerEvent.currentTarget.parentElement?.querySelectorAll("button.r5-event-row") || []) row.classList.remove("is-selected");
+    for (const row of pointerEvent.currentTarget.parentElement?.querySelectorAll("button.monitoring-event-row") || []) row.classList.remove("is-selected");
     pointerEvent.currentTarget.classList.add("is-selected");
     onSelect?.(event);
   };
   return (
-    <button type="button" className="r5-event-row" data-event-ref={event.eventRef} onClick={select}>
+    <button type="button" className="monitoring-event-row" data-event-ref={event.eventRef} onClick={select}>
       <DomainIcon domain={event.domain} encoding={event.domainEncoding} size="row" title={DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel} />
-      <span className="r5-event-main"><strong><span className={`r5-date-chip r5-date-${event.dateState}`}>{DATE_STATE_CHIPS[event.dateState] || "日期待核实"}</span>{event.eventLabel}</strong><small>{event.dateLabel} · {text(event.start, "日期待确认")}{event.end ? ` — ${event.end}` : ""}</small></span>
-      {event.risk && <span className={`r5-event-risk-count r5-track-risk-${event.risk.severity}`}>{DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel}·{riskSeverityLabel(event.risk.severity)}</span>}
-      {marker ? <R7JourneyChangeMarker marker={marker} /> : null}
-      {marker ? <span className="r7-journey-sr-only">，本轮变化：{marker.changeText}{marker.countSuffix}</span> : null}
+      <span className="monitoring-event-main"><strong><span className={`monitoring-date-chip monitoring-date-${event.dateState}`}>{DATE_STATE_CHIPS[event.dateState] || "日期待核实"}</span>{event.eventLabel}</strong><small>{event.dateLabel} · {text(event.start, "日期待确认")}{event.end ? ` — ${event.end}` : ""}</small></span>
+      {event.risk && <span className={`monitoring-event-risk-count monitoring-track-risk-${event.risk.severity}`}>{DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel}·{riskSeverityLabel(event.risk.severity)}</span>}
+      {marker ? <MonitoringJourneyChangeMarker marker={marker} /> : null}
+      {marker ? <span className="monitoring-journey-sr-only">，本轮变化：{marker.changeText}{marker.countSuffix}</span> : null}
     </button>
   );
 });
@@ -1558,9 +1558,9 @@ const EventRow = memo(function EventRow({ event, onSelect, marker = null }) {
 function EventDetailPanel({ event }) {
   if (!event) return null;
   return (
-    <div className="r5-inspector-card" data-event-detail={event.eventRef}>
-      <span className="r5-eyebrow">事件详情</span>
-      <span className={`r5-date-chip r5-date-${event.dateState}`}>{DATE_STATE_CHIPS[event.dateState] || "日期待核实"}</span>
+    <div className="monitoring-inspector-card" data-event-detail={event.eventRef}>
+      <span className="monitoring-eyebrow">事件详情</span>
+      <span className={`monitoring-date-chip monitoring-date-${event.dateState}`}>{DATE_STATE_CHIPS[event.dateState] || "日期待核实"}</span>
       <h3>{event.eventLabel}</h3>
       <dl>
         <div><dt>医学域</dt><dd>{DOMAIN_LABELS[event.domain] || event.domainEncoding?.shortLabel || "域待确认"}</dd></div>
@@ -1612,15 +1612,15 @@ function SubjectWorkspaceView({
     }
     : null;
 
-  // Slice-08C-3 R7-only gating (§5.1): the change markers and the detail
+  // Result-context gating: the change markers and the detail
   // drawer are enabled only on product routes with a result_context_token;
-  // legacy R5 keeps the existing inline inspector untouched.
+  // setup preview keeps the existing inline inspector untouched.
   const journeyEnabled = payload?.publicResultContext === true && Boolean(route.result_context_token);
   const journeyRows = journeyEnabled
-    ? r7JourneyContinuityRows(continuityResult, payload, route)
+    ? monitoringJourneyContinuityRows(continuityResult, payload, route)
     : [];
   const journeyBinding = journeyEnabled
-    ? bindR7ContinuityRowsToJourney(journeyRows, projection.events || [], projection.currentRisks || [])
+    ? bindMonitoringContinuityRowsToJourney(journeyRows, projection.events || [], projection.currentRisks || [])
     : null;
   const rowsByEventRef = new Map();
   const rowsByRiskInstance = new Map();
@@ -1640,13 +1640,13 @@ function SubjectWorkspaceView({
       if (!rowsByRiskInstance.has(group.riskInstanceRef)) rowsByRiskInstance.set(group.riskInstanceRef, []);
       rowsByRiskInstance.get(group.riskInstanceRef).push(...group.rows);
     }
-    for (const [eventRef, rows] of rowsByEventRef.entries()) markersByEventRef.set(eventRef, r7EventChangeMarker(rows));
-    for (const [instance, rows] of rowsByRiskInstance.entries()) markersByRiskInstance.set(instance, r7EventChangeMarker(rows));
+    for (const [eventRef, rows] of rowsByEventRef.entries()) markersByEventRef.set(eventRef, monitoringEventChangeMarker(rows));
+    for (const [instance, rows] of rowsByRiskInstance.entries()) markersByRiskInstance.set(instance, monitoringEventChangeMarker(rows));
   }
   const journeyComparison = journeyEnabled && continuityResult?.ok
     ? continuityResult.value?.comparison || null
     : null;
-  const journeyTruncationText = journeyEnabled ? r7JourneyTruncationText(journeyComparison) : "";
+  const journeyTruncationText = journeyEnabled ? monitoringJourneyTruncationText(journeyComparison) : "";
   const selectedEventRows = selectedEvent ? rowsByEventRef.get(selectedEvent.eventRef) || [] : [];
   const selectedRiskRows = selectedRisk ? rowsByRiskInstance.get(selectedRisk.riskInstanceRef) || [] : [];
   const continuityOnlyRows = journeyEnabled && !selectedEvent && !selectedRisk && route.risk_instance_ref
@@ -1661,13 +1661,13 @@ function SubjectWorkspaceView({
       : continuityOnlyRows;
   const drawerOpen = journeyEnabled && Boolean(selectedEvent || selectedRisk || continuityOnlyRows.length);
   const drawerRow = drawerRows.find((row) => text(row.row_ref) === selectedJourneyRowRef)
-    || (drawerRows.length ? r7JourneyDrawerCurrentRow(drawerRows, route) : null);
+    || (drawerRows.length ? monitoringJourneyDrawerCurrentRow(drawerRows, route) : null);
   const drawerRowIndex = drawerRow ? drawerRows.findIndex((row) => row.row_ref === drawerRow.row_ref) : -1;
   const drawerRisk = drawerRow
     ? projection.currentRisks.find((risk) => text(risk.riskInstanceRef) === text(drawerRow.risk_instance_ref)) || selectedRisk
     : selectedRisk;
   const drawerSections = drawerOpen
-    ? r7JourneyDrawerSections({ event: enrichedSelectedEvent, risk: drawerRisk, currentRow: drawerRow, comparison: journeyComparison, domainLabels: DOMAIN_LABELS })
+    ? monitoringJourneyDrawerSections({ event: enrichedSelectedEvent, risk: drawerRisk, currentRow: drawerRow, comparison: journeyComparison, domainLabels: DOMAIN_LABELS })
     : null;
   const drawerSourceRisk = drawerRow || drawerRisk
     ? {
@@ -1713,31 +1713,31 @@ function SubjectWorkspaceView({
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, [journeyEnabled]);
-  const drawerMode = r7JourneyDrawerLayoutMode({ viewportWidth: drawerViewport, hostContentWidth: drawerHostWidth });
+  const drawerMode = monitoringJourneyDrawerLayoutMode({ viewportWidth: drawerViewport, hostContentWidth: drawerHostWidth });
   const openSource = (risk) => {
     if (risk) onSource?.(risk);
   };
   return (
-    <div className="r5-view-stack">
-      <section className="r5-subject-banner">
-        <div><span className="r5-eyebrow">受试者医学旅程</span><h2>{subjectLabel}</h2></div>
-        <div className="r5-subject-meta"><span>{centerLabel(projection.raw.subject?.site_ref)}</span><span>{text(projection.temporalSpine.axisMode, "calendar") === "study_day" ? "研究日" : "日历日期"}</span></div>
+    <div className="monitoring-view-stack">
+      <section className="monitoring-subject-banner">
+        <div><span className="monitoring-eyebrow">受试者医学旅程</span><h2>{subjectLabel}</h2></div>
+        <div className="monitoring-subject-meta"><span>{centerLabel(projection.raw.subject?.site_ref)}</span><span>{text(projection.temporalSpine.axisMode, "calendar") === "study_day" ? "研究日" : "日历日期"}</span></div>
       </section>
-      <nav className="r5-workspace-tabs" aria-label="受试者工作区视图">
+      <nav className="monitoring-workspace-tabs" aria-label="受试者工作区视图">
         {SUBJECT_VIEW_KEYS.map((key) => <button type="button" key={key} className={view === key ? "is-active" : ""} onClick={() => selectWorkspaceRisk({ __view: key })}>{SUBJECT_VIEW_LABELS[key]}</button>)}
       </nav>
-      <div className={`r5-subject-columns${drawerOpen && drawerMode === "push" ? " is-r7-drawer-push" : ""}`} ref={subjectColumnsRef}>
-        <section className="r5-panel r5-panel-wide">
+      <div className={`monitoring-subject-columns${drawerOpen && drawerMode === "push" ? " is-monitoring-drawer-push" : ""}`} ref={subjectColumnsRef}>
+        <section className="monitoring-panel monitoring-panel-wide">
           {view === "profile" ? indicators?.length ? (
-            <section className="r5-indicator-panel" aria-label="指标趋势">
-              <div className="r5-axis-heading r5-trend-window"><div><span className="r5-eyebrow">共享时间轴</span><h2 id={journeyEnabled ? R7_JOURNEY_AXIS_TITLE_ID : undefined} tabIndex={journeyEnabled ? -1 : undefined}>{text(projection.temporalSpine.axisMode, "calendar") === "study_day" ? "研究日" : "日历日期"}</h2></div><span className="r5-axis-window">{text(projection.temporalSpine.windowStart, "起点待确认")} — {text(projection.temporalSpine.windowEnd, "终点待确认")}</span></div>
-              <div className="r5-section-heading"><span className="r5-eyebrow">指标趋势</span><h2>{text(indicators[trendIndicator]?.label, "指标待确认")}</h2></div>
-              <div className="r5-indicator-switcher">{indicators.map((indicator, index) => <button type="button" key={indicator.indicator_ref || indicator.label} className={index === trendIndicator ? "is-active" : ""} onClick={() => setTrendIndicator(index)}>{indicator.label}</button>)}</div>
-              <div className="r5-trend-chart" role="img" aria-label="指标趋势图">
-                {(indicators[trendIndicator]?.points || []).map((point) => <div className="r5-trend-point" key={`${point.date}-${point.value}`}><span style={{ "--point-height": `${Math.max(14, Math.min(92, Number(point.value) * 8 || 14))}%` }} /><strong>{numberText(point.value)}</strong><small>{text(point.date, "日期待确认")}</small></div>)}
+            <section className="monitoring-indicator-panel" aria-label="指标趋势">
+              <div className="monitoring-axis-heading monitoring-trend-window"><div><span className="monitoring-eyebrow">共享时间轴</span><h2 id={journeyEnabled ? MONITORING_JOURNEY_AXIS_TITLE_ID : undefined} tabIndex={journeyEnabled ? -1 : undefined}>{text(projection.temporalSpine.axisMode, "calendar") === "study_day" ? "研究日" : "日历日期"}</h2></div><span className="monitoring-axis-window">{text(projection.temporalSpine.windowStart, "起点待确认")} — {text(projection.temporalSpine.windowEnd, "终点待确认")}</span></div>
+              <div className="monitoring-section-heading"><span className="monitoring-eyebrow">指标趋势</span><h2>{text(indicators[trendIndicator]?.label, "指标待确认")}</h2></div>
+              <div className="monitoring-indicator-switcher">{indicators.map((indicator, index) => <button type="button" key={indicator.indicator_ref || indicator.label} className={index === trendIndicator ? "is-active" : ""} onClick={() => setTrendIndicator(index)}>{indicator.label}</button>)}</div>
+              <div className="monitoring-trend-chart" role="img" aria-label="指标趋势图">
+                {(indicators[trendIndicator]?.points || []).map((point) => <div className="monitoring-trend-point" key={`${point.date}-${point.value}`}><span style={{ "--point-height": `${Math.max(14, Math.min(92, Number(point.value) * 8 || 14))}%` }} /><strong>{numberText(point.value)}</strong><small>{text(point.date, "日期待确认")}</small></div>)}
               </div>
             </section>
-          ) : <div className="r5-empty-state">当前范围未提供指标趋势。</div>
+          ) : <div className="monitoring-empty-state">当前范围未提供指标趋势。</div>
           : (
             <DomainTracks
               projection={projection}
@@ -1752,18 +1752,18 @@ function SubjectWorkspaceView({
           )}
           {view === "journey" && <DomainLegend domains={projection.domains} />}
           {view === "timeline" && enrichedSelectedEvent && (
-            <section className="r5-event-lane" aria-label="选中事件明细">
+            <section className="monitoring-event-lane" aria-label="选中事件明细">
               <EventRow event={enrichedSelectedEvent} onSelect={selectWorkspaceEvent} marker={journeyEnabled ? markersByEventRef.get(enrichedSelectedEvent.eventRef) || null : null} />
             </section>
           )}
           {projection.aemhHistory?.length > 0 && (
-            <section className="r5-history-panel"><div className="r5-section-heading"><span className="r5-eyebrow">AE/MH 前后记录</span><h2>漏报提示与补录匹配历史</h2></div>{projection.aemhHistory.map((item) => <div className="r5-history-detail" key={item.candidate_ref || item.item_ref}><div><span>原疑似漏报</span><strong>疑似 AE 漏报 / 疑似既往史未录入</strong></div><div><span>后续已补录记录</span><strong>{item.later_fact_ref ? "已发现对应补录记录" : "暂未发现"}</strong></div><div><span>匹配关系</span><strong>{HISTORY_LABELS[item.match_state] || "状态待确认"}</strong></div><p>匹配历史保留：原提示与后续记录均保留，便于复核前后变化。</p><p><strong>核查问题草稿：</strong>{selectedRisk?.evidenceSummary?.query_draft || "请核实原疑似漏报与后续记录是否为同一医学事件，并确认 AE/MH 记录是否完整。"}</p></div>)}</section>
+            <section className="monitoring-history-panel"><div className="monitoring-section-heading"><span className="monitoring-eyebrow">AE/MH 前后记录</span><h2>漏报提示与补录匹配历史</h2></div>{projection.aemhHistory.map((item) => <div className="monitoring-history-detail" key={item.candidate_ref || item.item_ref}><div><span>原疑似漏报</span><strong>疑似 AE 漏报 / 疑似既往史未录入</strong></div><div><span>后续已补录记录</span><strong>{item.later_fact_ref ? "已发现对应补录记录" : "暂未发现"}</strong></div><div><span>匹配关系</span><strong>{HISTORY_LABELS[item.match_state] || "状态待确认"}</strong></div><p>匹配历史保留：原提示与后续记录均保留，便于复核前后变化。</p><p><strong>核查问题草稿：</strong>{selectedRisk?.evidenceSummary?.query_draft || "请核实原疑似漏报与后续记录是否为同一医学事件，并确认 AE/MH 记录是否完整。"}</p></div>)}</section>
           )}
         </section>
-        <aside className="r5-panel r5-inspector" aria-label="风险定位">
-          <div className="r5-section-heading"><span className="r5-eyebrow">风险定位</span><h2>检查依据</h2></div>
+        <aside className="monitoring-panel monitoring-inspector" aria-label="风险定位">
+          <div className="monitoring-section-heading"><span className="monitoring-eyebrow">风险定位</span><h2>检查依据</h2></div>
           <RiskList risks={inspectorRisks} onSelect={selectWorkspaceRisk} selectedRiskInstanceRef={selectedRisk?.riskInstanceRef} markersByRiskInstance={journeyEnabled ? Object.fromEntries(markersByRiskInstance.entries()) : null} />
-          {priorityRisks.length > inspectorRisks.length && <p className="r5-event-lane-note">这里优先列出 16 项；其余 {priorityRisks.length - inspectorRisks.length} 项中高风险已在左侧八域泳道逐项呈现。</p>}
+          {priorityRisks.length > inspectorRisks.length && <p className="monitoring-event-lane-note">这里优先列出 16 项；其余 {priorityRisks.length - inspectorRisks.length} 项中高风险已在左侧八域泳道逐项呈现。</p>}
           {journeyEnabled ? (
             drawerOpen && drawerSections ? (
               <MedicalMonitoringJourneyDrawer
@@ -1780,12 +1780,12 @@ function SubjectWorkspaceView({
             <>
               <EventDetailPanel event={enrichedSelectedEvent} />
               {selectedRisk && (
-                <div className="r5-inspector-card">
+                <div className="monitoring-inspector-card">
                   <RiskBadge risk={selectedRisk} />
                   <h3>{selectedRisk.riskType}</h3>
                   <dl><div><dt>日期状态</dt><dd>{selectedRisk.dateLabel}</dd></div><div><dt>变化</dt><dd>{selectedRisk.changeLabel}</dd></div><div><dt>关联记录</dt><dd>{selectedRisk.riskType?.includes("AE/MH") ? "AE + MH" : text(selectedRisk.domainEncoding?.shortLabel, "待确认")}</dd></div></dl>
-                  {selectedRisk.evidenceSummary && <div className="r5-query-draft"><strong>依据 / 发现 / 行动项</strong><p>{selectedRisk.evidenceSummary.query_draft}</p></div>}
-                  <button type="button" className="r5-source-button" disabled={!selectedRisk.sourceLocatorRef} onClick={() => onSource?.(selectedRisk)}>查看来源证据</button>
+                  {selectedRisk.evidenceSummary && <div className="monitoring-query-draft"><strong>依据 / 发现 / 行动项</strong><p>{selectedRisk.evidenceSummary.query_draft}</p></div>}
+                  <button type="button" className="monitoring-source-button" disabled={!selectedRisk.sourceLocatorRef} onClick={() => onSource?.(selectedRisk)}>查看来源证据</button>
                 </div>
               )}
             </>
@@ -1805,14 +1805,14 @@ function EvidenceView({ payload, route, onBack }) {
   const excerpt = text(evidence.excerpt || sourceRef.excerpt, "来源片段暂不可读取。");
   const lineage = Array.isArray(evidence.lineage) && evidence.lineage.length ? evidence.lineage : sourceRef.lineage;
   return (
-    <div className="r5-view-stack">
-      <section className="r5-panel r5-evidence-panel">
-        <div className="r5-section-heading"><span className="r5-eyebrow">风险证据</span><h2>{text(evidence.title, publicResult ? "本次结果来源定位" : "精确来源定位")}</h2></div>
-        <div className="r5-evidence-locator" data-r5-evidence-field="canonical_location"><span>原始来源</span><strong title={canonicalLocation}>{canonicalLocation}</strong><small>已定位到具体 listing 行或方案条款</small></div>
-        <blockquote className="r5-evidence-excerpt" data-r5-evidence-field="excerpt"><span>原始引文</span><p>{excerpt}</p></blockquote>
-        <dl className="r5-evidence-meta">
-          <div data-r5-evidence-field="record_ref"><dt>记录号</dt><dd>{recordRef}</dd></div>
-          <div data-r5-evidence-field="canonical_location"><dt>原始定位</dt><dd>{canonicalLocation}</dd></div>
+    <div className="monitoring-view-stack">
+      <section className="monitoring-panel monitoring-evidence-panel">
+        <div className="monitoring-section-heading"><span className="monitoring-eyebrow">风险证据</span><h2>{text(evidence.title, publicResult ? "本次结果来源定位" : "精确来源定位")}</h2></div>
+        <div className="monitoring-evidence-locator" data-monitoring-evidence-field="canonical_location"><span>原始来源</span><strong title={canonicalLocation}>{canonicalLocation}</strong><small>已定位到具体 listing 行或方案条款</small></div>
+        <blockquote className="monitoring-evidence-excerpt" data-monitoring-evidence-field="excerpt"><span>原始引文</span><p>{excerpt}</p></blockquote>
+        <dl className="monitoring-evidence-meta">
+          <div data-monitoring-evidence-field="record_ref"><dt>记录号</dt><dd>{recordRef}</dd></div>
+          <div data-monitoring-evidence-field="canonical_location"><dt>原始定位</dt><dd>{canonicalLocation}</dd></div>
           <div><dt>来源文件</dt><dd>{text(evidence.source_file_label || sourceRef.source_file_label, publicResult ? "本次结果来源" : "方案执行 Data Listing（合成验证）")}</dd></div>
           <div><dt>来源修订</dt><dd>{text(evidence.source_revision_label || sourceRef.source_revision_label, publicResult ? "本次数据范围" : "本次数据版本")}</dd></div>
           <div><dt>来源链路</dt><dd>{Array.isArray(lineage) && lineage.length ? lineage.join(" → ") : "来源链路待确认"}</dd></div>
@@ -1820,17 +1820,17 @@ function EvidenceView({ payload, route, onBack }) {
           <div><dt>风险时间窗</dt><dd>{route.window_start && route.window_end ? `${route.window_start} — ${route.window_end}` : "与当前风险 / 事件时间窗一致"}</dd></div>
           <div><dt>打开状态</dt><dd>已完成来源一跳定位</dd></div>
         </dl>
-        <button type="button" className="r5-back-button" onClick={onBack}>返回受试者医学旅程</button>
+        <button type="button" className="monitoring-back-button" onClick={onBack}>返回受试者医学旅程</button>
       </section>
     </div>
   );
 }
 
 export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn }) {
-  const adapter = useMemo(() => createMedicalMonitoringR5Adapter(), []);
+  const adapter = useMemo(() => createMedicalMonitoringWorkspaceApi(), []);
   const route = routeCanonical(routeState);
   const effectiveView = route.view === "overview" && route.site_ref ? "site_overview" : route.view;
-  const isR7ProductRoute = Boolean(
+  const isMonitoringProductRoute = Boolean(
     route.project_ref
       && (!route.run_ref || route.public_run_token || route.result_context_token),
   );
@@ -1848,7 +1848,7 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
   currentRisksRef.current = risks;
 
   useEffect(() => {
-    if (isR7ProductRoute) {
+    if (isMonitoringProductRoute) {
       setPayload(null);
       setStatus("product");
       setError(null);
@@ -1880,7 +1880,7 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
     read.then((nextPayload) => {
       if (!controller.signal.aborted) {
         const responseIdentity = nextPayload?.identity || {};
-        const nextRoute = normalizeMedicalMonitoringR5RouteState({
+        const nextRoute = normalizeMedicalMonitoringWorkspaceRouteState({
           ...route,
           ...Object.fromEntries(
             Object.entries(responseIdentity).filter(([key, value]) => key !== "return_context_key" && !route[key] && value !== null && value !== undefined && value !== ""),
@@ -1901,14 +1901,14 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
       }
     });
     return () => controller.abort();
-  }, [adapter, isR7ProductRoute, onRouteChange, routeValid, route.project_ref, route.run_ref, route.snapshot_ref, route.cutoff_ref, route.site_ref, route.subject_ref, route.risk_instance_ref, route.view, route.spine_ref, route.axis_mode, route.window_start, route.window_end, route.visit_ref, route.event_ref, route.risk_anchor_ref, route.source_locator_ref]);
+  }, [adapter, isMonitoringProductRoute, onRouteChange, routeValid, route.project_ref, route.run_ref, route.snapshot_ref, route.cutoff_ref, route.site_ref, route.subject_ref, route.risk_instance_ref, route.view, route.spine_ref, route.axis_mode, route.window_start, route.window_end, route.visit_ref, route.event_ref, route.risk_anchor_ref, route.source_locator_ref]);
 
   useEffect(() => {
     const handleKey = (event) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || event.target?.isContentEditable) return;
       // 焦点位于流向图、流向筛选或流向表格时，不触发文档级风险列表与缩放快捷键。
       if (event.target instanceof SVGElement) return;
-      if (event.target instanceof Element && event.target.closest("[data-r5-flow-scope]")) return;
+      if (event.target instanceof Element && event.target.closest("[data-monitoring-flow-scope]")) return;
       if (event.key === "-" || event.key === "0" || event.key === "+" || (event.key === "=" && event.shiftKey)) {
         event.preventDefault();
         setZoomLevel((current) => event.key === "0" ? 0 : event.key === "-" ? Math.max(-1, current - 1) : Math.min(1, current + 1));
@@ -1925,7 +1925,7 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
       if (event.key === "Enter" && available[focusIndex]) {
         event.preventDefault();
         const risk = available[focusIndex];
-        onRouteChange?.(routeStateForMedicalMonitoringR5View(route, "journey", {
+        onRouteChange?.(routeStateForMedicalMonitoringWorkspaceView(route, "journey", {
           subject_ref: risk.subjectRef || route.subject_ref,
           site_ref: risk.siteRef || route.site_ref,
           risk_ref: risk.riskRef,
@@ -1941,16 +1941,16 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
     return () => window.removeEventListener("keydown", handleKey);
   }, [focusIndex, onRouteChange, risks, route, routeState]);
 
-  const navigate = (view, patch = {}) => onRouteChange?.(routeStateForMedicalMonitoringR5View(route, view, patch));
+  const navigate = (view, patch = {}) => onRouteChange?.(routeStateForMedicalMonitoringWorkspaceView(route, view, patch));
   const selectRisk = useCallback((risk) => {
     const currentRoute = currentRouteRef.current;
     if (risk?.__view) {
-      onRouteChange?.(routeStateForMedicalMonitoringR5View(currentRoute, risk.__view));
+      onRouteChange?.(routeStateForMedicalMonitoringWorkspaceView(currentRoute, risk.__view));
       return;
     }
     const next = { risk_ref: risk.riskRef, risk_instance_ref: risk.riskInstanceRef, event_ref: risk.eventRef, risk_anchor_ref: risk.riskAnchorRef, subject_ref: risk.subjectRef || currentRoute.subject_ref, site_ref: risk.siteRef || currentRoute.site_ref, spine_ref: risk.spineRef || currentRoute.spine_ref, visit_ref: risk.visit_ref || currentRoute.visit_ref };
     const nextView = currentRoute.view === "overview" || currentRoute.view === "site_overview" ? "journey" : currentRoute.view;
-    onRouteChange?.(routeStateForMedicalMonitoringR5View(currentRoute, nextView, next));
+    onRouteChange?.(routeStateForMedicalMonitoringWorkspaceView(currentRoute, nextView, next));
   }, [onRouteChange]);
   const selectCenter = (center) => navigate("site_overview", { site_ref: center.siteRef });
   const selectSubject = (subject) => navigate("journey", { subject_ref: subject.subject_ref || subject.subject_id, site_ref: subject.site_ref || subject.site_id, spine_ref: subject.spine_ref || route.spine_ref, run_ref: route.run_ref, snapshot_ref: route.snapshot_ref, cutoff_ref: route.cutoff_ref, window_start: route.window_start, window_end: route.window_end });
@@ -1958,7 +1958,7 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
     const currentRoute = currentRouteRef.current;
     const riskAnchorRef = event.riskAnchorRefs[0] || "";
     const linkedRisk = currentRisksRef.current.find((risk) => risk.riskAnchorRef === riskAnchorRef);
-    startTransition(() => onRouteChange?.(routeStateForMedicalMonitoringR5View(currentRoute, currentRoute.view, {
+    startTransition(() => onRouteChange?.(routeStateForMedicalMonitoringWorkspaceView(currentRoute, currentRoute.view, {
         event_ref: event.eventRef,
         visit_ref: event.visitRef || event.visit_ref || "",
         risk_anchor_ref: riskAnchorRef,
@@ -1971,12 +1971,12 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
   // Slice-08C-3 drawer close: clears only the four selection keys and keeps
   // the project/result/center/subject/spine/window and the current view.
   const closeJourneyDrawer = useCallback(() => {
-    onRouteChange?.(r7JourneyDrawerClosePatch(currentRouteRef.current));
+    onRouteChange?.(monitoringJourneyDrawerClosePatch(currentRouteRef.current));
   }, [onRouteChange]);
   // 流向筛选统一写回路由（主选择互斥）；Journey 往返由路由层保留 flow 键。
   const selectFlowStage = useCallback((stageRef, metric) => {
     const currentRoute = currentRouteRef.current;
-    startTransition(() => onRouteChange?.(routeStateForMedicalMonitoringR5View(currentRoute, currentRoute.view, {
+    startTransition(() => onRouteChange?.(routeStateForMedicalMonitoringWorkspaceView(currentRoute, currentRoute.view, {
       flow_stage_ref: stageRef,
       flow_node_metric: metric === "reached" ? "reached" : "current",
       flow_link_ref: "",
@@ -1984,7 +1984,7 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
   }, [onRouteChange]);
   const selectFlowLink = useCallback((linkRef) => {
     const currentRoute = currentRouteRef.current;
-    startTransition(() => onRouteChange?.(routeStateForMedicalMonitoringR5View(currentRoute, currentRoute.view, {
+    startTransition(() => onRouteChange?.(routeStateForMedicalMonitoringWorkspaceView(currentRoute, currentRoute.view, {
       flow_link_ref: linkRef,
       flow_stage_ref: "",
       flow_node_metric: "",
@@ -1992,20 +1992,20 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
   }, [onRouteChange]);
   const selectFlowMetric = useCallback((metric) => {
     const currentRoute = currentRouteRef.current;
-    startTransition(() => onRouteChange?.(routeStateForMedicalMonitoringR5View(currentRoute, currentRoute.view, {
+    startTransition(() => onRouteChange?.(routeStateForMedicalMonitoringWorkspaceView(currentRoute, currentRoute.view, {
       flow_node_metric: metric === "reached" ? "reached" : "current",
     })));
   }, [onRouteChange]);
   const toggleFlowRiskBand = useCallback(() => {
     const currentRoute = currentRouteRef.current;
     const next = flowText(currentRoute, ["flow_risk_band"]) === "mid_high" ? "" : "mid_high";
-    startTransition(() => onRouteChange?.(routeStateForMedicalMonitoringR5View(currentRoute, currentRoute.view, {
+    startTransition(() => onRouteChange?.(routeStateForMedicalMonitoringWorkspaceView(currentRoute, currentRoute.view, {
       flow_risk_band: next,
     })));
   }, [onRouteChange]);
   const clearFlowSelection = useCallback(() => {
     const currentRoute = currentRouteRef.current;
-    startTransition(() => onRouteChange?.(routeStateForMedicalMonitoringR5View(currentRoute, currentRoute.view, {
+    startTransition(() => onRouteChange?.(routeStateForMedicalMonitoringWorkspaceView(currentRoute, currentRoute.view, {
       flow_stage_ref: "",
       flow_node_metric: "",
       flow_link_ref: "",
@@ -2015,7 +2015,7 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
   const jumpFlowSubject = useCallback((row) => {
     if (!row?.spineRef || !row?.jumpStart || !row?.jumpEnd) return;
     const currentRoute = currentRouteRef.current;
-    onRouteChange?.(routeStateForMedicalMonitoringR5View(currentRoute, "journey", {
+    onRouteChange?.(routeStateForMedicalMonitoringWorkspaceView(currentRoute, "journey", {
       subject_ref: row.subjectRef,
       site_ref: row.siteRef || currentRoute.site_ref,
       spine_ref: row.spineRef,
@@ -2023,7 +2023,7 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
       window_end: row.jumpEnd,
     }));
   }, [onRouteChange]);
-  const availableViews = MEDICAL_MONITORING_R5_VIEWS.filter((view) => {
+  const availableViews = MEDICAL_MONITORING_WORKSPACE_VIEWS.filter((view) => {
     if (view === "overview") return true;
     if (view === "site_overview") return Boolean(route.site_ref);
     if (SUBJECT_VIEW_KEYS.includes(view)) return Boolean(route.subject_ref);
@@ -2031,7 +2031,7 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
     return false;
   });
 
-  if (isR7ProductRoute) {
+  if (isMonitoringProductRoute) {
     return (
       <MedicalMonitoringProductLoop
         projectId={route.project_ref}
@@ -2046,22 +2046,22 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
   }
 
   return (
-    <main className="r5-page" data-r5-view={effectiveView || "invalid"} data-r5-status={status} data-r5-zoom={zoomLevel}>
-      <header className="r5-page-header">
-        <div><span className="r5-eyebrow">医学监查</span><h1>{VIEW_LABELS[effectiveView] || "项目风险概览"}</h1><p>从项目风险进入中心与受试者，沿时间轴查看事件、趋势和来源依据</p></div>
-        <div className="r5-page-actions"><ZoomControls zoomLevel={zoomLevel} onZoomChange={setZoomLevel} /><button type="button" className="r5-back-button" onClick={onReturn}>医学监查首页</button></div>
+    <main className="monitoring-page" data-monitoring-view={effectiveView || "invalid"} data-monitoring-status={status} data-monitoring-zoom={zoomLevel}>
+      <header className="monitoring-page-header">
+        <div><span className="monitoring-eyebrow">医学监查</span><h1>{VIEW_LABELS[effectiveView] || "项目风险概览"}</h1><p>从项目风险进入中心与受试者，沿时间轴查看事件、趋势和来源依据</p></div>
+        <div className="monitoring-page-actions"><ZoomControls zoomLevel={zoomLevel} onZoomChange={setZoomLevel} /><button type="button" className="monitoring-back-button" onClick={onReturn}>医学监查首页</button></div>
       </header>
       <IdentityStrip identity={route} project={payload?.projection?.project || {}} />
-      <nav className="r5-route-tabs" aria-label="医学监查页面导航">
+      <nav className="monitoring-route-tabs" aria-label="医学监查页面导航">
         {availableViews.map((view) => {
           const label = view === "overview" && route.return_context_key && route.view !== "overview" ? "返回项目风险概览" : VIEW_LABELS[view];
           return <button type="button" key={view} className={effectiveView === view ? "is-active" : ""} onClick={() => navigate(view)}>{label}</button>;
         })}
       </nav>
       <MedicalMonitoringProgressPanel routeCanonical={route} />
-      {status === "invalid" && <section className="r5-state-panel" role="alert"><strong>当前定位无法确认</strong><span>请返回上一级并重新打开已绑定的项目范围。</span></section>}
-      {status === "loading" && <section className="r5-state-panel" role="status"><strong>正在读取当前范围</strong><span>项目身份、数据截止与来源链路保持一致后展示。</span></section>}
-      {status === "error" && <section className="r5-state-panel" role="alert"><strong>当前范围暂不可用</strong><span>{unavailableMessage(error)}</span><button type="button" onClick={() => onRouteChange?.({ ...route })}>重新读取</button></section>}
+      {status === "invalid" && <section className="monitoring-state-panel" role="alert"><strong>当前定位无法确认</strong><span>请返回上一级并重新打开已绑定的项目范围。</span></section>}
+      {status === "loading" && <section className="monitoring-state-panel" role="status"><strong>正在读取当前范围</strong><span>项目身份、数据截止与来源链路保持一致后展示。</span></section>}
+      {status === "error" && <section className="monitoring-state-panel" role="alert"><strong>当前范围暂不可用</strong><span>{unavailableMessage(error)}</span><button type="button" onClick={() => onRouteChange?.({ ...route })}>重新读取</button></section>}
       {status === "ready" && payload && (
         <>
           {route.view === "overview" || route.view === "site_overview" ? <OverviewView payload={payload} route={route} selectedRiskInstanceRef={route.risk_instance_ref} onRiskSelect={selectRisk} onCenterSelect={selectCenter} onSubjectSelect={selectSubject} onSource={openSource} onFlowStageSelect={selectFlowStage} onFlowLinkSelect={selectFlowLink} onFlowMetricSelect={selectFlowMetric} onFlowRiskToggle={toggleFlowRiskBand} onFlowClear={clearFlowSelection} onFlowSubjectJump={jumpFlowSubject} /> : null}

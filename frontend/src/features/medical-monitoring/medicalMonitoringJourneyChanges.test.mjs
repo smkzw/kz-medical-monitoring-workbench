@@ -12,34 +12,34 @@
 import assert from "node:assert/strict";
 
 import {
-  R7_JOURNEY_CHANGE_KIND_VISUAL,
-  R7_JOURNEY_CHANGE_TONES,
-  R7_JOURNEY_DRAWER_FALLBACK_TEXTS,
-  R7_JOURNEY_DRAWER_KEYS,
-  R7_JOURNEY_DRAWER_SECTION_ORDER,
-  R7_JOURNEY_TRUNCATION_PREFIX,
-  R7_JOURNEY_TRUNCATION_SUFFIX,
-  bindR7ContinuityRowsToJourney,
-  filterR7ContinuityRowsForJourney,
-  r7EventChangeMarker,
-  r7EventChangeRows,
-  r7JourneyAxisWindow,
-  r7JourneyBeforeAfterModel,
-  r7JourneyContinuityRows,
-  r7JourneyDrawerClosePatch,
-  r7JourneyDrawerCurrentRow,
-  r7JourneyQueryDraft,
-  r7JourneySeverityLabel,
-  r7JourneyTruncationText,
-  r7JourneyWindowContains,
-  r7RiskChangeRows,
+  MONITORING_JOURNEY_CHANGE_KIND_VISUAL,
+  MONITORING_JOURNEY_CHANGE_TONES,
+  MONITORING_JOURNEY_DRAWER_FALLBACK_TEXTS,
+  MONITORING_JOURNEY_DRAWER_KEYS,
+  MONITORING_JOURNEY_DRAWER_SECTION_ORDER,
+  MONITORING_JOURNEY_TRUNCATION_PREFIX,
+  MONITORING_JOURNEY_TRUNCATION_SUFFIX,
+  bindMonitoringContinuityRowsToJourney,
+  filterMonitoringContinuityRowsForJourney,
+  monitoringEventChangeMarker,
+  monitoringEventChangeRows,
+  monitoringJourneyAxisWindow,
+  monitoringJourneyBeforeAfterModel,
+  monitoringJourneyContinuityRows,
+  monitoringJourneyDrawerClosePatch,
+  monitoringJourneyDrawerCurrentRow,
+  monitoringJourneyQueryDraft,
+  monitoringJourneySeverityLabel,
+  monitoringJourneyTruncationText,
+  monitoringJourneyWindowContains,
+  monitoringRiskChangeRows,
 } from "./medicalMonitoringJourneyChanges.mjs";
 import {
-  R7_CONTINUITY_CHANGE_KIND_TEXTS,
-  R7_CONTINUITY_CHANGE_KINDS,
-  R7_CONTINUITY_FIRST_ANALYSIS_TEXT,
+  MONITORING_CONTINUITY_CHANGE_KIND_TEXTS,
+  MONITORING_CONTINUITY_CHANGE_KINDS,
+  MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT,
 } from "./medicalMonitoringContinuityProjection.mjs";
-import { r7ContinuityRowSeverityLabel } from "./medicalMonitoringContinuityFilter.mjs";
+import { monitoringContinuityRowSeverityLabel } from "./medicalMonitoringContinuityFilter.mjs";
 
 let passed = 0;
 function check(condition, message) {
@@ -95,7 +95,7 @@ function journeyRisk(overrides = {}) {
 // --- seven-kind visual model (§4.3): icon + Chinese + semantic tone ---
 {
   check(
-    JSON.stringify(R7_CONTINUITY_CHANGE_KINDS) === JSON.stringify(Object.keys(R7_JOURNEY_CHANGE_KIND_VISUAL)),
+    JSON.stringify(MONITORING_CONTINUITY_CHANGE_KINDS) === JSON.stringify(Object.keys(MONITORING_JOURNEY_CHANGE_KIND_VISUAL)),
     "visual model covers exactly the frozen seven kinds",
   );
   const expectedIcons = {
@@ -107,57 +107,57 @@ function journeyRisk(overrides = {}) {
     reopened: "RotateCcw",
     needs_rejudgment: "CircleHelp",
   };
-  for (const kind of R7_CONTINUITY_CHANGE_KINDS) {
+  for (const kind of MONITORING_CONTINUITY_CHANGE_KINDS) {
     check(
-      R7_JOURNEY_CHANGE_KIND_VISUAL[kind].icon === expectedIcons[kind],
+      MONITORING_JOURNEY_CHANGE_KIND_VISUAL[kind].icon === expectedIcons[kind],
       `${kind} uses the frozen Lucide icon ${expectedIcons[kind]}`,
     );
     check(
-      R7_JOURNEY_CHANGE_KIND_VISUAL[kind].label === R7_CONTINUITY_CHANGE_KIND_TEXTS[kind],
+      MONITORING_JOURNEY_CHANGE_KIND_VISUAL[kind].label === MONITORING_CONTINUITY_CHANGE_KIND_TEXTS[kind],
       `${kind} label is the frozen Chinese wording`,
     );
     check(
-      R7_JOURNEY_CHANGE_TONES.includes(R7_JOURNEY_CHANGE_KIND_VISUAL[kind].tone),
+      MONITORING_JOURNEY_CHANGE_TONES.includes(MONITORING_JOURNEY_CHANGE_KIND_VISUAL[kind].tone),
       `${kind} tone is inside the closed semantic tone set`,
     );
   }
   check(
-    R7_JOURNEY_CHANGE_KIND_VISUAL.upgraded.tone === "danger" && R7_JOURNEY_CHANGE_KIND_VISUAL.reopened.tone === "danger",
+    MONITORING_JOURNEY_CHANGE_KIND_VISUAL.upgraded.tone === "danger" && MONITORING_JOURNEY_CHANGE_KIND_VISUAL.reopened.tone === "danger",
     "升级 and 重开 carry the danger tone",
   );
   check(
-    R7_JOURNEY_CHANGE_KIND_VISUAL.downgraded.tone === "success" && R7_JOURNEY_CHANGE_KIND_VISUAL.closed.tone === "success",
+    MONITORING_JOURNEY_CHANGE_KIND_VISUAL.downgraded.tone === "success" && MONITORING_JOURNEY_CHANGE_KIND_VISUAL.closed.tone === "success",
     "降级 and 关闭 carry the success tone",
   );
   check(
-    R7_JOURNEY_CHANGE_KIND_VISUAL.needs_rejudgment.tone === "warning",
+    MONITORING_JOURNEY_CHANGE_KIND_VISUAL.needs_rejudgment.tone === "warning",
     "需重新判断 carries the warning tone",
   );
-  check(R7_JOURNEY_CHANGE_KIND_VISUAL.new.tone === "info", "新增 carries the info tone");
-  check(R7_JOURNEY_CHANGE_KIND_VISUAL.continued.tone === "neutral", "持续 carries the neutral tone");
+  check(MONITORING_JOURNEY_CHANGE_KIND_VISUAL.new.tone === "info", "新增 carries the info tone");
+  check(MONITORING_JOURNEY_CHANGE_KIND_VISUAL.continued.tone === "neutral", "持续 carries the neutral tone");
   check(
-    r7JourneySeverityLabel === r7ContinuityRowSeverityLabel,
+    monitoringJourneySeverityLabel === monitoringContinuityRowSeverityLabel,
     "severity wording re-export is the 08C-2 function",
   );
-  check(R7_JOURNEY_CHANGE_KIND_VISUAL.unknown === undefined, "unknown kinds are not in the visual model");
+  check(MONITORING_JOURNEY_CHANGE_KIND_VISUAL.unknown === undefined, "unknown kinds are not in the visual model");
   passed += 30;
 }
 
 // --- drawer fixed content order and fallback texts (§5.2) ---
 {
   check(
-    JSON.stringify(R7_JOURNEY_DRAWER_SECTION_ORDER)
+    JSON.stringify(MONITORING_JOURNEY_DRAWER_SECTION_ORDER)
       === JSON.stringify(["title", "event_category", "risk_level", "change", "date", "before_after", "related_records", "query_draft", "source"]),
     "drawer section order is the frozen nine-item sequence",
   );
-  check(R7_JOURNEY_DRAWER_FALLBACK_TEXTS.eventCategory === "类别待确认", "category fallback is fixed");
-  check(R7_JOURNEY_DRAWER_FALLBACK_TEXTS.riskLevel === "风险等级待确认", "risk-level fallback is fixed");
-  check(R7_JOURNEY_DRAWER_FALLBACK_TEXTS.change === "本轮变化待确认", "change fallback is fixed");
-  check(R7_JOURNEY_DRAWER_FALLBACK_TEXTS.date === "日期待确认", "date fallback is fixed");
-  check(R7_JOURNEY_DRAWER_FALLBACK_TEXTS.beforeAfter === "本轮未提供前后比较依据", "before/after fallback is fixed");
-  check(R7_JOURNEY_DRAWER_FALLBACK_TEXTS.relatedRecords === "本轮未提供关联记录", "related-records fallback is fixed");
-  check(R7_JOURNEY_DRAWER_FALLBACK_TEXTS.queryDraft === "本轮未提供 Query 草稿", "query-draft fallback is fixed");
-  check(R7_JOURNEY_DRAWER_FALLBACK_TEXTS.source === "原始记录位置待确认", "source fallback is fixed");
+  check(MONITORING_JOURNEY_DRAWER_FALLBACK_TEXTS.eventCategory === "类别待确认", "category fallback is fixed");
+  check(MONITORING_JOURNEY_DRAWER_FALLBACK_TEXTS.riskLevel === "风险等级待确认", "risk-level fallback is fixed");
+  check(MONITORING_JOURNEY_DRAWER_FALLBACK_TEXTS.change === "本轮变化待确认", "change fallback is fixed");
+  check(MONITORING_JOURNEY_DRAWER_FALLBACK_TEXTS.date === "日期待确认", "date fallback is fixed");
+  check(MONITORING_JOURNEY_DRAWER_FALLBACK_TEXTS.beforeAfter === "本轮未提供前后比较依据", "before/after fallback is fixed");
+  check(MONITORING_JOURNEY_DRAWER_FALLBACK_TEXTS.relatedRecords === "本轮未提供关联记录", "related-records fallback is fixed");
+  check(MONITORING_JOURNEY_DRAWER_FALLBACK_TEXTS.queryDraft === "本轮未提供 Query 草稿", "query-draft fallback is fixed");
+  check(MONITORING_JOURNEY_DRAWER_FALLBACK_TEXTS.source === "原始记录位置待确认", "source fallback is fixed");
   passed += 9;
 }
 
@@ -170,7 +170,7 @@ function journeyRisk(overrides = {}) {
   };
   const route = { window_start: "2025-12-01", window_end: "2026-04-30" };
   check(
-    JSON.stringify(r7JourneyAxisWindow(spinePayload, route))
+    JSON.stringify(monitoringJourneyAxisWindow(spinePayload, route))
       === JSON.stringify({ windowStart: "2026-01-01", windowEnd: "2026-03-31" }),
     "temporalSpine window is the only axis window source when present",
   );
@@ -178,30 +178,30 @@ function journeyRisk(overrides = {}) {
     projection: { temporalSpine: { window_start: "2026-02-01", window_end: "2026-02-28" } },
   };
   check(
-    JSON.stringify(r7JourneyAxisWindow(snakePayload, route))
+    JSON.stringify(monitoringJourneyAxisWindow(snakePayload, route))
       === JSON.stringify({ windowStart: "2026-02-01", windowEnd: "2026-02-28" }),
     "snake_case temporalSpine window fields are accepted",
   );
   check(
-    JSON.stringify(r7JourneyAxisWindow({ projection: { temporalSpine: {} } }, route))
+    JSON.stringify(monitoringJourneyAxisWindow({ projection: { temporalSpine: {} } }, route))
       === JSON.stringify({ windowStart: "2025-12-01", windowEnd: "2026-04-30" }),
     "missing server axis window falls back to the route window",
   );
   check(
-    JSON.stringify(r7JourneyAxisWindow(
+    JSON.stringify(monitoringJourneyAxisWindow(
       { projection: { temporalSpine: { windowStart: "2026-01-01" } } },
       route,
     ))
       === JSON.stringify({ windowStart: "2025-12-01", windowEnd: "2026-04-30" }),
     "half-provided server axis window falls back to the route window entirely",
   );
-  check(r7JourneyAxisWindow(null, route) && r7JourneyAxisWindow(null, route).windowStart === "2025-12-01", "missing payload still falls back to the route window");
+  check(monitoringJourneyAxisWindow(null, route) && monitoringJourneyAxisWindow(null, route).windowStart === "2025-12-01", "missing payload still falls back to the route window");
   check(
-    r7JourneyAxisWindow({ projection: {} }, {}) === null,
+    monitoringJourneyAxisWindow({ projection: {} }, {}) === null,
     "no axis window anywhere resolves to null",
   );
   check(
-    r7JourneyAxisWindow(null, { window_start: "2026-01-01" }) === null,
+    monitoringJourneyAxisWindow(null, { window_start: "2026-01-01" }) === null,
     "half-provided route window resolves to null",
   );
   passed += 7;
@@ -212,43 +212,43 @@ function journeyRisk(overrides = {}) {
 {
   const axis = { windowStart: "2026-01-01", windowEnd: "2026-03-31" };
   check(
-    r7JourneyWindowContains(riskRow({ window_start: "2026-01-01", window_end: "2026-03-31" }), axis),
+    monitoringJourneyWindowContains(riskRow({ window_start: "2026-01-01", window_end: "2026-03-31" }), axis),
     "equal boundaries are inside the axis window",
   );
   check(
-    r7JourneyWindowContains(riskRow({ window_start: "2026-01-15", window_end: "2026-03-15" }), axis),
+    monitoringJourneyWindowContains(riskRow({ window_start: "2026-01-15", window_end: "2026-03-15" }), axis),
     "true containment is inside the axis window",
   );
   check(
-    !r7JourneyWindowContains(riskRow({ window_start: "2026-03-01", window_end: "2026-04-30" }), axis),
+    !monitoringJourneyWindowContains(riskRow({ window_start: "2026-03-01", window_end: "2026-04-30" }), axis),
     "partial overlap is outside the axis window",
   );
   check(
-    !r7JourneyWindowContains(riskRow({ window_start: "2026-04-01", window_end: "2026-06-30" }), axis),
+    !monitoringJourneyWindowContains(riskRow({ window_start: "2026-04-01", window_end: "2026-06-30" }), axis),
     "disjoint windows are outside the axis window",
   );
   check(
-    !r7JourneyWindowContains(riskRow({ window_start: "2025-12-01", window_end: "2025-12-31" }), axis),
+    !monitoringJourneyWindowContains(riskRow({ window_start: "2025-12-01", window_end: "2025-12-31" }), axis),
     "window ending before the axis start is outside",
   );
   check(
-    !r7JourneyWindowContains(riskRow({ window_start: "", window_end: "2026-03-31" }), axis),
+    !monitoringJourneyWindowContains(riskRow({ window_start: "", window_end: "2026-03-31" }), axis),
     "missing row window_start stays outside",
   );
   check(
-    !r7JourneyWindowContains(riskRow({ window_start: "2026-01-01", window_end: "" }), axis),
+    !monitoringJourneyWindowContains(riskRow({ window_start: "2026-01-01", window_end: "" }), axis),
     "missing row window_end stays outside",
   );
   check(
-    !r7JourneyWindowContains(riskRow(), { windowStart: "", windowEnd: "2026-03-31" }),
+    !monitoringJourneyWindowContains(riskRow(), { windowStart: "", windowEnd: "2026-03-31" }),
     "missing axis windowStart keeps every row outside",
   );
   check(
-    !r7JourneyWindowContains(riskRow(), { windowStart: "2026-01-01", windowEnd: "" }),
+    !monitoringJourneyWindowContains(riskRow(), { windowStart: "2026-01-01", windowEnd: "" }),
     "missing axis windowEnd keeps every row outside",
   );
-  check(!r7JourneyWindowContains(null, axis), "null rows stay outside");
-  check(!r7JourneyWindowContains(riskRow(), null), "null axis keeps rows outside");
+  check(!monitoringJourneyWindowContains(null, axis), "null rows stay outside");
+  check(!monitoringJourneyWindowContains(riskRow(), null), "null axis keeps rows outside");
   passed += 11;
 }
 
@@ -283,7 +283,7 @@ function journeyRisk(overrides = {}) {
       event_ref: "event-o",
     }, // non-risk inside the window
   ];
-  const filtered = filterR7ContinuityRowsForJourney(rows, {
+  const filtered = filterMonitoringContinuityRowsForJourney(rows, {
     siteRef: "site/01",
     subjectRef: "S/01",
     windowStart: AXIS.windowStart,
@@ -298,14 +298,14 @@ function journeyRisk(overrides = {}) {
     JSON.stringify(filtered.map((row) => row.ordinal)) === JSON.stringify([0, 1]),
     "filter preserves the server-authoritative order",
   );
-  check(filterR7ContinuityRowsForJourney(rows, {}).length === 0, "missing journey identity fails closed");
+  check(filterMonitoringContinuityRowsForJourney(rows, {}).length === 0, "missing journey identity fails closed");
   check(
-    filterR7ContinuityRowsForJourney(rows, { siteRef: "site/01", subjectRef: "S/01", windowStart: "", windowEnd: "" }).length === 0,
+    filterMonitoringContinuityRowsForJourney(rows, { siteRef: "site/01", subjectRef: "S/01", windowStart: "", windowEnd: "" }).length === 0,
     "missing axis window fails closed",
   );
-  check(filterR7ContinuityRowsForJourney(null, { siteRef: "site/01", subjectRef: "S/01", windowStart: "2026-01-01", windowEnd: "2026-03-31" }).length === 0, "null rows filter to an empty list");
+  check(filterMonitoringContinuityRowsForJourney(null, { siteRef: "site/01", subjectRef: "S/01", windowStart: "2026-01-01", windowEnd: "2026-03-31" }).length === 0, "null rows filter to an empty list");
   check(
-    filterR7ContinuityRowsForJourney([riskRow({ subject_ref: "  S/01  " })], { siteRef: "site/01", subjectRef: "S/01", windowStart: "2026-01-01", windowEnd: "2026-03-31" }).length === 1,
+    filterMonitoringContinuityRowsForJourney([riskRow({ subject_ref: "  S/01  " })], { siteRef: "site/01", subjectRef: "S/01", windowStart: "2026-01-01", windowEnd: "2026-03-31" }).length === 1,
     "row identity is trim-normalized before comparison",
   );
   passed += 7;
@@ -331,20 +331,20 @@ function journeyRisk(overrides = {}) {
     projection: { temporalSpine: { windowStart: "2026-01-01", windowEnd: "2026-03-31" } },
   };
   const route = { site_ref: "site/01", subject_ref: "S/01", window_start: "2025-01-01", window_end: "2025-12-31" };
-  const selected = r7JourneyContinuityRows(envelope, payload, route);
+  const selected = monitoringJourneyContinuityRows(envelope, payload, route);
   check(selected.length === 1 && selected[0].ordinal === 0, "combined reader selects only the same-identity same-window risk row");
-  check(r7JourneyContinuityRows({ ok: false, text: "本轮变化暂不可查看" }, payload, route).length === 0, "failed envelopes yield no markers");
-  check(r7JourneyContinuityRows(null, payload, route).length === 0, "null envelopes yield no markers");
+  check(monitoringJourneyContinuityRows({ ok: false, text: "本轮变化暂不可查看" }, payload, route).length === 0, "failed envelopes yield no markers");
+  check(monitoringJourneyContinuityRows(null, payload, route).length === 0, "null envelopes yield no markers");
   check(
-    r7JourneyContinuityRows({ ok: true, value: { kind: "unavailable" } }, payload, route).length === 0,
+    monitoringJourneyContinuityRows({ ok: true, value: { kind: "unavailable" } }, payload, route).length === 0,
     "non-continuity values yield no markers",
   );
   check(
-    r7JourneyContinuityRows(envelope, { projection: {} }, route).length === 0,
+    monitoringJourneyContinuityRows(envelope, { projection: {} }, route).length === 0,
     "missing axis window yields no markers even with a verified envelope",
   );
   check(
-    r7JourneyContinuityRows(envelope, payload, {}).length === 0,
+    monitoringJourneyContinuityRows(envelope, payload, {}).length === 0,
     "missing journey identity yields no markers",
   );
   passed += 6;
@@ -366,22 +366,22 @@ function journeyRisk(overrides = {}) {
     riskRow({ ordinal: 4, event_ref: "", risk_anchor_ref: "", risk_instance_ref: "" }), // unbound
     riskRow({ ordinal: 5, event_ref: "event-missing", risk_anchor_ref: "", risk_instance_ref: "" }), // unknown event_ref
   ];
-  const binding = bindR7ContinuityRowsToJourney(rows, events, risks);
+  const binding = bindMonitoringContinuityRowsToJourney(rows, events, risks);
   check(binding.events.length === 3, "three events carry bound rows");
   check(
-    JSON.stringify(r7EventChangeRows(binding, "event-1").map((row) => row.ordinal)) === JSON.stringify([0]),
+    JSON.stringify(monitoringEventChangeRows(binding, "event-1").map((row) => row.ordinal)) === JSON.stringify([0]),
     "exact event_ref binds the row to that event",
   );
   check(
-    JSON.stringify(r7EventChangeRows(binding, "event-2").map((row) => row.ordinal)) === JSON.stringify([1]),
+    JSON.stringify(monitoringEventChangeRows(binding, "event-2").map((row) => row.ordinal)) === JSON.stringify([1]),
     "risk_anchor_ref binds to the event already carrying the anchor (camelCase)",
   );
   check(
-    JSON.stringify(r7EventChangeRows(binding, "event-3").map((row) => row.ordinal)) === JSON.stringify([2]),
+    JSON.stringify(monitoringEventChangeRows(binding, "event-3").map((row) => row.ordinal)) === JSON.stringify([2]),
     "risk_anchor_ref binds to the event already carrying the anchor (snake_case)",
   );
   check(
-    JSON.stringify(r7RiskChangeRows(binding, "risk-i-9").map((row) => row.ordinal)) === JSON.stringify([3]),
+    JSON.stringify(monitoringRiskChangeRows(binding, "risk-i-9").map((row) => row.ordinal)) === JSON.stringify([3]),
     "risk_instance_ref binds to the current risk when no event matches",
   );
   check(binding.unbound.length === 2, "unbound rows stay listed and never create virtual nodes");
@@ -389,10 +389,10 @@ function journeyRisk(overrides = {}) {
     JSON.stringify(binding.unbound.map((row) => row.ordinal)) === JSON.stringify([4, 5]),
     "unbound rows keep server order",
   );
-  check(r7EventChangeRows(binding, "event-4").length === 0, "unknown events return an empty row set");
-  check(r7RiskChangeRows(binding, "risk-i-99").length === 0, "unknown risks return an empty row set");
-  check(r7EventChangeRows(null, "event-1").length === 0, "null bindings return an empty row set");
-  check(r7RiskChangeRows(binding, "").length === 0, "empty risk refs return an empty row set");
+  check(monitoringEventChangeRows(binding, "event-4").length === 0, "unknown events return an empty row set");
+  check(monitoringRiskChangeRows(binding, "risk-i-99").length === 0, "unknown risks return an empty row set");
+  check(monitoringEventChangeRows(null, "event-1").length === 0, "null bindings return an empty row set");
+  check(monitoringRiskChangeRows(binding, "").length === 0, "empty risk refs return an empty row set");
   passed += 10;
 }
 
@@ -403,12 +403,12 @@ function journeyRisk(overrides = {}) {
     journeyEvent({ eventRef: "event-2", riskAnchorRefs: ["risk-a-2"] }),
   ];
   const rows = [riskRow({ ordinal: 0, event_ref: "event-1", risk_anchor_ref: "risk-a-2" })];
-  const binding = bindR7ContinuityRowsToJourney(rows, events, []);
+  const binding = bindMonitoringContinuityRowsToJourney(rows, events, []);
   check(
-    r7EventChangeRows(binding, "event-1").length === 1 && r7EventChangeRows(binding, "event-2").length === 0,
+    monitoringEventChangeRows(binding, "event-1").length === 1 && monitoringEventChangeRows(binding, "event-2").length === 0,
     "exact event_ref takes priority even when the anchor also matches another event",
   );
-  const anchorOnly = bindR7ContinuityRowsToJourney(
+  const anchorOnly = bindMonitoringContinuityRowsToJourney(
     [riskRow({ ordinal: 0, event_ref: "", risk_anchor_ref: "risk-a-2" })],
     events,
     [],
@@ -418,7 +418,7 @@ function journeyRisk(overrides = {}) {
     "anchor fallback binds to the first event carrying the anchor",
   );
   check(
-    r7EventChangeRows(anchorOnly, "event-1").length === 1 && r7EventChangeRows(anchorOnly, "event-2").length === 0,
+    monitoringEventChangeRows(anchorOnly, "event-1").length === 1 && monitoringEventChangeRows(anchorOnly, "event-2").length === 0,
     "anchor fallback binds to the first carrying event only",
   );
   passed += 3;
@@ -426,7 +426,7 @@ function journeyRisk(overrides = {}) {
 
 // --- primary marker (§4.5): minimal ordinal, count suffix, multi-change ---
 {
-  const single = r7EventChangeMarker([riskRow({ ordinal: 3, change_kind: "upgraded" })]);
+  const single = monitoringEventChangeMarker([riskRow({ ordinal: 3, change_kind: "upgraded" })]);
   check(
     single && single.changeKind === "upgraded" && single.changeText === "升级" && single.icon === "CircleArrowUp",
     "single-change marker shows the frozen word and icon",
@@ -434,7 +434,7 @@ function journeyRisk(overrides = {}) {
   check(single.total === 1 && single.countSuffix === "", "single-change marker states no count suffix");
   check(single.row.ordinal === 3, "single-change marker keeps the bound row");
 
-  const multi = r7EventChangeMarker([
+  const multi = monitoringEventChangeMarker([
     riskRow({ ordinal: 5, change_kind: "continued" }),
     riskRow({ ordinal: 2, change_kind: "new" }),
     riskRow({ ordinal: 9, change_kind: "closed" }),
@@ -447,20 +447,20 @@ function journeyRisk(overrides = {}) {
   check(multi.total === 3 && multi.countSuffix === "，共 3 条变化", "multi-change marker states the total in the accessible suffix");
   check(multi.icon === "CirclePlus" && multi.tone === "info", "primary marker carries the primary row's visual model");
 
-  const repeated = r7EventChangeMarker([
+  const repeated = monitoringEventChangeMarker([
     riskRow({ ordinal: 1, change_kind: "continued" }),
     riskRow({ ordinal: 1, change_kind: "closed" }),
     riskRow({ ordinal: 0, change_kind: "reopened" }),
   ]);
   check(repeated.changeKind === "reopened", "duplicate ordinals still select by ordinal order");
 
-  check(r7EventChangeMarker([]) === null, "empty row sets render no marker");
-  check(r7EventChangeMarker(null) === null, "null row sets render no marker");
+  check(monitoringEventChangeMarker([]) === null, "empty row sets render no marker");
+  check(monitoringEventChangeMarker(null) === null, "null row sets render no marker");
   check(
-    r7EventChangeMarker([riskRow({ change_kind: "not_a_kind" })]) === null,
+    monitoringEventChangeMarker([riskRow({ change_kind: "not_a_kind" })]) === null,
     "kinds outside the closed set render no marker",
   );
-  check(r7EventChangeMarker([null, "x"]) === null, "malformed rows render no marker");
+  check(monitoringEventChangeMarker([null, "x"]) === null, "malformed rows render no marker");
   passed += 8;
 }
 
@@ -471,31 +471,31 @@ function journeyRisk(overrides = {}) {
     riskRow({ ordinal: 1, risk_instance_ref: "risk-i-2" }),
     riskRow({ ordinal: 2, risk_instance_ref: "risk-i-3" }),
   ];
-  const picked = r7JourneyDrawerCurrentRow(rows, { risk_instance_ref: "risk-i-2" });
+  const picked = monitoringJourneyDrawerCurrentRow(rows, { risk_instance_ref: "risk-i-2" });
   check(picked && picked.ordinal === 1, "current row prefers the route risk_instance_ref");
-  const first = r7JourneyDrawerCurrentRow(rows, {});
+  const first = monitoringJourneyDrawerCurrentRow(rows, {});
   check(first && first.ordinal === 0, "current row falls back to the first bound row in server order");
-  const unmatched = r7JourneyDrawerCurrentRow(rows, { risk_instance_ref: "risk-i-99" });
+  const unmatched = monitoringJourneyDrawerCurrentRow(rows, { risk_instance_ref: "risk-i-99" });
   check(unmatched && unmatched.ordinal === 0, "unmatched route ref falls back to the first row");
-  check(r7JourneyDrawerCurrentRow([], {}) === null, "empty row sets have no current row");
-  check(r7JourneyDrawerCurrentRow(null, {}) === null, "null row sets have no current row");
+  check(monitoringJourneyDrawerCurrentRow([], {}) === null, "empty row sets have no current row");
+  check(monitoringJourneyDrawerCurrentRow(null, {}) === null, "null row sets have no current row");
   passed += 5;
 }
 
 // --- severity wording (§4.4): explicit text, never color/single-character only ---
 {
-  check(r7ContinuityRowSeverityLabel(riskRow({ change_kind: "upgraded", severity_before_text: "中", severity_after_text: "高" })) === "中 → 高", "upgraded shows 前等级 → 后等级");
-  check(r7ContinuityRowSeverityLabel(riskRow({ change_kind: "closed", severity_before_text: "高", severity_after_text: "" })) === "高（已关闭）", "closed shows 前等级（已关闭）");
-  check(r7ContinuityRowSeverityLabel(riskRow({ change_kind: "reopened", severity_after_text: "高" })) === "高", "reopened shows the current level");
-  check(r7ContinuityRowSeverityLabel(riskRow({ change_kind: "continued", severity_before_text: "低", severity_after_text: "低" })) === "低 → 低", "continued shows the explicit before → after");
-  check(r7ContinuityRowSeverityLabel(riskRow({ change_kind: "new", severity_after_text: "" })) === "等级变化待确认", "missing level falls back to the frozen confirm text");
+  check(monitoringContinuityRowSeverityLabel(riskRow({ change_kind: "upgraded", severity_before_text: "中", severity_after_text: "高" })) === "中 → 高", "upgraded shows 前等级 → 后等级");
+  check(monitoringContinuityRowSeverityLabel(riskRow({ change_kind: "closed", severity_before_text: "高", severity_after_text: "" })) === "高（已关闭）", "closed shows 前等级（已关闭）");
+  check(monitoringContinuityRowSeverityLabel(riskRow({ change_kind: "reopened", severity_after_text: "高" })) === "高", "reopened shows the current level");
+  check(monitoringContinuityRowSeverityLabel(riskRow({ change_kind: "continued", severity_before_text: "低", severity_after_text: "低" })) === "低 → 低", "continued shows the explicit before → after");
+  check(monitoringContinuityRowSeverityLabel(riskRow({ change_kind: "new", severity_after_text: "" })) === "等级变化待确认", "missing level falls back to the frozen confirm text");
   passed += 5;
 }
 
 // --- before/after basis and query draft (§6) ---
 {
   const compared = { comparison_text: "已与上次监查结果比较" };
-  const detail = r7JourneyBeforeAfterModel(compared, riskRow({
+  const detail = monitoringJourneyBeforeAfterModel(compared, riskRow({
     severity_before_text: "中",
     severity_after_text: "高",
     reason_text: "实验室复查确认",
@@ -511,28 +511,28 @@ function journeyRisk(overrides = {}) {
     detail.text === "上轮 中；本轮 高；变化原因：实验室复查确认",
     "before/after detail text distinguishes the three parts",
   );
-  const firstAnalysis = r7JourneyBeforeAfterModel({ comparison_text: R7_CONTINUITY_FIRST_ANALYSIS_TEXT }, riskRow());
+  const firstAnalysis = monitoringJourneyBeforeAfterModel({ comparison_text: MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT }, riskRow());
   check(
-    firstAnalysis.state === "first_analysis" && firstAnalysis.text === R7_CONTINUITY_FIRST_ANALYSIS_TEXT,
+    firstAnalysis.state === "first_analysis" && firstAnalysis.text === MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT,
     "first analysis shows the frozen 首次全面分析 baseline text",
   );
-  const empty = r7JourneyBeforeAfterModel(compared, riskRow({ severity_before_text: "", severity_after_text: "", reason_text: "" }));
+  const empty = monitoringJourneyBeforeAfterModel(compared, riskRow({ severity_before_text: "", severity_after_text: "", reason_text: "" }));
   check(
     empty.state === "none" && empty.text === "本轮未提供前后比较依据",
     "missing before/after detail uses the fixed fallback",
   );
   check(
-    r7JourneyBeforeAfterModel(compared, null).text === "本轮未提供前后比较依据",
+    monitoringJourneyBeforeAfterModel(compared, null).text === "本轮未提供前后比较依据",
     "null rows use the fixed fallback",
   );
   const queryRisk = { evidenceSummary: { query_draft: "请核实发热与实验室结果的时间顺序" } };
   check(
-    r7JourneyQueryDraft(queryRisk) === "请核实发热与实验室结果的时间顺序",
+    monitoringJourneyQueryDraft(queryRisk) === "请核实发热与实验室结果的时间顺序",
     "query draft is taken from the selected R5 risk evidenceSummary.query_draft",
   );
-  check(r7JourneyQueryDraft({ evidence_summary: { query_draft: "snake 草稿" } }) === "snake 草稿", "snake_case evidence summary is accepted");
-  check(r7JourneyQueryDraft({}) === "", "missing query draft yields an empty string for the fallback");
-  check(r7JourneyQueryDraft(null) === "", "null risks yield no query draft");
+  check(monitoringJourneyQueryDraft({ evidence_summary: { query_draft: "snake 草稿" } }) === "snake 草稿", "snake_case evidence summary is accepted");
+  check(monitoringJourneyQueryDraft({}) === "", "missing query draft yields an empty string for the fallback");
+  check(monitoringJourneyQueryDraft(null) === "", "null risks yield no query draft");
   passed += 8;
 }
 
@@ -553,12 +553,12 @@ function journeyRisk(overrides = {}) {
     risk_instance_ref: "risk-i-1",
     axis_mode: "calendar",
   };
-  const closed = r7JourneyDrawerClosePatch(route);
+  const closed = monitoringJourneyDrawerClosePatch(route);
   check(
-    JSON.stringify(R7_JOURNEY_DRAWER_KEYS) === JSON.stringify(["event_ref", "risk_instance_ref", "risk_anchor_ref", "visit_ref"]),
+    JSON.stringify(MONITORING_JOURNEY_DRAWER_KEYS) === JSON.stringify(["event_ref", "risk_instance_ref", "risk_anchor_ref", "visit_ref"]),
     "drawer close clears exactly the four frozen keys",
   );
-  for (const key of R7_JOURNEY_DRAWER_KEYS) {
+  for (const key of MONITORING_JOURNEY_DRAWER_KEYS) {
     check(closed[key] === "", `route close patch clears ${key}`);
   }
   check(closed.project_ref === "project/01", "route close patch preserves the project");
@@ -570,19 +570,19 @@ function journeyRisk(overrides = {}) {
   check(closed.view === "journey", "route close patch preserves the journey/profile/timeline view");
   check(closed.axis_mode === "calendar", "route close patch preserves untouched keys");
   check(
-    JSON.stringify(r7JourneyDrawerClosePatch({ view: "timeline" })) === JSON.stringify({ view: "timeline", event_ref: "", risk_instance_ref: "", risk_anchor_ref: "", visit_ref: "" }),
+    JSON.stringify(monitoringJourneyDrawerClosePatch({ view: "timeline" })) === JSON.stringify({ view: "timeline", event_ref: "", risk_instance_ref: "", risk_anchor_ref: "", visit_ref: "" }),
     "route close patch is idempotent on already-clear routes",
   );
   check(
-    JSON.stringify(r7JourneyDrawerClosePatch(null)) === JSON.stringify({}),
+    JSON.stringify(monitoringJourneyDrawerClosePatch(null)) === JSON.stringify({}),
     "route close patch handles null routes",
   );
   check(
-    JSON.stringify(r7JourneyDrawerClosePatch({ event_ref: "e" })) === JSON.stringify({ event_ref: "", risk_instance_ref: "", risk_anchor_ref: "", visit_ref: "" }),
+    JSON.stringify(monitoringJourneyDrawerClosePatch({ event_ref: "e" })) === JSON.stringify({ event_ref: "", risk_instance_ref: "", risk_anchor_ref: "", visit_ref: "" }),
     "route close patch never mutates the input object",
   );
   check(
-    Object.isFrozen(r7JourneyDrawerClosePatch(route)),
+    Object.isFrozen(monitoringJourneyDrawerClosePatch(route)),
     "route close patch returns a frozen patch",
   );
   passed += 14;
@@ -590,17 +590,17 @@ function journeyRisk(overrides = {}) {
 
 // --- truncation hint (§3.6): fixed prompt, axis markers never imply fullness ---
 {
-  const hint = r7JourneyTruncationText({ truncated: true, shown_count: 12, total_count: 80 });
+  const hint = monitoringJourneyTruncationText({ truncated: true, shown_count: 12, total_count: 80 });
   check(
-    hint === `${R7_JOURNEY_TRUNCATION_PREFIX} 12 ${R7_JOURNEY_TRUNCATION_SUFFIX}`,
+    hint === `${MONITORING_JOURNEY_TRUNCATION_PREFIX} 12 ${MONITORING_JOURNEY_TRUNCATION_SUFFIX}`,
     "truncated comparisons render the frozen M-prompt",
   );
   check(hint.includes("本轮变化较多，当前仅显示服务端已返回的前 12 条"), "truncation prompt quotes the returned row count");
   check(hint.includes("请返回项目或中心概览查看完整范围说明。"), "truncation prompt points to the full-scope surface");
-  check(r7JourneyTruncationText({ truncated: false, shown_count: 12 }) === "", "untruncated comparisons render no hint");
-  check(r7JourneyTruncationText(null) === "", "missing comparisons render no hint");
+  check(monitoringJourneyTruncationText({ truncated: false, shown_count: 12 }) === "", "untruncated comparisons render no hint");
+  check(monitoringJourneyTruncationText(null) === "", "missing comparisons render no hint");
   check(
-    r7JourneyTruncationText({ truncated: true, shown_count: 1.5 }) === `${R7_JOURNEY_TRUNCATION_PREFIX} 0 ${R7_JOURNEY_TRUNCATION_SUFFIX}`,
+    monitoringJourneyTruncationText({ truncated: true, shown_count: 1.5 }) === `${MONITORING_JOURNEY_TRUNCATION_PREFIX} 0 ${MONITORING_JOURNEY_TRUNCATION_SUFFIX}`,
     "malformed counts degrade to zero instead of leaking raw values",
   );
   passed += 6;

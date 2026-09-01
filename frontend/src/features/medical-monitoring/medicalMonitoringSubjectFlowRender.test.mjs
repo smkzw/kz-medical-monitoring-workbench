@@ -19,7 +19,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 // 与 R7 进度面板渲染测试相同的离线策略：用已安装的 esbuild 打包 JSX 渲染夹具，
 // 以静态标记断言受试者阶段流向看板，不新增 DOM 渲染依赖，不启动服务或浏览器。
-const bundlePath = path.join(here, ".r5-subject-flow-render-bundle.cjs");
+const bundlePath = path.join(here, ".monitoring-subject-flow-render-bundle.cjs");
 buildSync({
   entryPoints: [path.join(here, "medicalMonitoringSubjectFlowRender.test.jsx")],
   bundle: true,
@@ -66,7 +66,7 @@ check(flow.reconciliation.state === "matched" && flow.reconciliation.entry_total
 
 // ---- 正常渲染：全宽 SVG、节点/连线 aria、风险摘要、范围条、默认折叠 ----
 const ready = renders.ready;
-check(ready.includes('data-r5-flow-state="ready"'), "ready state is exposed for styling");
+check(ready.includes('data-monitoring-flow-state="ready"'), "ready state is exposed for styling");
 check(ready.includes("连线表示截至本次截止点的规范阶段路径"), "fixed path explanation copy rendered");
 check(ready.includes('viewBox="0 0 1520 214"'), "svg canvas spreads stages horizontally and sizes height to used rows only");
 check(countOccurrences(ready, 'data-flow-node="') === 7, "renders every catalog stage as a node");
@@ -146,32 +146,32 @@ check(!empty.includes("0 人"), "empty range DOM never shows 0 人");
 const pageSource = fs.readFileSync(path.join(here, "MedicalMonitoringWorkspace.jsx"), "utf8");
 check(pageSource.includes('data-flow-empty={node.emptyAtCutoff ? "true" : "false"}') && pageSource.includes("本截止点无人到达"), "zero-count catalog stage is visibly explained instead of implying a later active stage");
 check(pageSource.includes('emptyAtCutoff && stage.kind === "branch_terminal"'), "an empty main stage keeps its canonical row instead of colliding with a terminal branch");
-check(pageSource.indexOf("<SubjectFlowSection") < pageSource.indexOf('className="r5-overview-columns"')
-  && pageSource.indexOf('className="r5-overview-columns"') < pageSource.indexOf('className="r5-panel r5-center-summary"'), "center mode keeps flow and current risk ahead of the secondary center calculation panel");
-check(pageSource.includes('data-r5-flow-scope="true"'), "flow section marks its interactive scope");
-check(pageSource.includes("event.target instanceof SVGElement") && pageSource.includes('event.target.closest("[data-r5-flow-scope]")'), "document-level shortcuts skip the flow scope");
+check(pageSource.indexOf("<SubjectFlowSection") < pageSource.indexOf('className="monitoring-overview-columns"')
+  && pageSource.indexOf('className="monitoring-overview-columns"') < pageSource.indexOf('className="monitoring-panel monitoring-center-summary"'), "center mode keeps flow and current risk ahead of the secondary center calculation panel");
+check(pageSource.includes('data-monitoring-flow-scope="true"'), "flow section marks its interactive scope");
+check(pageSource.includes("event.target instanceof SVGElement") && pageSource.includes('event.target.closest("[data-monitoring-flow-scope]")'), "document-level shortcuts skip the flow scope");
 check(pageSource.includes('event.key === "Escape"'), "escape clears the flow selection");
 check(pageSource.includes("ArrowRight") && pageSource.includes("ArrowLeft"), "arrow keys move focus across nodes and links");
-check(pageSource.includes('event.target instanceof Element && event.target.closest("[data-r5-flow-scope]")'), "risk-list shortcuts stay isolated from flow controls");
+check(pageSource.includes('event.target instanceof Element && event.target.closest("[data-monitoring-flow-scope]")'), "risk-list shortcuts stay isolated from flow controls");
 check(pageSource.includes("const sameColumn = from.x === to.x") && pageSource.includes('value.endsWith("数据未提供")'), "same-column branches and long Chinese labels use dedicated readable geometry");
 
 const css = fs.readFileSync(path.join(here, "medicalMonitoringWorkspace.css"), "utf8");
 const flowCss = css.slice(css.indexOf("受试者阶段流向：全宽横向流向图"));
-check(flowCss.includes(".r5-flow-svg"), "styles define the flow svg canvas");
+check(flowCss.includes(".monitoring-flow-svg"), "styles define the flow svg canvas");
 check(flowCss.includes("g[data-flow-node]:focus-visible") && flowCss.includes("g[data-flow-link]:focus-visible"), "nodes and links keep a visible focus style");
-check(flowCss.includes(".r5-flow-node-counts") && flowCss.includes("font-variant-numeric: tabular-nums"), "counts use tabular numerals");
-check(flowCss.includes(".r5-flow-table-wrap") && flowCss.includes("overflow-x: auto"), "detail table scrolls internally instead of the page");
-check(css.includes(".r5-flow-table-hrail") && css.includes(".r5-timeline-vrail"), "painted scroll rails remain visible when OS overlay scrollbars hide");
-check(css.includes(".r5-flow-table-scroll.is-overflow .r5-flow-table-wrap") && css.includes("scrollbar-width: none"), "overflow table hides native bar when custom hrail paints");
-check(css.includes(".r5-timeline-scroll-shell.is-overflow-y .r5-timeline-scroll") && /is-overflow-y[\s\S]{0,180}scrollbar-width:\s*none/.test(css), "overflow timeline hides native bar when custom vrail paints");
+check(flowCss.includes(".monitoring-flow-node-counts") && flowCss.includes("font-variant-numeric: tabular-nums"), "counts use tabular numerals");
+check(flowCss.includes(".monitoring-flow-table-wrap") && flowCss.includes("overflow-x: auto"), "detail table scrolls internally instead of the page");
+check(css.includes(".monitoring-flow-table-hrail") && css.includes(".monitoring-timeline-vrail"), "painted scroll rails remain visible when OS overlay scrollbars hide");
+check(css.includes(".monitoring-flow-table-scroll.is-overflow .monitoring-flow-table-wrap") && css.includes("scrollbar-width: none"), "overflow table hides native bar when custom hrail paints");
+check(css.includes(".monitoring-timeline-scroll-shell.is-overflow-y .monitoring-timeline-scroll") && /is-overflow-y[\s\S]{0,180}scrollbar-width:\s*none/.test(css), "overflow timeline hides native bar when custom vrail paints");
 check(pageSource.includes("左右滑动查看完整明细"), "table overflow cue uses Chinese-native monitor wording");
-check(pageSource.includes("FlowTableScroll") || pageSource.includes("data-r5-table-hrail"), "homologous table paints a linked horizontal scroll affordance");
+check(pageSource.includes("FlowTableScroll") || pageSource.includes("data-monitoring-table-hrail"), "homologous table paints a linked horizontal scroll affordance");
 check(pageSource.includes('aria-label="左右滑动查看完整明细"'), "table hrail exposes a Chinese accessible label");
 check(pageSource.includes('aria-label="上下滑动查看完整时间轴泳道"'), "journey vrail exposes a Chinese accessible label");
-check(pageSource.includes("--r5-edge-clip"), "table sync clips mid-glyph header at overflow edge");
+check(pageSource.includes("--monitoring-edge-clip"), "table sync clips mid-glyph header at overflow edge");
 check(pageSource.includes("scrollToRatio"), "custom rails are linked to the real overflow scroller");
-check(flowCss.includes(".r5-flow-notice.is-blocked"), "blocked notice has a distinct visual treatment");
-check(flowCss.includes('data-r7-state="waiting_start"') && flowCss.includes("max-height: 118px"), "wide overview keeps the idle progress and flow canvas compact");
+check(flowCss.includes(".monitoring-flow-notice.is-blocked"), "blocked notice has a distinct visual treatment");
+check(flowCss.includes('data-monitoring-state="waiting_start"') && flowCss.includes("max-height: 118px"), "wide overview keeps the idle progress and flow canvas compact");
 check(!/linear-gradient|backdrop-filter/.test(flowCss), "flow styles stay flat and restrained");
 
 console.log(`medicalMonitoringSubjectFlowRender: ${passed} checks passed`);

@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 
 import { MedicalMonitoringApiError } from "./medicalMonitoringApi.mjs";
 import {
-  MEDICAL_MONITORING_R7_PRODUCT_PATHS,
-  MEDICAL_MONITORING_R7_PUBLIC_RESULT_PATHS,
-  R7_PRODUCT_DEFAULT_HISTORY_LIMIT,
-  createMedicalMonitoringR7ProductApi,
+  MEDICAL_MONITORING_PRODUCT_PATHS,
+  MEDICAL_MONITORING_PUBLIC_RESULT_PATHS,
+  MONITORING_PRODUCT_DEFAULT_HISTORY_LIMIT,
+  createMedicalMonitoringProductApi,
 } from "./medicalMonitoringProductApi.mjs";
 
 let passed = 0;
@@ -25,7 +25,7 @@ function jsonResponse(body, status = 200) {
 }
 
 const calls = [];
-const api = createMedicalMonitoringR7ProductApi({
+const api = createMedicalMonitoringProductApi({
   baseUrl: "http://127.0.0.1:8911/",
   fetchImpl: async (url, options) => {
     calls.push({ url, options });
@@ -44,7 +44,7 @@ await api.prepareAndStart("proj/01", {
   execution_basis: "full",
   baseline_token: null,
   risk_rule_tokens: [],
-  idempotency_key: "r7-test-1",
+  idempotency_key: "monitoring-test-1",
 });
 await api.listRuns("proj/01");
 await api.getPublicProgress("proj/01", "run:01");
@@ -71,8 +71,8 @@ check(calls[0].options.body === undefined, "bootstrap has no client body");
 check(calls[1].url.includes("current_snapshot_token=snap+01"), "setup reads the optional current snapshot selector");
 check(calls[1].options.method === "GET", "setup options remains a GET");
 check(calls[2].options.headers["Content-Type"] === "application/json", "risk preview serializes JSON");
-check(JSON.parse(calls[5].options.body).idempotency_key === "r7-test-1", "prepare forwards the caller nonce");
-check(calls[6].url.endsWith(`/runs?limit=${R7_PRODUCT_DEFAULT_HISTORY_LIMIT}`), "history uses the frozen default limit");
+check(JSON.parse(calls[5].options.body).idempotency_key === "monitoring-test-1", "prepare forwards the caller nonce");
+check(calls[6].url.endsWith(`/runs?limit=${MONITORING_PRODUCT_DEFAULT_HISTORY_LIMIT}`), "history uses the frozen default limit");
 check(calls[7].url.endsWith("/runs/run%3A01/progress"), "public progress encodes the public run token");
 check(calls[8].url.endsWith("/runs/run%3A01/result-entry"), "result entry stays on the public run route");
 check(calls[9].url.includes("/results/result-context%3A01/overview?site_ref=site%2F01"), "overview uses result context and site locator");
@@ -97,7 +97,7 @@ for (const invalid of [
 }
 check(calls.length === 12, "invalid identifiers and non-public payloads never reach fetch");
 
-const errorApi = createMedicalMonitoringR7ProductApi({
+const errorApi = createMedicalMonitoringProductApi({
   fetchImpl: async () => jsonResponse(
     { code: "result_context_unavailable", message: "本次结果暂不可查看，请返回进度页" },
     409,
@@ -114,14 +114,14 @@ check(error.status === 409, "product error preserves HTTP status");
 check(error.detail?.code === "result_context_unavailable", "product error preserves machine code");
 check(error.message === "本次结果暂不可查看，请返回进度页", "product error keeps server Chinese copy");
 
-const networkApi = createMedicalMonitoringR7ProductApi({
+const networkApi = createMedicalMonitoringProductApi({
   fetchImpl: async () => { throw new Error("network down"); },
 });
 await assert.rejects(networkApi.getPublicProgress("proj", "run:01"), /network down/);
 passed += 1;
 
 check(
-  MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultSourceEvidence("p", "ctx", {
+  MEDICAL_MONITORING_PRODUCT_PATHS.resultSourceEvidence("p", "ctx", {
     riskInstanceRef: "r",
     sourceLocatorRef: "s",
   }) === "/api/projects/p/modules/medical-monitoring/r7/results/ctx/source-evidence?risk_instance_ref=r&source_locator_ref=s",
@@ -130,7 +130,7 @@ check(
 
 // --- Slice-08C-2 continuity client contract ---
 const continuityCalls = [];
-const continuityApi = createMedicalMonitoringR7ProductApi({
+const continuityApi = createMedicalMonitoringProductApi({
   baseUrl: "http://127.0.0.1:8911/",
   fetchImpl: async (url, options) => {
     continuityCalls.push({ url, options });
@@ -180,7 +180,7 @@ for (const invalid of [
 }
 check(continuityCalls.length === 3, "invalid continuity identifiers never reach fetch");
 
-const continuityErrorApi = createMedicalMonitoringR7ProductApi({
+const continuityErrorApi = createMedicalMonitoringProductApi({
   fetchImpl: async () => jsonResponse(
     { code: "continuity_unavailable", message: "连续性比较结果暂不可查看，请返回结果页" },
     409,
@@ -198,12 +198,12 @@ check(continuityError.detail?.code === "continuity_unavailable", "continuity err
 check(continuityError.message === "连续性比较结果暂不可查看，请返回结果页", "continuity error keeps server Chinese copy");
 
 check(
-  MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultContinuity("p", "ctx", { siteRef: "s" })
+  MEDICAL_MONITORING_PRODUCT_PATHS.resultContinuity("p", "ctx", { siteRef: "s" })
     === "/api/projects/p/modules/medical-monitoring/r7/results/ctx/continuity?site_ref=s",
   "continuity path helper remains deterministic",
 );
 check(
-  MEDICAL_MONITORING_R7_PUBLIC_RESULT_PATHS.continuity("p", "ctx")
+  MEDICAL_MONITORING_PUBLIC_RESULT_PATHS.continuity("p", "ctx")
     === "/api/projects/p/modules/medical-monitoring/r7/results/ctx/continuity",
   "public result path alias covers continuity",
 );

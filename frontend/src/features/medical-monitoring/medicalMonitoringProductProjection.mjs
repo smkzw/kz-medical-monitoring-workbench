@@ -1,22 +1,22 @@
 import {
-  projectR7Progress,
-  R7_RUN_STATES,
+  projectMonitoringProgress,
+  MONITORING_RUN_STATES,
 } from "./medicalMonitoringProgressProjection.mjs";
 
-export const R7_PRODUCT_MODES = Object.freeze([
+export const MONITORING_PRODUCT_MODES = Object.freeze([
   "daily",
   "pre_lock",
   "post_lock_pre_cfdi",
 ]);
 
-export const R7_PRODUCT_IN_FLIGHT_STATES = Object.freeze([
+export const MONITORING_PRODUCT_IN_FLIGHT_STATES = Object.freeze([
   "waiting_start",
   "running",
   "stopping",
   "interrupted_resumable",
 ]);
 
-export const R7_PRODUCT_HISTORY_FIELDS = Object.freeze([
+export const MONITORING_PRODUCT_HISTORY_FIELDS = Object.freeze([
   "public_run_token",
   "mode_text",
   "data_cutoff_text",
@@ -27,13 +27,13 @@ export const R7_PRODUCT_HISTORY_FIELDS = Object.freeze([
   "status_text",
 ]);
 
-export const R7_PUBLIC_RESULT_VIEWS = Object.freeze([
+export const MONITORING_PUBLIC_RESULT_VIEWS = Object.freeze([
   "overview",
   "journey",
   "evidence",
 ]);
 
-export const R7_PUBLIC_RESULT_LOCATOR_FIELDS = Object.freeze([
+export const MONITORING_PUBLIC_RESULT_LOCATOR_FIELDS = Object.freeze([
   "site_ref",
   "subject_ref",
   "spine_ref",
@@ -46,7 +46,7 @@ export const R7_PUBLIC_RESULT_LOCATOR_FIELDS = Object.freeze([
   "source_locator_ref",
 ]);
 
-export const R7_PUBLIC_RESULT_IDENTITY_FIELDS = Object.freeze([
+export const MONITORING_PUBLIC_RESULT_IDENTITY_FIELDS = Object.freeze([
   "project_ref",
   "public_run_token",
   "snapshot_token",
@@ -55,16 +55,16 @@ export const R7_PUBLIC_RESULT_IDENTITY_FIELDS = Object.freeze([
   "mode_text",
   "site_scope_text",
   "site_options",
-  ...R7_PUBLIC_RESULT_LOCATOR_FIELDS,
+  ...MONITORING_PUBLIC_RESULT_LOCATOR_FIELDS,
 ]);
 
-export const R7_PUBLIC_RESULT_ENVELOPE_FIELDS = Object.freeze([
+export const MONITORING_PUBLIC_RESULT_ENVELOPE_FIELDS = Object.freeze([
   "identity",
   "projection",
   "result_context_token",
   "response_digest",
 ]);
-export const R7_PUBLIC_RESULT_ENTRY_FIELDS = Object.freeze([
+export const MONITORING_PUBLIC_RESULT_ENTRY_FIELDS = Object.freeze([
   "project_ref",
   "public_run_token",
   "snapshot_token",
@@ -73,7 +73,7 @@ export const R7_PUBLIC_RESULT_ENTRY_FIELDS = Object.freeze([
   "result_context_token",
 ]);
 
-export const R7_PRODUCT_STATE_KINDS = Object.freeze([
+export const MONITORING_PRODUCT_STATE_KINDS = Object.freeze([
   "loading",
   "ready",
   "active_run",
@@ -81,21 +81,21 @@ export const R7_PRODUCT_STATE_KINDS = Object.freeze([
   "unavailable",
 ]);
 
-export const R7_PUBLIC_RESULT_UNAVAILABLE_TEXT = "本次结果暂不可查看，请返回进度页";
-export const R7_OPTIONS_REFRESH_TEXT = "监查范围已更新，请重新确认";
-export const R7_COMPARISON_UNAVAILABLE_TEXT = "当前数据尚不能与上次结果逐项比较";
-export const R7_PUBLIC_RESULT_CENTER_OUT_OF_SCOPE_TEXT = "该中心不在本次监查范围";
-export const R7_PUBLIC_RESULT_UNPUBLISHED_TEXT = "分析已结束，结果整理未完成";
+export const MONITORING_PUBLIC_RESULT_UNAVAILABLE_TEXT = "本次结果暂不可查看，请返回进度页";
+export const MONITORING_OPTIONS_REFRESH_TEXT = "监查范围已更新，请重新确认";
+export const MONITORING_COMPARISON_UNAVAILABLE_TEXT = "当前数据尚不能与上次结果逐项比较";
+export const MONITORING_PUBLIC_RESULT_CENTER_OUT_OF_SCOPE_TEXT = "该中心不在本次监查范围";
+export const MONITORING_PUBLIC_RESULT_UNPUBLISHED_TEXT = "分析已结束，结果整理未完成";
 
-const R7_RUN_STATE_SET = new Set(R7_RUN_STATES);
-const R7_PRODUCT_MODE_SET = new Set(R7_PRODUCT_MODES);
-const R7_IN_FLIGHT_SET = new Set(R7_PRODUCT_IN_FLIGHT_STATES);
-const R7_RESULT_VIEW_SET = new Set(R7_PUBLIC_RESULT_VIEWS);
-const R7_HISTORY_FIELD_SET = new Set(R7_PRODUCT_HISTORY_FIELDS);
-const R7_RESULT_ENTRY_FIELD_SET = new Set(R7_PUBLIC_RESULT_ENTRY_FIELDS);
-const R7_RESULT_IDENTITY_FIELD_SET = new Set(R7_PUBLIC_RESULT_IDENTITY_FIELDS);
-const R7_RESULT_ENVELOPE_FIELD_SET = new Set(R7_PUBLIC_RESULT_ENVELOPE_FIELDS);
-const R7_PUBLICATION_STATE_SET = new Set([
+const MONITORING_RUN_STATE_SET = new Set(MONITORING_RUN_STATES);
+const MONITORING_PRODUCT_MODE_SET = new Set(MONITORING_PRODUCT_MODES);
+const MONITORING_IN_FLIGHT_SET = new Set(MONITORING_PRODUCT_IN_FLIGHT_STATES);
+const MONITORING_RESULT_VIEW_SET = new Set(MONITORING_PUBLIC_RESULT_VIEWS);
+const MONITORING_HISTORY_FIELD_SET = new Set(MONITORING_PRODUCT_HISTORY_FIELDS);
+const MONITORING_RESULT_ENTRY_FIELD_SET = new Set(MONITORING_PUBLIC_RESULT_ENTRY_FIELDS);
+const MONITORING_RESULT_IDENTITY_FIELD_SET = new Set(MONITORING_PUBLIC_RESULT_IDENTITY_FIELDS);
+const MONITORING_RESULT_ENVELOPE_FIELD_SET = new Set(MONITORING_PUBLIC_RESULT_ENVELOPE_FIELDS);
+const MONITORING_PUBLICATION_STATE_SET = new Set([
   "not_started",
   "publishing",
   "available",
@@ -166,16 +166,16 @@ function freeze(value) {
 
 function projectionError(code, text, field = "") {
   const error = new Error(text);
-  error.name = "MedicalMonitoringR7ProductProjectionError";
+  error.name = "MedicalMonitoringProductProjectionError";
   error.code = code;
   error.field = field;
   return error;
 }
 
-export class MedicalMonitoringR7PublicEnvelopeError extends Error {
+export class MedicalMonitoringPublicEnvelopeError extends Error {
   constructor(code, message, field = "") {
     super(message);
-    this.name = "MedicalMonitoringR7PublicEnvelopeError";
+    this.name = "MedicalMonitoringPublicEnvelopeError";
     this.code = code;
     this.field = field;
   }
@@ -277,7 +277,7 @@ function normalizeMode(value, index) {
     throw projectionError("invalid_setup_options", `监查方式 ${index + 1} 格式异常，暂不展示监查方式。`);
   }
   const mode = requiredText(value.mode, `modes[${index}].mode`, "invalid_setup_options");
-  if (!R7_PRODUCT_MODE_SET.has(mode)) {
+  if (!MONITORING_PRODUCT_MODE_SET.has(mode)) {
     // The product page is closed to the three server-registered modes. An
     // unknown future/forged option is not silently presented as a fourth card.
     throw projectionError("unsupported_mode", `监查方式 ${mode} 不在当前可用范围内。`, `modes[${index}].mode`);
@@ -348,11 +348,11 @@ function normalizeSetupOptionsOrThrow(payload, { projectId } = {}) {
     throw projectionError("invalid_setup_options", "监查方式响应格式异常，暂不展示监查方式。", "modes");
   }
   const modes = payload.modes.map(normalizeMode);
-  if (modes.length !== R7_PRODUCT_MODES.length || modes.some((item) => !R7_PRODUCT_MODE_SET.has(item.mode))) {
+  if (modes.length !== MONITORING_PRODUCT_MODES.length || modes.some((item) => !MONITORING_PRODUCT_MODE_SET.has(item.mode))) {
     throw projectionError("invalid_setup_options", "当前监查方式响应不完整，暂不展示向导。", "modes");
   }
   const seenModes = new Set(modes.map((item) => item.mode));
-  if (seenModes.size !== modes.length || R7_PRODUCT_MODES.some((mode) => !seenModes.has(mode))) {
+  if (seenModes.size !== modes.length || MONITORING_PRODUCT_MODES.some((mode) => !seenModes.has(mode))) {
     throw projectionError("invalid_setup_options", "当前监查方式响应不完整，暂不展示向导。", "modes");
   }
   const batches = Array.isArray(payload.data_batches)
@@ -365,7 +365,7 @@ function normalizeSetupOptionsOrThrow(payload, { projectId } = {}) {
     ? payload.rule_revisions.map((item, index) => normalizeRuleRevision(item, index, responseProject))
     : [];
   const recommendedMode = optionalText(payload.recommended_mode);
-  if (recommendedMode && !R7_PRODUCT_MODE_SET.has(recommendedMode)) {
+  if (recommendedMode && !MONITORING_PRODUCT_MODE_SET.has(recommendedMode)) {
     throw projectionError("invalid_setup_options", "服务端推荐的监查方式不可用。", "recommended_mode");
   }
   return {
@@ -381,7 +381,7 @@ function normalizeSetupOptionsOrThrow(payload, { projectId } = {}) {
   };
 }
 
-export function normalizeR7SetupOptions(payload, expected = {}) {
+export function normalizeMonitoringSetupOptions(payload, expected = {}) {
   try {
     return normalizedResult(normalizeSetupOptionsOrThrow(payload, expected));
   } catch (error) {
@@ -389,25 +389,25 @@ export function normalizeR7SetupOptions(payload, expected = {}) {
   }
 }
 
-export function projectR7SetupOptions(payload, expected = {}) {
-  const normalized = normalizeR7SetupOptions(payload, expected);
+export function projectMonitoringSetupOptions(payload, expected = {}) {
+  const normalized = normalizeMonitoringSetupOptions(payload, expected);
   if (!normalized.ok) return invalidResult({ code: normalized.code, message: normalized.error });
   return normalized.value;
 }
 
-export const projectR7RunSetupOptions = projectR7SetupOptions;
+export const projectMonitoringRunSetupOptions = projectMonitoringSetupOptions;
 
 function normalizeHistoryRow(value, index) {
   if (!isRecord(value)) {
     throw projectionError("invalid_history", `第 ${index + 1} 条历史记录格式异常，暂不展示历史。`);
   }
   const keys = Object.keys(value);
-  if (keys.length !== R7_PRODUCT_HISTORY_FIELDS.length || keys.some((key) => !R7_HISTORY_FIELD_SET.has(key))) {
+  if (keys.length !== MONITORING_PRODUCT_HISTORY_FIELDS.length || keys.some((key) => !MONITORING_HISTORY_FIELD_SET.has(key))) {
     throw projectionError("invalid_history", "历史记录字段不完整，暂不展示历史。", `runs[${index}]`);
   }
   const publicRunToken = requiredText(value.public_run_token, `runs[${index}].public_run_token`, "invalid_history");
   const runState = requiredText(value.run_state, `runs[${index}].run_state`, "invalid_history");
-  if (!R7_RUN_STATE_SET.has(runState)) {
+  if (!MONITORING_RUN_STATE_SET.has(runState)) {
     throw projectionError("invalid_history", "历史记录状态无法核对，暂不展示历史。", `runs[${index}].run_state`);
   }
   if (typeof value.result_available !== "boolean") {
@@ -446,7 +446,7 @@ function normalizeHistoryOrThrow(payload, { projectId } = {}) {
   };
 }
 
-export function normalizeR7History(payload, expected = {}) {
+export function normalizeMonitoringHistory(payload, expected = {}) {
   try {
     return normalizedResult(normalizeHistoryOrThrow(payload, expected));
   } catch (error) {
@@ -454,13 +454,13 @@ export function normalizeR7History(payload, expected = {}) {
   }
 }
 
-export function projectR7History(payload, expected = {}) {
-  const normalized = normalizeR7History(payload, expected);
+export function projectMonitoringHistory(payload, expected = {}) {
+  const normalized = normalizeMonitoringHistory(payload, expected);
   if (!normalized.ok) return invalidResult({ code: normalized.code, message: normalized.error });
   return normalized.value;
 }
 
-export const projectR7RunHistory = projectR7History;
+export const projectMonitoringRunHistory = projectMonitoringHistory;
 function normalizeResultEntryOrThrow(payload, {
   projectId,
   publicRunToken,
@@ -470,7 +470,7 @@ function normalizeResultEntryOrThrow(payload, {
     throw projectionError("invalid_result_entry", "本次结果暂不可查看，请返回进度页", "response");
   }
   const keys = Object.keys(payload);
-  if (keys.length !== R7_PUBLIC_RESULT_ENTRY_FIELDS.length || keys.some((key) => !R7_RESULT_ENTRY_FIELD_SET.has(key))) {
+  if (keys.length !== MONITORING_PUBLIC_RESULT_ENTRY_FIELDS.length || keys.some((key) => !MONITORING_RESULT_ENTRY_FIELD_SET.has(key))) {
     throw projectionError("invalid_result_entry", "本次结果暂不可查看，请返回进度页", "response");
   }
   const forbidden = findForbiddenKey(payload);
@@ -509,24 +509,24 @@ function normalizeResultEntryOrThrow(payload, {
   };
 }
 
-export function normalizeR7ResultEntry(payload, expected = {}) {
+export function normalizeMonitoringResultEntry(payload, expected = {}) {
   try {
     return normalizedResult(normalizeResultEntryOrThrow(payload, expected));
   } catch (error) {
-    return invalidResult(error, R7_PUBLIC_RESULT_UNAVAILABLE_TEXT);
+    return invalidResult(error, MONITORING_PUBLIC_RESULT_UNAVAILABLE_TEXT);
   }
 }
 
-export function projectR7ResultEntry(payload, expected = {}) {
-  const normalized = normalizeR7ResultEntry(payload, expected);
+export function projectMonitoringResultEntry(payload, expected = {}) {
+  const normalized = normalizeMonitoringResultEntry(payload, expected);
   if (!normalized.ok) return invalidResult({ code: normalized.code, message: normalized.error });
   return normalized.value;
 }
 
-export const projectR7PublicResultEntry = projectR7ResultEntry;
+export const projectMonitoringPublicResultEntry = projectMonitoringResultEntry;
 
 function publicProgressPollDecision(runState, publicationState) {
-  const analysisActive = R7_PRODUCT_IN_FLIGHT_STATES.includes(runState);
+  const analysisActive = MONITORING_PRODUCT_IN_FLIGHT_STATES.includes(runState);
   const publicationActive = runState === "completed"
     && ["not_started", "publishing"].includes(publicationState);
   return freeze({
@@ -545,13 +545,13 @@ function normalizePublicProgressOrThrow(payload, { publicRunToken } = {}) {
   if (forbidden) {
     throw projectionError("public_identity_forbidden", `本次监查进度包含不可公开身份：${forbidden}。`, forbidden);
   }
-  const base = projectR7Progress(payload);
+  const base = projectMonitoringProgress(payload);
   if (base.kind !== "progress") {
     throw projectionError("invalid_public_progress", "本次监查进度格式异常，暂不展示进度。", "run_state");
   }
   const publicationState = optionalText(payload.publication_state)
     || (base.runState === "completed" ? "not_started" : "not_started");
-  if (!R7_PUBLICATION_STATE_SET.has(publicationState)) {
+  if (!MONITORING_PUBLICATION_STATE_SET.has(publicationState)) {
     throw projectionError("invalid_public_progress", "本次监查结果整理状态格式异常，暂不展示进度。", "publication_state");
   }
   const resultAvailable = typeof payload.result_available === "boolean"
@@ -561,7 +561,7 @@ function normalizePublicProgressOrThrow(payload, { publicRunToken } = {}) {
     throw projectionError("invalid_public_progress", "本次监查结果状态无法核对，暂不展示进度。", "result_available");
   }
   const publicationStatusText = optionalText(payload.publication_status_text)
-    || (base.runState === "completed" && !resultAvailable ? R7_PUBLIC_RESULT_UNPUBLISHED_TEXT : "");
+    || (base.runState === "completed" && !resultAvailable ? MONITORING_PUBLIC_RESULT_UNPUBLISHED_TEXT : "");
   return {
     ...base,
     kind: "public_progress",
@@ -573,7 +573,7 @@ function normalizePublicProgressOrThrow(payload, { publicRunToken } = {}) {
   };
 }
 
-export function normalizeR7PublicProgress(payload, expected = {}) {
+export function normalizeMonitoringPublicProgress(payload, expected = {}) {
   try {
     return normalizedResult(normalizePublicProgressOrThrow(payload, expected));
   } catch (error) {
@@ -581,20 +581,20 @@ export function normalizeR7PublicProgress(payload, expected = {}) {
   }
 }
 
-export function projectR7PublicProgress(payload, expected = {}) {
-  const normalized = normalizeR7PublicProgress(payload, expected);
+export function projectMonitoringPublicProgress(payload, expected = {}) {
+  const normalized = normalizeMonitoringPublicProgress(payload, expected);
   if (!normalized.ok) return invalidResult({ code: normalized.code, message: normalized.error });
   return normalized.value;
 }
 
-export const projectR7PublicRunProgress = projectR7PublicProgress;
+export const projectMonitoringPublicRunProgress = projectMonitoringPublicProgress;
 function publicErrorCode(error) {
   const detail = error && typeof error === "object" ? error.detail : null;
   if (detail && typeof detail === "object" && typeof detail.code === "string") return detail.code;
   return typeof error?.code === "string" ? error.code : "";
 }
 
-export function projectR7PublicProgressError(error) {
+export function projectMonitoringPublicProgressError(error) {
   const code = publicErrorCode(error);
   if (code === "public_run_not_found" || code === "run_binding_not_found") {
     return freeze({
@@ -604,7 +604,7 @@ export function projectR7PublicProgressError(error) {
     });
   }
   if (code === "global_default_missing" || code === "invalid_snapshot") {
-    return freeze({ kind: "refresh_options", code, text: R7_OPTIONS_REFRESH_TEXT });
+    return freeze({ kind: "refresh_options", code, text: MONITORING_OPTIONS_REFRESH_TEXT });
   }
   const status = Number(error?.status) || 0;
   return freeze({
@@ -614,19 +614,19 @@ export function projectR7PublicProgressError(error) {
   });
 }
 
-export function projectR7PublicResultError(error) {
+export function projectMonitoringPublicResultError(error) {
   const code = publicErrorCode(error);
   if (code === "result_center_out_of_scope") {
     return freeze({
       kind: "unavailable",
       code,
-      text: R7_PUBLIC_RESULT_CENTER_OUT_OF_SCOPE_TEXT,
+      text: MONITORING_PUBLIC_RESULT_CENTER_OUT_OF_SCOPE_TEXT,
     });
   }
   return freeze({
     kind: "unavailable",
     code,
-    text: R7_PUBLIC_RESULT_UNAVAILABLE_TEXT,
+    text: MONITORING_PUBLIC_RESULT_UNAVAILABLE_TEXT,
   });
 }
 
@@ -637,7 +637,7 @@ function normalizePublicResultEnvelopeOrThrow(payload, {
   view,
 } = {}) {
   if (!isRecord(payload) || Array.isArray(payload)) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+    throw new MedicalMonitoringPublicEnvelopeError(
       "invalid_envelope",
       "本次结果暂不可查看，请返回进度页",
       "response",
@@ -645,10 +645,10 @@ function normalizePublicResultEnvelopeOrThrow(payload, {
   }
   const topLevelKeys = Object.keys(payload);
   if (
-    topLevelKeys.length !== R7_PUBLIC_RESULT_ENVELOPE_FIELDS.length
-    || topLevelKeys.some((key) => !R7_RESULT_ENVELOPE_FIELD_SET.has(key))
+    topLevelKeys.length !== MONITORING_PUBLIC_RESULT_ENVELOPE_FIELDS.length
+    || topLevelKeys.some((key) => !MONITORING_RESULT_ENVELOPE_FIELD_SET.has(key))
   ) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_envelope_fields_invalid",
       "本次结果暂不可查看，请返回进度页",
       "response",
@@ -656,7 +656,7 @@ function normalizePublicResultEnvelopeOrThrow(payload, {
   }
   const forbidden = findForbiddenKey(payload);
   if (forbidden) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_identity_forbidden",
       "本次结果暂不可查看，请返回进度页",
       forbidden,
@@ -664,15 +664,15 @@ function normalizePublicResultEnvelopeOrThrow(payload, {
   }
   const identity = payload.identity;
   if (!isRecord(identity) || !isRecord(payload.projection)) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_envelope_shape_invalid",
       "本次结果暂不可查看，请返回进度页",
       "identity",
     );
   }
   const identityKeys = Object.keys(identity);
-  if (identityKeys.some((key) => !R7_RESULT_IDENTITY_FIELD_SET.has(key))) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+  if (identityKeys.some((key) => !MONITORING_RESULT_IDENTITY_FIELD_SET.has(key))) {
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_identity_fields_invalid",
       "本次结果暂不可查看，请返回进度页",
       "identity",
@@ -684,8 +684,8 @@ function normalizePublicResultEnvelopeOrThrow(payload, {
   const snapshotToken = requiredText(identity.snapshot_token, "identity.snapshot_token", "public_identity_invalid");
   const cutoffText = requiredText(identity.data_cutoff_text, "identity.data_cutoff_text", "public_identity_invalid");
   const identityView = requiredText(identity.view, "identity.view", "public_identity_invalid");
-  if (!R7_RESULT_VIEW_SET.has(identityView)) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+  if (!MONITORING_RESULT_VIEW_SET.has(identityView)) {
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_identity_invalid",
       "本次结果暂不可查看，请返回进度页",
       "identity.view",
@@ -693,7 +693,7 @@ function normalizePublicResultEnvelopeOrThrow(payload, {
   }
   const expectedView = clean(view);
   if (expectedView && identityView !== expectedView) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_identity_mismatch",
       "本次结果暂不可查看，请返回进度页",
       "identity.view",
@@ -701,21 +701,21 @@ function normalizePublicResultEnvelopeOrThrow(payload, {
   }
   const token = requiredText(payload.result_context_token, "result_context_token", "public_identity_invalid");
   if (!token.startsWith(RESULT_CONTEXT_PREFIX)) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_identity_invalid",
       "本次结果暂不可查看，请返回进度页",
       "result_context_token",
     );
   }
   if (clean(resultContextToken) && token !== clean(resultContextToken)) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_identity_mismatch",
       "本次结果暂不可查看，请返回进度页",
       "result_context_token",
     );
   }
   if (clean(publicRunToken) && publicToken !== clean(publicRunToken)) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_identity_mismatch",
       "本次结果暂不可查看，请返回进度页",
       "identity.public_run_token",
@@ -732,14 +732,14 @@ function normalizePublicResultEnvelopeOrThrow(payload, {
       || !clean(item.site_label)
     ))
   )) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_identity_invalid",
       "本次结果暂不可查看，请返回进度页",
       "identity.site_options",
     );
   }
   if (!siteScopeText && !Array.isArray(siteOptions)) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_identity_invalid",
       "本次结果暂不可查看，请返回进度页",
       "identity.site_scope_text",
@@ -749,15 +749,15 @@ function normalizePublicResultEnvelopeOrThrow(payload, {
     requiredText(identity[field], `identity.${field}`, "public_identity_invalid");
   }
   if (typeof payload.response_digest !== "string" || !HEX_64.test(payload.response_digest)) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_response_digest_invalid",
       "本次结果暂不可查看，请返回进度页",
       "response_digest",
     );
   }
-  for (const key of R7_PUBLIC_RESULT_LOCATOR_FIELDS) {
+  for (const key of MONITORING_PUBLIC_RESULT_LOCATOR_FIELDS) {
     if (identity[key] !== undefined && (typeof identity[key] !== "string" || !identity[key].trim())) {
-      throw new MedicalMonitoringR7PublicEnvelopeError(
+      throw new MedicalMonitoringPublicEnvelopeError(
         "public_locator_invalid",
         "本次结果暂不可查看，请返回进度页",
         `identity.${key}`,
@@ -773,7 +773,7 @@ function normalizePublicResultEnvelopeOrThrow(payload, {
     mode_text: clean(identity.mode_text),
     site_scope_text: siteScopeText,
   };
-  for (const key of R7_PUBLIC_RESULT_LOCATOR_FIELDS) {
+  for (const key of MONITORING_PUBLIC_RESULT_LOCATOR_FIELDS) {
     if (identity[key] !== undefined) normalizedIdentity[key] = identity[key];
   }
   if (Array.isArray(siteOptions)) normalizedIdentity.site_options = clone(siteOptions);
@@ -785,25 +785,25 @@ function normalizePublicResultEnvelopeOrThrow(payload, {
   };
 }
 
-export function normalizeR7PublicResultEnvelope(payload, expected = {}) {
+export function normalizeMonitoringPublicResultEnvelope(payload, expected = {}) {
   return freeze(normalizePublicResultEnvelopeOrThrow(payload, expected));
 }
 
-export function validateR7PublicResultEnvelope(payload, expected = {}) {
-  return normalizeR7PublicResultEnvelope(payload, expected);
+export function validateMonitoringPublicResultEnvelope(payload, expected = {}) {
+  return normalizeMonitoringPublicResultEnvelope(payload, expected);
 }
 
-export function safeValidateR7PublicResultEnvelope(payload, expected = {}) {
+export function safeValidateMonitoringPublicResultEnvelope(payload, expected = {}) {
   try {
     return normalizedResult(normalizePublicResultEnvelopeOrThrow(payload, expected));
   } catch (error) {
-    return invalidResult(error, R7_PUBLIC_RESULT_UNAVAILABLE_TEXT);
+    return invalidResult(error, MONITORING_PUBLIC_RESULT_UNAVAILABLE_TEXT);
   }
 }
 
-export const validateMedicalMonitoringR7PublicResultEnvelope = validateR7PublicResultEnvelope;
-export const validateMedicalMonitoringR7PublicEnvelope = validateR7PublicResultEnvelope;
-export const normalizeMedicalMonitoringR7PublicEnvelope = normalizeR7PublicResultEnvelope;
+export const validateMedicalMonitoringPublicResultEnvelope = validateMonitoringPublicResultEnvelope;
+export const validateMedicalMonitoringPublicEnvelope = validateMonitoringPublicResultEnvelope;
+export const normalizeMedicalMonitoringPublicEnvelope = normalizeMonitoringPublicResultEnvelope;
 
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -815,45 +815,45 @@ function canonicalize(value) {
   return value;
 }
 
-export function canonicalR7PublicResultPayload(envelope) {
-  const normalized = normalizeR7PublicResultEnvelope(envelope);
+export function canonicalMonitoringPublicResultPayload(envelope) {
+  const normalized = normalizeMonitoringPublicResultEnvelope(envelope);
   return JSON.stringify(canonicalize({
     identity: normalized.identity,
     projection: normalized.projection,
   }));
 }
 
-export async function computeR7PublicResponseDigest(envelope) {
+export async function computeMonitoringPublicResponseDigest(envelope) {
   if (!globalThis.crypto?.subtle || typeof TextEncoder !== "function") {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_digest_unavailable",
       "本次结果暂不可查看，请返回进度页",
       "response_digest",
     );
   }
-  const bytes = new TextEncoder().encode(canonicalR7PublicResultPayload(envelope));
+  const bytes = new TextEncoder().encode(canonicalMonitoringPublicResultPayload(envelope));
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
-export const computeMedicalMonitoringR7PublicResponseDigest = computeR7PublicResponseDigest;
+export const computeMedicalMonitoringPublicResponseDigest = computeMonitoringPublicResponseDigest;
 
-export async function verifyR7PublicResultEnvelope(payload, expected = {}) {
-  const normalized = normalizeR7PublicResultEnvelope(payload, expected);
-  const actual = await computeR7PublicResponseDigest(normalized);
+export async function verifyMonitoringPublicResultEnvelope(payload, expected = {}) {
+  const normalized = normalizeMonitoringPublicResultEnvelope(payload, expected);
+  const actual = await computeMonitoringPublicResponseDigest(normalized);
   if (actual !== normalized.response_digest) {
-    throw new MedicalMonitoringR7PublicEnvelopeError(
+    throw new MedicalMonitoringPublicEnvelopeError(
       "public_response_digest_mismatch",
-      R7_PUBLIC_RESULT_UNAVAILABLE_TEXT,
+      MONITORING_PUBLIC_RESULT_UNAVAILABLE_TEXT,
       "response_digest",
     );
   }
   return normalized;
 }
-export const validateR7PublicResultEnvelopeWithDigest = verifyR7PublicResultEnvelope;
+export const validateMonitoringPublicResultEnvelopeWithDigest = verifyMonitoringPublicResultEnvelope;
 
-export function projectR7ResultContext(payload, expected = {}) {
+export function projectMonitoringResultContext(payload, expected = {}) {
   try {
-    const envelope = normalizeR7PublicResultEnvelope(payload, expected);
+    const envelope = normalizeMonitoringPublicResultEnvelope(payload, expected);
     return freeze({
       kind: "result",
       resultContextToken: envelope.result_context_token,
@@ -867,24 +867,24 @@ export function projectR7ResultContext(payload, expected = {}) {
       siteScopeText: envelope.identity.site_scope_text,
     });
   } catch (error) {
-    return invalidResult(error, R7_PUBLIC_RESULT_UNAVAILABLE_TEXT);
+    return invalidResult(error, MONITORING_PUBLIC_RESULT_UNAVAILABLE_TEXT);
   }
 }
 
-export const projectR7PublicResultContext = projectR7ResultContext;
-export const projectMedicalMonitoringR7PublicResult = projectR7ResultContext;
-export const projectR7PublicResultEnvelope = projectR7ResultContext;
+export const projectMonitoringPublicResultContext = projectMonitoringResultContext;
+export const projectMedicalMonitoringPublicResult = projectMonitoringResultContext;
+export const projectMonitoringPublicResultEnvelope = projectMonitoringResultContext;
 
-export function isR7ProductMode(value) {
-  return R7_PRODUCT_MODE_SET.has(clean(value));
+export function isMonitoringProductMode(value) {
+  return MONITORING_PRODUCT_MODE_SET.has(clean(value));
 }
 
-export function isR7InFlightRunState(value) {
-  return R7_IN_FLIGHT_SET.has(clean(value));
+export function isMonitoringInFlightRunState(value) {
+  return MONITORING_IN_FLIGHT_SET.has(clean(value));
 }
 
-export function isR7PublicResultView(value) {
-  return R7_RESULT_VIEW_SET.has(clean(value));
+export function isMonitoringPublicResultView(value) {
+  return MONITORING_RESULT_VIEW_SET.has(clean(value));
 }
 
 export function publicResultContextTokenPrefix() {

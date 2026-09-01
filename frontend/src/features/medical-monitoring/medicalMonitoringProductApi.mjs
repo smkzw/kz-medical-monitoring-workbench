@@ -1,7 +1,7 @@
 import { MedicalMonitoringApiError } from "./medicalMonitoringApi.mjs";
 
 const API_PREFIX = "/api/projects";
-export const R7_PRODUCT_DEFAULT_HISTORY_LIMIT = 50;
+export const MONITORING_PRODUCT_DEFAULT_HISTORY_LIMIT = 50;
 
 function requireId(value, label) {
   const clean = value === null || value === undefined ? "" : String(value).trim();
@@ -93,10 +93,10 @@ function errorMessage(payload, response) {
     if (typeof payload.code === "string" && payload.code.trim()) return payload.code;
   }
   if (typeof payload === "string" && payload.trim()) return payload.trim();
-  return `Medical monitoring R7 request failed (${response.status})`;
+  return `医学监查请求失败 (${response.status})`;
 }
 
-export const MEDICAL_MONITORING_R7_PRODUCT_PATHS = Object.freeze({
+export const MEDICAL_MONITORING_PRODUCT_PATHS = Object.freeze({
   workspaceBootstrap: (projectId) => `${projectPath(projectId)}/workspace/bootstrap`,
   setupOptions: (projectId, selector = {}) => {
     const options = typeof selector === "string"
@@ -115,7 +115,7 @@ export const MEDICAL_MONITORING_R7_PRODUCT_PATHS = Object.freeze({
   riskRulePreview: (projectId) => `${projectPath(projectId)}/risk-rules/preview`,
   riskRules: (projectId) => `${projectPath(projectId)}/risk-rules`,
   prepareAndStart: (projectId) => `${projectPath(projectId)}/runs/prepare-and-start`,
-  runs: (projectId, { limit = R7_PRODUCT_DEFAULT_HISTORY_LIMIT } = {}) => appendQuery(
+  runs: (projectId, { limit = MONITORING_PRODUCT_DEFAULT_HISTORY_LIMIT } = {}) => appendQuery(
     `${projectPath(projectId)}/runs`,
     { limit },
   ),
@@ -169,26 +169,26 @@ export const MEDICAL_MONITORING_R7_PRODUCT_PATHS = Object.freeze({
     { site_ref: options?.siteRef || options?.site_ref },
   ),
   // Names used by the product layer; each delegates to the same path shape.
-  runSetupOptions: (projectId, selector = {}) => MEDICAL_MONITORING_R7_PRODUCT_PATHS.setupOptions(projectId, selector),
-  history: (projectId, options = {}) => MEDICAL_MONITORING_R7_PRODUCT_PATHS.runs(projectId, options),
-  progress: (projectId, publicRunToken) => MEDICAL_MONITORING_R7_PRODUCT_PATHS.publicProgress(projectId, publicRunToken),
-  overview: (projectId, resultContextToken, options = {}) => MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultOverview(projectId, resultContextToken, options),
-  subject: (projectId, resultContextToken, subjectRef, options = {}) => MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultSubject(projectId, resultContextToken, subjectRef, options),
-  sourceEvidence: (projectId, resultContextToken, options = {}) => MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultSourceEvidence(projectId, resultContextToken, options),
-  continuity: (projectId, resultContextToken, options = {}) => MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultContinuity(projectId, resultContextToken, options),
+  runSetupOptions: (projectId, selector = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.setupOptions(projectId, selector),
+  history: (projectId, options = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.runs(projectId, options),
+  progress: (projectId, publicRunToken) => MEDICAL_MONITORING_PRODUCT_PATHS.publicProgress(projectId, publicRunToken),
+  overview: (projectId, resultContextToken, options = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.resultOverview(projectId, resultContextToken, options),
+  subject: (projectId, resultContextToken, subjectRef, options = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.resultSubject(projectId, resultContextToken, subjectRef, options),
+  sourceEvidence: (projectId, resultContextToken, options = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.resultSourceEvidence(projectId, resultContextToken, options),
+  continuity: (projectId, resultContextToken, options = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.resultContinuity(projectId, resultContextToken, options),
 });
 
 // Explicit aliases keep route names readable at call sites without creating a
 // second transport implementation. All result reads remain on the public
-// result-context prefix; no internal R5 identity is accepted here.
-export const MEDICAL_MONITORING_R7_PUBLIC_RESULT_PATHS = Object.freeze({
-  overview: MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultOverview,
-  subject: MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultSubject,
-  sourceEvidence: MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultSourceEvidence,
-  continuity: MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultContinuity,
+// result-context prefix; no internal 医学监查数据标识 is accepted here.
+export const MEDICAL_MONITORING_PUBLIC_RESULT_PATHS = Object.freeze({
+  overview: MEDICAL_MONITORING_PRODUCT_PATHS.resultOverview,
+  subject: MEDICAL_MONITORING_PRODUCT_PATHS.resultSubject,
+  sourceEvidence: MEDICAL_MONITORING_PRODUCT_PATHS.resultSourceEvidence,
+  continuity: MEDICAL_MONITORING_PRODUCT_PATHS.resultContinuity,
 });
 
-export function createMedicalMonitoringR7ProductApi({
+export function createMedicalMonitoringProductApi({
   fetchImpl = globalThis.fetch,
   baseUrl = "",
 } = {}) {
@@ -222,22 +222,22 @@ export function createMedicalMonitoringR7ProductApi({
 
   const get = (path, options = {}) => request("GET", path, options);
   const post = (path, body, options = {}) => request("POST", path, { ...options, body });
-  const listRuns = (projectId, { limit = R7_PRODUCT_DEFAULT_HISTORY_LIMIT, signal } = {}) => get(
-    MEDICAL_MONITORING_R7_PRODUCT_PATHS.runs(
+  const listRuns = (projectId, { limit = MONITORING_PRODUCT_DEFAULT_HISTORY_LIMIT, signal } = {}) => get(
+    MEDICAL_MONITORING_PRODUCT_PATHS.runs(
       requireId(projectId, "projectId"),
       { limit },
     ),
     { signal },
   );
   const getPublicProgress = (projectId, publicRunToken, { signal } = {}) => get(
-    MEDICAL_MONITORING_R7_PRODUCT_PATHS.publicProgress(
+    MEDICAL_MONITORING_PRODUCT_PATHS.publicProgress(
       requireId(projectId, "projectId"),
       requireId(publicRunToken, "publicRunToken"),
     ),
     { signal },
   );
   const getResultOverview = (projectId, resultContextToken, options = {}) => get(
-    MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultOverview(
+    MEDICAL_MONITORING_PRODUCT_PATHS.resultOverview(
       requireId(projectId, "projectId"),
       requireId(resultContextToken, "resultContextToken"),
       options || {},
@@ -270,7 +270,7 @@ export function createMedicalMonitoringR7ProductApi({
       requiredOption(value, label);
     }
     return get(
-      MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultSubject(
+      MEDICAL_MONITORING_PRODUCT_PATHS.resultSubject(
         requireId(projectId, "projectId"),
         requireId(resultContextToken, "resultContextToken"),
         requireId(subjectRef, "subjectRef"),
@@ -292,7 +292,7 @@ export function createMedicalMonitoringR7ProductApi({
     requiredOption(publicOptions.riskInstanceRef, "riskInstanceRef");
     requiredOption(publicOptions.sourceLocatorRef, "sourceLocatorRef");
     return get(
-      MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultSourceEvidence(
+      MEDICAL_MONITORING_PRODUCT_PATHS.resultSourceEvidence(
         requireId(projectId, "projectId"),
         requireId(resultContextToken, "resultContextToken"),
         publicOptions,
@@ -309,7 +309,7 @@ export function createMedicalMonitoringR7ProductApi({
   ) => {
     const source = options || {};
     return get(
-      MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultContinuity(
+      MEDICAL_MONITORING_PRODUCT_PATHS.resultContinuity(
         requireId(projectId, "projectId"),
         requireId(resultContextToken, "resultContextToken"),
         { siteRef: source.siteRef || source.site_ref },
@@ -320,14 +320,14 @@ export function createMedicalMonitoringR7ProductApi({
 
   const api = {
     bootstrapWorkspace(projectId, { signal } = {}) {
-      return post(MEDICAL_MONITORING_R7_PRODUCT_PATHS.workspaceBootstrap(
+      return post(MEDICAL_MONITORING_PRODUCT_PATHS.workspaceBootstrap(
         requireId(projectId, "projectId"),
       ), undefined, { signal });
     },
 
     getSetupOptions(projectId, options = {}) {
       const source = options || {};
-      return get(MEDICAL_MONITORING_R7_PRODUCT_PATHS.setupOptions(
+      return get(MEDICAL_MONITORING_PRODUCT_PATHS.setupOptions(
         requireId(projectId, "projectId"),
         source,
       ), { signal: source.signal });
@@ -335,32 +335,32 @@ export function createMedicalMonitoringR7ProductApi({
 
     getRunSetupOptions(projectId, options = {}) {
       const source = options || {};
-      return get(MEDICAL_MONITORING_R7_PRODUCT_PATHS.setupOptions(
+      return get(MEDICAL_MONITORING_PRODUCT_PATHS.setupOptions(
         requireId(projectId, "projectId"),
         source,
       ), { signal: source.signal });
     },
 
     previewRiskRule(projectId, payload, { signal } = {}) {
-      return post(MEDICAL_MONITORING_R7_PRODUCT_PATHS.riskRulePreview(
+      return post(MEDICAL_MONITORING_PRODUCT_PATHS.riskRulePreview(
         requireId(projectId, "projectId"),
       ), payload, { signal });
     },
 
     listRiskRules(projectId, { signal } = {}) {
-      return get(MEDICAL_MONITORING_R7_PRODUCT_PATHS.riskRules(
+      return get(MEDICAL_MONITORING_PRODUCT_PATHS.riskRules(
         requireId(projectId, "projectId"),
       ), { signal });
     },
 
     confirmRiskRule(projectId, payload, { signal } = {}) {
-      return post(MEDICAL_MONITORING_R7_PRODUCT_PATHS.riskRules(
+      return post(MEDICAL_MONITORING_PRODUCT_PATHS.riskRules(
         requireId(projectId, "projectId"),
       ), payload, { signal });
     },
 
     prepareAndStart(projectId, payload, { signal } = {}) {
-      return post(MEDICAL_MONITORING_R7_PRODUCT_PATHS.prepareAndStart(
+      return post(MEDICAL_MONITORING_PRODUCT_PATHS.prepareAndStart(
         requireId(projectId, "projectId"),
       ), publicPreparePayload(payload), { signal });
     },
@@ -373,12 +373,12 @@ export function createMedicalMonitoringR7ProductApi({
     getPublicRunProgress: getPublicProgress,
 
     // This name is intentionally public-token-only. The older
-    // medicalMonitoringProgressApi module remains the internal R5/R7
+    // medicalMonitoringProgressApi remains the shared progress transport
     // compatibility surface and is not used by result pages.
     getProgress: getPublicProgress,
 
     getResultEntry(projectId, publicRunToken, { signal } = {}) {
-      return get(MEDICAL_MONITORING_R7_PRODUCT_PATHS.resultEntry(
+      return get(MEDICAL_MONITORING_PRODUCT_PATHS.resultEntry(
         requireId(projectId, "projectId"),
         requireId(publicRunToken, "publicRunToken"),
       ), { signal });
@@ -406,8 +406,8 @@ export function createMedicalMonitoringR7ProductApi({
   return Object.freeze(api);
 }
 
-export function normalizeR7ProductQuery(values) {
+export function normalizeMonitoringProductQuery(values) {
   return queryValues(values);
 }
 
-export { appendQuery as appendR7ProductQuery };
+export { appendQuery as appendMonitoringProductQuery };

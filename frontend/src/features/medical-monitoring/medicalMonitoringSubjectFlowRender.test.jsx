@@ -6,10 +6,10 @@ import {
   selectSubjectFlowRows,
 } from "./MedicalMonitoringWorkspace.jsx";
 import {
-  R5_SYNTHETIC_SUBJECT_FLOW,
-  R5_SYNTHETIC_SUBJECT_FLOW_BLOCKED,
-  R5_SYNTHETIC_SUBJECT_FLOW_EMPTY,
-  R5_SYNTHETIC_SUBJECT_FLOW_NOT_PROVIDED,
+  WORKSPACE_SYNTHETIC_SUBJECT_FLOW,
+  WORKSPACE_SYNTHETIC_SUBJECT_FLOW_BLOCKED,
+  WORKSPACE_SYNTHETIC_SUBJECT_FLOW_EMPTY,
+  WORKSPACE_SYNTHETIC_SUBJECT_FLOW_NOT_PROVIDED,
 } from "./medicalMonitoringProductFixtures.mjs";
 
 function flowProjection(subjectFlow) {
@@ -88,24 +88,24 @@ function countOccurrences(html, marker) {
 }
 
 export const renders = {
-  ready: renderFlow(R5_SYNTHETIC_SUBJECT_FLOW),
-  readyTableOpen: renderFlow(R5_SYNTHETIC_SUBJECT_FLOW, {}, { initialTableOpen: true }),
-  currentTreatment: renderFlow(R5_SYNTHETIC_SUBJECT_FLOW, { flow_stage_ref: "flow-stage-treatment", flow_node_metric: "current" }, { initialTableOpen: true }),
-  reachedScreening: renderFlow(R5_SYNTHETIC_SUBJECT_FLOW, { flow_stage_ref: "flow-stage-screening", flow_node_metric: "reached" }, { initialTableOpen: true }),
-  linkCompleted: renderFlow(R5_SYNTHETIC_SUBJECT_FLOW, { flow_link_ref: "flow-link-05" }, { initialTableOpen: true }),
-  riskBandWithStage: renderFlow(R5_SYNTHETIC_SUBJECT_FLOW, { flow_stage_ref: "flow-stage-treatment", flow_node_metric: "current", flow_risk_band: "mid_high" }, { initialTableOpen: true }),
-  riskBandAlone: renderFlow(R5_SYNTHETIC_SUBJECT_FLOW, { flow_risk_band: "mid_high" }, { initialTableOpen: true }),
-  notProvided: renderFlow(R5_SYNTHETIC_SUBJECT_FLOW_NOT_PROVIDED),
+  ready: renderFlow(WORKSPACE_SYNTHETIC_SUBJECT_FLOW),
+  readyTableOpen: renderFlow(WORKSPACE_SYNTHETIC_SUBJECT_FLOW, {}, { initialTableOpen: true }),
+  currentTreatment: renderFlow(WORKSPACE_SYNTHETIC_SUBJECT_FLOW, { flow_stage_ref: "flow-stage-treatment", flow_node_metric: "current" }, { initialTableOpen: true }),
+  reachedScreening: renderFlow(WORKSPACE_SYNTHETIC_SUBJECT_FLOW, { flow_stage_ref: "flow-stage-screening", flow_node_metric: "reached" }, { initialTableOpen: true }),
+  linkCompleted: renderFlow(WORKSPACE_SYNTHETIC_SUBJECT_FLOW, { flow_link_ref: "flow-link-05" }, { initialTableOpen: true }),
+  riskBandWithStage: renderFlow(WORKSPACE_SYNTHETIC_SUBJECT_FLOW, { flow_stage_ref: "flow-stage-treatment", flow_node_metric: "current", flow_risk_band: "mid_high" }, { initialTableOpen: true }),
+  riskBandAlone: renderFlow(WORKSPACE_SYNTHETIC_SUBJECT_FLOW, { flow_risk_band: "mid_high" }, { initialTableOpen: true }),
+  notProvided: renderFlow(WORKSPACE_SYNTHETIC_SUBJECT_FLOW_NOT_PROVIDED),
   legacyAbsent: renderFlow(undefined),
-  blocked: renderFlow(R5_SYNTHETIC_SUBJECT_FLOW_BLOCKED),
-  empty: renderFlow(R5_SYNTHETIC_SUBJECT_FLOW_EMPTY),
+  blocked: renderFlow(WORKSPACE_SYNTHETIC_SUBJECT_FLOW_BLOCKED),
+  empty: renderFlow(WORKSPACE_SYNTHETIC_SUBJECT_FLOW_EMPTY),
 };
 
 export const selectors = {
-  ready: normalizeSubjectFlowView(flowProjection(R5_SYNTHETIC_SUBJECT_FLOW)),
+  ready: normalizeSubjectFlowView(flowProjection(WORKSPACE_SYNTHETIC_SUBJECT_FLOW)),
   selection: subjectFlowSelectionFromRoute({ flow_stage_ref: "flow-stage-treatment", flow_node_metric: "current", flow_risk_band: "mid_high" }),
   linkSelection: subjectFlowSelectionFromRoute({ flow_link_ref: "flow-link-02" }),
-  flow: R5_SYNTHETIC_SUBJECT_FLOW,
-  normalizedReady: normalizeSubjectFlowView(normalizedFlowProjection(R5_SYNTHETIC_SUBJECT_FLOW)),
+  flow: WORKSPACE_SYNTHETIC_SUBJECT_FLOW,
+  normalizedReady: normalizeSubjectFlowView(normalizedFlowProjection(WORKSPACE_SYNTHETIC_SUBJECT_FLOW)),
   selectRows: (flowView, selection) => selectSubjectFlowRows(flowView, selection),
 };

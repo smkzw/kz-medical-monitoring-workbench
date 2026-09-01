@@ -1,4 +1,4 @@
-export const MEDICAL_MONITORING_R5_VIEWS = Object.freeze([
+export const MEDICAL_MONITORING_WORKSPACE_VIEWS = Object.freeze([
   "overview",
   "site_overview",
   "journey",
@@ -7,7 +7,7 @@ export const MEDICAL_MONITORING_R5_VIEWS = Object.freeze([
   "evidence",
 ]);
 
-export const MEDICAL_MONITORING_R5_CANONICAL_KEYS = Object.freeze([
+export const MEDICAL_MONITORING_WORKSPACE_CANONICAL_KEYS = Object.freeze([
   "project_ref",
   "run_ref",
   "snapshot_ref",
@@ -35,10 +35,10 @@ export const MEDICAL_MONITORING_R5_CANONICAL_KEYS = Object.freeze([
   "return_context_key",
 ]);
 
-export const MEDICAL_MONITORING_R5_FLOW_NODE_METRICS = Object.freeze(["current", "reached"]);
-export const MEDICAL_MONITORING_R5_FLOW_RISK_BANDS = Object.freeze(["mid_high"]);
+export const MEDICAL_MONITORING_WORKSPACE_FLOW_NODE_METRICS = Object.freeze(["current", "reached"]);
+export const MEDICAL_MONITORING_WORKSPACE_FLOW_RISK_BANDS = Object.freeze(["mid_high"]);
 
-export const MEDICAL_MONITORING_R5_EPHEMERAL_KEYS = Object.freeze([
+export const MEDICAL_MONITORING_WORKSPACE_EPHEMERAL_KEYS = Object.freeze([
   "scroll_refs",
   "inspector_width",
   "inspector_expanded",
@@ -46,11 +46,11 @@ export const MEDICAL_MONITORING_R5_EPHEMERAL_KEYS = Object.freeze([
   "focus_ref",
 ]);
 
-const R5_VIEW_SET = new Set(MEDICAL_MONITORING_R5_VIEWS);
-const R5_AXIS_MODES = new Set(["calendar", "study_day"]);
-const R5_FLOW_NODE_METRIC_SET = new Set(MEDICAL_MONITORING_R5_FLOW_NODE_METRICS);
-const R5_FLOW_RISK_BAND_SET = new Set(MEDICAL_MONITORING_R5_FLOW_RISK_BANDS);
-const R5_QUERY_KEYS = new Set([
+const WORKSPACE_VIEW_SET = new Set(MEDICAL_MONITORING_WORKSPACE_VIEWS);
+const WORKSPACE_AXIS_MODES = new Set(["calendar", "study_day"]);
+const WORKSPACE_FLOW_NODE_METRIC_SET = new Set(MEDICAL_MONITORING_WORKSPACE_FLOW_NODE_METRICS);
+const WORKSPACE_FLOW_RISK_BAND_SET = new Set(MEDICAL_MONITORING_WORKSPACE_FLOW_RISK_BANDS);
+const WORKSPACE_QUERY_KEYS = new Set([
   "project_id",
   "run_id",
   "snapshot_id",
@@ -146,7 +146,7 @@ function paramsFrom(input) {
 
 function result(status, fields = {}) {
   return Object.freeze({
-    isR5: status !== "legacy",
+    isWorkspace: status !== "legacy",
     status,
     valid: status === "valid",
     ...fields,
@@ -164,9 +164,9 @@ function resolveFlowSelection(source, keyOrder) {
   }
   let nodeMetric = clean(source?.flow_node_metric);
   if (!stageRef || linkRef) nodeMetric = "";
-  else if (!R5_FLOW_NODE_METRIC_SET.has(nodeMetric)) nodeMetric = "current";
+  else if (!WORKSPACE_FLOW_NODE_METRIC_SET.has(nodeMetric)) nodeMetric = "current";
   let riskBand = clean(source?.flow_risk_band);
-  if (riskBand && !R5_FLOW_RISK_BAND_SET.has(riskBand)) riskBand = "";
+  if (riskBand && !WORKSPACE_FLOW_RISK_BAND_SET.has(riskBand)) riskBand = "";
   return { flow_stage_ref: stageRef, flow_node_metric: nodeMetric, flow_link_ref: linkRef, flow_risk_band: riskBand };
 }
 
@@ -186,7 +186,7 @@ function identityFailure(canonical, unknownKeys) {
   const publicProgress = Boolean(canonical.public_run_token) && !publicResult;
   if (publicResult) {
     // Public result URLs carry only result-context and public locator fields.
-    // Internal R5 references and the legacy risk key are never accepted.
+    // Internal authority references and the legacy risk key are never accepted.
     if (canonical.run_ref || canonical.snapshot_ref || canonical.cutoff_ref || canonical.risk_ref || canonical.return_context_key || canonical.public_run_token) {
       return { code: "PUBLIC_RESULT_INTERNAL_IDENTITY", fields: ["result_context_token"] };
     }
@@ -231,9 +231,9 @@ function identityFailure(canonical, unknownKeys) {
   if (canonical.risk_ref && !canonical.risk_instance_ref && !publicResult) missing.push("risk_instance_ref");
   if (canonical.window_start && !canonical.window_end) missing.push("window_end");
   if (canonical.window_end && !canonical.window_start) missing.push("window_start");
-  if (canonical.axis_mode && !R5_AXIS_MODES.has(canonical.axis_mode)) missing.push("axis_mode");
-  if (canonical.flow_node_metric && !R5_FLOW_NODE_METRIC_SET.has(canonical.flow_node_metric)) missing.push("flow_node_metric");
-  if (canonical.flow_risk_band && !R5_FLOW_RISK_BAND_SET.has(canonical.flow_risk_band)) missing.push("flow_risk_band");
+  if (canonical.axis_mode && !WORKSPACE_AXIS_MODES.has(canonical.axis_mode)) missing.push("axis_mode");
+  if (canonical.flow_node_metric && !WORKSPACE_FLOW_NODE_METRIC_SET.has(canonical.flow_node_metric)) missing.push("flow_node_metric");
+  if (canonical.flow_risk_band && !WORKSPACE_FLOW_RISK_BAND_SET.has(canonical.flow_risk_band)) missing.push("flow_risk_band");
   if (!publicResult && !publicProgress) {
     const authorityRefs = [canonical.run_ref, canonical.snapshot_ref, canonical.cutoff_ref].filter(Boolean);
     if (authorityRefs.length > 0 && authorityRefs.length < 3) {
@@ -241,20 +241,20 @@ function identityFailure(canonical, unknownKeys) {
     }
   }
   if (unknownKeys.length) return { code: "UNKNOWN_QUERY_KEY", fields: unknownKeys };
-  if (missing.length) return { code: "R5_IDENTITY_INCOMPLETE", fields: [...new Set(missing)] };
+  if (missing.length) return { code: "WORKSPACE_IDENTITY_INCOMPLETE", fields: [...new Set(missing)] };
   return null;
 }
 
-export function isMedicalMonitoringR5View(view) {
-  return R5_VIEW_SET.has(clean(view).toLowerCase());
+export function isMedicalMonitoringWorkspaceView(view) {
+  return WORKSPACE_VIEW_SET.has(clean(view).toLowerCase());
 }
 
-export function parseMedicalMonitoringR5RouteState(input = "") {
+export function parseMedicalMonitoringWorkspaceRouteState(input = "") {
   const params = paramsFrom(input);
   const rawView = clean(params.get("view")).toLowerCase();
-  if (!isMedicalMonitoringR5View(rawView)) return result("legacy", { canonical: {}, unknownKeys: [] });
+  if (!isMedicalMonitoringWorkspaceView(rawView)) return result("legacy", { canonical: {}, unknownKeys: [] });
 
-  const unknownKeys = [...new Set([...params.keys()].filter((key) => !R5_QUERY_KEYS.has(key)))];
+  const unknownKeys = [...new Set([...params.keys()].filter((key) => !WORKSPACE_QUERY_KEYS.has(key)))];
   const canonical = {};
   for (const [publicKey, canonicalKey] of Object.entries(PUBLIC_TO_CANONICAL)) {
     const value = clean(params.get(publicKey));
@@ -278,50 +278,50 @@ export function parseMedicalMonitoringR5RouteState(input = "") {
     errorCode: failure?.code || "",
     errorFields: failure?.fields || [],
     publicQuery: Object.freeze(Object.fromEntries(
-      [...R5_QUERY_KEYS]
+      [...WORKSPACE_QUERY_KEYS]
         .map((key) => [key, clean(params.get(key))])
         .filter(([, value]) => value),
     )),
   });
 }
 
-export function normalizeMedicalMonitoringR5RouteState(input = {}) {
+export function normalizeMedicalMonitoringWorkspaceRouteState(input = {}) {
   const source = input && typeof input === "object" ? input : {};
   const flowSelection = resolveFlowSelection(source, Object.keys(source));
   const normalized = {};
-  for (const key of MEDICAL_MONITORING_R5_CANONICAL_KEYS) {
+  for (const key of MEDICAL_MONITORING_WORKSPACE_CANONICAL_KEYS) {
     const value = clean(source[key]);
     if (value) normalized[key] = value;
   }
-  normalized.view = isMedicalMonitoringR5View(normalized.view) ? normalized.view : "overview";
+  normalized.view = isMedicalMonitoringWorkspaceView(normalized.view) ? normalized.view : "overview";
   normalized.cutoff_state = normalized.cutoff_ref ? "present" : "absent";
-  normalized.axis_mode = R5_AXIS_MODES.has(normalized.axis_mode) ? normalized.axis_mode : "calendar";
+  normalized.axis_mode = WORKSPACE_AXIS_MODES.has(normalized.axis_mode) ? normalized.axis_mode : "calendar";
   applyFlowSelection(normalized, flowSelection);
   return normalized;
 }
 
-export function validateMedicalMonitoringR5Target(state, { view = state?.view } = {}) {
-  const canonical = normalizeMedicalMonitoringR5RouteState(state);
+export function validateMedicalMonitoringWorkspaceTarget(state, { view = state?.view } = {}) {
+  const canonical = normalizeMedicalMonitoringWorkspaceRouteState(state);
   const target = view || canonical.view;
-  if (!isMedicalMonitoringR5View(target)) return { valid: false, code: "R5_VIEW_INVALID", fields: ["view"] };
+  if (!isMedicalMonitoringWorkspaceView(target)) return { valid: false, code: "WORKSPACE_VIEW_INVALID", fields: ["view"] };
   const failure = identityFailure({ ...canonical, view: target }, []);
   return failure
     ? { valid: false, code: failure.code, fields: failure.fields }
     : { valid: true, code: "", fields: [] };
 }
 
-export function splitMedicalMonitoringR5State(state = {}) {
-  const canonical = normalizeMedicalMonitoringR5RouteState(state);
+export function splitMedicalMonitoringWorkspaceState(state = {}) {
+  const canonical = normalizeMedicalMonitoringWorkspaceRouteState(state);
   const source = state && typeof state === "object" ? state : {};
   const ephemeral = {};
-  for (const key of MEDICAL_MONITORING_R5_EPHEMERAL_KEYS) {
+  for (const key of MEDICAL_MONITORING_WORKSPACE_EPHEMERAL_KEYS) {
     if (source[key] !== undefined) ephemeral[key] = source[key];
   }
   return Object.freeze({ canonical, ephemeral });
 }
 
-export function serializeMedicalMonitoringR5RouteState(state = {}) {
-  const canonical = normalizeMedicalMonitoringR5RouteState(state);
+export function serializeMedicalMonitoringWorkspaceRouteState(state = {}) {
+  const canonical = normalizeMedicalMonitoringWorkspaceRouteState(state);
   const params = new URLSearchParams();
   const publicResult = Boolean(canonical.result_context_token);
   const publicProgress = Boolean(canonical.public_run_token) && !publicResult;
@@ -364,8 +364,8 @@ export function serializeMedicalMonitoringR5RouteState(state = {}) {
   return params.toString() ? `?${params.toString()}` : "";
 }
 
-export function routeStateForMedicalMonitoringR5View(state, view, patch = {}) {
-  const next = normalizeMedicalMonitoringR5RouteState({ ...state, ...patch, view });
+export function routeStateForMedicalMonitoringWorkspaceView(state, view, patch = {}) {
+  const next = normalizeMedicalMonitoringWorkspaceRouteState({ ...state, ...patch, view });
   if (["overview", "site_overview"].includes(view)) {
     if (view === "overview") delete next.site_ref;
     delete next.subject_ref;
@@ -387,10 +387,10 @@ export function routeStateForMedicalMonitoringR5View(state, view, patch = {}) {
   return next;
 }
 
-export function r5SubjectView(view) {
+export function monitoringSubjectView(view) {
   if (view === "profile") return "trend";
   if (view === "timeline") return "events";
   return "journey";
 }
 
-export const medicalMonitoringR5RouteQueryKeys = Object.freeze([...R5_QUERY_KEYS]);
+export const medicalMonitoringWorkspaceRouteQueryKeys = Object.freeze([...WORKSPACE_QUERY_KEYS]);

@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import {
-  createMedicalMonitoringR5Adapter,
-  computeMedicalMonitoringR5ResponseDigest,
-  MedicalMonitoringR5AdapterError,
+  createMedicalMonitoringWorkspaceApi,
+  computeMedicalMonitoringWorkspaceResponseDigest,
+  MedicalMonitoringWorkspaceApiError,
 } from "./medicalMonitoringWorkspaceApi.mjs";
 import {
-  R5_SYNTHETIC_IDENTITY_NEGATIVE,
-  R5_SYNTHETIC_OVERVIEW,
-  R5_SYNTHETIC_SITE_OVERVIEW,
-  R5_SYNTHETIC_SOURCE_EVIDENCE,
-  R5_SYNTHETIC_SUBJECT_WORKSPACE,
+  WORKSPACE_SYNTHETIC_IDENTITY_NEGATIVE,
+  WORKSPACE_SYNTHETIC_OVERVIEW,
+  WORKSPACE_SYNTHETIC_SITE_OVERVIEW,
+  WORKSPACE_SYNTHETIC_SOURCE_EVIDENCE,
+  WORKSPACE_SYNTHETIC_SUBJECT_WORKSPACE,
 } from "./medicalMonitoringProductFixtures.mjs";
 
 let passed = 0;
@@ -30,7 +30,7 @@ async function rebindResponseDigest(payload) {
   next.response_snapshot_sha256 = "";
   next.identity.response_snapshot_sha256 = "";
   next.read_handoff.response_snapshot_sha256 = "";
-  const digest = await computeMedicalMonitoringR5ResponseDigest(next);
+  const digest = await computeMedicalMonitoringWorkspaceResponseDigest(next);
   next.response_snapshot_sha256 = digest;
   next.identity.response_snapshot_sha256 = digest;
   next.read_handoff.response_snapshot_sha256 = digest;
@@ -38,13 +38,13 @@ async function rebindResponseDigest(payload) {
 }
 
 const calls = [];
-const adapter = createMedicalMonitoringR5Adapter({
+const adapter = createMedicalMonitoringWorkspaceApi({
   baseUrl: "http://workbench.test",
   fetchImpl: async (url, options) => {
     calls.push({ url, options });
-    if (url.includes("source-evidence")) return jsonResponse(R5_SYNTHETIC_SOURCE_EVIDENCE);
-    if (url.includes("subject-workspaces")) return jsonResponse(R5_SYNTHETIC_SUBJECT_WORKSPACE);
-    return jsonResponse(R5_SYNTHETIC_OVERVIEW);
+    if (url.includes("source-evidence")) return jsonResponse(WORKSPACE_SYNTHETIC_SOURCE_EVIDENCE);
+    if (url.includes("subject-workspaces")) return jsonResponse(WORKSPACE_SYNTHETIC_SUBJECT_WORKSPACE);
+    return jsonResponse(WORKSPACE_SYNTHETIC_OVERVIEW);
   },
 });
 
@@ -74,9 +74,9 @@ await adapter.getSourceEvidence({
 });
 
 check(calls.length === 3, "uses one request for each declared R5 read surface");
-check(calls.every((call) => call.options.method === "GET"), "all R5 adapter requests use GET");
-check(calls.every((call) => call.options.body === undefined), "R5 adapter requests have no body");
-check(calls.every((call) => call.options.headers.Accept === "application/json"), "R5 adapter requests accept JSON");
+check(calls.every((call) => call.options.method === "GET"), "all 医学监查数据适配器 requests use GET");
+check(calls.every((call) => call.options.body === undefined), "医学监查数据适配器 requests have no body");
+check(calls.every((call) => call.options.headers.Accept === "application/json"), "医学监查数据适配器 requests accept JSON");
 check(calls[0].url === "http://workbench.test/api/projects/synthetic-project-r5-s7/modules/medical-monitoring/r5/overview", "uses the declared overview path");
 const subjectUrl = new URL(calls[1].url);
 check(subjectUrl.pathname.endsWith("/subject-workspaces/synthetic-subject-001"), "uses the declared subject workspace path");
@@ -98,10 +98,10 @@ check(overview.projection.currentRisks[0].domainEncoding.shape, "maps an event s
 let derivedChangeBand = null;
 try {
   const changedRows = await rebindResponseDigest({
-    ...R5_SYNTHETIC_OVERVIEW,
-    projection: { ...R5_SYNTHETIC_OVERVIEW.projection, change_bands: [] },
+    ...WORKSPACE_SYNTHETIC_OVERVIEW,
+    projection: { ...WORKSPACE_SYNTHETIC_OVERVIEW.projection, change_bands: [] },
   });
-  const changedRowsAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(changedRows) });
+  const changedRowsAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(changedRows) });
   derivedChangeBand = await changedRowsAdapter.getOverview({ projectId: "synthetic-project-r5-s7" });
 } catch (error) {
   derivedChangeBand = error;
@@ -109,11 +109,11 @@ try {
 check(derivedChangeBand?.counts?.changeBand === 2, "does not derive change-band count from projection rows");
 
 const siteCalls = [];
-const siteAdapter = createMedicalMonitoringR5Adapter({
+const siteAdapter = createMedicalMonitoringWorkspaceApi({
   baseUrl: "http://workbench.test",
   fetchImpl: async (url, options) => {
     siteCalls.push({ url, options });
-    return jsonResponse(R5_SYNTHETIC_SITE_OVERVIEW);
+    return jsonResponse(WORKSPACE_SYNTHETIC_SITE_OVERVIEW);
   },
 });
 const siteOverview = await siteAdapter.getOverview({ projectId: "synthetic-project-r5-s7", siteRef: "synthetic-site-01" });
@@ -124,10 +124,10 @@ check(siteOverview.publicIdentity.siteRef === "synthetic-site-01", "binds site_o
 let siteIdentityError = null;
 try {
   const mismatchedSite = await rebindResponseDigest({
-    ...R5_SYNTHETIC_SITE_OVERVIEW,
-    identity: { ...R5_SYNTHETIC_SITE_OVERVIEW.identity, site_ref: "synthetic-site-02" },
+    ...WORKSPACE_SYNTHETIC_SITE_OVERVIEW,
+    identity: { ...WORKSPACE_SYNTHETIC_SITE_OVERVIEW.identity, site_ref: "synthetic-site-02" },
   });
-  const mismatchedSiteAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(mismatchedSite) });
+  const mismatchedSiteAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(mismatchedSite) });
   await mismatchedSiteAdapter.getOverview({ projectId: "synthetic-project-r5-s7", siteRef: "synthetic-site-01" });
 } catch (error) {
   siteIdentityError = error;
@@ -136,24 +136,24 @@ check(siteIdentityError?.code === "IDENTITY_TARGET_MISMATCH", "fails closed when
 
 let identityError = null;
 try {
-  const negative = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(R5_SYNTHETIC_IDENTITY_NEGATIVE) });
+  const negative = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(WORKSPACE_SYNTHETIC_IDENTITY_NEGATIVE) });
   await negative.getOverview({ projectId: "synthetic-project-r5-s7" });
 } catch (error) {
   identityError = error;
 }
-check(identityError instanceof MedicalMonitoringR5AdapterError, "rejects an identity mismatch with a typed error");
+check(identityError instanceof MedicalMonitoringWorkspaceApiError, "rejects an identity mismatch with a typed error");
 check(identityError.code === "IDENTITY_PROJECT_MISMATCH", "distinguishes a project identity mismatch");
 
 let digestError = null;
 try {
   const broken = {
-    ...R5_SYNTHETIC_OVERVIEW,
+    ...WORKSPACE_SYNTHETIC_OVERVIEW,
     projection: {
-      ...R5_SYNTHETIC_OVERVIEW.projection,
-      project: { ...R5_SYNTHETIC_OVERVIEW.projection.project, project_label: "tampered" },
+      ...WORKSPACE_SYNTHETIC_OVERVIEW.projection,
+      project: { ...WORKSPACE_SYNTHETIC_OVERVIEW.projection.project, project_label: "tampered" },
     },
   };
-  const digestAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(broken) });
+  const digestAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(broken) });
   await digestAdapter.getOverview({ projectId: "synthetic-project-r5-s7" });
 } catch (error) {
   digestError = error;
@@ -162,8 +162,8 @@ check(digestError?.code === "RESPONSE_DIGEST_MISMATCH", "rejects payload tamper 
 
 let handoffDigestError = null;
 try {
-  const brokenHandoff = { ...R5_SYNTHETIC_OVERVIEW, read_handoff: { ...R5_SYNTHETIC_OVERVIEW.read_handoff, response_snapshot_sha256: "f".repeat(64) } };
-  const handoffAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(brokenHandoff) });
+  const brokenHandoff = { ...WORKSPACE_SYNTHETIC_OVERVIEW, read_handoff: { ...WORKSPACE_SYNTHETIC_OVERVIEW.read_handoff, response_snapshot_sha256: "f".repeat(64) } };
+  const handoffAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(brokenHandoff) });
   await handoffAdapter.getOverview({ projectId: "synthetic-project-r5-s7" });
 } catch (error) {
   handoffDigestError = error;
@@ -173,11 +173,11 @@ check(handoffDigestError?.code === "DIGEST_HANDOFF_MISMATCH", "rejects a handoff
 let emptyRunError = null;
 try {
   const emptyRun = await rebindResponseDigest({
-    ...R5_SYNTHETIC_OVERVIEW,
-    identity: { ...R5_SYNTHETIC_OVERVIEW.identity, run_ref: "" },
-    authority_receipt: { ...R5_SYNTHETIC_OVERVIEW.authority_receipt, run_ref: "" },
+    ...WORKSPACE_SYNTHETIC_OVERVIEW,
+    identity: { ...WORKSPACE_SYNTHETIC_OVERVIEW.identity, run_ref: "" },
+    authority_receipt: { ...WORKSPACE_SYNTHETIC_OVERVIEW.authority_receipt, run_ref: "" },
   });
-  const emptyRunAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(emptyRun) });
+  const emptyRunAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(emptyRun) });
   await emptyRunAdapter.getOverview({ projectId: "synthetic-project-r5-s7" });
 } catch (error) {
   emptyRunError = error;
@@ -187,13 +187,13 @@ check(emptyRunError?.code === "REQUIRED_STRING_MISSING", "rejects an empty requi
 let domainEncodingError = null;
 try {
   const missingEncoding = await rebindResponseDigest({
-    ...R5_SYNTHETIC_OVERVIEW,
+    ...WORKSPACE_SYNTHETIC_OVERVIEW,
     projection: {
-      ...R5_SYNTHETIC_OVERVIEW.projection,
-      domain_encoding: R5_SYNTHETIC_OVERVIEW.projection.domain_encoding.map((domain, index) => index === 0 ? { ...domain, event_shape: "" } : domain),
+      ...WORKSPACE_SYNTHETIC_OVERVIEW.projection,
+      domain_encoding: WORKSPACE_SYNTHETIC_OVERVIEW.projection.domain_encoding.map((domain, index) => index === 0 ? { ...domain, event_shape: "" } : domain),
     },
   });
-  const domainAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(missingEncoding) });
+  const domainAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(missingEncoding) });
   await domainAdapter.getOverview({ projectId: "synthetic-project-r5-s7" });
 } catch (error) {
   domainEncodingError = error;
@@ -203,13 +203,13 @@ check(domainEncodingError?.code === "REQUIRED_STRING_MISSING", "rejects a missin
 let riskDomainError = null;
 try {
   const missingRiskDomain = await rebindResponseDigest({
-    ...R5_SYNTHETIC_SUBJECT_WORKSPACE,
+    ...WORKSPACE_SYNTHETIC_SUBJECT_WORKSPACE,
     projection: {
-      ...R5_SYNTHETIC_SUBJECT_WORKSPACE.projection,
-      risk_anchors: [{ ...R5_SYNTHETIC_SUBJECT_WORKSPACE.projection.risk_anchors[0], domain: "" }],
+      ...WORKSPACE_SYNTHETIC_SUBJECT_WORKSPACE.projection,
+      risk_anchors: [{ ...WORKSPACE_SYNTHETIC_SUBJECT_WORKSPACE.projection.risk_anchors[0], domain: "" }],
     },
   });
-  const riskDomainAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(missingRiskDomain) });
+  const riskDomainAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(missingRiskDomain) });
   await riskDomainAdapter.getSubjectWorkspace({
     projectId: "synthetic-project-r5-s7",
     subjectId: "synthetic-subject-001",
@@ -228,10 +228,10 @@ check(riskDomainError?.code === "REQUIRED_STRING_MISSING", "rejects a current-ri
 
 let missingCurrentRisksError = null;
 try {
-  const missingCurrentRisks = structuredClone(R5_SYNTHETIC_OVERVIEW);
+  const missingCurrentRisks = structuredClone(WORKSPACE_SYNTHETIC_OVERVIEW);
   delete missingCurrentRisks.projection.current_risks;
   const missingCurrentRisksBound = await rebindResponseDigest(missingCurrentRisks);
-  const missingCurrentRisksAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(missingCurrentRisksBound) });
+  const missingCurrentRisksAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(missingCurrentRisksBound) });
   await missingCurrentRisksAdapter.getOverview({ projectId: "synthetic-project-r5-s7" });
 } catch (error) {
   missingCurrentRisksError = error;
@@ -241,10 +241,10 @@ check(missingCurrentRisksError?.code === "CURRENT_RISKS_REQUIRED", "rejects a mi
 let emptyCurrentRisksError = null;
 try {
   const emptyCurrentRisks = await rebindResponseDigest({
-    ...R5_SYNTHETIC_OVERVIEW,
-    projection: { ...R5_SYNTHETIC_OVERVIEW.projection, current_risks: [] },
+    ...WORKSPACE_SYNTHETIC_OVERVIEW,
+    projection: { ...WORKSPACE_SYNTHETIC_OVERVIEW.projection, current_risks: [] },
   });
-  const emptyCurrentRisksAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(emptyCurrentRisks) });
+  const emptyCurrentRisksAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(emptyCurrentRisks) });
   await emptyCurrentRisksAdapter.getOverview({ projectId: "synthetic-project-r5-s7" });
 } catch (error) {
   emptyCurrentRisksError = error;
@@ -254,10 +254,10 @@ check(emptyCurrentRisksError?.code === "CURRENT_RISKS_REQUIRED", "rejects an emp
 let subjectCurrentRisksError = null;
 try {
   const emptySubjectRisks = await rebindResponseDigest({
-    ...R5_SYNTHETIC_SUBJECT_WORKSPACE,
-    projection: { ...R5_SYNTHETIC_SUBJECT_WORKSPACE.projection, current_risks: [] },
+    ...WORKSPACE_SYNTHETIC_SUBJECT_WORKSPACE,
+    projection: { ...WORKSPACE_SYNTHETIC_SUBJECT_WORKSPACE.projection, current_risks: [] },
   });
-  const emptySubjectRisksAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(emptySubjectRisks) });
+  const emptySubjectRisksAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(emptySubjectRisks) });
   await emptySubjectRisksAdapter.getSubjectWorkspace({
     projectId: "synthetic-project-r5-s7",
     subjectId: "synthetic-subject-001",
@@ -289,10 +289,10 @@ check(subject.projection.currentRisks.length === 2, "maps subject risk_anchors i
 check(subject.projection.riskAnchors.length === 2 && subject.projection.currentRisks[0].riskInstanceRef, "keeps the selected risk anchor in the canonical inspector model");
 check(subject.projection.indicators.length === 2, "consumes authoritative indicator trends when present");
 
-const noIndicatorEnvelope = structuredClone(R5_SYNTHETIC_SUBJECT_WORKSPACE);
+const noIndicatorEnvelope = structuredClone(WORKSPACE_SYNTHETIC_SUBJECT_WORKSPACE);
 delete noIndicatorEnvelope.projection.indicators;
 const noIndicatorBound = await rebindResponseDigest(noIndicatorEnvelope);
-const noIndicatorAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(noIndicatorBound) });
+const noIndicatorAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(noIndicatorBound) });
 const unavailableIndicators = await noIndicatorAdapter.getSubjectWorkspace({
   projectId: "synthetic-project-r5-s7",
   subjectId: "synthetic-subject-001",
@@ -320,13 +320,13 @@ check(evidence.projection.sourceEvidence.excerpt && evidence.projection.sourceEv
 let sourceEvidenceTamperError = null;
 try {
   const tamperedEvidence = await rebindResponseDigest({
-    ...R5_SYNTHETIC_SOURCE_EVIDENCE,
+    ...WORKSPACE_SYNTHETIC_SOURCE_EVIDENCE,
     projection: {
-      ...R5_SYNTHETIC_SOURCE_EVIDENCE.projection,
-      evidence: { ...R5_SYNTHETIC_SOURCE_EVIDENCE.projection.evidence, excerpt: "tampered" },
+      ...WORKSPACE_SYNTHETIC_SOURCE_EVIDENCE.projection,
+      evidence: { ...WORKSPACE_SYNTHETIC_SOURCE_EVIDENCE.projection.evidence, excerpt: "tampered" },
     },
   });
-  const tamperedEvidenceAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(tamperedEvidence) });
+  const tamperedEvidenceAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(tamperedEvidence) });
   await tamperedEvidenceAdapter.getSourceEvidence({
     projectId: "synthetic-project-r5-s7",
     runRef: "synthetic-run-r5-20260820",
@@ -351,7 +351,7 @@ check(unknownOptionError?.code === "QUERY_OPTION_INVALID", "rejects unknown adap
 let noFallbackError = null;
 const failedCalls = [];
 try {
-  const failedAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async (url) => { failedCalls.push(url); return jsonResponse({ detail: "unavailable" }, 503); } });
+  const failedAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async (url) => { failedCalls.push(url); return jsonResponse({ detail: "unavailable" }, 503); } });
   await failedAdapter.getOverview({ projectId: "synthetic-project-r5-s7" });
 } catch (error) {
   noFallbackError = error;
@@ -459,13 +459,13 @@ function subjectFlowFixture({ siteRef = "", scopeProjectRef = "synthetic-project
 }
 
 async function overviewWithSubjectFlow(subjectFlow, { siteScope = false, identityOverrides = {} } = {}) {
-  const base = siteScope ? R5_SYNTHETIC_SITE_OVERVIEW : R5_SYNTHETIC_OVERVIEW;
+  const base = siteScope ? WORKSPACE_SYNTHETIC_SITE_OVERVIEW : WORKSPACE_SYNTHETIC_OVERVIEW;
   const bound = await rebindResponseDigest({
     ...base,
     identity: { ...base.identity, ...identityOverrides },
     projection: { ...base.projection, subject_flow: subjectFlow },
   });
-  const flowAdapter = createMedicalMonitoringR5Adapter({ fetchImpl: async () => jsonResponse(bound) });
+  const flowAdapter = createMedicalMonitoringWorkspaceApi({ fetchImpl: async () => jsonResponse(bound) });
   return flowAdapter.getOverview({
     projectId: "synthetic-project-r5-s7",
     ...(siteScope ? { siteRef: "synthetic-site-01" } : {}),

@@ -1,23 +1,23 @@
-// Interaction store for the R7 live progress panel. Holds no display
+// Interaction store for the live monitoring progress panel. Holds no display
 // authority: every fact shown comes from the server progress payload through
 // the pure projection. Polling only re-reads facts; nothing here invents
 // progress, parses Chinese copy to decide polling, or sends stop requests on
 // unload.
 
-import { createMedicalMonitoringR7ProgressApi } from "./medicalMonitoringProgressApi.mjs";
+import { createMedicalMonitoringProgressApi } from "./medicalMonitoringProgressApi.mjs";
 import {
-  R7_NO_RUN_TEXT,
-  R7_REFRESH_FAILED_TEXT,
-  createR7ProgressGate,
-  projectR7Progress,
-  projectR7ProgressError,
-  r7ProgressRequestContext,
-  r7RefreshBackoffMs,
+  MONITORING_NO_RUN_TEXT,
+  MONITORING_REFRESH_FAILED_TEXT,
+  createMonitoringProgressGate,
+  projectMonitoringProgress,
+  projectMonitoringProgressError,
+  monitoringProgressRequestContext,
+  monitoringRefreshBackoffMs,
 } from "./medicalMonitoringProgressProjection.mjs";
 
-export const R7_STOP_CONFIRM_TIMEOUT_MS = 8000;
+export const MONITORING_STOP_CONFIRM_TIMEOUT_MS = 8000;
 
-export const R7_PANEL_TEXT = Object.freeze({
+export const MONITORING_PANEL_TEXT = Object.freeze({
   title: "本次监查进度",
   loading: "正在读取本次监查进度",
   latestUpdatesEmpty: "暂无最新进展",
@@ -43,7 +43,7 @@ function pad2(value) {
   return String(value).padStart(2, "0");
 }
 
-export function r7PanelTimeText(epochMs) {
+export function monitoringPanelTimeText(epochMs) {
   const date = new Date(epochMs);
   if (!Number.isFinite(date.getTime())) return "";
   return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
@@ -63,13 +63,13 @@ function defaultVisibility() {
   });
 }
 
-export function createR7ProgressPanelStore({
-  api = createMedicalMonitoringR7ProgressApi(),
+export function createMonitoringProgressPanelStore({
+  api = createMedicalMonitoringProgressApi(),
   now = () => Date.now(),
   schedule = (fn, ms) => setTimeout(fn, ms),
   unschedule = (handle) => clearTimeout(handle),
   visibility = defaultVisibility(),
-  confirmTimeoutMs = R7_STOP_CONFIRM_TIMEOUT_MS,
+  confirmTimeoutMs = MONITORING_STOP_CONFIRM_TIMEOUT_MS,
 } = {}) {
   if (typeof schedule !== "function") throw new TypeError("schedule must be a function");
   if (typeof unschedule !== "function") throw new TypeError("unschedule must be a function");
@@ -78,7 +78,7 @@ export function createR7ProgressPanelStore({
     throw new TypeError("visibility must expose isVisible() and subscribe()");
   }
 
-  const gate = createR7ProgressGate();
+  const gate = createMonitoringProgressGate();
   const listeners = new Set();
   const inFlight = new Set();
 
@@ -153,16 +153,16 @@ export function createR7ProgressPanelStore({
 
   function handleReadFailure() {
     consecutiveFailures += 1;
-    const timeText = lastReadAt ? r7PanelTimeText(lastReadAt) : "";
+    const timeText = lastReadAt ? monitoringPanelTimeText(lastReadAt) : "";
     fields = {
       ...fields,
       notice: Object.freeze({
         kind: "refresh_failed",
-        text: timeText ? R7_PANEL_TEXT.refreshFailedAt(timeText) : R7_REFRESH_FAILED_TEXT,
+        text: timeText ? MONITORING_PANEL_TEXT.refreshFailedAt(timeText) : MONITORING_REFRESH_FAILED_TEXT,
       }),
     };
     emit();
-    scheduleNextLoad(wantsPolling() ? r7RefreshBackoffMs(consecutiveFailures) : 0);
+    scheduleNextLoad(wantsPolling() ? monitoringRefreshBackoffMs(consecutiveFailures) : 0);
   }
 
   async function load() {
@@ -174,7 +174,7 @@ export function createR7ProgressPanelStore({
     try {
       const payload = await api.getProgress(current.projectRef, current.runRef, { signal: controller.signal });
       if (destroyed || !gate.accept(ticket)) return;
-      const view = projectR7Progress(payload);
+      const view = projectMonitoringProgress(payload);
       if (view.kind === "progress") {
         lastReadAt = now();
         consecutiveFailures = 0;
@@ -187,7 +187,7 @@ export function createR7ProgressPanelStore({
       handleReadFailure();
     } catch (error) {
       if (controller.signal.aborted || destroyed || !gate.accept(ticket)) return;
-      const mapped = projectR7ProgressError(error);
+      const mapped = projectMonitoringProgressError(error);
       if (mapped.kind === "empty") {
         consecutiveFailures = 0;
         fields = {
@@ -228,7 +228,7 @@ export function createR7ProgressPanelStore({
       identity = null;
       unsubscribeVisibility = visibility.subscribe(handleVisibility);
     }
-    const context = r7ProgressRequestContext(canonicalRoute);
+    const context = monitoringProgressRequestContext(canonicalRoute);
     const key = context ? `${context.projectRef}‱${context.runRef}` : "";
     const currentKey = identity ? `${identity.projectRef}‱${identity.runRef}` : "";
     if (shownOnce && key === currentKey) return;
@@ -241,7 +241,7 @@ export function createR7ProgressPanelStore({
     setConfirmStop(false);
     fields = {
       view: null,
-      empty: context ? null : Object.freeze({ reason: "no_run", text: R7_NO_RUN_TEXT }),
+      empty: context ? null : Object.freeze({ reason: "no_run", text: MONITORING_NO_RUN_TEXT }),
       notice: null,
       actionsHidden: false,
       pendingAction: null,
@@ -292,7 +292,7 @@ export function createR7ProgressPanelStore({
       await load();
     } catch (error) {
       if (controller.signal.aborted || destroyed || epoch !== actionEpoch) return;
-      const mapped = projectR7ProgressError(error);
+      const mapped = projectMonitoringProgressError(error);
       fields = { ...fields, pendingAction: null };
       if (mapped.kind === "forbidden") {
         fields.notice = Object.freeze({ kind: "forbidden", text: mapped.text });
@@ -302,7 +302,7 @@ export function createR7ProgressPanelStore({
         const serverText = status > 0 ? String(error?.message || "").trim() : "";
         fields.notice = Object.freeze({
           kind: "action_failed",
-          text: serverText || R7_PANEL_TEXT.actionFailed,
+          text: serverText || MONITORING_PANEL_TEXT.actionFailed,
         });
       }
       emit();

@@ -1,23 +1,19 @@
-// R7 Slice-08C-2 continuity public projection: strict frontend validator.
-// Contract sources (frozen):
-// - reviews/medical_monitoring_r7_slice08c_chinese_continuity_visual_contract_v0_1_20260829.md
-// - reviews/medical_monitoring_r7_slice08c_chinese_continuity_visual_contract_v0_2_20260829.md (v0.2 wins on conflict)
-// - context/medical_monitoring_r7_slice08c2_frontend_vertical_contract_20260829.md
+// Continuity public projection: strict frontend validator.
 // Any field-set, closed-set, count, order, or identity violation fails the
 // whole response closed; callers must then show only
-// R7_CONTINUITY_UNAVAILABLE_TEXT and keep the existing result boards intact.
+// MONITORING_CONTINUITY_UNAVAILABLE_TEXT and keep the existing result boards intact.
 
-export const R7_CONTINUITY_UNAVAILABLE_TEXT = "本轮变化暂不可查看";
-export const R7_CONTINUITY_ROW_LIMIT = 200;
+export const MONITORING_CONTINUITY_UNAVAILABLE_TEXT = "本轮变化暂不可查看";
+export const MONITORING_CONTINUITY_ROW_LIMIT = 200;
 
-export const R7_CONTINUITY_TOP_LEVEL_FIELDS = Object.freeze([
+export const MONITORING_CONTINUITY_TOP_LEVEL_FIELDS = Object.freeze([
   "result_context_token",
   "identity",
   "comparison",
   "response_digest",
 ]);
 
-export const R7_CONTINUITY_IDENTITY_FIELDS = Object.freeze([
+export const MONITORING_CONTINUITY_IDENTITY_FIELDS = Object.freeze([
   "project_ref",
   "public_run_token",
   "snapshot_token",
@@ -26,11 +22,11 @@ export const R7_CONTINUITY_IDENTITY_FIELDS = Object.freeze([
   "site_scope_text",
 ]);
 
-export const R7_CONTINUITY_IDENTITY_OPTIONAL_FIELDS = Object.freeze([
+export const MONITORING_CONTINUITY_IDENTITY_OPTIONAL_FIELDS = Object.freeze([
   "site_ref",
 ]);
 
-export const R7_CONTINUITY_COMPARISON_FIELDS = Object.freeze([
+export const MONITORING_CONTINUITY_COMPARISON_FIELDS = Object.freeze([
   "available",
   "basis_text",
   "comparison_text",
@@ -42,7 +38,7 @@ export const R7_CONTINUITY_COMPARISON_FIELDS = Object.freeze([
   "truncated",
 ]);
 
-export const R7_CONTINUITY_ROW_FIELDS = Object.freeze([
+export const MONITORING_CONTINUITY_ROW_FIELDS = Object.freeze([
   "row_ref",
   "object_type",
   "object_type_text",
@@ -73,7 +69,7 @@ export const R7_CONTINUITY_ROW_FIELDS = Object.freeze([
   "source_count",
 ]);
 
-export const R7_CONTINUITY_CHANGE_COUNT_KEYS = Object.freeze([
+export const MONITORING_CONTINUITY_CHANGE_COUNT_KEYS = Object.freeze([
   "new",
   "upgraded",
   "continued",
@@ -85,18 +81,18 @@ export const R7_CONTINUITY_CHANGE_COUNT_KEYS = Object.freeze([
   "changed_subject_count",
 ]);
 
-export const R7_CONTINUITY_OBJECT_TYPES = Object.freeze([
+export const MONITORING_CONTINUITY_OBJECT_TYPES = Object.freeze([
   "risk",
   "query_draft",
   "monitoring_output",
 ]);
-export const R7_CONTINUITY_OBJECT_TYPE_TEXTS = Object.freeze({
+export const MONITORING_CONTINUITY_OBJECT_TYPE_TEXTS = Object.freeze({
   risk: "风险",
   query_draft: "Query 草稿",
   monitoring_output: "监查结果项",
 });
 
-export const R7_CONTINUITY_CHANGE_KINDS = Object.freeze([
+export const MONITORING_CONTINUITY_CHANGE_KINDS = Object.freeze([
   "new",
   "upgraded",
   "continued",
@@ -105,7 +101,7 @@ export const R7_CONTINUITY_CHANGE_KINDS = Object.freeze([
   "reopened",
   "needs_rejudgment",
 ]);
-export const R7_CONTINUITY_CHANGE_KIND_TEXTS = Object.freeze({
+export const MONITORING_CONTINUITY_CHANGE_KIND_TEXTS = Object.freeze({
   new: "新增",
   upgraded: "升级",
   continued: "持续",
@@ -115,7 +111,7 @@ export const R7_CONTINUITY_CHANGE_KIND_TEXTS = Object.freeze({
   needs_rejudgment: "需重新判断",
 });
 
-export const R7_CONTINUITY_DISPOSITIONS = Object.freeze([
+export const MONITORING_CONTINUITY_DISPOSITIONS = Object.freeze([
   "reuse_unchanged",
   "re_evaluate_changed_data",
   "re_evaluate_rule_change",
@@ -123,7 +119,7 @@ export const R7_CONTINUITY_DISPOSITIONS = Object.freeze([
   "close_with_evidence",
   "blocked_incompatible",
 ]);
-export const R7_CONTINUITY_DISPOSITION_TEXTS = Object.freeze({
+export const MONITORING_CONTINUITY_DISPOSITION_TEXTS = Object.freeze({
   reuse_unchanged: "沿用不变",
   re_evaluate_changed_data: "数据变化，已重新分析",
   re_evaluate_rule_change: "规则变化，已重新分析",
@@ -132,7 +128,7 @@ export const R7_CONTINUITY_DISPOSITION_TEXTS = Object.freeze({
   blocked_incompatible: "前后版本不可直接比较",
 });
 
-export const R7_CONTINUITY_DATA_CHANGE_KINDS = Object.freeze([
+export const MONITORING_CONTINUITY_DATA_CHANGE_KINDS = Object.freeze([
   "unchanged",
   "added",
   "revised",
@@ -140,7 +136,7 @@ export const R7_CONTINUITY_DATA_CHANGE_KINDS = Object.freeze([
   "cannot_compare",
   "missing",
 ]);
-export const R7_CONTINUITY_DATA_CHANGE_TEXTS = Object.freeze({
+export const MONITORING_CONTINUITY_DATA_CHANGE_TEXTS = Object.freeze({
   unchanged: "无变化",
   added: "新增数据",
   revised: "数据修订",
@@ -149,47 +145,47 @@ export const R7_CONTINUITY_DATA_CHANGE_TEXTS = Object.freeze({
   missing: "本轮未见对应记录",
 });
 
-export const R7_CONTINUITY_ATTENTION_TEXTS = Object.freeze([
+export const MONITORING_CONTINUITY_ATTENTION_TEXTS = Object.freeze([
   "",
   "未见记录不代表风险已解除",
   "身份或数据不完整，需重新判断",
   "等级变化待确认",
   "原始记录位置待确认",
 ]);
-export const R7_CONTINUITY_MISSING_DATA_ATTENTION_TEXT = "未见记录不代表风险已解除";
+export const MONITORING_CONTINUITY_MISSING_DATA_ATTENTION_TEXT = "未见记录不代表风险已解除";
 
-export const R7_CONTINUITY_SEVERITY_TEXTS = Object.freeze(["", "高", "中", "低"]);
-export const R7_CONTINUITY_SEVERITY_RANK = Object.freeze({ 高: 3, 中: 2, 低: 1 });
+export const MONITORING_CONTINUITY_SEVERITY_TEXTS = Object.freeze(["", "高", "中", "低"]);
+export const MONITORING_CONTINUITY_SEVERITY_RANK = Object.freeze({ 高: 3, 中: 2, 低: 1 });
 
-export const R7_CONTINUITY_BASIS_TEXTS = Object.freeze([
+export const MONITORING_CONTINUITY_BASIS_TEXTS = Object.freeze([
   "全量分析",
   "增量分析",
 ]);
-export const R7_CONTINUITY_COMPARED_TEXT = "已与上次监查结果比较";
-export const R7_CONTINUITY_FIRST_ANALYSIS_TEXT = "本轮为首次全面分析，无比较基线";
-export const R7_CONTINUITY_COMPARISON_TEXTS = Object.freeze([
-  R7_CONTINUITY_COMPARED_TEXT,
-  R7_CONTINUITY_FIRST_ANALYSIS_TEXT,
+export const MONITORING_CONTINUITY_COMPARED_TEXT = "已与上次监查结果比较";
+export const MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT = "本轮为首次全面分析，无比较基线";
+export const MONITORING_CONTINUITY_COMPARISON_TEXTS = Object.freeze([
+  MONITORING_CONTINUITY_COMPARED_TEXT,
+  MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT,
 ]);
 
-const R7_CONTINUITY_TOP_LEVEL_FIELD_SET = new Set(R7_CONTINUITY_TOP_LEVEL_FIELDS);
-const R7_CONTINUITY_IDENTITY_FIELD_SET = new Set(R7_CONTINUITY_IDENTITY_FIELDS);
-const R7_CONTINUITY_IDENTITY_ALLOWED_FIELD_SET = new Set([
-  ...R7_CONTINUITY_IDENTITY_FIELDS,
-  ...R7_CONTINUITY_IDENTITY_OPTIONAL_FIELDS,
+const MONITORING_CONTINUITY_TOP_LEVEL_FIELD_SET = new Set(MONITORING_CONTINUITY_TOP_LEVEL_FIELDS);
+const MONITORING_CONTINUITY_IDENTITY_FIELD_SET = new Set(MONITORING_CONTINUITY_IDENTITY_FIELDS);
+const MONITORING_CONTINUITY_IDENTITY_ALLOWED_FIELD_SET = new Set([
+  ...MONITORING_CONTINUITY_IDENTITY_FIELDS,
+  ...MONITORING_CONTINUITY_IDENTITY_OPTIONAL_FIELDS,
 ]);
-const R7_CONTINUITY_COMPARISON_FIELD_SET = new Set(R7_CONTINUITY_COMPARISON_FIELDS);
-const R7_CONTINUITY_ROW_FIELD_SET = new Set(R7_CONTINUITY_ROW_FIELDS);
-const R7_CONTINUITY_CHANGE_COUNT_KEY_SET = new Set(R7_CONTINUITY_CHANGE_COUNT_KEYS);
-const R7_CONTINUITY_OBJECT_TYPE_SET = new Set(R7_CONTINUITY_OBJECT_TYPES);
-const R7_CONTINUITY_CHANGE_KIND_SET = new Set(R7_CONTINUITY_CHANGE_KINDS);
-const R7_CONTINUITY_DISPOSITION_SET = new Set(R7_CONTINUITY_DISPOSITIONS);
-const R7_CONTINUITY_DATA_CHANGE_KIND_SET = new Set(R7_CONTINUITY_DATA_CHANGE_KINDS);
-const R7_CONTINUITY_ATTENTION_TEXT_SET = new Set(R7_CONTINUITY_ATTENTION_TEXTS);
-const R7_CONTINUITY_SEVERITY_TEXT_SET = new Set(R7_CONTINUITY_SEVERITY_TEXTS);
-const R7_CONTINUITY_BASIS_TEXT_SET = new Set(R7_CONTINUITY_BASIS_TEXTS);
-const R7_CONTINUITY_COMPARISON_TEXT_SET = new Set(R7_CONTINUITY_COMPARISON_TEXTS);
-const R7_CONTINUITY_CHANGED_KIND_SET = new Set([
+const MONITORING_CONTINUITY_COMPARISON_FIELD_SET = new Set(MONITORING_CONTINUITY_COMPARISON_FIELDS);
+const MONITORING_CONTINUITY_ROW_FIELD_SET = new Set(MONITORING_CONTINUITY_ROW_FIELDS);
+const MONITORING_CONTINUITY_CHANGE_COUNT_KEY_SET = new Set(MONITORING_CONTINUITY_CHANGE_COUNT_KEYS);
+const MONITORING_CONTINUITY_OBJECT_TYPE_SET = new Set(MONITORING_CONTINUITY_OBJECT_TYPES);
+const MONITORING_CONTINUITY_CHANGE_KIND_SET = new Set(MONITORING_CONTINUITY_CHANGE_KINDS);
+const MONITORING_CONTINUITY_DISPOSITION_SET = new Set(MONITORING_CONTINUITY_DISPOSITIONS);
+const MONITORING_CONTINUITY_DATA_CHANGE_KIND_SET = new Set(MONITORING_CONTINUITY_DATA_CHANGE_KINDS);
+const MONITORING_CONTINUITY_ATTENTION_TEXT_SET = new Set(MONITORING_CONTINUITY_ATTENTION_TEXTS);
+const MONITORING_CONTINUITY_SEVERITY_TEXT_SET = new Set(MONITORING_CONTINUITY_SEVERITY_TEXTS);
+const MONITORING_CONTINUITY_BASIS_TEXT_SET = new Set(MONITORING_CONTINUITY_BASIS_TEXTS);
+const MONITORING_CONTINUITY_COMPARISON_TEXT_SET = new Set(MONITORING_CONTINUITY_COMPARISON_TEXTS);
+const MONITORING_CONTINUITY_CHANGED_KIND_SET = new Set([
   "new",
   "upgraded",
   "downgraded",
@@ -197,7 +193,7 @@ const R7_CONTINUITY_CHANGED_KIND_SET = new Set([
   "reopened",
   "needs_rejudgment",
 ]);
-const R7_CONTINUITY_DIRECTIONAL_KIND_SET = new Set([
+const MONITORING_CONTINUITY_DIRECTIONAL_KIND_SET = new Set([
   "upgraded",
   "downgraded",
   "continued",
@@ -258,10 +254,10 @@ const HEX_64 = /^[0-9a-f]{64}$/i;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const RESULT_CONTEXT_PREFIX = "result-context:";
 
-export class MedicalMonitoringR7ContinuityProjectionError extends Error {
+export class MedicalMonitoringContinuityProjectionError extends Error {
   constructor(code, message, field = "") {
     super(message);
-    this.name = "MedicalMonitoringR7ContinuityProjectionError";
+    this.name = "MedicalMonitoringContinuityProjectionError";
     this.code = code;
     this.field = field;
   }
@@ -293,10 +289,10 @@ function freeze(value) {
 }
 
 function continuityError(code, message, field = "") {
-  return new MedicalMonitoringR7ContinuityProjectionError(code, message, field);
+  return new MedicalMonitoringContinuityProjectionError(code, message, field);
 }
 
-function invalidResult(error, fallback = R7_CONTINUITY_UNAVAILABLE_TEXT) {
+function invalidResult(error, fallback = MONITORING_CONTINUITY_UNAVAILABLE_TEXT) {
   const code = error?.code || "invalid_continuity";
   const text = error?.message || fallback;
   return freeze({
@@ -423,12 +419,12 @@ function exactFields(value, allowedSet, expectedCount, code, message, field) {
 }
 
 function severityRank(text) {
-  return R7_CONTINUITY_SEVERITY_RANK[text] || 0;
+  return MONITORING_CONTINUITY_SEVERITY_RANK[text] || 0;
 }
 
 function severityText(value, field) {
   const text = optionalText(value, field);
-  if (!R7_CONTINUITY_SEVERITY_TEXT_SET.has(text)) {
+  if (!MONITORING_CONTINUITY_SEVERITY_TEXT_SET.has(text)) {
     throw continuityError(
       "invalid_continuity",
       `${field} 风险等级不在公开范围内，本轮变化暂不展示。`,
@@ -457,7 +453,7 @@ function validateSeverityShape(row, index) {
   }
 
   if (row.change_kind === "new") {
-    if (before || !R7_CONTINUITY_SEVERITY_TEXT_SET.has(after)) {
+    if (before || !MONITORING_CONTINUITY_SEVERITY_TEXT_SET.has(after)) {
       throw continuityError(
         "invalid_continuity",
         `${label} 新增风险等级形态异常，本轮变化暂不展示。`,
@@ -467,7 +463,7 @@ function validateSeverityShape(row, index) {
     return;
   }
   if (row.change_kind === "closed") {
-    if (after || !R7_CONTINUITY_SEVERITY_TEXT_SET.has(before)) {
+    if (after || !MONITORING_CONTINUITY_SEVERITY_TEXT_SET.has(before)) {
       throw continuityError(
         "invalid_continuity",
         `${label} 关闭风险等级形态异常，本轮变化暂不展示。`,
@@ -477,7 +473,7 @@ function validateSeverityShape(row, index) {
     return;
   }
   if (row.change_kind === "reopened") {
-    if (!after || !R7_CONTINUITY_SEVERITY_TEXT_SET.has(after)) {
+    if (!after || !MONITORING_CONTINUITY_SEVERITY_TEXT_SET.has(after)) {
       throw continuityError(
         "invalid_continuity",
         `${label} 重开风险缺少当前等级，本轮变化暂不展示。`,
@@ -486,9 +482,9 @@ function validateSeverityShape(row, index) {
     }
     return;
   }
-  if (R7_CONTINUITY_DIRECTIONAL_KIND_SET.has(row.change_kind)) {
-    const hasBefore = before && R7_CONTINUITY_SEVERITY_TEXT_SET.has(before);
-    const hasAfter = after && R7_CONTINUITY_SEVERITY_TEXT_SET.has(after);
+  if (MONITORING_CONTINUITY_DIRECTIONAL_KIND_SET.has(row.change_kind)) {
+    const hasBefore = before && MONITORING_CONTINUITY_SEVERITY_TEXT_SET.has(before);
+    const hasAfter = after && MONITORING_CONTINUITY_SEVERITY_TEXT_SET.has(after);
     if (!hasBefore || !hasAfter) {
       throw continuityError(
         "invalid_continuity",
@@ -524,8 +520,8 @@ function normalizeContinuityRow(value, index) {
   const label = `comparison.rows[${index}]`;
   exactFields(
     value,
-    R7_CONTINUITY_ROW_FIELD_SET,
-    R7_CONTINUITY_ROW_FIELDS.length,
+    MONITORING_CONTINUITY_ROW_FIELD_SET,
+    MONITORING_CONTINUITY_ROW_FIELDS.length,
     "invalid_continuity",
     `${label} 字段不完整，本轮变化暂不展示。`,
     label,
@@ -562,63 +558,63 @@ function normalizeContinuityRow(value, index) {
     source_count: nonNegativeInt(value.source_count, `${label}.source_count`),
   };
 
-  if (!R7_CONTINUITY_OBJECT_TYPE_SET.has(row.object_type)) {
+  if (!MONITORING_CONTINUITY_OBJECT_TYPE_SET.has(row.object_type)) {
     throw continuityError(
       "invalid_continuity",
       `${label} 对象类别不在公开范围内，本轮变化暂不展示。`,
       `${label}.object_type`,
     );
   }
-  if (row.object_type_text !== R7_CONTINUITY_OBJECT_TYPE_TEXTS[row.object_type]) {
+  if (row.object_type_text !== MONITORING_CONTINUITY_OBJECT_TYPE_TEXTS[row.object_type]) {
     throw continuityError(
       "invalid_continuity",
       `${label} 对象类别中文不一致，本轮变化暂不展示。`,
       `${label}.object_type_text`,
     );
   }
-  if (!R7_CONTINUITY_CHANGE_KIND_SET.has(row.change_kind)) {
+  if (!MONITORING_CONTINUITY_CHANGE_KIND_SET.has(row.change_kind)) {
     throw continuityError(
       "invalid_continuity",
       `${label} 变化类型不在公开闭集内，本轮变化暂不展示。`,
       `${label}.change_kind`,
     );
   }
-  if (row.change_text !== R7_CONTINUITY_CHANGE_KIND_TEXTS[row.change_kind]) {
+  if (row.change_text !== MONITORING_CONTINUITY_CHANGE_KIND_TEXTS[row.change_kind]) {
     throw continuityError(
       "invalid_continuity",
       `${label} 变化类型中文不一致，本轮变化暂不展示。`,
       `${label}.change_text`,
     );
   }
-  if (!R7_CONTINUITY_DISPOSITION_SET.has(row.disposition)) {
+  if (!MONITORING_CONTINUITY_DISPOSITION_SET.has(row.disposition)) {
     throw continuityError(
       "invalid_continuity",
       `${label} 处置不在公开闭集内，本轮变化暂不展示。`,
       `${label}.disposition`,
     );
   }
-  if (row.disposition_text !== R7_CONTINUITY_DISPOSITION_TEXTS[row.disposition]) {
+  if (row.disposition_text !== MONITORING_CONTINUITY_DISPOSITION_TEXTS[row.disposition]) {
     throw continuityError(
       "invalid_continuity",
       `${label} 处置中文不一致，本轮变化暂不展示。`,
       `${label}.disposition_text`,
     );
   }
-  if (!R7_CONTINUITY_DATA_CHANGE_KIND_SET.has(row.data_change_kind)) {
+  if (!MONITORING_CONTINUITY_DATA_CHANGE_KIND_SET.has(row.data_change_kind)) {
     throw continuityError(
       "invalid_continuity",
       `${label} 数据变化不在公开闭集内，本轮变化暂不展示。`,
       `${label}.data_change_kind`,
     );
   }
-  if (row.data_change_text !== R7_CONTINUITY_DATA_CHANGE_TEXTS[row.data_change_kind]) {
+  if (row.data_change_text !== MONITORING_CONTINUITY_DATA_CHANGE_TEXTS[row.data_change_kind]) {
     throw continuityError(
       "invalid_continuity",
       `${label} 数据变化中文不一致，本轮变化暂不展示。`,
       `${label}.data_change_text`,
     );
   }
-  if (!R7_CONTINUITY_ATTENTION_TEXT_SET.has(row.attention_text)) {
+  if (!MONITORING_CONTINUITY_ATTENTION_TEXT_SET.has(row.attention_text)) {
     throw continuityError(
       "invalid_continuity",
       `${label} 提示文本不在公开闭集内，本轮变化暂不展示。`,
@@ -627,7 +623,7 @@ function normalizeContinuityRow(value, index) {
   }
   if (
     row.data_change_kind === "missing"
-    && row.attention_text !== R7_CONTINUITY_MISSING_DATA_ATTENTION_TEXT
+    && row.attention_text !== MONITORING_CONTINUITY_MISSING_DATA_ATTENTION_TEXT
   ) {
     throw continuityError(
       "invalid_continuity",
@@ -678,7 +674,7 @@ function normalizeContinuityRow(value, index) {
 // Server-frozen continuity order (router `_continuity_row_sort_key`):
 // the frontend may filter but must never reorder, so the received sequence
 // must already be non-decreasing under this key.
-export function r7ContinuityRowSortKey(row) {
+export function monitoringContinuityRowSortKey(row) {
   const objectType = clean(row?.object_type);
   const changeKind = clean(row?.change_kind);
   const severityAfter = clean(row?.severity_after_text);
@@ -712,7 +708,7 @@ function compareSortKeys(a, b) {
 // Rebuild the nine change_counts from rows (v0.2 §16 口径). Multiple
 // continuity rows may share one risk_instance_ref for Journey dual-entry
 // switchers; mid/high totals still count unique risk instances once.
-export function rebuildR7ContinuityChangeCounts(rows) {
+export function rebuildMonitoringContinuityChangeCounts(rows) {
   const counts = {
     new: 0,
     upgraded: 0,
@@ -727,7 +723,7 @@ export function rebuildR7ContinuityChangeCounts(rows) {
   const changedSubjects = new Set();
   const midHighInstances = new Set();
   for (const row of rows) {
-    if (!isRecord(row) || !R7_CONTINUITY_OBJECT_TYPE_SET.has(clean(row.object_type))) {
+    if (!isRecord(row) || !MONITORING_CONTINUITY_OBJECT_TYPE_SET.has(clean(row.object_type))) {
       throw continuityError(
         "invalid_continuity",
         "本轮变化行格式异常，无法核对摘要计数。",
@@ -735,7 +731,7 @@ export function rebuildR7ContinuityChangeCounts(rows) {
       );
     }
     if (row.object_type !== "risk") continue;
-    if (!R7_CONTINUITY_CHANGE_KIND_SET.has(row.change_kind)) {
+    if (!MONITORING_CONTINUITY_CHANGE_KIND_SET.has(row.change_kind)) {
       throw continuityError(
         "invalid_continuity",
         "本轮变化行变化类型异常，无法核对摘要计数。",
@@ -753,7 +749,7 @@ export function rebuildR7ContinuityChangeCounts(rows) {
     if (row.severity_after_text === "高" || row.severity_after_text === "中") {
       midHighInstances.add(row.risk_instance_ref);
     }
-    if (R7_CONTINUITY_CHANGED_KIND_SET.has(row.change_kind) && clean(row.subject_ref)) {
+    if (MONITORING_CONTINUITY_CHANGED_KIND_SET.has(row.change_kind) && clean(row.subject_ref)) {
       changedSubjects.add(row.subject_ref);
     }
   }
@@ -772,10 +768,10 @@ function normalizeContinuityIdentity(value, expected) {
   }
   const keys = Object.keys(value);
   if (
-    keys.length < R7_CONTINUITY_IDENTITY_FIELDS.length
-    || keys.length > R7_CONTINUITY_IDENTITY_ALLOWED_FIELD_SET.size
-    || keys.some((key) => !R7_CONTINUITY_IDENTITY_ALLOWED_FIELD_SET.has(key))
-    || R7_CONTINUITY_IDENTITY_FIELDS.some((key) => !(key in value))
+    keys.length < MONITORING_CONTINUITY_IDENTITY_FIELDS.length
+    || keys.length > MONITORING_CONTINUITY_IDENTITY_ALLOWED_FIELD_SET.size
+    || keys.some((key) => !MONITORING_CONTINUITY_IDENTITY_ALLOWED_FIELD_SET.has(key))
+    || MONITORING_CONTINUITY_IDENTITY_FIELDS.some((key) => !(key in value))
   ) {
     throw continuityError(
       "invalid_continuity",
@@ -826,8 +822,8 @@ function normalizeContinuityComparison(value) {
   }
   exactFields(
     value,
-    R7_CONTINUITY_COMPARISON_FIELD_SET,
-    R7_CONTINUITY_COMPARISON_FIELDS.length,
+    MONITORING_CONTINUITY_COMPARISON_FIELD_SET,
+    MONITORING_CONTINUITY_COMPARISON_FIELDS.length,
     "invalid_continuity",
     "本轮变化比较字段不完整，本轮变化暂不展示。",
     "comparison",
@@ -841,7 +837,7 @@ function normalizeContinuityComparison(value) {
     );
   }
   const basisText = requiredText(value.basis_text, "comparison.basis_text");
-  if (!R7_CONTINUITY_BASIS_TEXT_SET.has(basisText)) {
+  if (!MONITORING_CONTINUITY_BASIS_TEXT_SET.has(basisText)) {
     throw continuityError(
       "invalid_continuity",
       "本轮变化执行基础不在公开闭集内，本轮变化暂不展示。",
@@ -849,7 +845,7 @@ function normalizeContinuityComparison(value) {
     );
   }
   const comparisonText = requiredText(value.comparison_text, "comparison.comparison_text");
-  if (!R7_CONTINUITY_COMPARISON_TEXT_SET.has(comparisonText)) {
+  if (!MONITORING_CONTINUITY_COMPARISON_TEXT_SET.has(comparisonText)) {
     throw continuityError(
       "invalid_continuity",
       "本轮变化比较说明不在公开闭集内，本轮变化暂不展示。",
@@ -857,7 +853,7 @@ function normalizeContinuityComparison(value) {
     );
   }
   const sourceRunText = optionalText(value.source_run_text, "comparison.source_run_text");
-  if ((sourceRunText === "") !== (comparisonText === R7_CONTINUITY_FIRST_ANALYSIS_TEXT)) {
+  if ((sourceRunText === "") !== (comparisonText === MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT)) {
     throw continuityError(
       "invalid_continuity",
       "本轮变化比较说明与上次批次不一致，本轮变化暂不展示。",
@@ -875,14 +871,14 @@ function normalizeContinuityComparison(value) {
   }
   exactFields(
     countsValue,
-    R7_CONTINUITY_CHANGE_COUNT_KEY_SET,
-    R7_CONTINUITY_CHANGE_COUNT_KEYS.length,
+    MONITORING_CONTINUITY_CHANGE_COUNT_KEY_SET,
+    MONITORING_CONTINUITY_CHANGE_COUNT_KEYS.length,
     "invalid_continuity",
     "本轮变化摘要计数字段不完整，本轮变化暂不展示。",
     "comparison.change_counts",
   );
   const changeCounts = {};
-  for (const key of R7_CONTINUITY_CHANGE_COUNT_KEYS) {
+  for (const key of MONITORING_CONTINUITY_CHANGE_COUNT_KEYS) {
     changeCounts[key] = nonNegativeInt(countsValue[key], `comparison.change_counts.${key}`);
   }
 
@@ -893,7 +889,7 @@ function normalizeContinuityComparison(value) {
       "comparison.rows",
     );
   }
-  if (value.rows.length > R7_CONTINUITY_ROW_LIMIT) {
+  if (value.rows.length > MONITORING_CONTINUITY_ROW_LIMIT) {
     throw continuityError(
       "invalid_continuity",
       "本轮变化列表超出返回上限，本轮变化暂不展示。",
@@ -914,7 +910,7 @@ function normalizeContinuityComparison(value) {
     seenRowRefs.add(row.row_ref);
   }
   for (let index = 1; index < rows.length; index += 1) {
-    if (compareSortKeys(r7ContinuityRowSortKey(rows[index - 1]), r7ContinuityRowSortKey(rows[index])) > 0) {
+    if (compareSortKeys(monitoringContinuityRowSortKey(rows[index - 1]), monitoringContinuityRowSortKey(rows[index])) > 0) {
       throw continuityError(
         "invalid_continuity",
         "本轮变化列表顺序与服务端权威顺序不一致，本轮变化暂不展示。",
@@ -935,8 +931,8 @@ function normalizeContinuityComparison(value) {
   const truncated = value.truncated;
   if (
     rows.length !== shownCount
-    || shownCount !== Math.min(totalCount, R7_CONTINUITY_ROW_LIMIT)
-    || truncated !== (totalCount > R7_CONTINUITY_ROW_LIMIT)
+    || shownCount !== Math.min(totalCount, MONITORING_CONTINUITY_ROW_LIMIT)
+    || truncated !== (totalCount > MONITORING_CONTINUITY_ROW_LIMIT)
     || totalCount < rows.length
   ) {
     throw continuityError(
@@ -946,8 +942,8 @@ function normalizeContinuityComparison(value) {
     );
   }
 
-  const rebuilt = rebuildR7ContinuityChangeCounts(rows);
-  for (const key of R7_CONTINUITY_CHANGE_COUNT_KEYS) {
+  const rebuilt = rebuildMonitoringContinuityChangeCounts(rows);
+  for (const key of MONITORING_CONTINUITY_CHANGE_COUNT_KEYS) {
     if (rebuilt[key] > changeCounts[key] || (!truncated && rebuilt[key] !== changeCounts[key])) {
       throw continuityError(
         "invalid_continuity",
@@ -977,14 +973,14 @@ function normalizeContinuityEnvelopeOrThrow(payload, expected = {}) {
   if (!isRecord(payload) || Array.isArray(payload)) {
     throw continuityError(
       "invalid_continuity",
-      R7_CONTINUITY_UNAVAILABLE_TEXT,
+      MONITORING_CONTINUITY_UNAVAILABLE_TEXT,
       "response",
     );
   }
   exactFields(
     payload,
-    R7_CONTINUITY_TOP_LEVEL_FIELD_SET,
-    R7_CONTINUITY_TOP_LEVEL_FIELDS.length,
+    MONITORING_CONTINUITY_TOP_LEVEL_FIELD_SET,
+    MONITORING_CONTINUITY_TOP_LEVEL_FIELDS.length,
     "invalid_continuity",
     "本轮变化响应字段不完整，本轮变化暂不展示。",
     "response",
@@ -1043,13 +1039,13 @@ function normalizeContinuityEnvelopeOrThrow(payload, expected = {}) {
   };
 }
 
-export function normalizeR7ContinuityEnvelope(payload, expected = {}) {
+export function normalizeMonitoringContinuityEnvelope(payload, expected = {}) {
   return freeze(normalizeContinuityEnvelopeOrThrow(payload, expected));
 }
 
-export const validateR7ContinuityEnvelope = normalizeR7ContinuityEnvelope;
+export const validateMonitoringContinuityEnvelope = normalizeMonitoringContinuityEnvelope;
 
-export function safeValidateR7ContinuityEnvelope(payload, expected = {}) {
+export function safeValidateMonitoringContinuityEnvelope(payload, expected = {}) {
   try {
     return normalizedResult(normalizeContinuityEnvelopeOrThrow(payload, expected));
   } catch (error) {
@@ -1057,7 +1053,7 @@ export function safeValidateR7ContinuityEnvelope(payload, expected = {}) {
   }
 }
 
-export function projectR7Continuity(payload, expected = {}) {
+export function projectMonitoringContinuity(payload, expected = {}) {
   try {
     return freeze(normalizeContinuityEnvelopeOrThrow(payload, expected));
   } catch (error) {
@@ -1075,45 +1071,45 @@ function canonicalize(value) {
   return value;
 }
 
-export function canonicalR7ContinuityPayload(envelope, expected = {}) {
+export function canonicalMonitoringContinuityPayload(envelope, expected = {}) {
   const normalized = envelope?.kind === "continuity"
     ? envelope
-    : normalizeR7ContinuityEnvelope(envelope, expected);
+    : normalizeMonitoringContinuityEnvelope(envelope, expected);
   return JSON.stringify(canonicalize({
     identity: normalized.identity,
     comparison: normalized.comparison,
   }));
 }
 
-export async function computeR7ContinuityResponseDigest(envelope, expected = {}) {
+export async function computeMonitoringContinuityResponseDigest(envelope, expected = {}) {
   if (!globalThis.crypto?.subtle || typeof TextEncoder !== "function") {
     throw continuityError(
       "continuity_digest_unavailable",
-      R7_CONTINUITY_UNAVAILABLE_TEXT,
+      MONITORING_CONTINUITY_UNAVAILABLE_TEXT,
       "response_digest",
     );
   }
-  const bytes = new TextEncoder().encode(canonicalR7ContinuityPayload(envelope, expected));
+  const bytes = new TextEncoder().encode(canonicalMonitoringContinuityPayload(envelope, expected));
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-export async function verifyR7ContinuityEnvelope(payload, expected = {}) {
-  const normalized = normalizeR7ContinuityEnvelope(payload, expected);
-  const actual = await computeR7ContinuityResponseDigest(normalized, expected);
+export async function verifyMonitoringContinuityEnvelope(payload, expected = {}) {
+  const normalized = normalizeMonitoringContinuityEnvelope(payload, expected);
+  const actual = await computeMonitoringContinuityResponseDigest(normalized, expected);
   if (actual !== normalized.responseDigest) {
     throw continuityError(
       "continuity_response_digest_mismatch",
-      R7_CONTINUITY_UNAVAILABLE_TEXT,
+      MONITORING_CONTINUITY_UNAVAILABLE_TEXT,
       "response_digest",
     );
   }
   return normalized;
 }
 
-export async function safeVerifyR7ContinuityEnvelope(payload, expected = {}) {
+export async function safeVerifyMonitoringContinuityEnvelope(payload, expected = {}) {
   try {
-    return normalizedResult(await verifyR7ContinuityEnvelope(payload, expected));
+    return normalizedResult(await verifyMonitoringContinuityEnvelope(payload, expected));
   } catch (error) {
     return invalidResult(error);
   }
@@ -1127,10 +1123,10 @@ function continuityErrorCode(error) {
 
 // Contract §5: continuity_unavailable and frontend validation failures both
 // degrade to a single unavailable text; the existing result boards stay.
-export function projectR7ContinuityError(error) {
+export function projectMonitoringContinuityError(error) {
   return freeze({
     kind: "unavailable",
     code: continuityErrorCode(error),
-    text: R7_CONTINUITY_UNAVAILABLE_TEXT,
+    text: MONITORING_CONTINUITY_UNAVAILABLE_TEXT,
   });
 }

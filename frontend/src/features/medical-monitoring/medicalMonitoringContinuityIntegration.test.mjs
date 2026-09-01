@@ -37,11 +37,11 @@ const needle = (text) => compact(text);
 // --- imports: the continuity surface is wired into the loop ---
 {
   check(
-    src.includes(needle(`import {\n  projectR7ContinuityError,\n  safeVerifyR7ContinuityEnvelope,\n} from "./medicalMonitoringContinuityProjection.mjs";`)),
+    src.includes(needle(`import {\n  projectMonitoringContinuityError,\n  safeVerifyMonitoringContinuityEnvelope,\n} from "./medicalMonitoringContinuityProjection.mjs";`)),
     "loop imports the continuity error projection and strict verifier",
   );
   check(
-    src.includes(needle(`import {\n  r7ContinuityRowJourneyTarget,\n  r7ContinuityRowSourceTarget,\n} from "./medicalMonitoringContinuityFilter.mjs";`)),
+    src.includes(needle(`import {\n  monitoringContinuityRowJourneyTarget,\n  monitoringContinuityRowSourceTarget,\n} from "./medicalMonitoringContinuityFilter.mjs";`)),
     "loop imports the same-identity routing gates",
   );
   check(
@@ -117,12 +117,12 @@ const needle = (text) => compact(text);
     effect.includes(needle(`if (route.site_ref) expected.siteRef = route.site_ref;`)),
     "site-scoped responses must match the active center identity",
   );
-  check(effect.includes("safeVerifyR7ContinuityEnvelope(payload,expected);"), "payload passes the strict digest+identity verifier");
+  check(effect.includes("safeVerifyMonitoringContinuityEnvelope(payload,expected);"), "payload passes the strict digest+identity verifier");
   check(
     effect.includes(needle(`if (cancelled || error?.name === "AbortError") return;`)),
     "catch ignores aborted requests instead of projecting errors",
   );
-  check(effect.includes("setContinuityResult(projectR7ContinuityError(error));"), "real failures degrade through the frozen unavailable error");
+  check(effect.includes("setContinuityResult(projectMonitoringContinuityError(error));"), "real failures degrade through the frozen unavailable error");
   check(effect.includes("return()=>{cancelled=true;controller.abort();};"), "cleanup cancels the flag and aborts the in-flight request");
   check(
     effect.includes(needle(`}, [api, normalizedProjectId, resultToken, route.site_ref, route.subject_ref, route.spine_ref, route.window_start, route.window_end, routeView]);`)),
@@ -180,7 +180,7 @@ const needle = (text) => compact(text);
     "SubjectWorkspaceView receives the loading flag",
   );
   check(
-    subjectViewWindow.includes(needle(`onDrawerClose={() => onRouteChange?.(r7JourneyDrawerClosePatch(route))}`)),
+    subjectViewWindow.includes(needle(`onDrawerClose={() => onRouteChange?.(monitoringJourneyDrawerClosePatch(route))}`)),
     "subject-view drawer close applies the route-close patch that keeps journey identity",
   );
   check(
@@ -188,11 +188,11 @@ const needle = (text) => compact(text);
     "subject-view drawer switches continuity rows through the identity-preserving route callback",
   );
   check(
-    src.includes(needle(`import { r7JourneyDrawerClosePatch } from "./medicalMonitoringJourneyChanges.mjs";`)),
+    src.includes(needle(`import { monitoringJourneyDrawerClosePatch } from "./medicalMonitoringJourneyChanges.mjs";`)),
     "loop imports the drawer close patch",
   );
   check(
-    src.includes(needle(`onDrawerClose={() => onRouteChange?.(r7JourneyDrawerClosePatch(route))}`)),
+    src.includes(needle(`onDrawerClose={() => onRouteChange?.(monitoringJourneyDrawerClosePatch(route))}`)),
     "the subject workspace never gets an empty close handler",
   );
   check(
@@ -205,11 +205,11 @@ const needle = (text) => compact(text);
 // --- same-identity routing: gates refuse empty jumps, reuse public routes ---
 {
   check(
-    src.includes(needle(`const selectContinuityJourney = useCallback((row) => {\n    const target = r7ContinuityRowJourneyTarget(row, resultPayload);\n    if (!target) return;\n    navigate("journey", target);\n  }, [navigate, resultPayload]);`)),
+    src.includes(needle(`const selectContinuityJourney = useCallback((row) => {\n    const target = monitoringContinuityRowJourneyTarget(row, resultPayload);\n    if (!target) return;\n    navigate("journey", target);\n  }, [navigate, resultPayload]);`)),
     "journey click re-runs the gate and refuses a null target",
   );
   check(
-    src.includes(needle(`const selectContinuitySource = useCallback((row) => {\n    const target = r7ContinuityRowSourceTarget(row);\n    if (!target) return;\n    navigate("evidence", target);\n  }, [navigate]);`)),
+    src.includes(needle(`const selectContinuitySource = useCallback((row) => {\n    const target = monitoringContinuityRowSourceTarget(row);\n    if (!target) return;\n    navigate("evidence", target);\n  }, [navigate]);`)),
     "source click re-runs the gate and refuses a null target",
   );
   passed += 2;
@@ -217,7 +217,7 @@ const needle = (text) => compact(text);
 
 // --- same-identity contract cross-check against the pure gates ---
 {
-  const { r7ContinuityRowJourneyTarget, r7ContinuityRowSourceTarget } = await import("./medicalMonitoringContinuityFilter.mjs");
+  const { monitoringContinuityRowJourneyTarget, monitoringContinuityRowSourceTarget } = await import("./medicalMonitoringContinuityFilter.mjs");
   const riskRow = {
     object_type: "risk",
     subject_ref: "S/01",
@@ -229,7 +229,7 @@ const needle = (text) => compact(text);
     event_ref: "e-1",
     source_locator_ref: "s-1",
   };
-  const target = r7ContinuityRowJourneyTarget(riskRow, {
+  const target = monitoringContinuityRowJourneyTarget(riskRow, {
     projection: {
       subjects: [{ subject_ref: "S/01", site_ref: "site/01", spine_ref: "spine/01" }],
       subjectFlow: {
@@ -244,14 +244,14 @@ const needle = (text) => compact(text);
     "journey target carries the same identity the route will consume",
   );
   check(
-    r7ContinuityRowJourneyTarget({ ...riskRow, subject_ref: "S/99" }, { projection: { subjects: [{ subject_ref: "S/01", site_ref: "site/01", spine_ref: "spine/01" }], subjectFlow: { availability: "available", reconciliation: { state: "matched" }, subjects: [] } } }) === null,
+    monitoringContinuityRowJourneyTarget({ ...riskRow, subject_ref: "S/99" }, { projection: { subjects: [{ subject_ref: "S/01", site_ref: "site/01", spine_ref: "spine/01" }], subjectFlow: { availability: "available", reconciliation: { state: "matched" }, subjects: [] } } }) === null,
     "cross-identity rows never reach the journey route",
   );
   check(
-    r7ContinuityRowSourceTarget(riskRow) && r7ContinuityRowSourceTarget(riskRow).risk_instance_ref === "r-i-1",
+    monitoringContinuityRowSourceTarget(riskRow) && monitoringContinuityRowSourceTarget(riskRow).risk_instance_ref === "r-i-1",
     "source target reuses the existing evidence route identity",
   );
-  check(r7ContinuityRowSourceTarget({ ...riskRow, source_locator_ref: "" }) === null, "empty source rows never jump",
+  check(monitoringContinuityRowSourceTarget({ ...riskRow, source_locator_ref: "" }) === null, "empty source rows never jump",
   );
   passed += 4;
 }

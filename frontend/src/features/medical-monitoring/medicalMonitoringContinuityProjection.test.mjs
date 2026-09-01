@@ -2,23 +2,23 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
 import {
-  R7_CONTINUITY_ATTENTION_TEXTS,
-  R7_CONTINUITY_CHANGE_COUNT_KEYS,
-  R7_CONTINUITY_COMPARED_TEXT,
-  R7_CONTINUITY_FIRST_ANALYSIS_TEXT,
-  R7_CONTINUITY_ROW_FIELDS,
-  R7_CONTINUITY_ROW_LIMIT,
-  R7_CONTINUITY_UNAVAILABLE_TEXT,
-  canonicalR7ContinuityPayload,
-  computeR7ContinuityResponseDigest,
-  normalizeR7ContinuityEnvelope,
-  projectR7Continuity,
-  projectR7ContinuityError,
-  rebuildR7ContinuityChangeCounts,
-  r7ContinuityRowSortKey,
-  safeValidateR7ContinuityEnvelope,
-  safeVerifyR7ContinuityEnvelope,
-  verifyR7ContinuityEnvelope,
+  MONITORING_CONTINUITY_ATTENTION_TEXTS,
+  MONITORING_CONTINUITY_CHANGE_COUNT_KEYS,
+  MONITORING_CONTINUITY_COMPARED_TEXT,
+  MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT,
+  MONITORING_CONTINUITY_ROW_FIELDS,
+  MONITORING_CONTINUITY_ROW_LIMIT,
+  MONITORING_CONTINUITY_UNAVAILABLE_TEXT,
+  canonicalMonitoringContinuityPayload,
+  computeMonitoringContinuityResponseDigest,
+  normalizeMonitoringContinuityEnvelope,
+  projectMonitoringContinuity,
+  projectMonitoringContinuityError,
+  rebuildMonitoringContinuityChangeCounts,
+  monitoringContinuityRowSortKey,
+  safeValidateMonitoringContinuityEnvelope,
+  safeVerifyMonitoringContinuityEnvelope,
+  verifyMonitoringContinuityEnvelope,
 } from "./medicalMonitoringContinuityProjection.mjs";
 
 let passed = 0;
@@ -212,9 +212,9 @@ function envelope(rows, {
     comparison: {
       available: true,
       basis_text: "增量分析",
-      comparison_text: R7_CONTINUITY_COMPARED_TEXT,
+      comparison_text: MONITORING_CONTINUITY_COMPARED_TEXT,
       source_run_text: "2026-03-01 监查批次",
-      change_counts: counts || rebuildR7ContinuityChangeCounts(rows),
+      change_counts: counts || rebuildMonitoringContinuityChangeCounts(rows),
       rows,
       shown_count: shownCount ?? rows.length,
       total_count: totalCount ?? rows.length,
@@ -229,7 +229,7 @@ const EXPECTED_TOP_KEYS = ["result_context_token", "identity", "comparison", "re
 
 // --- happy paths ---
 const okEnvelope = envelope([...HAPPY_ROWS]);
-const okNormalized = normalizeR7ContinuityEnvelope(okEnvelope);
+const okNormalized = normalizeMonitoringContinuityEnvelope(okEnvelope);
 check(okNormalized.kind === "continuity", "valid continuity response normalizes to the continuity kind");
 check(okNormalized.resultContextToken === "result-context:01", "normalization preserves the public result context");
 check(okNormalized.identity.project_ref === "project-a", "identity project ref is preserved");
@@ -239,18 +239,18 @@ check(
   Object.keys(okEnvelope).every((key) => EXPECTED_TOP_KEYS.includes(key)),
   "fixture matches the frozen top-level field set",
 );
-check(R7_CONTINUITY_ROW_FIELDS.length === 28, "row field set stays at the frozen 28 public fields");
-check(R7_CONTINUITY_CHANGE_COUNT_KEYS.length === 9, "change counts stay at the frozen nine keys");
-check(R7_CONTINUITY_ATTENTION_TEXTS.length === 5, "attention texts stay on the frozen five-value closed set");
+check(MONITORING_CONTINUITY_ROW_FIELDS.length === 28, "row field set stays at the frozen 28 public fields");
+check(MONITORING_CONTINUITY_CHANGE_COUNT_KEYS.length === 9, "change counts stay at the frozen nine keys");
+check(MONITORING_CONTINUITY_ATTENTION_TEXTS.length === 5, "attention texts stay on the frozen five-value closed set");
 
-const safeOk = safeValidateR7ContinuityEnvelope(okEnvelope, {
+const safeOk = safeValidateMonitoringContinuityEnvelope(okEnvelope, {
   projectId: "project-a",
   resultContextToken: "result-context:01",
   siteRef: "",
 });
 check(safeOk.ok === true && safeOk.value.kind === "continuity", "safe validation accepts a valid response with expected identity");
 
-const projected = projectR7Continuity(envelope([...HAPPY_ROWS], { siteRef: "site/01" }), {
+const projected = projectMonitoringContinuity(envelope([...HAPPY_ROWS], { siteRef: "site/01" }), {
   projectId: "project-a",
   resultContextToken: "result-context:01",
   siteRef: "site/01",
@@ -264,56 +264,56 @@ const firstAnalysis = envelope([queryRow(1)], {
   },
   comparisonOverrides: {
     basis_text: "全量分析",
-    comparison_text: R7_CONTINUITY_FIRST_ANALYSIS_TEXT,
+    comparison_text: MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT,
     source_run_text: "",
   },
 });
-check(normalizeR7ContinuityEnvelope(firstAnalysis).comparison.comparison_text === R7_CONTINUITY_FIRST_ANALYSIS_TEXT, "first-analysis copy passes with an empty source run text");
+check(normalizeMonitoringContinuityEnvelope(firstAnalysis).comparison.comparison_text === MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT, "first-analysis copy passes with an empty source run text");
 
 // --- rebuild: nine counts (v0.2 §16 口径) ---
-const rebuilt = rebuildR7ContinuityChangeCounts(HAPPY_ROWS);
+const rebuilt = rebuildMonitoringContinuityChangeCounts(HAPPY_ROWS);
 check(rebuilt.new === 1 && rebuilt.upgraded === 1 && rebuilt.continued === 1, "rebuild counts new/upgraded/continued");
 check(rebuilt.downgraded === 1 && rebuilt.closed === 1 && rebuilt.reopened === 1 && rebuilt.needs_rejudgment === 1, "rebuild counts downgraded/closed/reopened/needs_rejudgment");
 check(rebuilt.mid_high_total === 4, "rebuild counts mid/high current severities only");
 check(rebuilt.changed_subject_count === 4, "rebuild counts distinct changed subjects and ignores continued-only subjects");
-const continuedOnly = rebuildR7ContinuityChangeCounts([riskRow(1, "continued", "低", "低", "S/01")]);
+const continuedOnly = rebuildMonitoringContinuityChangeCounts([riskRow(1, "continued", "低", "低", "S/01")]);
 check(continuedOnly.changed_subject_count === 0, "continued-only rows do not create changed subjects");
 check(continuedOnly.mid_high_total === 0, "low-severity continued rows stay out of the mid/high total");
-const dualInstance = rebuildR7ContinuityChangeCounts([
+const dualInstance = rebuildMonitoringContinuityChangeCounts([
   riskRow(1, "new", "", "高", "S/01"),
   riskRow(2, "upgraded", "中", "高", "S/01", { risk_instance_ref: "s7-risk-1", risk_ref: "s7-risk-1", risk_anchor_ref: "s7-anchor-1", event_ref: "s7-event-1" }),
 ]);
 check(dualInstance.new === 1 && dualInstance.upgraded === 1 && dualInstance.mid_high_total === 1, "shared risk_instance_ref rows count each change kind and unique mid/high once");
-assert.throws(() => rebuildR7ContinuityChangeCounts([
+assert.throws(() => rebuildMonitoringContinuityChangeCounts([
   riskRow(1, "new", "", "高", "S/01", { risk_instance_ref: "" }),
 ]), "risk rows without a stable identity fail the count rebuild closed");
 passed += 4;
 
 // --- exact field sets ---
 assert.throws(
-  () => normalizeR7ContinuityEnvelope({ ...okEnvelope, extra_field: true }),
+  () => normalizeMonitoringContinuityEnvelope({ ...okEnvelope, extra_field: true }),
   "extra top-level fields fail closed",
 );
 assert.throws(
-  () => normalizeR7ContinuityEnvelope(envelope(HAPPY_ROWS.map((r, i) => (
+  () => normalizeMonitoringContinuityEnvelope(envelope(HAPPY_ROWS.map((r, i) => (
     i === 0 ? (({ disposition_text, ...rest }) => rest)(r) : r
   )))),
   "rows missing a public field fail closed",
 );
 assert.throws(
-  () => normalizeR7ContinuityEnvelope(envelope(HAPPY_ROWS.map((r, i) => (
+  () => normalizeMonitoringContinuityEnvelope(envelope(HAPPY_ROWS.map((r, i) => (
     i === 0 ? { ...r, internal_note: "x" } : r
   )))),
   "rows with extra fields fail closed",
 );
 assert.throws(
-  () => normalizeR7ContinuityEnvelope(envelope([...HAPPY_ROWS], {
+  () => normalizeMonitoringContinuityEnvelope(envelope([...HAPPY_ROWS], {
     identityOverrides: { site_ref: "site/01", extra_identity: "x" },
   })),
   "identity with unknown fields fails closed",
 );
 assert.throws(
-  () => normalizeR7ContinuityEnvelope({
+  () => normalizeMonitoringContinuityEnvelope({
     ...okEnvelope,
     identity: { ...okEnvelope.identity, data_cutoff_text: undefined },
   }),
@@ -325,21 +325,21 @@ passed += 6;
 const forbiddenKeyPayload = envelope([...HAPPY_ROWS], {
   comparisonOverrides: { r5_authority_packet_id: "internal" },
 });
-let forbiddenKeyResult = safeValidateR7ContinuityEnvelope(forbiddenKeyPayload);
+let forbiddenKeyResult = safeValidateMonitoringContinuityEnvelope(forbiddenKeyPayload);
 check(forbiddenKeyResult.ok === false && forbiddenKeyResult.code === "public_identity_forbidden", "internal identity keys fail closed with the public gate code");
 
 const forbiddenValuePayload = envelope([
   { ...HAPPY_ROWS[0], title: "标题包含 run_id 泄露" },
   ...HAPPY_ROWS.slice(1),
 ]);
-let forbiddenTextResult = safeValidateR7ContinuityEnvelope(forbiddenValuePayload);
+let forbiddenTextResult = safeValidateMonitoringContinuityEnvelope(forbiddenValuePayload);
 check(forbiddenTextResult.ok === false && forbiddenTextResult.code === "public_text_forbidden", "label values carrying internal markers fail closed");
 
 const secretValuePayload = envelope([
   { ...HAPPY_ROWS[0], reason_text: "详见 token=abc123" },
   ...HAPPY_ROWS.slice(1),
 ]);
-check(safeValidateR7ContinuityEnvelope(secretValuePayload).ok === false, "secret-shaped public text fails closed");
+check(safeValidateMonitoringContinuityEnvelope(secretValuePayload).ok === false, "secret-shaped public text fails closed");
 passed += 3;
 
 // --- Chinese closed sets ---
@@ -358,7 +358,7 @@ function expectFail(label, mutate, counts) {
     check(true, `${label} fails closed during fixture reconstruction`);
     return;
   }
-  const result = safeValidateR7ContinuityEnvelope(candidate);
+  const result = safeValidateMonitoringContinuityEnvelope(candidate);
   check(result.ok === false, `${label} fails closed`);
 }
 
@@ -381,7 +381,7 @@ const illegalBasis = envelope([queryRow(1)], {
   },
   comparisonOverrides: { basis_text: "比较分析" },
 });
-check(safeValidateR7ContinuityEnvelope(illegalBasis).ok === false, "basis text outside the two-value closed set fails closed");
+check(safeValidateMonitoringContinuityEnvelope(illegalBasis).ok === false, "basis text outside the two-value closed set fails closed");
 const illegalComparison = envelope([queryRow(1)], {
   counts: {
     new: 0, upgraded: 0, continued: 0, downgraded: 0, closed: 0,
@@ -389,7 +389,7 @@ const illegalComparison = envelope([queryRow(1)], {
   },
   comparisonOverrides: { comparison_text: "已与历史数据比较" },
 });
-check(safeValidateR7ContinuityEnvelope(illegalComparison).ok === false, "comparison text outside the closed set fails closed");
+check(safeValidateMonitoringContinuityEnvelope(illegalComparison).ok === false, "comparison text outside the closed set fails closed");
 const pairedMismatch = envelope([queryRow(1)], {
   counts: {
     new: 0, upgraded: 0, continued: 0, downgraded: 0, closed: 0,
@@ -397,7 +397,7 @@ const pairedMismatch = envelope([queryRow(1)], {
   },
   comparisonOverrides: { source_run_text: "" },
 });
-check(safeValidateR7ContinuityEnvelope(pairedMismatch).ok === false, "compared copy without a source run fails closed");
+check(safeValidateMonitoringContinuityEnvelope(pairedMismatch).ok === false, "compared copy without a source run fails closed");
 const pairedMismatch2 = envelope([queryRow(1)], {
   counts: {
     new: 0, upgraded: 0, continued: 0, downgraded: 0, closed: 0,
@@ -405,11 +405,11 @@ const pairedMismatch2 = envelope([queryRow(1)], {
   },
   comparisonOverrides: {
     basis_text: "全量分析",
-    comparison_text: R7_CONTINUITY_FIRST_ANALYSIS_TEXT,
+    comparison_text: MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT,
     source_run_text: "2026-03-01 监查批次",
   },
 });
-check(safeValidateR7ContinuityEnvelope(pairedMismatch2).ok === false, "first-analysis copy with a source run fails closed");
+check(safeValidateMonitoringContinuityEnvelope(pairedMismatch2).ok === false, "first-analysis copy with a source run fails closed");
 passed += 4;
 
 // --- severity shape rules (v0.2 §18) ---
@@ -432,15 +432,15 @@ passed += 1;
 
 // --- identity binding ---
 const siteEnvelope = envelope([...HAPPY_ROWS], { siteRef: "site/01" });
-check(normalizeR7ContinuityEnvelope(siteEnvelope, { siteRef: "site/01" }).identity.site_ref === "site/01", "requested center matches the identity site ref");
-check(safeValidateR7ContinuityEnvelope(siteEnvelope, { siteRef: "site/02" }).ok === false, "center mismatch fails closed");
-check(safeValidateR7ContinuityEnvelope(siteEnvelope, { siteRef: "" }).ok === false, "identity site ref without a request fails closed");
-check(safeValidateR7ContinuityEnvelope(okEnvelope, { siteRef: "site/01" }).ok === false, "requested center without an identity site ref fails closed");
-check(safeValidateR7ContinuityEnvelope(okEnvelope, { projectId: "project-b" }).code === "continuity_identity_mismatch", "project mismatch fails closed");
-check(safeValidateR7ContinuityEnvelope(okEnvelope, { resultContextToken: "result-context:99" }).ok === false, "result-context mismatch fails closed");
+check(normalizeMonitoringContinuityEnvelope(siteEnvelope, { siteRef: "site/01" }).identity.site_ref === "site/01", "requested center matches the identity site ref");
+check(safeValidateMonitoringContinuityEnvelope(siteEnvelope, { siteRef: "site/02" }).ok === false, "center mismatch fails closed");
+check(safeValidateMonitoringContinuityEnvelope(siteEnvelope, { siteRef: "" }).ok === false, "identity site ref without a request fails closed");
+check(safeValidateMonitoringContinuityEnvelope(okEnvelope, { siteRef: "site/01" }).ok === false, "requested center without an identity site ref fails closed");
+check(safeValidateMonitoringContinuityEnvelope(okEnvelope, { projectId: "project-b" }).code === "continuity_identity_mismatch", "project mismatch fails closed");
+check(safeValidateMonitoringContinuityEnvelope(okEnvelope, { resultContextToken: "result-context:99" }).ok === false, "result-context mismatch fails closed");
 const badTokenPrefix = envelope([...HAPPY_ROWS], { identityOverrides: {} });
 check(
-  safeValidateR7ContinuityEnvelope({ ...badTokenPrefix, result_context_token: "run:09" }).ok === false,
+  safeValidateMonitoringContinuityEnvelope({ ...badTokenPrefix, result_context_token: "run:09" }).ok === false,
   "non result-context tokens fail closed",
 );
 passed += 7;
@@ -448,28 +448,28 @@ passed += 7;
 // --- counts, truncation, order ---
 {
   const negative = envelope([...HAPPY_ROWS], {
-    counts: { ...rebuildR7ContinuityChangeCounts(HAPPY_ROWS), new: -1 },
+    counts: { ...rebuildMonitoringContinuityChangeCounts(HAPPY_ROWS), new: -1 },
   });
-  check(safeValidateR7ContinuityEnvelope(negative).ok === false, "negative counts fail closed");
+  check(safeValidateMonitoringContinuityEnvelope(negative).ok === false, "negative counts fail closed");
   const fractional = envelope([...HAPPY_ROWS], {
-    counts: { ...rebuildR7ContinuityChangeCounts(HAPPY_ROWS), upgraded: 1.5 },
+    counts: { ...rebuildMonitoringContinuityChangeCounts(HAPPY_ROWS), upgraded: 1.5 },
   });
-  check(safeValidateR7ContinuityEnvelope(fractional).ok === false, "non-integer counts fail closed");
+  check(safeValidateMonitoringContinuityEnvelope(fractional).ok === false, "non-integer counts fail closed");
   const missingKey = envelope([...HAPPY_ROWS], {
-    counts: (({ reopened, ...rest }) => rest)(rebuildR7ContinuityChangeCounts(HAPPY_ROWS)),
+    counts: (({ reopened, ...rest }) => rest)(rebuildMonitoringContinuityChangeCounts(HAPPY_ROWS)),
   });
-  check(safeValidateR7ContinuityEnvelope(missingKey).ok === false, "missing count keys fail closed");
+  check(safeValidateMonitoringContinuityEnvelope(missingKey).ok === false, "missing count keys fail closed");
   const extraKey = envelope([...HAPPY_ROWS], {
-    counts: { ...rebuildR7ContinuityChangeCounts(HAPPY_ROWS), stale: 1 },
+    counts: { ...rebuildMonitoringContinuityChangeCounts(HAPPY_ROWS), stale: 1 },
   });
-  check(safeValidateR7ContinuityEnvelope(extraKey).ok === false, "extra count keys fail closed");
+  check(safeValidateMonitoringContinuityEnvelope(extraKey).ok === false, "extra count keys fail closed");
   const inflated = envelope([...HAPPY_ROWS], {
-    counts: { ...rebuildR7ContinuityChangeCounts(HAPPY_ROWS), new: 2 },
+    counts: { ...rebuildMonitoringContinuityChangeCounts(HAPPY_ROWS), new: 2 },
   });
-  check(safeValidateR7ContinuityEnvelope(inflated).ok === false, "counts that cannot be rebuilt from rows fail closed");
+  check(safeValidateMonitoringContinuityEnvelope(inflated).ok === false, "counts that cannot be rebuilt from rows fail closed");
   const unavailable = envelope([...HAPPY_ROWS]);
   unavailable.comparison.available = false;
-  check(safeValidateR7ContinuityEnvelope(unavailable).ok === false, "available=false never normalizes");
+  check(safeValidateMonitoringContinuityEnvelope(unavailable).ok === false, "available=false never normalizes");
   passed += 6;
 }
 
@@ -488,7 +488,7 @@ expectFail("order violation", (rows) => {
       reopened: 0, needs_rejudgment: 0, mid_high_total: 2, changed_subject_count: 2,
     },
   });
-  check(safeValidateR7ContinuityEnvelope(duplicatedRef).ok === false, "duplicate row refs fail closed");
+  check(safeValidateMonitoringContinuityEnvelope(duplicatedRef).ok === false, "duplicate row refs fail closed");
   const duplicatedInstance = envelope([
     riskRow(1, "new", "", "高", "S/01"),
     riskRow(2, "upgraded", "中", "高", "S/02", { risk_instance_ref: "s7-risk-1", risk_ref: "s7-risk-1", risk_anchor_ref: "s7-anchor-1", event_ref: "s7-event-1" }),
@@ -498,7 +498,7 @@ expectFail("order violation", (rows) => {
       reopened: 0, needs_rejudgment: 0, mid_high_total: 1, changed_subject_count: 2,
     },
   });
-  check(safeValidateR7ContinuityEnvelope(duplicatedInstance).ok === true, "shared risk_instance_ref dual-entry rows validate when counts match");
+  check(safeValidateMonitoringContinuityEnvelope(duplicatedInstance).ok === true, "shared risk_instance_ref dual-entry rows validate when counts match");
   passed += 3;
 }
 
@@ -509,46 +509,46 @@ expectFail("order violation", (rows) => {
     riskRow(200, "new", "", "高", "S/97", { title: "方案执行偏离" }),
     ...Array.from({ length: 199 }, (_, index) => riskRow(index + 1, "continued", "低", "低", `S/${index + 1}`, { title: `持续观察项 ${index + 1}` })),
   ];
-  const fullCounts = rebuildR7ContinuityChangeCounts([...shown, hidden]);
+  const fullCounts = rebuildMonitoringContinuityChangeCounts([...shown, hidden]);
   check(fullCounts.continued === 200, "truncation fixture rebuilds the hidden row into server counts");
 
-  const truncatedOk = safeValidateR7ContinuityEnvelope(envelope(shown, {
+  const truncatedOk = safeValidateMonitoringContinuityEnvelope(envelope(shown, {
     counts: fullCounts,
-    shownCount: R7_CONTINUITY_ROW_LIMIT,
-    totalCount: R7_CONTINUITY_ROW_LIMIT + 1,
+    shownCount: MONITORING_CONTINUITY_ROW_LIMIT,
+    totalCount: MONITORING_CONTINUITY_ROW_LIMIT + 1,
     truncated: true,
   }));
   check(truncatedOk.ok === true, "truncated responses only require visible counts to be a subset of server counts");
 
-  const truncatedMismatch = safeValidateR7ContinuityEnvelope(envelope(shown, {
+  const truncatedMismatch = safeValidateMonitoringContinuityEnvelope(envelope(shown, {
     counts: fullCounts,
-    shownCount: R7_CONTINUITY_ROW_LIMIT,
-    totalCount: R7_CONTINUITY_ROW_LIMIT + 1,
+    shownCount: MONITORING_CONTINUITY_ROW_LIMIT,
+    totalCount: MONITORING_CONTINUITY_ROW_LIMIT + 1,
     truncated: false,
   }));
   check(truncatedMismatch.ok === false, "untruncated responses must rebuild server counts exactly");
 
-  const shownMismatch = safeValidateR7ContinuityEnvelope(envelope(shown, {
+  const shownMismatch = safeValidateMonitoringContinuityEnvelope(envelope(shown, {
     counts: fullCounts,
-    shownCount: R7_CONTINUITY_ROW_LIMIT - 1,
-    totalCount: R7_CONTINUITY_ROW_LIMIT + 1,
+    shownCount: MONITORING_CONTINUITY_ROW_LIMIT - 1,
+    totalCount: MONITORING_CONTINUITY_ROW_LIMIT + 1,
     truncated: true,
   }));
   check(shownMismatch.ok === false, "shown_count must equal the visible row count");
 
-  const truncatedFlagMismatch = safeValidateR7ContinuityEnvelope(envelope(shown, {
+  const truncatedFlagMismatch = safeValidateMonitoringContinuityEnvelope(envelope(shown, {
     counts: fullCounts,
-    shownCount: R7_CONTINUITY_ROW_LIMIT,
-    totalCount: R7_CONTINUITY_ROW_LIMIT,
+    shownCount: MONITORING_CONTINUITY_ROW_LIMIT,
+    totalCount: MONITORING_CONTINUITY_ROW_LIMIT,
     truncated: true,
   }));
   check(truncatedFlagMismatch.ok === false, "truncated must equal total_count > 200");
 
-  const overLimit = safeValidateR7ContinuityEnvelope(envelope(
+  const overLimit = safeValidateMonitoringContinuityEnvelope(envelope(
     [...shown, hidden],
     {
-      shownCount: R7_CONTINUITY_ROW_LIMIT + 1,
-      totalCount: R7_CONTINUITY_ROW_LIMIT + 1,
+      shownCount: MONITORING_CONTINUITY_ROW_LIMIT + 1,
+      totalCount: MONITORING_CONTINUITY_ROW_LIMIT + 1,
       truncated: false,
     },
   ));
@@ -568,31 +568,31 @@ expectFail("risk row without risk identity", (rows) => rows.map((r, i) => (i ===
 expectFail("query row without event ref", (rows) => rows.map((r, i) => (i === 7 ? { ...r, event_ref: "" } : r)));
 expectFail("locator without count", (rows) => rows.map((r, i) => (i === 0 ? { ...r, source_count: 0 } : r)));
 expectFail("count without locator", (rows) => rows.map((r, i) => (i === 6 ? { ...r, source_locator_ref: "s7-source-x" } : r)));
-check(safeValidateR7ContinuityEnvelope(envelope([...HAPPY_ROWS], { digest: "deadbeef" })).ok === false, "short digests fail closed");
-check(safeValidateR7ContinuityEnvelope(envelope([...HAPPY_ROWS], { digest: "ZZZZ" })).ok === false, "non-hex digests fail closed");
-check(safeValidateR7ContinuityEnvelope(null).ok === false, "non-object payloads fail closed");
-check(safeValidateR7ContinuityEnvelope([]).ok === false, "array payloads fail closed");
+check(safeValidateMonitoringContinuityEnvelope(envelope([...HAPPY_ROWS], { digest: "deadbeef" })).ok === false, "short digests fail closed");
+check(safeValidateMonitoringContinuityEnvelope(envelope([...HAPPY_ROWS], { digest: "ZZZZ" })).ok === false, "non-hex digests fail closed");
+check(safeValidateMonitoringContinuityEnvelope(null).ok === false, "non-object payloads fail closed");
+check(safeValidateMonitoringContinuityEnvelope([]).ok === false, "array payloads fail closed");
 passed += 15;
 
 // --- sort key ---
-check(JSON.stringify(r7ContinuityRowSortKey(riskRow(1, "new", "", "高", "S/01"))) === JSON.stringify([0, 1, "continuity-row-1"]), "high-severity priority changes sort into group 0");
-check(r7ContinuityRowSortKey(riskRow(2, "upgraded", "中", "高", "S/01"))[0] === 0, "high upgraded stays in group 0");
-check(r7ContinuityRowSortKey(riskRow(3, "upgraded", "低", "中", "S/01"))[0] === 1, "mid-severity priority changes sort into group 1");
-check(r7ContinuityRowSortKey(riskRow(4, "closed", "中", "", "S/01"))[0] === 2, "closed mid risks sort into group 2");
-check(r7ContinuityRowSortKey(riskRow(5, "continued", "低", "低", "S/01"))[0] === 3, "low continued risks sort into group 3");
-check(r7ContinuityRowSortKey(queryRow(6))[0] === 4, "query drafts sort into group 4");
-check(r7ContinuityRowSortKey(outputRow(7))[0] === 5, "monitoring outputs sort into group 5");
-check(r7ContinuityRowSortKey({ object_type: "unknown" })[0] === 6, "unknown objects sort into the fallback group");
+check(JSON.stringify(monitoringContinuityRowSortKey(riskRow(1, "new", "", "高", "S/01"))) === JSON.stringify([0, 1, "continuity-row-1"]), "high-severity priority changes sort into group 0");
+check(monitoringContinuityRowSortKey(riskRow(2, "upgraded", "中", "高", "S/01"))[0] === 0, "high upgraded stays in group 0");
+check(monitoringContinuityRowSortKey(riskRow(3, "upgraded", "低", "中", "S/01"))[0] === 1, "mid-severity priority changes sort into group 1");
+check(monitoringContinuityRowSortKey(riskRow(4, "closed", "中", "", "S/01"))[0] === 2, "closed mid risks sort into group 2");
+check(monitoringContinuityRowSortKey(riskRow(5, "continued", "低", "低", "S/01"))[0] === 3, "low continued risks sort into group 3");
+check(monitoringContinuityRowSortKey(queryRow(6))[0] === 4, "query drafts sort into group 4");
+check(monitoringContinuityRowSortKey(outputRow(7))[0] === 5, "monitoring outputs sort into group 5");
+check(monitoringContinuityRowSortKey({ object_type: "unknown" })[0] === 6, "unknown objects sort into the fallback group");
 passed += 8;
 
 // --- digest verification ---
 const digestTarget = envelope([...HAPPY_ROWS], { siteRef: "site/01" });
 const digestExpected = { siteRef: "site/01" };
-const computedDigest = await computeR7ContinuityResponseDigest(digestTarget, digestExpected);
+const computedDigest = await computeMonitoringContinuityResponseDigest(digestTarget, digestExpected);
 check(computedDigest === serverDigest(digestTarget.identity, digestTarget.comparison), "frontend canonical digest matches the server content_digest format");
-check(canonicalR7ContinuityPayload(digestTarget, digestExpected).includes('"change_counts"'), "canonical payload keeps wire-format keys");
+check(canonicalMonitoringContinuityPayload(digestTarget, digestExpected).includes('"change_counts"'), "canonical payload keeps wire-format keys");
 
-const verified = await verifyR7ContinuityEnvelope(
+const verified = await verifyMonitoringContinuityEnvelope(
   envelope([...HAPPY_ROWS], { siteRef: "site/01", digest: computedDigest }),
   { projectId: "project-a", resultContextToken: "result-context:01", siteRef: "site/01" },
 );
@@ -603,25 +603,25 @@ const tampered = envelope([...HAPPY_ROWS], {
   digest: computedDigest,
   identityOverrides: { data_cutoff_text: "2026-04-30" },
 });
-const tamperedResult = await safeVerifyR7ContinuityEnvelope(tampered, { projectId: "project-a", resultContextToken: "result-context:01", siteRef: "site/01" });
+const tamperedResult = await safeVerifyMonitoringContinuityEnvelope(tampered, { projectId: "project-a", resultContextToken: "result-context:01", siteRef: "site/01" });
 check(tamperedResult.ok === false && tamperedResult.code === "continuity_response_digest_mismatch", "tampered identity fails digest verification closed");
 
 const tamperedRow = envelope([...HAPPY_ROWS], { siteRef: "site/01", digest: computedDigest });
 tamperedRow.comparison.rows[0] = { ...tamperedRow.comparison.rows[0], title: "被篡改的标题" };
-const tamperedRowResult = await safeVerifyR7ContinuityEnvelope(tamperedRow, { projectId: "project-a", resultContextToken: "result-context:01", siteRef: "site/01" });
+const tamperedRowResult = await safeVerifyMonitoringContinuityEnvelope(tamperedRow, { projectId: "project-a", resultContextToken: "result-context:01", siteRef: "site/01" });
 check(tamperedRowResult.ok === false && tamperedRowResult.code === "continuity_response_digest_mismatch", "tampered row content fails digest verification closed");
 
 const wrongDigestEnvelope = envelope([...HAPPY_ROWS], { digest: "f".repeat(64) });
-const wrongDigestResult = await safeVerifyR7ContinuityEnvelope(wrongDigestEnvelope);
+const wrongDigestResult = await safeVerifyMonitoringContinuityEnvelope(wrongDigestEnvelope);
 check(wrongDigestResult.ok === false && wrongDigestResult.code === "continuity_response_digest_mismatch", "digest mismatch degrades to the unavailable result");
-check(wrongDigestResult.text === R7_CONTINUITY_UNAVAILABLE_TEXT, "digest failures surface the contract unavailable text");
+check(wrongDigestResult.text === MONITORING_CONTINUITY_UNAVAILABLE_TEXT, "digest failures surface the contract unavailable text");
 passed += 6;
 
 // --- error projection ---
-const unavailableError = projectR7ContinuityError({ detail: { code: "continuity_unavailable" } });
+const unavailableError = projectMonitoringContinuityError({ detail: { code: "continuity_unavailable" } });
 check(unavailableError.kind === "unavailable" && unavailableError.code === "continuity_unavailable", "continuity_unavailable maps to the unavailable kind");
-check(unavailableError.text === R7_CONTINUITY_UNAVAILABLE_TEXT, "continuity errors surface the contract unavailable text");
-check(projectR7ContinuityError(new Error("network down")).text === R7_CONTINUITY_UNAVAILABLE_TEXT, "transport errors surface the same unavailable text");
+check(unavailableError.text === MONITORING_CONTINUITY_UNAVAILABLE_TEXT, "continuity errors surface the contract unavailable text");
+check(projectMonitoringContinuityError(new Error("network down")).text === MONITORING_CONTINUITY_UNAVAILABLE_TEXT, "transport errors surface the same unavailable text");
 passed += 3;
 
 console.log(`medicalMonitoringContinuityProjection: ${passed} passed`);

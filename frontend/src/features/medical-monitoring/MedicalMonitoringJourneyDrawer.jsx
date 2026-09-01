@@ -1,10 +1,5 @@
-// R7 Slice-08C-3 R7-only Patient Journey change markers and right-side detail
-// drawer. The marker component and the drawer render only inside R7 product
-// routes (result_context_token present); legacy R5 keeps its inline inspector.
-//
-// Contract sources (frozen):
-// - context/medical_monitoring_r7_slice08c3_journey_changes_drawer_contract_20260829.md
-// - reviews/medical_monitoring_r7_slice08c_chinese_continuity_visual_contract_v0_2_20260829.md (v0.2 wins)
+// Patient Journey change markers and right-side detail drawer. The marker and
+// drawer render only when a result context is present.
 //
 // Boundaries honored here:
 // - The drawer and markers never fabricate data: sections come from the
@@ -15,8 +10,8 @@
 //   allows direct switching (§5.3). Escape/close restore focus to the trigger
 //   element or the shared axis title (§5.1).
 // - The fixed section order and the fixed missing-value texts come from
-//   worker_01's frozen model (R7_JOURNEY_DRAWER_SECTION_ORDER /
-//   R7_JOURNEY_DRAWER_FALLBACK_TEXTS), never from this file.
+//   worker_01's frozen model (MONITORING_JOURNEY_DRAWER_SECTION_ORDER /
+//   MONITORING_JOURNEY_DRAWER_FALLBACK_TEXTS), never from this file.
 
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import {
@@ -28,42 +23,41 @@ import {
   RotateCcw,
   CircleHelp,
 } from "lucide-react";
-import { R7_JOURNEY_DRAWER_SECTION_ORDER } from "./medicalMonitoringJourneyChanges.mjs";
+import { MONITORING_JOURNEY_DRAWER_SECTION_ORDER } from "./medicalMonitoringJourneyChanges.mjs";
 import {
-  R7_JOURNEY_AXIS_TITLE_ID,
-  R7_JOURNEY_DRAWER_FOCUSABLE_SELECTOR,
-  R7_JOURNEY_DRAWER_LIVE_ID,
-  R7_JOURNEY_DRAWER_TITLE_ID,
-  r7JourneyDrawerKeyAction,
-  r7JourneyFocusStep,
-  r7JourneyRestoreTarget,
-  r7JourneyDrawerSections,
+  MONITORING_JOURNEY_AXIS_TITLE_ID,
+  MONITORING_JOURNEY_DRAWER_FOCUSABLE_SELECTOR,
+  MONITORING_JOURNEY_DRAWER_LIVE_ID,
+  MONITORING_JOURNEY_DRAWER_TITLE_ID,
+  monitoringJourneyDrawerKeyAction,
+  monitoringJourneyFocusStep,
+  monitoringJourneyRestoreTarget,
+  monitoringJourneyDrawerSections,
 } from "./medicalMonitoringJourneyDrawerModel.mjs";
 import "./medicalMonitoringJourneyDrawer.css";
 
-// Re-exported so the R5 page and the offline tests keep a single import
-// surface for the R7-only drawer and marker feature.
+// Re-exported so the workspace and offline tests share one import surface.
 export {
-  R7_JOURNEY_AXIS_TITLE_ID,
-  R7_JOURNEY_CONTENT_MIN_WIDTH,
-  R7_JOURNEY_DRAWER_FOCUSABLE_SELECTOR,
-  R7_JOURNEY_DRAWER_GAP,
-  R7_JOURNEY_DRAWER_LIVE_ID,
-  R7_JOURNEY_DRAWER_TITLE_ID,
-  R7_JOURNEY_DRAWER_WIDTH,
-  R7_JOURNEY_DEFAULT_DOMAIN_LABELS,
-  R7_JOURNEY_OVERLAY_DRAWER_MAX_WIDTH,
-  R7_JOURNEY_VIEWPORT_PUSH_MIN,
-  r7JourneyDrawerKeyAction,
-  r7JourneyDrawerLayoutMode,
-  r7JourneyDrawerSections,
-  r7JourneyFocusStep,
-  r7JourneyRestoreTarget,
+  MONITORING_JOURNEY_AXIS_TITLE_ID,
+  MONITORING_JOURNEY_CONTENT_MIN_WIDTH,
+  MONITORING_JOURNEY_DRAWER_FOCUSABLE_SELECTOR,
+  MONITORING_JOURNEY_DRAWER_GAP,
+  MONITORING_JOURNEY_DRAWER_LIVE_ID,
+  MONITORING_JOURNEY_DRAWER_TITLE_ID,
+  MONITORING_JOURNEY_DRAWER_WIDTH,
+  MONITORING_JOURNEY_DEFAULT_DOMAIN_LABELS,
+  MONITORING_JOURNEY_OVERLAY_DRAWER_MAX_WIDTH,
+  MONITORING_JOURNEY_VIEWPORT_PUSH_MIN,
+  monitoringJourneyDrawerKeyAction,
+  monitoringJourneyDrawerLayoutMode,
+  monitoringJourneyDrawerSections,
+  monitoringJourneyFocusStep,
+  monitoringJourneyRestoreTarget,
 } from "./medicalMonitoringJourneyDrawerModel.mjs";
 
 // The frozen seven-kind Lucide icon set (§4.3). Verified present in
 // lucide-react 1.23.0; only this closed mapping may feed the marker render.
-const R7_JOURNEY_MARKER_ICONS = Object.freeze({
+const MONITORING_JOURNEY_MARKER_ICONS = Object.freeze({
   CirclePlus,
   CircleArrowUp,
   CircleDot,
@@ -78,12 +72,12 @@ const R7_JOURNEY_MARKER_ICONS = Object.freeze({
  * change word + semantic tone class. aria-hidden: the parent button's
  * accessible name carries the change wording and the total count (§4.5).
  */
-export function R7JourneyChangeMarker({ marker, className = "" }) {
+export function MonitoringJourneyChangeMarker({ marker, className = "" }) {
   if (!marker || typeof marker !== "object") return null;
-  const Icon = R7_JOURNEY_MARKER_ICONS[marker.icon] || CircleHelp;
+  const Icon = MONITORING_JOURNEY_MARKER_ICONS[marker.icon] || CircleHelp;
   return (
     <span
-      className={`r7-journey-marker r7-journey-tone-${marker.tone || "neutral"}${className ? ` ${className}` : ""}`}
+      className={`monitoring-journey-marker monitoring-journey-tone-${marker.tone || "neutral"}${className ? ` ${className}` : ""}`}
       data-change-kind={marker.changeKind}
       data-change-marker="true"
       aria-hidden="true"
@@ -120,13 +114,13 @@ const DRAWER_SECTION_FIELDS = Object.freeze({
 
 function JourneyDrawerSections({ sections, changeRows = [], currentRowIndex = -1, onSelectRow }) {
   return (
-    <dl className="r7-journey-sections" data-journey-sections>
-      {R7_JOURNEY_DRAWER_SECTION_ORDER.filter((key) => key !== "title" && key !== "source").map((key) => (
+    <dl className="monitoring-journey-sections" data-journey-sections>
+      {MONITORING_JOURNEY_DRAWER_SECTION_ORDER.filter((key) => key !== "title" && key !== "source").map((key) => (
         <div data-drawer-section={key} key={key}>
           <dt>{DRAWER_SECTION_LABELS[key]}</dt>
           <dd>{sections[DRAWER_SECTION_FIELDS[key]]}</dd>
           {key === "change" && changeRows.length > 1 ? (
-            <div className="r7-journey-change-switcher" role="group" aria-label="本轮变化切换">
+            <div className="monitoring-journey-change-switcher" role="group" aria-label="本轮变化切换">
               {changeRows.map((row, index) => (
                 <button
                   type="button"
@@ -149,7 +143,7 @@ function JourneyDrawerSections({ sections, changeRows = [], currentRowIndex = -1
 }
 
 /**
- * R7-only detail drawer (§5). `mode` comes from the shared threshold function;
+ * Detail drawer. `mode` comes from the shared threshold function;
  * the parent supplies the section model, the server-ordered change rows and
  * the close/switch/source callbacks.
  */
@@ -162,8 +156,8 @@ export function MedicalMonitoringJourneyDrawer({
   onClose,
   onSource,
   closeLabel = "关闭详情",
-  titleId = R7_JOURNEY_DRAWER_TITLE_ID,
-  liveId = R7_JOURNEY_DRAWER_LIVE_ID,
+  titleId = MONITORING_JOURNEY_DRAWER_TITLE_ID,
+  liveId = MONITORING_JOURNEY_DRAWER_LIVE_ID,
 }) {
   const containerRef = useRef(null);
   const closeRef = useRef(null);
@@ -212,8 +206,8 @@ export function MedicalMonitoringJourneyDrawer({
     onClose?.();
     if (typeof window === "undefined" || typeof document === "undefined") return;
     window.requestAnimationFrame(() => {
-      const axisTitle = document.getElementById(R7_JOURNEY_AXIS_TITLE_ID);
-      const target = r7JourneyRestoreTarget({
+      const axisTitle = document.getElementById(MONITORING_JOURNEY_AXIS_TITLE_ID);
+      const target = monitoringJourneyRestoreTarget({
         triggerConnected,
         axisTitleExists: Boolean(axisTitle),
       });
@@ -226,7 +220,7 @@ export function MedicalMonitoringJourneyDrawer({
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
     const handleKey = (event) => {
-      if (r7JourneyDrawerKeyAction({ key: event.key, shiftKey: event.shiftKey, mode }) === "close") {
+      if (monitoringJourneyDrawerKeyAction({ key: event.key, shiftKey: event.shiftKey, mode }) === "close") {
         event.preventDefault();
         handleClose();
       }
@@ -237,43 +231,43 @@ export function MedicalMonitoringJourneyDrawer({
 
   const handleContainerKeyDown = (event) => {
     if (mode !== "overlay" || event.key !== "Tab") return;
-    const focusables = Array.from(containerRef.current?.querySelectorAll(R7_JOURNEY_DRAWER_FOCUSABLE_SELECTOR) || [])
+    const focusables = Array.from(containerRef.current?.querySelectorAll(MONITORING_JOURNEY_DRAWER_FOCUSABLE_SELECTOR) || [])
       .filter((element) => !element.hasAttribute("disabled"));
     if (!focusables.length) {
       event.preventDefault();
       return;
     }
     const current = typeof document !== "undefined" ? focusables.indexOf(document.activeElement) : -1;
-    const next = r7JourneyFocusStep(focusables.length, current, { forward: !event.shiftKey });
+    const next = monitoringJourneyFocusStep(focusables.length, current, { forward: !event.shiftKey });
     event.preventDefault();
     focusables[next]?.focus?.();
   };
 
   const isOverlay = mode === "overlay";
-  const sectionKeys = R7_JOURNEY_DRAWER_SECTION_ORDER.filter((key) => key !== "title" && key !== "source");
+  const sectionKeys = MONITORING_JOURNEY_DRAWER_SECTION_ORDER.filter((key) => key !== "title" && key !== "source");
   const liveText = sections
     ? `${sections.title} · ${sections.riskLevel} · ${sections.change}`
     : "";
   const drawer = (
     <aside
       ref={containerRef}
-      className={isOverlay ? "r7-journey-drawer" : "r7-journey-drawer r7-journey-drawer-push"}
+      className={isOverlay ? "monitoring-journey-drawer" : "monitoring-journey-drawer monitoring-journey-drawer-push"}
       data-journey-drawer="true"
       data-journey-drawer-mode={mode}
       aria-labelledby={titleId}
       {...(isOverlay ? { role: "dialog", "aria-modal": "true" } : {})}
       onKeyDown={handleContainerKeyDown}
     >
-      <header className="r7-journey-drawer-head">
+      <header className="monitoring-journey-drawer-head">
         <div>
-          <span className="r5-eyebrow">风险定位</span>
+          <span className="monitoring-eyebrow">风险定位</span>
           <h2 id={titleId}>{sections?.title || "本轮变化详情"}</h2>
         </div>
-        <button type="button" className="r7-icon-button" data-journey-close="true" aria-label={closeLabel} ref={closeRef} onClick={handleClose}>关闭</button>
+        <button type="button" className="monitoring-icon-button" data-journey-close="true" aria-label={closeLabel} ref={closeRef} onClick={handleClose}>关闭</button>
       </header>
       {sections ? (
         <>
-          <div className="r7-journey-drawer-body">
+          <div className="monitoring-journey-drawer-body">
             {sectionKeys.length ? (
               <JourneyDrawerSections
                 sections={sections}
@@ -283,13 +277,13 @@ export function MedicalMonitoringJourneyDrawer({
               />
             ) : null}
             {liveText ? (
-              <p className="r7-journey-live" id={liveId} data-journey-live aria-live="polite">{liveText}</p>
+              <p className="monitoring-journey-live" id={liveId} data-journey-live aria-live="polite">{liveText}</p>
             ) : null}
           </div>
-          <div className="r7-journey-source" data-drawer-section="source">
+          <div className="monitoring-journey-source" data-drawer-section="source">
             <button
               type="button"
-              className="r5-source-button"
+              className="monitoring-source-button"
               data-journey-source="true"
               disabled={!sections.sourceEnabled}
               onClick={onSource}
@@ -304,8 +298,8 @@ export function MedicalMonitoringJourneyDrawer({
 
   if (isOverlay) {
     return (
-      <div className="r7-journey-overlay" data-journey-overlay="true" role="presentation">
-        <div className="r7-journey-backdrop" data-journey-backdrop="true" aria-hidden="true" onClick={handleClose} />
+      <div className="monitoring-journey-overlay" data-journey-overlay="true" role="presentation">
+        <div className="monitoring-journey-backdrop" data-journey-backdrop="true" aria-hidden="true" onClick={handleClose} />
         {drawer}
       </div>
     );

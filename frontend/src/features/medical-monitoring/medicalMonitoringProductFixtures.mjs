@@ -4,7 +4,7 @@ const BACKEND_CONTRACT_SCHEMA = "medical-monitoring-r5-exact-contract-v0.3.1";
 const BACKEND_CONTRACT_SHA256 = "1d2f2531584ad55b5e788636839add8248026e28a24460f0a85387e2bb72a0c6";
 const RECEIPT_ID = "r5:receipt:synthetic-project-r5-s7:synthetic-snapshot-r5-20260820";
 
-export const R5_SYNTHETIC_IDENTITY = Object.freeze({
+export const WORKSPACE_SYNTHETIC_IDENTITY = Object.freeze({
   tenant_id: "synthetic-tenant-r5",
   project_ref: "synthetic-project-r5-s7",
   run_ref: "synthetic-run-r5-20260820",
@@ -28,7 +28,7 @@ export const R5_SYNTHETIC_IDENTITY = Object.freeze({
   return_context_key: "synthetic-return-overview",
   authority_hash: HASH_2,
   source_snapshot_sha256: HASH,
-  response_snapshot_sha256: "49e7e219db5c2874edc5ada4212be621ecb7d97aba9607a94f0a98aef02eddb4",
+  response_snapshot_sha256: "042f4a87b875047f22bea82a6bf5d3fa5037a9c00f64b9e9add20cfad631a72c",
   principal_identity_hash: HASH,
   authorization_decision_sha256: HASH_2,
   audit_id: "synthetic-audit-r5-overview",
@@ -99,7 +99,7 @@ const RISK_ROWS = Object.freeze([
 function sourceRef(locatorRef, excerpt = null) {
   const source = {
     locator_ref: locatorRef,
-    snapshot_ref: R5_SYNTHETIC_IDENTITY.snapshot_ref,
+    snapshot_ref: WORKSPACE_SYNTHETIC_IDENTITY.snapshot_ref,
     source_file_ref: `synthetic-file-${locatorRef}`,
     source_revision_ref: `synthetic-revision-${locatorRef}`,
     source_revision_content_hash: HASH,
@@ -181,14 +181,14 @@ function envelope(identity, projection, counts = {}, sourceRefs = []) {
   };
 }
 
-export const R5_SYNTHETIC_OVERVIEW = Object.freeze(envelope(
-  R5_SYNTHETIC_IDENTITY,
+export const WORKSPACE_SYNTHETIC_OVERVIEW = Object.freeze(envelope(
+  WORKSPACE_SYNTHETIC_IDENTITY,
   {
     kind: "project_cockpit",
     project: {
-      project_ref: R5_SYNTHETIC_IDENTITY.project_ref,
+      project_ref: WORKSPACE_SYNTHETIC_IDENTITY.project_ref,
       project_code: "S7-SYNTH",
-      project_label: "R5医学监查示范项目",
+      project_label: "医学监查示范项目",
       indication: "示范适应症",
       phase: "III期",
     },
@@ -199,8 +199,8 @@ export const R5_SYNTHETIC_OVERVIEW = Object.freeze(envelope(
       label: "24/24 受试者",
     },
     change_bands: [
-      { risk_ref: RISK_ROWS[0].risk_ref, change_kind: "new", change_cause: "data", prior_snapshot_ref: null, current_snapshot_ref: R5_SYNTHETIC_IDENTITY.snapshot_ref, authority_receipt_ref: RECEIPT_ID },
-      { risk_ref: RISK_ROWS[1].risk_ref, change_kind: "continued", change_cause: "coverage", prior_snapshot_ref: null, current_snapshot_ref: R5_SYNTHETIC_IDENTITY.snapshot_ref, authority_receipt_ref: RECEIPT_ID },
+      { risk_ref: RISK_ROWS[0].risk_ref, change_kind: "new", change_cause: "data", prior_snapshot_ref: null, current_snapshot_ref: WORKSPACE_SYNTHETIC_IDENTITY.snapshot_ref, authority_receipt_ref: RECEIPT_ID },
+      { risk_ref: RISK_ROWS[1].risk_ref, change_kind: "continued", change_cause: "coverage", prior_snapshot_ref: null, current_snapshot_ref: WORKSPACE_SYNTHETIC_IDENTITY.snapshot_ref, authority_receipt_ref: RECEIPT_ID },
     ],
     current_risks: RISK_ROWS,
     current_risk_set: {
@@ -231,12 +231,12 @@ export const R5_SYNTHETIC_OVERVIEW = Object.freeze(envelope(
           measure_refs: ["synthetic-measure-site-02"],
         },
       ],
-      projection_instance: { opaque_run_ref: R5_SYNTHETIC_IDENTITY.run_ref, opaque_snapshot_ref: R5_SYNTHETIC_IDENTITY.snapshot_ref, replay_content_identity: HASH, authority_receipt_ref: RECEIPT_ID },
+      projection_instance: { opaque_run_ref: WORKSPACE_SYNTHETIC_IDENTITY.run_ref, opaque_snapshot_ref: WORKSPACE_SYNTHETIC_IDENTITY.snapshot_ref, replay_content_identity: HASH, authority_receipt_ref: RECEIPT_ID },
       content_hash: HASH,
     },
     measures: [
-      { measure_ref: "synthetic-measure-site-01", site_ref: "synthetic-site-01", numerator: 1, denominator: 8, denominator_state: "closed_positive", rate_state: "closed", coverage_state: "complete", cutoff_ref: R5_SYNTHETIC_IDENTITY.cutoff_ref, authority_receipt_ref: RECEIPT_ID },
-      { measure_ref: "synthetic-measure-site-02", site_ref: "synthetic-site-02", numerator: 1, denominator: 7, denominator_state: "closed_positive", rate_state: "closed", coverage_state: "partial", cutoff_ref: R5_SYNTHETIC_IDENTITY.cutoff_ref, authority_receipt_ref: RECEIPT_ID },
+      { measure_ref: "synthetic-measure-site-01", site_ref: "synthetic-site-01", numerator: 1, denominator: 8, denominator_state: "closed_positive", rate_state: "closed", coverage_state: "complete", cutoff_ref: WORKSPACE_SYNTHETIC_IDENTITY.cutoff_ref, authority_receipt_ref: RECEIPT_ID },
+      { measure_ref: "synthetic-measure-site-02", site_ref: "synthetic-site-02", numerator: 1, denominator: 7, denominator_state: "closed_positive", rate_state: "closed", coverage_state: "partial", cutoff_ref: WORKSPACE_SYNTHETIC_IDENTITY.cutoff_ref, authority_receipt_ref: RECEIPT_ID },
     ],
     subjects: [
       { subject_ref: "synthetic-subject-001", subject_id: "synthetic-subject-001", site_ref: "synthetic-site-01", spine_ref: "synthetic-spine-001", label: "受试者 001", subject_label: "受试者 001", authority_receipt_ref: RECEIPT_ID },
@@ -248,22 +248,22 @@ export const R5_SYNTHETIC_OVERVIEW = Object.freeze(envelope(
   [sourceRef(RISK_ROWS[0].source_locator_ref), sourceRef(RISK_ROWS[1].source_locator_ref)],
 ));
 
-export const R5_SYNTHETIC_SITE_OVERVIEW = Object.freeze({
-  ...R5_SYNTHETIC_OVERVIEW,
+export const WORKSPACE_SYNTHETIC_SITE_OVERVIEW = Object.freeze({
+  ...WORKSPACE_SYNTHETIC_OVERVIEW,
   identity: {
-    ...R5_SYNTHETIC_OVERVIEW.identity,
+    ...WORKSPACE_SYNTHETIC_OVERVIEW.identity,
     site_ref: "synthetic-site-01",
-    response_snapshot_sha256: "7e2c07366fdd544eefdc1824147b6514d78cb8679c6f368926f5a67c3bdc8e75",
+    response_snapshot_sha256: "880691fabcca8bfb2fae4a88efac2691ce6d302f513e5ae027349ead93836095",
   },
-  response_snapshot_sha256: "7e2c07366fdd544eefdc1824147b6514d78cb8679c6f368926f5a67c3bdc8e75",
+  response_snapshot_sha256: "880691fabcca8bfb2fae4a88efac2691ce6d302f513e5ae027349ead93836095",
   read_handoff: {
-    ...R5_SYNTHETIC_OVERVIEW.read_handoff,
-    response_snapshot_sha256: "7e2c07366fdd544eefdc1824147b6514d78cb8679c6f368926f5a67c3bdc8e75",
+    ...WORKSPACE_SYNTHETIC_OVERVIEW.read_handoff,
+    response_snapshot_sha256: "880691fabcca8bfb2fae4a88efac2691ce6d302f513e5ae027349ead93836095",
   },
 });
 
 const SUBJECT_IDENTITY = Object.freeze({
-  ...R5_SYNTHETIC_IDENTITY,
+  ...WORKSPACE_SYNTHETIC_IDENTITY,
   site_ref: "synthetic-site-01",
   subject_ref: "synthetic-subject-001",
   spine_ref: "synthetic-spine-001",
@@ -272,7 +272,7 @@ const SUBJECT_IDENTITY = Object.freeze({
   window_end: "2026-08-20",
   return_context_key: "synthetic-return-subject-001",
   target_projection_content_hash: HASH_2,
-  response_snapshot_sha256: "fe7e5e8f9479507e93ebe7a29f4778dc776c3a295fb0caa965f50dc52b080b32",
+  response_snapshot_sha256: "d4fa49debfdadcb004544243bb05ceb31dc8de97fb4d78e6b6ba8163acd05ef8",
   risk_ref: "synthetic-risk-ae-01",
   risk_instance_ref: "synthetic-risk-instance-ae-01",
   risk_anchor_ref: "synthetic-anchor-ae-01",
@@ -280,11 +280,11 @@ const SUBJECT_IDENTITY = Object.freeze({
   visit_ref: "synthetic-visit-04",
 });
 
-export const R5_SYNTHETIC_SUBJECT_WORKSPACE = Object.freeze(envelope(
+export const WORKSPACE_SYNTHETIC_SUBJECT_WORKSPACE = Object.freeze(envelope(
   SUBJECT_IDENTITY,
   {
     kind: "subject_workspace",
-    project: R5_SYNTHETIC_OVERVIEW.projection.project,
+    project: WORKSPACE_SYNTHETIC_OVERVIEW.projection.project,
     workspace_state: {
       active_view: "journey",
       axis_mode: "calendar",
@@ -340,7 +340,7 @@ const EVIDENCE_IDENTITY = Object.freeze({
   response_snapshot_sha256: "d4d5a95124265fc9545f2cf45713c484b09bd8d1aefb98c891aff5d7057d3b61",
 });
 
-export const R5_SYNTHETIC_SOURCE_EVIDENCE = Object.freeze(envelope(
+export const WORKSPACE_SYNTHETIC_SOURCE_EVIDENCE = Object.freeze(envelope(
   EVIDENCE_IDENTITY,
   {
     kind: "source_evidence",
@@ -361,21 +361,21 @@ export const R5_SYNTHETIC_SOURCE_EVIDENCE = Object.freeze(envelope(
   [sourceRef(EVIDENCE_IDENTITY.source_locator_ref, "此处为隔离示范来源片段，用于验证精确定位与返回上下文。")],
 ));
 
-export const R5_SYNTHETIC_IDENTITY_NEGATIVE = Object.freeze({
-  ...R5_SYNTHETIC_OVERVIEW,
+export const WORKSPACE_SYNTHETIC_IDENTITY_NEGATIVE = Object.freeze({
+  ...WORKSPACE_SYNTHETIC_OVERVIEW,
   identity: {
-    ...R5_SYNTHETIC_OVERVIEW.identity,
+    ...WORKSPACE_SYNTHETIC_OVERVIEW.identity,
     project_ref: "synthetic-project-other",
-    response_snapshot_sha256: "eb1a36ab20186b41fca0e1bec6316244a94a86327d5535a339a351ca9889a30d",
+    response_snapshot_sha256: "a9713e91397bb650fa04bbb43817b330c7f35b8ef206d5a6e267b5d01faaee39",
   },
-  response_snapshot_sha256: "eb1a36ab20186b41fca0e1bec6316244a94a86327d5535a339a351ca9889a30d",
+  response_snapshot_sha256: "a9713e91397bb650fa04bbb43817b330c7f35b8ef206d5a6e267b5d01faaee39",
   read_handoff: {
-    ...R5_SYNTHETIC_OVERVIEW.read_handoff,
-    response_snapshot_sha256: "eb1a36ab20186b41fca0e1bec6316244a94a86327d5535a339a351ca9889a30d",
+    ...WORKSPACE_SYNTHETIC_OVERVIEW.read_handoff,
+    response_snapshot_sha256: "a9713e91397bb650fa04bbb43817b330c7f35b8ef206d5a6e267b5d01faaee39",
   },
 });
 
-export const medicalMonitoringR5SyntheticDomains = DOMAIN_ENCODINGS;
+export const medicalMonitoringWorkspaceSyntheticDomains = DOMAIN_ENCODINGS;
 
 // ---------------------------------------------------------------------------
 // Slice-07B 受试者阶段流向 synthetic fixtures。
@@ -450,14 +450,14 @@ const FLOW_SUBJECT_ROWS = Object.freeze([
   flowSubject(12, "synthetic-site-02", "中心 2", STOP_PATH, "flow-stage-withdrawn", { enteredDate: "2026-08-05", reason: "研究者评估后永久停药", riskSummary: "高风险 · 不良事件需核对", riskChange: "new" }),
 ]);
 
-export const R5_SYNTHETIC_SUBJECT_FLOW = Object.freeze({
+export const WORKSPACE_SYNTHETIC_SUBJECT_FLOW = Object.freeze({
   availability: "available",
   visual_kind: "path_throughput_sankey",
   scope: {
-    project_ref: R5_SYNTHETIC_IDENTITY.project_ref,
-    run_ref: R5_SYNTHETIC_IDENTITY.run_ref,
-    snapshot_ref: R5_SYNTHETIC_IDENTITY.snapshot_ref,
-    cutoff_ref: R5_SYNTHETIC_IDENTITY.cutoff_ref,
+    project_ref: WORKSPACE_SYNTHETIC_IDENTITY.project_ref,
+    run_ref: WORKSPACE_SYNTHETIC_IDENTITY.run_ref,
+    snapshot_ref: WORKSPACE_SYNTHETIC_IDENTITY.snapshot_ref,
+    cutoff_ref: WORKSPACE_SYNTHETIC_IDENTITY.cutoff_ref,
     site_ref: null,
   },
   stages: FLOW_STAGE_ROWS,
@@ -467,14 +467,14 @@ export const R5_SYNTHETIC_SUBJECT_FLOW = Object.freeze({
   reconciliation: { state: "matched", subject_total: 12, entry_total: 12, current_total: 12, detail_total: 12 },
 });
 
-export const R5_SYNTHETIC_SUBJECT_FLOW_NOT_PROVIDED = Object.freeze({
+export const WORKSPACE_SYNTHETIC_SUBJECT_FLOW_NOT_PROVIDED = Object.freeze({
   availability: "not_provided",
   reason_zh: "本次运行未提供阶段路径数据。",
   scope: {
-    project_ref: R5_SYNTHETIC_IDENTITY.project_ref,
-    run_ref: R5_SYNTHETIC_IDENTITY.run_ref,
-    snapshot_ref: R5_SYNTHETIC_IDENTITY.snapshot_ref,
-    cutoff_ref: R5_SYNTHETIC_IDENTITY.cutoff_ref,
+    project_ref: WORKSPACE_SYNTHETIC_IDENTITY.project_ref,
+    run_ref: WORKSPACE_SYNTHETIC_IDENTITY.run_ref,
+    snapshot_ref: WORKSPACE_SYNTHETIC_IDENTITY.snapshot_ref,
+    cutoff_ref: WORKSPACE_SYNTHETIC_IDENTITY.cutoff_ref,
     site_ref: null,
   },
   stages: [],
@@ -483,13 +483,13 @@ export const R5_SYNTHETIC_SUBJECT_FLOW_NOT_PROVIDED = Object.freeze({
   reconciliation: { state: "not_applicable" },
 });
 
-export const R5_SYNTHETIC_SUBJECT_FLOW_BLOCKED = Object.freeze({
-  ...R5_SYNTHETIC_SUBJECT_FLOW,
+export const WORKSPACE_SYNTHETIC_SUBJECT_FLOW_BLOCKED = Object.freeze({
+  ...WORKSPACE_SYNTHETIC_SUBJECT_FLOW,
   reconciliation: { state: "blocked", subject_total: 12, entry_total: 12, current_total: 14, detail_total: 14, gap_zh: "筛选阶段到达人数与路径记录相差 2 条，无法核对。" },
 });
 
-export const R5_SYNTHETIC_SUBJECT_FLOW_EMPTY = Object.freeze({
-  ...R5_SYNTHETIC_SUBJECT_FLOW,
+export const WORKSPACE_SYNTHETIC_SUBJECT_FLOW_EMPTY = Object.freeze({
+  ...WORKSPACE_SYNTHETIC_SUBJECT_FLOW,
   stages: FLOW_STAGE_ROWS.map((stage) => ({ ...stage, reached_count: 0, current_count: 0, mid_high_risk_count: 0 })),
   links: [],
   subjects: [],
@@ -499,16 +499,16 @@ export const R5_SYNTHETIC_SUBJECT_FLOW_EMPTY = Object.freeze({
 
 function flowOverviewEnvelope(subjectFlow) {
   const envelope = {
-    ...R5_SYNTHETIC_OVERVIEW,
-    identity: { ...R5_SYNTHETIC_OVERVIEW.identity },
-    projection: { ...R5_SYNTHETIC_OVERVIEW.projection, subject_flow: subjectFlow },
-    read_handoff: { ...R5_SYNTHETIC_OVERVIEW.read_handoff },
+    ...WORKSPACE_SYNTHETIC_OVERVIEW,
+    identity: { ...WORKSPACE_SYNTHETIC_OVERVIEW.identity },
+    projection: { ...WORKSPACE_SYNTHETIC_OVERVIEW.projection, subject_flow: subjectFlow },
+    read_handoff: { ...WORKSPACE_SYNTHETIC_OVERVIEW.read_handoff },
   };
   const digest = {
-    ready: "4c9b6fa65f825b331f6ba62af2266e63eb8c87377e5acdb102ce6a6ec67e570d",
-    not_provided: "5265f0e6e1be0b298dbe1cce8e4878bdd3ea53d2f235885340a75bec664d764c",
-    blocked: "b9f5d4ccd8e0259f784a1b6b2f489248f8c3e70f48f9383f5ba16470d925e995",
-    empty: "e36420137b38c43761b9849c285821144886d0c104834c665d0087817b36455c",
+    ready: "bc9b6daefe8914194c77a9aa00062fed7c7cb9d43e12fbac3eb1b38f4f97083c",
+    not_provided: "3dde1152353c6d70b3617dfbe3076c035c8446b97a8ddc1f3c4052ab6456b1b9",
+    blocked: "21e03ecf98d422d62d4ec5912779a96c16eb8eeefbed290f83445d7c5ce1b140",
+    empty: "50e24a7f1ed7c4ff3b31823075e636ed4b17ea4ed1e6b0bfde40350232259004",
   }[subjectFlow.availability === "available" ? (subjectFlow.reconciliation?.state === "matched" ? (subjectFlow.subjects.length ? "ready" : "empty") : "blocked") : "not_provided"];
   envelope.response_snapshot_sha256 = digest;
   envelope.identity.response_snapshot_sha256 = digest;
@@ -516,7 +516,7 @@ function flowOverviewEnvelope(subjectFlow) {
   return Object.freeze(envelope);
 }
 
-export const R5_SYNTHETIC_FLOW_OVERVIEW = flowOverviewEnvelope(R5_SYNTHETIC_SUBJECT_FLOW);
-export const R5_SYNTHETIC_FLOW_OVERVIEW_NOT_PROVIDED = flowOverviewEnvelope(R5_SYNTHETIC_SUBJECT_FLOW_NOT_PROVIDED);
-export const R5_SYNTHETIC_FLOW_OVERVIEW_BLOCKED = flowOverviewEnvelope(R5_SYNTHETIC_SUBJECT_FLOW_BLOCKED);
-export const R5_SYNTHETIC_FLOW_OVERVIEW_EMPTY = flowOverviewEnvelope(R5_SYNTHETIC_SUBJECT_FLOW_EMPTY);
+export const WORKSPACE_SYNTHETIC_FLOW_OVERVIEW = flowOverviewEnvelope(WORKSPACE_SYNTHETIC_SUBJECT_FLOW);
+export const WORKSPACE_SYNTHETIC_FLOW_OVERVIEW_NOT_PROVIDED = flowOverviewEnvelope(WORKSPACE_SYNTHETIC_SUBJECT_FLOW_NOT_PROVIDED);
+export const WORKSPACE_SYNTHETIC_FLOW_OVERVIEW_BLOCKED = flowOverviewEnvelope(WORKSPACE_SYNTHETIC_SUBJECT_FLOW_BLOCKED);
+export const WORKSPACE_SYNTHETIC_FLOW_OVERVIEW_EMPTY = flowOverviewEnvelope(WORKSPACE_SYNTHETIC_SUBJECT_FLOW_EMPTY);

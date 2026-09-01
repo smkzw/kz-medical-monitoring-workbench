@@ -1,42 +1,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  createMedicalMonitoringR7ProductApi,
+  createMedicalMonitoringProductApi,
 } from "./medicalMonitoringProductApi.mjs";
 import {
-  projectR7History,
-  projectR7PublicProgress,
-  projectR7PublicProgressError,
-  projectR7PublicResultError,
-  projectR7ResultContext,
-  projectR7ResultEntry,
-  projectR7SetupOptions,
-  R7_OPTIONS_REFRESH_TEXT,
-  verifyR7PublicResultEnvelope,
+  projectMonitoringHistory,
+  projectMonitoringPublicProgress,
+  projectMonitoringPublicProgressError,
+  projectMonitoringPublicResultError,
+  projectMonitoringResultContext,
+  projectMonitoringResultEntry,
+  projectMonitoringSetupOptions,
+  MONITORING_OPTIONS_REFRESH_TEXT,
+  verifyMonitoringPublicResultEnvelope,
 } from "./medicalMonitoringProductProjection.mjs";
 import {
-  projectR7ContinuityError,
-  safeVerifyR7ContinuityEnvelope,
+  projectMonitoringContinuityError,
+  safeVerifyMonitoringContinuityEnvelope,
 } from "./medicalMonitoringContinuityProjection.mjs";
 import {
-  r7ContinuityRowJourneyTarget,
-  r7ContinuityRowSourceTarget,
+  monitoringContinuityRowJourneyTarget,
+  monitoringContinuityRowSourceTarget,
 } from "./medicalMonitoringContinuityFilter.mjs";
-import { r7JourneyDrawerClosePatch } from "./medicalMonitoringJourneyChanges.mjs";
+import { monitoringJourneyDrawerClosePatch } from "./medicalMonitoringJourneyChanges.mjs";
 import { MedicalMonitoringContinuityPanel } from "./MedicalMonitoringContinuityPanel.jsx";
 import {
-  R7_RESULT_ACTION_TEXT,
-  R7_WIZARD_STEPS,
-  advanceR7WizardStep,
-  buildR7PrepareAndStartPayload,
-  createR7IdempotencyController,
-  createR7WizardState,
-  projectR7ProductState,
-  projectR7WizardState,
-  setR7WizardSelection,
+  MONITORING_RESULT_ACTION_TEXT,
+  MONITORING_WIZARD_STEPS,
+  advanceMonitoringWizardStep,
+  buildMonitoringPrepareAndStartPayload,
+  createMonitoringIdempotencyController,
+  createMonitoringWizardState,
+  projectMonitoringProductState,
+  projectMonitoringWizardState,
+  setMonitoringWizardSelection,
 } from "./medicalMonitoringProductState.mjs";
-import { r7RefreshBackoffMs } from "./medicalMonitoringProgressProjection.mjs";
-import { R7ProgressPanelView } from "./MedicalMonitoringProgressPanel.jsx";
-import { routeStateForMedicalMonitoringR5View } from "./medicalMonitoringWorkspaceRouteState.mjs";
+import { monitoringRefreshBackoffMs } from "./medicalMonitoringProgressProjection.mjs";
+import { MonitoringProgressPanelView } from "./MedicalMonitoringProgressPanel.jsx";
+import { routeStateForMedicalMonitoringWorkspaceView } from "./medicalMonitoringWorkspaceRouteState.mjs";
 import "./medicalMonitoringProductLoop.css";
 
 const PRODUCT_RESULT_SUBJECT_VIEWS = new Set(["journey", "profile", "timeline"]);
@@ -95,7 +95,7 @@ function clean(value, fallback = "") {
 function publicErrorText(error, fallback) {
   const detail = error && typeof error === "object" ? error.detail : null;
   const code = clean(detail?.code || error?.code);
-  if (code === "global_default_missing" || code === "invalid_snapshot") return R7_OPTIONS_REFRESH_TEXT;
+  if (code === "global_default_missing" || code === "invalid_snapshot") return MONITORING_OPTIONS_REFRESH_TEXT;
   const message = clean(detail?.message || detail?.text || error?.message || (typeof error === "string" ? error : ""));
   return /[\u4e00-\u9fff]/u.test(message) ? message : fallback;
 }
@@ -223,7 +223,7 @@ function normalizeIndicator(value = {}, index = 0) {
   };
 }
 
-function normalizePublicR5Payload(resultContext) {
+function normalizePublicProductPayload(resultContext) {
   const identity = isRecord(resultContext?.identity) ? resultContext.identity : {};
   const raw = isRecord(resultContext?.projection) ? resultContext.projection : {};
   const domainValues = raw.domain_encodings
@@ -272,7 +272,7 @@ function normalizePublicR5Payload(resultContext) {
     existing.coverageLabel = COVERAGE_LABELS[existing.coverageState] || "覆盖待确认";
     centersBySite.set(siteRef, existing);
   }
-  const identityForR5 = {
+  const identityForWorkspace = {
     project_ref: clean(identity.project_ref),
     public_run_token: clean(identity.public_run_token),
     snapshot_token: clean(identity.snapshot_token),
@@ -280,7 +280,7 @@ function normalizePublicR5Payload(resultContext) {
     view: clean(identity.view),
   };
   for (const key of PUBLIC_RESULT_LOCATORS) {
-    if (identity[key] !== undefined && identity[key] !== null && clean(identity[key])) identityForR5[key] = identity[key];
+    if (identity[key] !== undefined && identity[key] !== null && clean(identity[key])) identityForWorkspace[key] = identity[key];
   }
   const temporal = isRecord(raw.temporal_spine) ? raw.temporal_spine : isRecord(raw.spine) ? raw.spine : {};
   const events = (Array.isArray(raw.events) ? raw.events : Array.isArray(temporal.events) ? temporal.events : [])
@@ -302,7 +302,7 @@ function normalizePublicR5Payload(resultContext) {
     : {};
   return {
     publicResultContext: true,
-    identity: identityForR5,
+    identity: identityForWorkspace,
     result_context_token: resultContext.resultContextToken,
     counts,
     source_refs: Array.isArray(raw.source_refs) ? raw.source_refs : [],
@@ -342,7 +342,7 @@ function normalizePublicR5Payload(resultContext) {
     },
   };
 }
-export { normalizePublicR5Payload };
+export { normalizePublicProductPayload };
 
 function selectedSubjectWindow(payload, subject, route) {
   const flowRows = payload?.projection?.subjectFlow?.subjects || payload?.projection?.subjectFlow?.rows || [];
@@ -353,7 +353,7 @@ function selectedSubjectWindow(payload, subject, route) {
   return { start, end };
 }
 
-function R7ProductWorkbar({ state, onAction, omitComparisonClaim = false }) {
+function MonitoringProductWorkbar({ state, onAction, omitComparisonClaim = false }) {
   const workbar = state?.workbar;
   const selectedRun = state?.selectedRun;
   const details = selectedRun
@@ -367,26 +367,26 @@ function R7ProductWorkbar({ state, onAction, omitComparisonClaim = false }) {
     onAction?.(target);
   };
   return (
-    <section className="r7-product-workbar" data-r7-product-workbar data-r7-workbar-state={state?.kind || "loading"} aria-label="本次监查">
-      <div className="r7-product-workbar-copy">
+    <section className="monitoring-product-workbar" data-monitoring-product-workbar data-monitoring-workbar-state={state?.kind || "loading"} aria-label="本次监查">
+      <div className="monitoring-product-workbar-copy">
         <strong>{selectedRun?.modeText ? `${selectedRun.modeText}（本次）` : "医学监查工作区"}</strong>
         <small>{details}</small>
       </div>
-      <div className="r7-product-workbar-actions" role="group" aria-label="本次监查操作">
-        {workbar?.mainAction ? <button type="button" data-r7-workbar-main className="r7-product-button is-primary" onClick={() => invoke(workbar.mainTarget)}>{workbar.mainAction}</button> : null}
-        {workbar?.secondaryAction ? <button type="button" data-r7-workbar-secondary className="r7-product-button" onClick={() => invoke(workbar.secondaryTarget)}>{workbar.secondaryAction}</button> : null}
-        {workbar?.otherAction ? <button type="button" data-r7-workbar-other className="r7-product-button is-quiet" onClick={() => invoke(workbar.otherTarget)}>{workbar.otherAction}</button> : null}
+      <div className="monitoring-product-workbar-actions" role="group" aria-label="本次监查操作">
+        {workbar?.mainAction ? <button type="button" data-monitoring-workbar-main className="monitoring-product-button is-primary" onClick={() => invoke(workbar.mainTarget)}>{workbar.mainAction}</button> : null}
+        {workbar?.secondaryAction ? <button type="button" data-monitoring-workbar-secondary className="monitoring-product-button" onClick={() => invoke(workbar.secondaryTarget)}>{workbar.secondaryAction}</button> : null}
+        {workbar?.otherAction ? <button type="button" data-monitoring-workbar-other className="monitoring-product-button is-quiet" onClick={() => invoke(workbar.otherTarget)}>{workbar.otherAction}</button> : null}
       </div>
     </section>
   );
 }
 
-export { R7ProductWorkbar };
+export { MonitoringProductWorkbar };
 
-export function R7PublicResultIdentityStrip({ identity = {}, siteScopeText = "" }) {
+export function MonitoringPublicResultIdentityStrip({ identity = {}, siteScopeText = "" }) {
   // Workbar already shows modeText; repeating it here reads as “日常监查 日常监查”.
   return (
-    <aside className="r7-public-result-identity" data-r7-result-identity aria-label="本次结果范围">
+    <aside className="monitoring-public-result-identity" data-monitoring-result-identity aria-label="本次结果范围">
       <strong>本次结果范围</strong>
       <span>数据截止 {clean(identity.data_cutoff_text || identity.dataCutoffText, "待确认")}</span>
       <span>{clean(siteScopeText || identity.site_scope_text || identity.siteScopeText, "中心范围待确认")}</span>
@@ -394,24 +394,24 @@ export function R7PublicResultIdentityStrip({ identity = {}, siteScopeText = "" 
   );
 }
 
-export function R7HistoryDrawer({ history, selectedPublicRunToken = "", onSelect, onClose }) {
+export function MonitoringHistoryDrawer({ history, selectedPublicRunToken = "", onSelect, onClose }) {
   const rows = Array.isArray(history?.rows) ? history.rows : [];
   return (
-    <div className="r7-product-overlay" role="presentation">
-      <aside className="r7-history-drawer" role="dialog" aria-modal="true" aria-label="监查历史" data-r7-history-drawer>
-        <header className="r7-drawer-head">
-          <div><span className="r5-eyebrow">监查记录</span><h2>历史</h2><p>按服务端顺序显示最近记录。</p></div>
-          <button type="button" className="r7-icon-button" aria-label="关闭历史" onClick={onClose}>关闭</button>
+    <div className="monitoring-product-overlay" role="presentation">
+      <aside className="monitoring-history-drawer" role="dialog" aria-modal="true" aria-label="监查历史" data-monitoring-history-drawer>
+        <header className="monitoring-drawer-head">
+          <div><span className="monitoring-eyebrow">监查记录</span><h2>历史</h2><p>按服务端顺序显示最近记录。</p></div>
+          <button type="button" className="monitoring-icon-button" aria-label="关闭历史" onClick={onClose}>关闭</button>
         </header>
-        <div className="r7-history-list">
-          {rows.length === 0 ? <p className="r7-product-muted">尚无历史监查记录。</p> : null}
+        <div className="monitoring-history-list">
+          {rows.length === 0 ? <p className="monitoring-product-muted">尚无历史监查记录。</p> : null}
           {rows.map((row) => (
-            <article className={`r7-history-row${row.publicRunToken === selectedPublicRunToken ? " is-selected" : ""}`} key={row.publicRunToken} data-public-run-token={row.publicRunToken}>
-              <div className="r7-history-row-head"><strong>{row.modeText}</strong><span>{row.resultAvailable ? "结果可用" : "结果尚未整理"}</span></div>
+            <article className={`monitoring-history-row${row.publicRunToken === selectedPublicRunToken ? " is-selected" : ""}`} key={row.publicRunToken} data-public-run-token={row.publicRunToken}>
+              <div className="monitoring-history-row-head"><strong>{row.modeText}</strong><span>{row.resultAvailable ? "结果可用" : "结果尚未整理"}</span></div>
               <p>{row.dataCutoffText}</p>
               <p>{row.comparisonRangeText}</p>
-              <p className="r7-history-status">{row.statusText}</p>
-              <button type="button" className="r7-product-button is-small" onClick={() => onSelect?.(row)}>{row.mainAction}</button>
+              <p className="monitoring-history-status">{row.statusText}</p>
+              <button type="button" className="monitoring-product-button is-small" onClick={() => onSelect?.(row)}>{row.mainAction}</button>
             </article>
           ))}
         </div>
@@ -420,7 +420,7 @@ export function R7HistoryDrawer({ history, selectedPublicRunToken = "", onSelect
   );
 }
 
-export function R7WizardView({
+export function MonitoringWizardView({
   wizard,
   previewText = "",
   previewBusy = false,
@@ -443,23 +443,23 @@ export function R7WizardView({
   const candidates = Array.isArray(preview?.candidates) ? preview.candidates.slice(0, 5) : [];
   const setField = (field, value) => onSelect?.(field, value);
   return (
-    <div className="r7-product-overlay" role="presentation">
-      <section className="r7-product-dialog" role="dialog" aria-modal="true" aria-label="开始一次监查" data-r7-wizard data-r7-wizard-step={step}>
-        <header className="r7-dialog-head">
-          <div><span className="r5-eyebrow">本次监查</span><h2>开始一次监查</h2><p>在当前项目内确认监查方式、数据范围和特殊关注。</p></div>
-          <button type="button" className="r7-icon-button" aria-label="关闭向导" onClick={onClose}>关闭</button>
+    <div className="monitoring-product-overlay" role="presentation">
+      <section className="monitoring-product-dialog" role="dialog" aria-modal="true" aria-label="开始一次监查" data-monitoring-wizard data-monitoring-wizard-step={step}>
+        <header className="monitoring-dialog-head">
+          <div><span className="monitoring-eyebrow">本次监查</span><h2>开始一次监查</h2><p>在当前项目内确认监查方式、数据范围和特殊关注。</p></div>
+          <button type="button" className="monitoring-icon-button" aria-label="关闭向导" onClick={onClose}>关闭</button>
         </header>
-        <ol className="r7-wizard-steps" aria-label="监查设置步骤">
-          {R7_WIZARD_STEPS.map((item) => <li key={item.key} className={item.number === step ? "is-active" : item.number < step ? "is-complete" : ""}><span>{item.number}</span><strong>{item.label}</strong></li>)}
+        <ol className="monitoring-wizard-steps" aria-label="监查设置步骤">
+          {MONITORING_WIZARD_STEPS.map((item) => <li key={item.key} className={item.number === step ? "is-active" : item.number < step ? "is-complete" : ""}><span>{item.number}</span><strong>{item.label}</strong></li>)}
         </ol>
-        <div className="r7-wizard-body">
+        <div className="monitoring-wizard-body">
           {step === 1 ? (
-            <section className="r7-wizard-section" aria-labelledby="r7-wizard-mode-heading">
-              <div className="r7-wizard-section-head"><div><span className="r5-eyebrow">第 1 步</span><h3 id="r7-wizard-mode-heading">选择监查方式</h3></div><p>{wizard?.recommendationReason || ""}</p></div>
-              <div className="r7-mode-grid">
+            <section className="monitoring-wizard-section" aria-labelledby="monitoring-wizard-mode-heading">
+              <div className="monitoring-wizard-section-head"><div><span className="monitoring-eyebrow">第 1 步</span><h3 id="monitoring-wizard-mode-heading">选择监查方式</h3></div><p>{wizard?.recommendationReason || ""}</p></div>
+              <div className="monitoring-mode-grid">
                 {(wizard?.modeOptions || []).map((mode) => (
-                  <button type="button" key={mode.mode} className={`r7-mode-card${mode.mode === wizard.mode ? " is-selected" : ""}`} disabled={mode.available !== true} onClick={() => setField("mode", mode.mode)} data-mode={mode.mode}>
-                    <span className="r7-mode-card-marker" aria-hidden="true" />
+                  <button type="button" key={mode.mode} className={`monitoring-mode-card${mode.mode === wizard.mode ? " is-selected" : ""}`} disabled={mode.available !== true} onClick={() => setField("mode", mode.mode)} data-mode={mode.mode}>
+                    <span className="monitoring-mode-card-marker" aria-hidden="true" />
                     <strong>{mode.label || "监查方式"}</strong>
                     <p>{mode.description}</p>
                     {mode.recommended ? <small>服务端推荐：{mode.recommendationReason}</small> : null}
@@ -470,41 +470,41 @@ export function R7WizardView({
             </section>
           ) : null}
           {step === 2 ? (
-            <section className="r7-wizard-section" aria-labelledby="r7-wizard-scope-heading">
-              <div className="r7-wizard-section-head"><div><span className="r5-eyebrow">第 2 步</span><h3 id="r7-wizard-scope-heading">确认数据范围</h3></div><p>{selectedMode?.description || ""}</p></div>
-              {dataBatches.length > 1 ? <label className="r7-data-picker"><span>数据版本</span><select value={wizard.currentSnapshotToken} onChange={(event) => setField("currentSnapshotToken", event.target.value)}>{dataBatches.map((batch) => <option value={batch.snapshotToken} key={batch.snapshotToken}>{batch.dataCutoff || batch.snapshotToken} · {batch.scopeDescription || "数据范围"}</option>)}</select></label> : null}
-              <dl className="r7-wizard-facts">
+            <section className="monitoring-wizard-section" aria-labelledby="monitoring-wizard-scope-heading">
+              <div className="monitoring-wizard-section-head"><div><span className="monitoring-eyebrow">第 2 步</span><h3 id="monitoring-wizard-scope-heading">确认数据范围</h3></div><p>{selectedMode?.description || ""}</p></div>
+              {dataBatches.length > 1 ? <label className="monitoring-data-picker"><span>数据版本</span><select value={wizard.currentSnapshotToken} onChange={(event) => setField("currentSnapshotToken", event.target.value)}>{dataBatches.map((batch) => <option value={batch.snapshotToken} key={batch.snapshotToken}>{batch.dataCutoff || batch.snapshotToken} · {batch.scopeDescription || "数据范围"}</option>)}</select></label> : null}
+              <dl className="monitoring-wizard-facts">
                 <div><dt>当前数据</dt><dd>{selectedData.scopeDescription || "当前完整数据"}</dd></div>
                 <div><dt>数据截止</dt><dd>{selectedData.dataCutoff || "待确认"}</dd></div>
                 <div><dt>记录数量</dt><dd>{selectedData.rowCount ?? "待确认"}</dd></div>
               </dl>
-              <fieldset className="r7-option-fieldset"><legend>执行基础</legend><div className="r7-choice-grid">{(wizard?.basisOptions || []).map((option) => <label key={option.value} className={`r7-choice-card${option.value === wizard.executionBasis ? " is-selected" : ""}`}><input type="radio" name="r7-execution-basis" value={option.value} checked={option.value === wizard.executionBasis} disabled={option.available !== true} onChange={() => setField("executionBasis", option.value)} /><span><strong>{option.label || "当前选项"}</strong>{option.disabledReason ? <small>{option.disabledReason}</small> : null}</span></label>)}</div></fieldset>
-              {wizard.executionBasis === "incremental" ? <fieldset className="r7-option-fieldset"><legend>比较基线</legend><div className="r7-baseline-list">{(wizard?.baselineOptions || []).map((option) => <label key={option.baselineToken} className={`r7-baseline-row${option.baselineToken === wizard.baselineToken ? " is-selected" : ""}`}><input type="radio" name="r7-baseline" value={option.baselineToken} checked={option.baselineToken === wizard.baselineToken} disabled={option.selectable !== true} onChange={() => setField("baselineToken", option.baselineToken)} /><span><strong>{option.scopeDescription || option.modeText || "已发布基线"}</strong><small>{option.dataCutoff || "截止时间待确认"}{option.recommended ? " · 服务端推荐" : ""}</small></span>{option.selectable !== true ? <em>{"当前不可用"}</em> : null}</label>)}</div></fieldset> : null}
+              <fieldset className="monitoring-option-fieldset"><legend>执行基础</legend><div className="monitoring-choice-grid">{(wizard?.basisOptions || []).map((option) => <label key={option.value} className={`monitoring-choice-card${option.value === wizard.executionBasis ? " is-selected" : ""}`}><input type="radio" name="monitoring-execution-basis" value={option.value} checked={option.value === wizard.executionBasis} disabled={option.available !== true} onChange={() => setField("executionBasis", option.value)} /><span><strong>{option.label || "当前选项"}</strong>{option.disabledReason ? <small>{option.disabledReason}</small> : null}</span></label>)}</div></fieldset>
+              {wizard.executionBasis === "incremental" ? <fieldset className="monitoring-option-fieldset"><legend>比较基线</legend><div className="monitoring-baseline-list">{(wizard?.baselineOptions || []).map((option) => <label key={option.baselineToken} className={`monitoring-baseline-row${option.baselineToken === wizard.baselineToken ? " is-selected" : ""}`}><input type="radio" name="monitoring-baseline" value={option.baselineToken} checked={option.baselineToken === wizard.baselineToken} disabled={option.selectable !== true} onChange={() => setField("baselineToken", option.baselineToken)} /><span><strong>{option.scopeDescription || option.modeText || "已发布基线"}</strong><small>{option.dataCutoff || "截止时间待确认"}{option.recommended ? " · 服务端推荐" : ""}</small></span>{option.selectable !== true ? <em>{"当前不可用"}</em> : null}</label>)}</div></fieldset> : null}
             </section>
           ) : null}
           {step === 3 ? (
-            <section className="r7-wizard-section" aria-labelledby="r7-wizard-rules-heading">
-              <div className="r7-wizard-section-head"><div><span className="r5-eyebrow">第 3 步</span><h3 id="r7-wizard-rules-heading">选择特殊关注</h3></div><p>沿用已确认的项目规则；取消选择不会删除项目规则。</p></div>
-              <div className="r7-rule-list">{(wizard?.ruleRevisions || []).map((rule) => <label key={rule.revisionToken} className={`r7-rule-row${wizard.riskRuleTokens.includes(rule.revisionToken) ? " is-selected" : ""}`}><input type="checkbox" checked={wizard.riskRuleTokens.includes(rule.revisionToken)} onChange={(event) => setField("riskRuleTokens", event.target.checked ? [...wizard.riskRuleTokens, rule.revisionToken] : wizard.riskRuleTokens.filter((token) => token !== rule.revisionToken))} disabled={rule.selectable !== true} /><span><strong>{rule.summary}</strong><small>{rule.applicableScope} · {rule.startingRun}</small></span></label>)}</div>
-              <button type="button" className="r7-product-button is-outline" onClick={onPreview}>增加特殊关注</button>
-              {previewOpen ? <section className="r7-preview-panel" aria-label="增加特殊关注预览"><div className="r7-preview-head"><strong>增加特殊关注</strong><button type="button" className="r7-link-button" onClick={onClosePreview}>关闭预览</button></div><textarea rows={3} value={previewText} onChange={(event) => onPreviewTextChange?.(event.target.value)} placeholder="例如：关注感染、发热相关事件" /><div className="r7-preview-actions"><button type="button" className="r7-product-button is-small" disabled={previewBusy || !previewText.trim()} onClick={onPreview}>{previewBusy ? "正在生成" : "生成关注方向"}</button></div>{preview ? <div className="r7-preview-result"><p>{preview.reason || (preview.state === "ready" ? "请确认以下关注方向。" : "请选择一个关注方向后继续。")}</p>{candidates.map((candidate) => <label key={candidate.candidate_id} className={`r7-candidate-row${candidate.candidate_id === wizard.previewCandidateId ? " is-selected" : ""}`}><input type="radio" name="r7-preview-candidate" checked={candidate.candidate_id === wizard.previewCandidateId} onChange={() => setField("previewCandidateId", candidate.candidate_id)} /><span><strong>{candidate.subject}</strong><small>{candidate.condition}</small><em>{candidate.explanation}</em></span></label>)}{candidates.length > 0 ? <button type="button" className="r7-product-button is-small is-primary" disabled={!canConfirmPreview} onClick={onConfirmPreview}>确认并保存到项目</button> : null}</div> : null}</section> : null}
+            <section className="monitoring-wizard-section" aria-labelledby="monitoring-wizard-rules-heading">
+              <div className="monitoring-wizard-section-head"><div><span className="monitoring-eyebrow">第 3 步</span><h3 id="monitoring-wizard-rules-heading">选择特殊关注</h3></div><p>沿用已确认的项目规则；取消选择不会删除项目规则。</p></div>
+              <div className="monitoring-rule-list">{(wizard?.ruleRevisions || []).map((rule) => <label key={rule.revisionToken} className={`monitoring-rule-row${wizard.riskRuleTokens.includes(rule.revisionToken) ? " is-selected" : ""}`}><input type="checkbox" checked={wizard.riskRuleTokens.includes(rule.revisionToken)} onChange={(event) => setField("riskRuleTokens", event.target.checked ? [...wizard.riskRuleTokens, rule.revisionToken] : wizard.riskRuleTokens.filter((token) => token !== rule.revisionToken))} disabled={rule.selectable !== true} /><span><strong>{rule.summary}</strong><small>{rule.applicableScope} · {rule.startingRun}</small></span></label>)}</div>
+              <button type="button" className="monitoring-product-button is-outline" onClick={onPreview}>增加特殊关注</button>
+              {previewOpen ? <section className="monitoring-preview-panel" aria-label="增加特殊关注预览"><div className="monitoring-preview-head"><strong>增加特殊关注</strong><button type="button" className="monitoring-link-button" onClick={onClosePreview}>关闭预览</button></div><textarea rows={3} value={previewText} onChange={(event) => onPreviewTextChange?.(event.target.value)} placeholder="例如：关注感染、发热相关事件" /><div className="monitoring-preview-actions"><button type="button" className="monitoring-product-button is-small" disabled={previewBusy || !previewText.trim()} onClick={onPreview}>{previewBusy ? "正在生成" : "生成关注方向"}</button></div>{preview ? <div className="monitoring-preview-result"><p>{preview.reason || (preview.state === "ready" ? "请确认以下关注方向。" : "请选择一个关注方向后继续。")}</p>{candidates.map((candidate) => <label key={candidate.candidate_id} className={`monitoring-candidate-row${candidate.candidate_id === wizard.previewCandidateId ? " is-selected" : ""}`}><input type="radio" name="monitoring-preview-candidate" checked={candidate.candidate_id === wizard.previewCandidateId} onChange={() => setField("previewCandidateId", candidate.candidate_id)} /><span><strong>{candidate.subject}</strong><small>{candidate.condition}</small><em>{candidate.explanation}</em></span></label>)}{candidates.length > 0 ? <button type="button" className="monitoring-product-button is-small is-primary" disabled={!canConfirmPreview} onClick={onConfirmPreview}>确认并保存到项目</button> : null}</div> : null}</section> : null}
             </section>
           ) : null}
           {step === 4 ? (
-            <section className="r7-wizard-section" aria-labelledby="r7-wizard-confirm-heading">
-              <div className="r7-wizard-section-head"><div><span className="r5-eyebrow">第 4 步</span><h3 id="r7-wizard-confirm-heading">确认并开始</h3></div><p>开始后将进入本次监查进度；离开页面不会停止本次监查。</p></div>
-              <dl className="r7-confirm-summary"><div><dt>监查方式</dt><dd>{wizard?.summary?.modeText || "待确认"}</dd></div><div><dt>数据范围</dt><dd>{wizard?.summary?.scopeDescription || currentData.scopeDescription || "待确认"}</dd></div><div><dt>数据截止</dt><dd>{wizard?.summary?.dataCutoffText || currentData.dataCutoff || "待确认"}</dd></div><div><dt>比较基线</dt><dd>{wizard?.summary?.comparisonRangeText || "不使用上次结果"}</dd></div><div><dt>中心数量</dt><dd>{wizard?.serverSummary?.centerCount ?? "开始后由服务端确认"}</dd></div><div><dt>受试者数量</dt><dd>{wizard?.serverSummary?.subjectCount ?? "开始后由服务端确认"}</dd></div><div><dt>特殊关注</dt><dd>{wizard?.summary?.selectedRuleCount ?? wizard?.riskRuleTokens?.length ?? 0} 项</dd></div><div><dt>工作项总数</dt><dd>{wizard?.serverSummary?.workItemCount ?? "开始后由服务端确认"}</dd></div></dl>
+            <section className="monitoring-wizard-section" aria-labelledby="monitoring-wizard-confirm-heading">
+              <div className="monitoring-wizard-section-head"><div><span className="monitoring-eyebrow">第 4 步</span><h3 id="monitoring-wizard-confirm-heading">确认并开始</h3></div><p>开始后将进入本次监查进度；离开页面不会停止本次监查。</p></div>
+              <dl className="monitoring-confirm-summary"><div><dt>监查方式</dt><dd>{wizard?.summary?.modeText || "待确认"}</dd></div><div><dt>数据范围</dt><dd>{wizard?.summary?.scopeDescription || currentData.scopeDescription || "待确认"}</dd></div><div><dt>数据截止</dt><dd>{wizard?.summary?.dataCutoffText || currentData.dataCutoff || "待确认"}</dd></div><div><dt>比较基线</dt><dd>{wizard?.summary?.comparisonRangeText || "不使用上次结果"}</dd></div><div><dt>中心数量</dt><dd>{wizard?.serverSummary?.centerCount ?? "开始后由服务端确认"}</dd></div><div><dt>受试者数量</dt><dd>{wizard?.serverSummary?.subjectCount ?? "开始后由服务端确认"}</dd></div><div><dt>特殊关注</dt><dd>{wizard?.summary?.selectedRuleCount ?? wizard?.riskRuleTokens?.length ?? 0} 项</dd></div><div><dt>工作项总数</dt><dd>{wizard?.serverSummary?.workItemCount ?? "开始后由服务端确认"}</dd></div></dl>
             </section>
           ) : null}
-          {wizard?.errorText ? <p className="r7-wizard-error" role="alert">{wizard.errorText}</p> : null}
+          {wizard?.errorText ? <p className="monitoring-wizard-error" role="alert">{wizard.errorText}</p> : null}
         </div>
-        <footer className="r7-dialog-foot"><button type="button" className="r7-product-button is-quiet" onClick={step > 1 ? () => onAdvance?.(-1) : onClose}>{step > 1 ? "上一步" : "取消"}</button><button type="button" className="r7-product-button is-primary" onClick={() => onAdvance?.(1)}>{step === 4 ? "确认并开始监查" : "下一步"}</button></footer>
+        <footer className="monitoring-dialog-foot"><button type="button" className="monitoring-product-button is-quiet" onClick={step > 1 ? () => onAdvance?.(-1) : onClose}>{step > 1 ? "上一步" : "取消"}</button><button type="button" className="monitoring-product-button is-primary" onClick={() => onAdvance?.(1)}>{step === 4 ? "确认并开始监查" : "下一步"}</button></footer>
       </section>
     </div>
   );
 }
 
-export function R7PublicProgressSurface({ progress, error, loading = false, onRefresh, onBack, onOpenResult }) {
+export function MonitoringPublicProgressSurface({ progress, error, loading = false, onRefresh, onBack, onOpenResult }) {
   const view = progress
     ? {
       ...progress,
@@ -521,11 +521,11 @@ export function R7PublicProgressSurface({ progress, error, loading = false, onRe
     confirmStop: false,
   };
   return (
-    <section className="r7-product-progress-surface" data-r7-public-progress>
-      <R7ProgressPanelView panel={panel} onRefresh={onRefresh} />
-      <div className="r7-progress-route-actions">
-        {progress?.resultAvailable ? <button type="button" className="r7-product-button is-primary" onClick={onOpenResult}>{R7_RESULT_ACTION_TEXT}</button> : null}
-        <button type="button" className="r7-product-button is-quiet" onClick={onBack}>返回项目风险概览</button>
+    <section className="monitoring-product-progress-surface" data-monitoring-public-progress>
+      <MonitoringProgressPanelView panel={panel} onRefresh={onRefresh} />
+      <div className="monitoring-progress-route-actions">
+        {progress?.resultAvailable ? <button type="button" className="monitoring-product-button is-primary" onClick={onOpenResult}>{MONITORING_RESULT_ACTION_TEXT}</button> : null}
+        <button type="button" className="monitoring-product-button is-quiet" onClick={onBack}>返回项目风险概览</button>
       </div>
     </section>
   );
@@ -537,7 +537,7 @@ function ProductRouteTabs({ route, resultLoaded, onOverview }) {
   const onSiteOverview = route?.view === "site_overview" || (route?.view === "overview" && Boolean(clean(route?.site_ref)));
   const onProjectOverview = route?.view === "overview" && !clean(route?.site_ref);
   return (
-    <nav className="r7-product-route-tabs" aria-label="医学监查结果导航">
+    <nav className="monitoring-product-route-tabs" aria-label="医学监查结果导航">
       {resultLoaded && onProjectOverview ? <button type="button" className="is-active" onClick={onOverview}>项目风险概览</button> : null}
       {resultLoaded && onSiteOverview ? <button type="button" className="is-back" onClick={onOverview}>返回项目风险概览</button> : null}
       {resultToken && !["overview", "site_overview"].includes(route.view) ? <button type="button" className="is-back" onClick={onOverview}>返回项目风险概览</button> : null}
@@ -554,7 +554,7 @@ export function MedicalMonitoringProductLoop({
   EvidenceView,
   api: providedApi,
 }) {
-  const api = useMemo(() => providedApi || createMedicalMonitoringR7ProductApi(), [providedApi]);
+  const api = useMemo(() => providedApi || createMedicalMonitoringProductApi(), [providedApi]);
   const [setup, setSetup] = useState(null);
   const [history, setHistory] = useState(null);
   const [setupHistoryLoading, setSetupHistoryLoading] = useState(true);
@@ -589,7 +589,7 @@ export function MedicalMonitoringProductLoop({
   const routeView = PRODUCT_RESULT_VIEWS.has(route.view)
     ? route.view === "overview" && route.site_ref ? "site_overview" : route.view
     : "overview";
-  const productState = useMemo(() => projectR7ProductState({
+  const productState = useMemo(() => projectMonitoringProductState({
     projectId: normalizedProjectId,
     options: setup,
     history,
@@ -620,8 +620,8 @@ export function MedicalMonitoringProductLoop({
       api.listRuns(normalizedProjectId, { signal: controller.signal }),
     ]).then(([setupPayload, historyPayload]) => {
       if (cancelled) return;
-      const projectedSetup = projectR7SetupOptions(setupPayload, { projectId: normalizedProjectId });
-      const nextHistory = projectR7History(historyPayload, { projectId: normalizedProjectId });
+      const projectedSetup = projectMonitoringSetupOptions(setupPayload, { projectId: normalizedProjectId });
+      const nextHistory = projectMonitoringHistory(historyPayload, { projectId: normalizedProjectId });
       if (projectedSetup?.kind === "invalid") throw new Error(projectedSetup.error || "监查范围响应暂不可用");
       if (nextHistory?.kind === "invalid") throw new Error(nextHistory.error || "监查历史响应暂不可用");
       const rawCurrentData = isRecord(setupPayload?.current_data) ? setupPayload.current_data : {};
@@ -689,34 +689,34 @@ export function MedicalMonitoringProductLoop({
       }
     } catch (error) {
       setResultLoading(false);
-      setResultError(projectR7PublicResultError(error));
+      setResultError(projectMonitoringPublicResultError(error));
       return undefined;
     }
     request.then(async (payload) => {
       if (cancelled) return;
-      const verified = await verifyR7PublicResultEnvelope(payload, {
+      const verified = await verifyMonitoringPublicResultEnvelope(payload, {
         projectId: normalizedProjectId,
         resultContextToken: resultToken,
         view: expectedView,
       });
       if (cancelled) return;
-      const projected = projectR7ResultContext(verified, {
+      const projected = projectMonitoringResultContext(verified, {
         projectId: normalizedProjectId,
         resultContextToken: resultToken,
         view: expectedView,
       });
       if (projected.kind === "invalid") {
-        setResultError(projectR7PublicResultError({ code: projected.code, message: projected.error }));
+        setResultError(projectMonitoringPublicResultError({ code: projected.code, message: projected.error }));
         setResultLoading(false);
         return;
       }
       setResultContext(projected);
-      setResultPayload(normalizePublicR5Payload(projected));
+      setResultPayload(normalizePublicProductPayload(projected));
       setResultLoading(false);
     }).catch((error) => {
       if (cancelled || error?.name === "AbortError") return;
       setResultLoading(false);
-      setResultError(projectR7PublicResultError(error));
+      setResultError(projectMonitoringPublicResultError(error));
     });
     return () => {
       cancelled = true;
@@ -754,13 +754,13 @@ export function MedicalMonitoringProductLoop({
       if (cancelled) return;
       const expected = { projectId: normalizedProjectId, resultContextToken: resultToken };
       if (route.site_ref) expected.siteRef = route.site_ref;
-      const result = await safeVerifyR7ContinuityEnvelope(payload, expected);
+      const result = await safeVerifyMonitoringContinuityEnvelope(payload, expected);
       if (cancelled) return;
       setContinuityResult(result);
       setContinuityLoading(false);
     }).catch((error) => {
       if (cancelled || error?.name === "AbortError") return;
-      setContinuityResult(projectR7ContinuityError(error));
+      setContinuityResult(projectMonitoringContinuityError(error));
       setContinuityLoading(false);
     });
     return () => {
@@ -789,7 +789,7 @@ export function MedicalMonitoringProductLoop({
       try {
         const payload = await api.getPublicProgress(normalizedProjectId, publicRunToken, { signal: inFlightController.signal });
         if (disposed) return;
-        const projected = projectR7PublicProgress(payload, { publicRunToken });
+        const projected = projectMonitoringPublicProgress(payload, { publicRunToken });
         if (projected.kind !== "public_progress") throw new Error(projected.error || "进度响应暂不可用");
         const wasAvailable = previousProgressAvailableRef.current;
         previousProgressAvailableRef.current = projected.resultAvailable;
@@ -803,11 +803,11 @@ export function MedicalMonitoringProductLoop({
         if (disposed || error?.name === "AbortError") return;
         setProgressLoading(false);
         failures += 1;
-        const projectedError = projectR7PublicProgressError(error);
+        const projectedError = projectMonitoringPublicProgressError(error);
         if (projectedError.kind === "unavailable") setProgress(null);
         setProgressError(projectedError);
         if (projectedError.kind === "error" || projectedError.kind === "refresh_options") {
-          timer = setTimeout(() => readProgress(false), r7RefreshBackoffMs(failures));
+          timer = setTimeout(() => readProgress(false), monitoringRefreshBackoffMs(failures));
         }
       }
     };
@@ -833,7 +833,7 @@ export function MedicalMonitoringProductLoop({
 
   const refreshAll = useCallback(() => setRefreshEpoch((value) => value + 1), []);
   const navigate = useCallback((view, patch = {}) => {
-    const next = routeStateForMedicalMonitoringR5View(route, view, patch);
+    const next = routeStateForMedicalMonitoringWorkspaceView(route, view, patch);
     onRouteChange?.(next);
   }, [onRouteChange, route]);
   const goToProgress = useCallback((token = "") => {
@@ -849,11 +849,11 @@ export function MedicalMonitoringProductLoop({
     setEntryLoading(true);
     try {
       const payload = await api.getResultEntry(normalizedProjectId, token);
-      const entry = projectR7ResultEntry(payload, { projectId: normalizedProjectId, publicRunToken: token });
+      const entry = projectMonitoringResultEntry(payload, { projectId: normalizedProjectId, publicRunToken: token });
       if (entry.kind === "invalid") throw new Error(entry.error || "本次结果暂不可查看，请返回进度页");
       navigate("overview", { result_context_token: entry.resultContextToken, public_run_token: "" });
     } catch (error) {
-      setResultError(projectR7PublicResultError(error));
+      setResultError(projectMonitoringPublicResultError(error));
     } finally {
       setEntryLoading(false);
     }
@@ -872,9 +872,9 @@ export function MedicalMonitoringProductLoop({
   }, [openResult, productState.kind, productState.selectedPublicRunToken, refreshAll, resultToken]);
   const openWizard = useCallback(() => {
     if (!setup || setup.kind !== "setup") return;
-    const nextWizard = createR7WizardState(setup, { projectId: normalizedProjectId });
-    idempotencyRef.current = createR7IdempotencyController({ initialState: { selection: nextWizard } });
-    setWizard(projectR7WizardState({ ...nextWizard, idempotencyKey: idempotencyRef.current.getState().key }, setup));
+    const nextWizard = createMonitoringWizardState(setup, { projectId: normalizedProjectId });
+    idempotencyRef.current = createMonitoringIdempotencyController({ initialState: { selection: nextWizard } });
+    setWizard(projectMonitoringWizardState({ ...nextWizard, idempotencyKey: idempotencyRef.current.getState().key }, setup));
     setWizardError("");
     setPreviewText("");
     setPreviewOpen(false);
@@ -891,21 +891,21 @@ export function MedicalMonitoringProductLoop({
     setWizardError("");
     setWizard((current) => {
       if (!current || !setup) return current;
-      const changed = setR7WizardSelection(current, field, value, setup);
+      const changed = setMonitoringWizardSelection(current, field, value, setup);
       const idem = idempotencyRef.current?.syncSelection(changed);
-      return projectR7WizardState({ ...changed, idempotencyKey: idem?.key || current.idempotencyKey }, setup);
+      return projectMonitoringWizardState({ ...changed, idempotencyKey: idem?.key || current.idempotencyKey }, setup);
     });
   }, [setup]);
   const advanceWizard = useCallback((direction) => {
     setWizard((current) => {
       if (!current || !setup) return current;
-      const moved = advanceR7WizardStep(current, setup, direction);
-      return projectR7WizardState(moved, setup);
+      const moved = advanceMonitoringWizardStep(current, setup, direction);
+      return projectMonitoringWizardState(moved, setup);
     });
   }, [setup]);
   const executePrepare = useCallback(async (currentWizard) => {
     if (!currentWizard) return null;
-    const payload = buildR7PrepareAndStartPayload(currentWizard, setup);
+    const payload = buildMonitoringPrepareAndStartPayload(currentWizard, setup);
     idempotencyRef.current?.markAttempt();
     return api.prepareAndStart(normalizedProjectId, payload);
   }, [api, normalizedProjectId, setup]);
@@ -964,7 +964,7 @@ export function MedicalMonitoringProductLoop({
       });
       const candidates = Array.isArray(payload?.candidates) ? payload.candidates.slice(0, 5) : [];
       const selected = candidates.length === 1 ? clean(candidates[0].candidate_id) : "";
-      setWizard((current) => current ? projectR7WizardState(setR7WizardSelection(setR7WizardSelection(current, "preview", { ...payload, candidates }, setup), "previewCandidateId", selected, setup), setup) : current);
+      setWizard((current) => current ? projectMonitoringWizardState(setMonitoringWizardSelection(setMonitoringWizardSelection(current, "preview", { ...payload, candidates }, setup), "previewCandidateId", selected, setup), setup) : current);
       setPreviewOpen(true);
     } catch (error) {
       setWizardError(publicErrorText(error, "特殊关注预览暂不可用，请稍后重试。"));
@@ -1004,10 +1004,10 @@ export function MedicalMonitoringProductLoop({
       setSetup(nextSetup);
       setWizard((current) => {
         if (!current) return current;
-        const withRule = setR7WizardSelection(current, "riskRuleTokens", [...current.riskRuleTokens, revisionToken], nextSetup);
+        const withRule = setMonitoringWizardSelection(current, "riskRuleTokens", [...current.riskRuleTokens, revisionToken], nextSetup);
         const idem = idempotencyRef.current?.syncSelection(withRule);
-        const clearedPreview = setR7WizardSelection(setR7WizardSelection(withRule, "preview", null, nextSetup), "previewCandidateId", "", nextSetup);
-        return projectR7WizardState({ ...clearedPreview, idempotencyKey: idem?.key || current.idempotencyKey }, nextSetup);
+        const clearedPreview = setMonitoringWizardSelection(setMonitoringWizardSelection(withRule, "preview", null, nextSetup), "previewCandidateId", "", nextSetup);
+        return projectMonitoringWizardState({ ...clearedPreview, idempotencyKey: idem?.key || current.idempotencyKey }, nextSetup);
       });
       setRuleConfirmOpen(false);
       setPreviewOpen(false);
@@ -1093,12 +1093,12 @@ export function MedicalMonitoringProductLoop({
   // Slice-08C-2 same-identity routing: continuity rows reuse the public
   // journey/evidence routes; the gates live in the pure filter helpers.
   const selectContinuityJourney = useCallback((row) => {
-    const target = r7ContinuityRowJourneyTarget(row, resultPayload);
+    const target = monitoringContinuityRowJourneyTarget(row, resultPayload);
     if (!target) return;
     navigate("journey", target);
   }, [navigate, resultPayload]);
   const selectContinuitySource = useCallback((row) => {
-    const target = r7ContinuityRowSourceTarget(row);
+    const target = monitoringContinuityRowSourceTarget(row);
     if (!target) return;
     navigate("evidence", target);
   }, [navigate]);
@@ -1140,7 +1140,7 @@ export function MedicalMonitoringProductLoop({
     routeView === "overview" || routeView === "site_overview"
       ? OverviewView ? <OverviewView payload={resultPayload} route={route} selectedRiskInstanceRef={route.risk_instance_ref} onRiskSelect={selectResultRisk} onCenterSelect={selectResultCenter} onSubjectSelect={selectResultSubject} onSource={openResultSource} onFlowStageSelect={selectResultFlowStage} onFlowLinkSelect={selectResultFlowLink} onFlowMetricSelect={selectResultFlowMetric} onFlowRiskToggle={toggleResultFlowRisk} onFlowClear={clearResultFlow} onFlowSubjectJump={jumpResultFlowSubject} suppressVersionClaim={suppressVersionClaim} flowTableOpen continuityCounts={continuityCounts} /> : null
       : PRODUCT_RESULT_SUBJECT_VIEWS.has(routeView)
-        ? SubjectWorkspaceView ? <SubjectWorkspaceView payload={resultPayload} route={route} view={routeView} zoomLevel={0} onRiskSelect={selectResultRisk} onEventSelect={selectResultEvent} onSource={openResultSource} onDrawerClose={() => onRouteChange?.(r7JourneyDrawerClosePatch(route))} onJourneyRowSelect={selectResultContinuityRow} continuityResult={continuityResult} continuityUnavailable={continuityUnavailableText} continuityLoading={continuityLoading} /> : null
+        ? SubjectWorkspaceView ? <SubjectWorkspaceView payload={resultPayload} route={route} view={routeView} zoomLevel={0} onRiskSelect={selectResultRisk} onEventSelect={selectResultEvent} onSource={openResultSource} onDrawerClose={() => onRouteChange?.(monitoringJourneyDrawerClosePatch(route))} onJourneyRowSelect={selectResultContinuityRow} continuityResult={continuityResult} continuityUnavailable={continuityUnavailableText} continuityLoading={continuityLoading} /> : null
         : routeView === "evidence"
           ? EvidenceView ? <EvidenceView payload={resultPayload} route={route} onBack={backFromPublicEvidence} /> : null
           : null
@@ -1196,19 +1196,19 @@ export function MedicalMonitoringProductLoop({
         ? "工作条中的“查看本次进度”进入真实进度页面。"
         : "工作条中的操作会读取服务端范围与历史，不使用本地示例结果。";
   return (
-    <main className="r5-page r7-product-page" data-r5-view={routeView} data-r7-product-state={productStatus} data-r7-product-view={routeView}>
-      <header className="r5-page-header r7-product-header">
-        <div><span className="r5-eyebrow">医学监查</span><h1>{effectiveHeading}</h1><p>从本次监查进入项目风险、中心范围与受试者医学旅程。</p></div>
-        <div className="r5-page-actions"><button type="button" className="r5-back-button" onClick={onReturn}>医学监查首页</button></div>
+    <main className="monitoring-page monitoring-product-page" data-monitoring-view={routeView} data-monitoring-product-state={productStatus} data-monitoring-product-view={routeView}>
+      <header className="monitoring-page-header monitoring-product-header">
+        <div><span className="monitoring-eyebrow">医学监查</span><h1>{effectiveHeading}</h1><p>从本次监查进入项目风险、中心范围与受试者医学旅程。</p></div>
+        <div className="monitoring-page-actions"><button type="button" className="monitoring-back-button" onClick={onReturn}>医学监查首页</button></div>
       </header>
-      <R7ProductWorkbar state={displayState} onAction={onWorkbarAction} omitComparisonClaim={suppressVersionClaim} />
-      {resultLoaded ? <R7PublicResultIdentityStrip identity={resultContext.identity} siteScopeText={resultSiteScopeText} /> : null}
+      <MonitoringProductWorkbar state={displayState} onAction={onWorkbarAction} omitComparisonClaim={suppressVersionClaim} />
+      {resultLoaded ? <MonitoringPublicResultIdentityStrip identity={resultContext.identity} siteScopeText={resultSiteScopeText} /> : null}
       <ProductRouteTabs route={route} resultLoaded={resultLoaded} onOverview={() => navigate("overview")} />
-      {wizardOpen && wizard ? <R7WizardView wizard={{ ...wizard, dataBatches: setup?.dataBatches || [], serverSummary: setup?.serverSummary || {}, errorText: wizardError || wizard.errorText }} previewText={previewText} previewBusy={previewBusy} previewOpen={previewOpen} onClose={closeWizard} onSelect={changeWizard} onAdvance={(direction) => direction > 0 && wizard.step === 4 ? submitWizard() : advanceWizard(direction)} onPreviewTextChange={setPreviewText} onPreview={requestPreview} onClosePreview={() => { setPreviewOpen(false); changeWizard("preview", null); changeWizard("previewCandidateId", ""); }} onConfirmPreview={confirmPreview} canConfirmPreview={Boolean(wizard.previewCandidateId)} /> : null}
-      {!loadingBody && (resultError || setupHistoryError) ? <section className="r7-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><button type="button" className="r7-product-button is-small" onClick={retryPage}>重新读取</button></section> : null}
-      {!loadingBody && !resultError && !setupHistoryError && publicRunToken && !resultToken ? <R7PublicProgressSurface progress={progress} error={progressError} loading={progressLoading} onRefresh={() => setRefreshEpoch((value) => value + 1)} onBack={() => navigate("overview", { public_run_token: "" })} onOpenResult={() => openResult(publicRunToken)} /> : null}
+      {wizardOpen && wizard ? <MonitoringWizardView wizard={{ ...wizard, dataBatches: setup?.dataBatches || [], serverSummary: setup?.serverSummary || {}, errorText: wizardError || wizard.errorText }} previewText={previewText} previewBusy={previewBusy} previewOpen={previewOpen} onClose={closeWizard} onSelect={changeWizard} onAdvance={(direction) => direction > 0 && wizard.step === 4 ? submitWizard() : advanceWizard(direction)} onPreviewTextChange={setPreviewText} onPreview={requestPreview} onClosePreview={() => { setPreviewOpen(false); changeWizard("preview", null); changeWizard("previewCandidateId", ""); }} onConfirmPreview={confirmPreview} canConfirmPreview={Boolean(wizard.previewCandidateId)} /> : null}
+      {!loadingBody && (resultError || setupHistoryError) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button></section> : null}
+      {!loadingBody && !resultError && !setupHistoryError && publicRunToken && !resultToken ? <MonitoringPublicProgressSurface progress={progress} error={progressError} loading={progressLoading} onRefresh={() => setRefreshEpoch((value) => value + 1)} onBack={() => navigate("overview", { public_run_token: "" })} onOpenResult={() => openResult(publicRunToken)} /> : null}
       {!loadingBody && !resultError && !setupHistoryError && resultLoaded ? (
-        <div className="r7-product-result-body">
+        <div className="monitoring-product-result-body">
           {/* Tamper/unavailable continuity must lead the first screen with the exact fail-closed copy.
            * Comparable overviews keep flow+table first, then continuity. */}
           {suppressVersionClaim && (routeView === "overview" || routeView === "site_overview") ? (
@@ -1237,9 +1237,9 @@ export function MedicalMonitoringProductLoop({
           ) : null}
         </div>
       ) : null}
-      {!loadingBody && !resultError && !setupHistoryError && !resultLoaded && !publicRunToken ? <section className="r7-product-start-surface"><strong>{startSurfaceTitle}</strong><span>{startSurfaceCopy}</span></section> : null}
-      {historyOpen ? <R7HistoryDrawer history={history} selectedPublicRunToken={productState.selectedPublicRunToken} onSelect={selectHistoryRow} onClose={() => setHistoryOpen(false)} /> : null}
-      {ruleConfirmOpen ? <div className="r7-product-overlay" role="presentation"><section className="r7-rule-confirm-dialog" role="dialog" aria-modal="true" aria-label="确认保存特殊关注"><span className="r5-eyebrow">再次确认</span><h2>确认后将保存为本项目规则</h2><p>即使关闭本次向导，该规则也会保留。确认后返回第 3 步并默认勾选。</p><div className="r7-dialog-foot"><button type="button" className="r7-product-button is-quiet" disabled={ruleConfirmBusy} onClick={() => setRuleConfirmOpen(false)}>取消</button><button type="button" className="r7-product-button is-primary" disabled={ruleConfirmBusy} onClick={confirmRule}>{ruleConfirmBusy ? "保存中" : "再次确认并保存"}</button></div></section></div> : null}
+      {!loadingBody && !resultError && !setupHistoryError && !resultLoaded && !publicRunToken ? <section className="monitoring-product-start-surface"><strong>{startSurfaceTitle}</strong><span>{startSurfaceCopy}</span></section> : null}
+      {historyOpen ? <MonitoringHistoryDrawer history={history} selectedPublicRunToken={productState.selectedPublicRunToken} onSelect={selectHistoryRow} onClose={() => setHistoryOpen(false)} /> : null}
+      {ruleConfirmOpen ? <div className="monitoring-product-overlay" role="presentation"><section className="monitoring-rule-confirm-dialog" role="dialog" aria-modal="true" aria-label="确认保存特殊关注"><span className="monitoring-eyebrow">再次确认</span><h2>确认后将保存为本项目规则</h2><p>即使关闭本次向导，该规则也会保留。确认后返回第 3 步并默认勾选。</p><div className="monitoring-dialog-foot"><button type="button" className="monitoring-product-button is-quiet" disabled={ruleConfirmBusy} onClick={() => setRuleConfirmOpen(false)}>取消</button><button type="button" className="monitoring-product-button is-primary" disabled={ruleConfirmBusy} onClick={confirmRule}>{ruleConfirmBusy ? "保存中" : "再次确认并保存"}</button></div></section></div> : null}
     </main>
   );
 }
