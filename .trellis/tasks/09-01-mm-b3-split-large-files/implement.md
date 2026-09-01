@@ -12,6 +12,7 @@
     - [x] Move HTTP status mapping and Chinese error envelopes.
     - [x] Move legacy read-only, setup and execution projections.
     - [x] Move public-result request parsing and runtime-manifest helpers.
+    - [x] Move provider-neutral R5/R6 publication invocation adapters.
 - [ ] Extract project lifecycle, backup and restore capability router.
 - [ ] Extract setup, special-risk rule and profile capability router.
 - [ ] Extract run preparation, execution and progress capability router.
