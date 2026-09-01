@@ -328,3 +328,11 @@
 - Every D07 evaluator source remains below 1,500 lines (largest extracted evaluator mixin: 1,180 lines; existing `d07_safety.py`: 1,330 lines).
 - Verification: original D07 runtime, challenge, mutation, Query/Journey and replay suites pass `1418 passed`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `py_compile` and diff checks pass.
 - Next slice: decompose visit-schedule evaluation while explicitly resolving its orchestration/evaluation/output helper cycle.
+
+## 2026-09-02 — B3 visit-schedule evaluator decomposition
+
+- Split the 4,674-line D05 authority into contracts, visit/activity assignment, expected-set expansion, result contracts, output helpers, unit evaluation and orchestration modules behind the existing `risks.visit_schedule_evaluator` facade.
+- Resolved the former evaluation/output helper cycle by placing evidence construction with output helpers and making unit evaluation consume it explicitly. Preserved the historically imported private Query action helper through the facade.
+- The first package-injected run exposed two missing private imports (`_action_suffix` and `_evidence_items`); both were restored without changing the D05 decision logic. Every D05 evaluator source is below the 1,500-line hard limit (largest: `visit_schedule_unit_evaluation.py`, 1,199 lines).
+- Verification: original D05 slice, projection and challenge-matrix suites pass `173 passed`; the broader R5/R7 product surface passes `141 passed`; the protected medical-writing manifest/frontend adjacent gate passes `156 passed`; `py_compile` and `git diff --check` pass. A deliberately broader writing scan also observed two pre-existing translation-batch contract failures in the parallel subsystem; this slice did not touch or repair that protected surface.
+- Next slice: split the remaining oversized monitoring authorities, starting with report mode output and graph store, while preserving report publication and graph transaction boundaries.
