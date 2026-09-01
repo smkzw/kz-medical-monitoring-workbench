@@ -223,3 +223,10 @@
 - A first mechanical boundary selected two lines beyond the intended constants and was corrected before commit; the process-wide backup/restore worker registry, lock and terminal sets remain a single facade-owned object.
 - Verification: package/facade pass `py_compile`; all 13 error symbols preserve facade identity; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `git diff --check` passes.
 - Next slice: extract legacy read-only profile/binding/run/risk/progress projections and setup/execution projections.
+
+## 2026-09-02 — B3 legacy read-only and execution projections
+
+- Moved legacy profile, binding, launch, risk and progress projections plus setup/execution audience adapters into `packages.medical_monitoring.api.r7_product.legacy_projections`.
+- Kept read-only view/store opening, mutable runtime construction, backup worker state and all endpoint closures in the facade. The nine moved symbols are eager facade re-exports, preserving compatibility identity.
+- Verification: package and facade pass `py_compile`; all nine facade identities match the extracted authority; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `git diff --check` passes.
+- Next slice: extract public-result request parsing and publication-manifest/provider-neutral metadata helpers, then begin capability route-context separation while retaining facade patch seams.
