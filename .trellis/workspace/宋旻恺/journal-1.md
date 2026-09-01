@@ -368,3 +368,11 @@
 - Every D05 domain source is below the 1,500-line hard limit (largest: `visit_schedule_types.py`, 1,382 lines). The first focused run exposed one private regex group omitted from the extracted imports and the original late `ScheduleGate` lookup; both were restored without changing contract behavior.
 - Verification: original D05 slice, projection and challenge-matrix suites pass `173 passed`; the broader product surface passes `141 passed`; the protected medical-writing adjacent gate passes `156 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `runtime/project_backup.py` or the next dependency-safe oversized authority, preserving archive validation and one restore transaction boundary.
+
+## 2026-09-02 — B3 project backup and atomic-restore decomposition
+
+- Split the 3,062-line project backup authority into the frozen contract/ledger support surface, shared manager and workspace-snapshot base, deterministic archive/preflight mixin, and atomic restore/rollback mixin behind the existing `runtime.project_backup.ProjectBackupManager` facade.
+- The concrete manager still owns one operation ledger, one maintenance gate route and one live-workspace switch/rollback sequence. Archive format, manifest validation, project identity reconciliation, artifact-closure checks, idempotency behavior and Chinese result/error wording are unchanged.
+- Every project-backup source is below the 1,500-line hard limit (largest: `project_backup_base.py`, 927 lines). Public aliases, helper entrypoints and historically visible module constants remain available from the facade.
+- Verification: backup and adversarial archive/restore suites pass `80 passed`; project audit, schema migration, independent verifier, R5/R7 product routes and the protected medical-writing adjacent gate pass `344 passed`; `py_compile` and `git diff --check` pass.
+- Next slice: split `projections/d10.py`, preserving D10 gate/result identity and user-facing projection semantics without adding study-specific rules.
