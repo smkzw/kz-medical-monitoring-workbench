@@ -209,3 +209,10 @@
 - All six symbols remain eager facade re-exports. Secret filtering, internal-term suppression and error class identity are unchanged; no endpoint or route closure moved.
 - Verification: package and facade pass `py_compile`; R5/R7 product routes pass `100 passed`.
 - Next slice: extract launch/publication and public-result pure projections, then rerun the combined product and adjacent medical-writing gate.
+
+## 2026-09-01 — B3 result projections
+
+- Moved publication audience wording, launch/publication state projections, public-result locator vocabulary and authority-field stripping into `packages.medical_monitoring.api.r7_product.result_projections`.
+- The facade retains error-envelope helpers, request parsing and all publication provider/bridge seams; no I/O orchestration or endpoint body moved.
+- Verification: package and facade pass `py_compile`; R5/R7 product plus adjacent medical-writing checks pass `227 passed`.
+- Next slice: extract request/error helpers and legacy read-only projections, then close the module-level pure-projection checklist before introducing capability route contexts.
