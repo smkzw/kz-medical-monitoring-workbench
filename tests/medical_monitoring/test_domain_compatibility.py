@@ -1,5 +1,21 @@
 """Consolidated domain modules remain identical through temporary POC shims."""
 
+import sys
+from pathlib import Path
+
+# Runnable without the poc conftests: place every poc R src dir on sys.path
+# first (same convention as poc/medical_monitoring_ai_native_r7/tests/
+# fake_harness.py, which only covers R6).
+for _r in range(1, 8):
+    _r_src = (
+        Path(__file__).resolve().parents[2]
+        / "poc"
+        / f"medical_monitoring_ai_native_r{_r}"
+        / "src"
+    )
+    if _r_src.is_dir() and str(_r_src) not in sys.path:
+        sys.path.insert(0, str(_r_src))
+
 from packages.medical_monitoring.domain import acceptance, entities, execution
 from packages.medical_monitoring.domain import identity, risk, schema_registry, schema_shape
 from packages.medical_monitoring.graph import engine, store
