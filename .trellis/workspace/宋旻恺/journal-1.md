@@ -497,3 +497,11 @@
 - The extraction exposed two direct dependencies (`_path_within` and `_SANDBOX_EXEC_PATH`) and a late-bound test/runtime identity edge. The main profile verifier now checks the current sandbox executable identity, and command construction receives that verified path explicitly, retaining the prior fail-closed behavior when the backend disappears after profile freeze.
 - Verification: capability runtime, product capability guard and R7 harness runtime pass `90 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; both modules pass `py_compile`, and `git diff --check` passes.
 - Next slice: split `projections/d07_journey.py`, preserving the chronological visit axis, typed event/risk markers, source jumps and renderer-neutral Chinese audience semantics.
+
+## 2026-09-02 — B3 D07 journey audience-contract decomposition
+
+- Split the 1,535-line D07 Journey projection into a 1,328-line chronological visit-axis/source-binding projection and a 205-line closed audience-schema/validation module, while keeping the existing `d07_journey` import surface compatible for R4 consumers.
+- Preserved the shared visit/time spine, deterministic event ordering, typed event and risk markers, one-hop source jumps with reverse bindings, exact-key payload contracts, risk anchors, audience visibility gating and Chinese-native lexicon checks. Internal object names and candidate/fact terms remain blocked from audience labels.
+- The split is renderer-neutral and adds no card-layout assumption, study/drug/disease feature, score threshold or listing-format branch; the later interactive Patient Journey remains free to render the same ordered projection as one horizontal visit axis.
+- Verification: D07 Query/Journey, runtime-contract, mutation, replay, challenge-matrix and artifact-generator suites pass `1,543 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; all three D07 modules pass `py_compile`, and `git diff --check` passes.
+- Next slice: split the slightly oversized `runtime/agent_harness.py`, preserving one model-routing and invocation authority and the configured provider-neutral harness contract.
