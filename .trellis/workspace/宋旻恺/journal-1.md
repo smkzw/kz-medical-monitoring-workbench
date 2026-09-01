@@ -155,3 +155,10 @@
 - This is a mechanical move only. Existing explicitly selected synthetic-fixture behavior is retained for B5 separation and is not used as a missing-authority fallback.
 - Verification: adapter, subject-flow and R5 product-router behavior pass `49 passed`; both authority and compatibility modules pass `py_compile`.
 - Next slice: migrate the five live R6 report/harness modules, then R7 runtime dependencies, before cutting product routers directly to consolidated imports.
+
+## 2026-09-01 — B2 R6 reports and harness
+
+- Moved R6 contract loading, external-report review and three-mode output into `packages.medical_monitoring.reports`; moved the provider-neutral agent harness into `packages.medical_monitoring.runtime`.
+- Updated the contract artifact root for the consolidated file location and kept old R6 imports as temporary compatibility entries. No model binding, medical rule, report wording or mode behavior changed.
+- Verification: authorities and compatibility entries pass `py_compile`; focused R6 behavior produced `477 passed`. The seven failures are exclusively abolished whole-file SHA pins, old POC create-only allowlists, and a fixed medical-writing file-count pin; no report/mode/harness behavior test failed, and no medical-writing file changed.
+- Next slice: migrate the R7 runtime/lifecycle/persistence modules in dependency order, beginning with schema/ledger and project lifecycle primitives before run execution and continuity.
