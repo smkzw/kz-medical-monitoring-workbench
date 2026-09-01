@@ -384,3 +384,11 @@
 - The first complete run exposed four original forward lookups that crossed the new module boundaries; the facade now performs the same explicit late binding for risk markers, hotspots, deep links and Query drafts, while the shared measure-ledger identity helper lives with projection identity. Every D10 projection source is below the 1,500-line hard limit (largest: `d10_core.py`, 1,193 lines).
 - Verification: original D10 adapter, mutation, projection, replay, runtime-closure, runtime-contract, verifier-probe and ensemble suites pass `245 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `runtime/migration.py`, retaining one migration ledger, resume/rollback semantics and schema-verification boundary.
+
+## 2026-09-02 — B3 schema-migration coordinator decomposition
+
+- Split the 3,043-line migration authority into immutable contracts and the root-ledger extension, workspace/database/artifact oracles, marker-last SQLite migration steps, coordinator setup/inspection, backup/staging/member execution, and atomic switch/recovery/rollback modules behind the existing `runtime.migration.MigrationRunner` facade.
+- Retained one root migration ledger, the 09A backup-manager seam, maintenance-gate ownership, source fingerprint recheck, sibling staging workspace, marker-last per-member commits, restartable step digests, same-device directory switch and fail-closed rollback/triage behavior.
+- Every migration source is below the 1,500-line hard limit (largest: `migration_contracts.py`, 912 lines). Public functional entrypoints, failure-hook matrix and historically visible internal schema/DDL bindings remain available through the facade.
+- Verification: focused migration and continuity suites pass `54 passed, 1 skipped`; R1 authoritative-progress coverage passes `40 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass. A broader legacy scan still reports only the v2.0-obsolete launch-schema source-text assertion and optimizer/hash-seed subprocess gate; neither was refreshed or restored.
+- Next slice: split `projections/publication/s4_contracts.py`, preserving publication-state orthogonality, Query draft-only semantics and audience-language isolation.
