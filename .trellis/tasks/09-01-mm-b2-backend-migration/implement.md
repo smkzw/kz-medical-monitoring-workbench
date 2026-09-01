@@ -8,9 +8,9 @@
   - [x] Capability work-unit controller (moved with runtime dependencies).
 - [x] Runtime primitives: R1 adapters/capability/audience progress.
 - [x] Intelligence: R3 normalization/primitives/schema registry.
-- [ ] Risks and projections: R4 modules, with fixture data externalized separately.
+- [x] Risks and projections: R4 modules, with fixture data externalized separately.
   - [x] Shared contracts, coverage, lifecycle and ensemble foundation.
-  - [ ] Domain evaluators and renderer-neutral projections.
+  - [x] Domain evaluators and renderer-neutral projections.
     - [x] D08 cross-domain consistency contracts, evaluator and projection.
     - [x] D09 center-pattern contracts, evaluator and projection.
     - [x] D10 project-signal contracts, evaluator and projection; test adapter retained outside product authority.
@@ -21,7 +21,7 @@
     - [x] D04 protocol-compliance evaluator and projection.
     - [x] D05 visit-schedule contracts, evaluator and projection.
     - [x] D06 efficacy contracts, evaluator and projection.
-  - [ ] Fixture externalization and compatibility cleanup.
+  - [x] Fixture externalization and compatibility cleanup.
 - [ ] Projection authority: R5 modules and product adapter.
 - [ ] Reports and harness: R6 modules.
 - [ ] Product runtime: R7 modules.

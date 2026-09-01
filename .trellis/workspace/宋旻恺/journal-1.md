@@ -133,3 +133,10 @@
 - The first relocation run exposed four stale same-package imports inside the projection. Updating them to the authoritative `risks.efficacy` path restored the unchanged runtime contract.
 - Verification: package and compatibility files pass `py_compile`; the complete efficacy suite passes `920 passed`.
 - Next slice: inventory the remaining top-level R4 POC modules, retain only fixture/test-bound artifacts there, run the complete R4 suite, and then begin R5 projection/product-adapter migration.
+
+## 2026-09-01 — B2 R4 authority closure
+
+- Reconciled every remaining top-level `mm_r4` file. Live domain/runtime files are now compatibility entries to `packages.medical_monitoring`; only synthetic fixtures, frozen challenge adapters/oracles and the legacy package entry remain physically test-bound.
+- No fixture, hardcoded study/drug/disease rule, listing layout or challenge-path dependency was promoted into product authority.
+- Verification: the complete original R4 suite passes `4396 passed` in 196.54 seconds; consolidated package compatibility adds `4 passed`. This closes the R4 behavioral boundary at `4400 passed` across the two declared commands.
+- Next slice: inspect R5's live import closure, migrate renderer-neutral projections and the product adapter without pulling fixtures or presentation-specific constants into backend authority.
