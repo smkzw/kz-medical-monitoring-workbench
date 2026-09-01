@@ -352,3 +352,11 @@
 - Every store source is below the 1,500-line hard limit (largest: `store_base.py`, 1,016 lines). The facade preserves the original public domain imports and private schema-shape symbols required by compatibility checks.
 - Verification: the complete R1 suite passes `326 passed, 1 skipped`; R7 schema/backup/verifier/continuity/progress/harness checks yield `244 passed, 1 skipped` plus one obsolete POC source-text assertion against the now-intentional `launch_schema` compatibility shim; the broader product surface passes `141 passed`; the protected medical-writing adjacent gate passes `156 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `risks/ip.py`, preserving exposure/accountability identity, deterministic evidence binding and Query/PD draft semantics without drug- or study-specific constants.
+
+## 2026-09-02 — B3 D03 investigational-product decomposition
+
+- Split the 4,128-line D03 authority into typed/source-derived inputs, temporal assignment and exposure-day resolution, risk identity/expected-set/result construction, plan/adherence evaluation, action/accountability evaluation, and slice orchestration behind the existing `risks.ip` facade.
+- Preserved distinct exposure-day versus treatment-span semantics, fail-closed assignment binding, six independent control items, source-bound evidence, draft-only three-part Chinese Query wording and the rule that a suspected PD is never presented as confirmed.
+- Every D03 source is below the 1,500-line hard limit (largest: `ip_types.py`, 1,172 lines). No drug, indication, study, threshold or listing-layout constant was introduced; those remain typed source-derived inputs.
+- Verification: original D03 slice, projection, challenge-matrix and shared-domain suites pass `279 passed`; the broader product surface passes `141 passed`; the protected medical-writing adjacent gate passes `156 passed`; `py_compile` and `git diff --check` pass.
+- Next slice: split `risks/visit_schedule.py` typed contracts and deterministic schedule primitives, then continue through remaining files above the hard limit.
