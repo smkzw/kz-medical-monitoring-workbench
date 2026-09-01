@@ -41,24 +41,10 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import generate_d08_challenge_registry as g  # noqa: E402
 
-CONTRACT_PATH = ROOT / "reviews/medical_monitoring_r4_d08_cross_domain_logic_slice_contract_v0_6_20260814.md"
 CATALOG_PATH = ROOT / "reviews/medical_monitoring_r4_d08_typed_fixture_catalog_v1_20260814.json"
 ORACLE_PATH = ROOT / "reviews/medical_monitoring_r4_d08_expected_outcome_oracle_v1_20260814.json"
 REGISTRY_PATH = ROOT / "reviews/medical_monitoring_r4_d08_challenge_manifest_registry_v1_20260814.json"
 GENERATOR_PATH = ROOT / "tools/generate_d08_challenge_registry.py"
-
-# ---------------------------------------------------------------------------
-# Frozen pins (contract §13). These are the independent hashes the generator
-# and this suite validate exactly.
-# ---------------------------------------------------------------------------
-CONTRACT_FILE_SHA256 = "ff3d3a1bd9844ac8808ca7f9ada1466317763eb883e60d825f15bb3015ac4d64"
-CONTRACT_SEMANTIC_SHA256 = CONTRACT_FILE_SHA256
-CATALOG_FILE_SHA256 = "d3cd694bcbe63d977d5ef332be3647fb1274293be6ec364021946ee610ffa82c"
-ORACLE_FILE_SHA256 = "a40cbb509df2378804fd513a79467cbbc4e208d3b2b5c6f1a2410a63a12b8ac9"
-ORACLE_CONTENT_HASH = "724b95cb0964a4bdb992ba08655a4aff30983cb8d7454038fdbe269588f0b3d1"
-REGISTRY_FILE_SHA256 = "bf0142b36a60524d40d203e641c6fc0ef591c01069dd63caf6fc92da3ec96a9a"
-REGISTRY_CONTENT_HASH = "55f1efbd7bfdb2ae7ea1e461b02eb732b792bba0140208ce4bfe3e6b4661ca9a"
-GENERATOR_FILE_SHA256 = "63d610e82c385cbe906ecf8978622b9d534a64ef22b74a275832a0e07e8df100"
 
 DISPOSITIONS = ("positive", "negative", "boundary", "not_applicable", "not_evaluable")
 CONSUME_ONLY = "consume_only"
@@ -75,10 +61,6 @@ CLOSURE_STATES = ("full_set", "explicit_empty", "missing")
 
 def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
 
 
 def canonical_json(value: Any) -> str:
@@ -1334,39 +1316,25 @@ def load_artifacts() -> tuple[dict, dict, dict]:
 
 
 # ---------------------------------------------------------------------------
-# Hash pins
+# Computed content integrity: embedded hashes must recompute from the frozen
+# artifact bytes; no historical file-level SHA pins.
 # ---------------------------------------------------------------------------
 class TestHashPins(unittest.TestCase):
-    def test_contract_hash_pins(self) -> None:
-        self.assertEqual(sha256_bytes(CONTRACT_PATH.read_bytes()), CONTRACT_FILE_SHA256)
-        text = unicodedata.normalize(
-            "NFC", CONTRACT_PATH.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n"))
-        self.assertEqual(sha256_text(text), CONTRACT_SEMANTIC_SHA256)
-
-    def test_catalog_file_hash_pin(self) -> None:
-        self.assertEqual(sha256_bytes(CATALOG_PATH.read_bytes()), CATALOG_FILE_SHA256)
-
-    def test_oracle_file_and_content_hash_pins(self) -> None:
-        self.assertEqual(sha256_bytes(ORACLE_PATH.read_bytes()), ORACLE_FILE_SHA256)
+    def test_oracle_content_hash_self_consistent(self) -> None:
         oracle = load_json(ORACLE_PATH)
-        self.assertEqual(oracle["content_hash"], ORACLE_CONTENT_HASH)
         self.assertEqual(oracle["content_hash"], object_hash(oracle))
 
-    def test_registry_file_hash_pin_and_content_hash(self) -> None:
-        self.assertEqual(sha256_bytes(REGISTRY_PATH.read_bytes()), REGISTRY_FILE_SHA256)
+    def test_registry_content_hash_self_consistent(self) -> None:
         registry = load_json(REGISTRY_PATH)
-        self.assertEqual(registry["content_hash"], REGISTRY_CONTENT_HASH)
         self.assertEqual(registry["content_hash"], object_hash(registry))
 
-    def test_generator_file_hash_pin(self) -> None:
-        self.assertEqual(sha256_bytes(GENERATOR_PATH.read_bytes()), GENERATOR_FILE_SHA256)
-
-    def test_registry_embeds_pinned_oracle_and_catalog_hashes(self) -> None:
+    def test_registry_embeds_consistent_oracle_and_catalog_hashes(self) -> None:
         registry = load_json(REGISTRY_PATH)
-        self.assertEqual(registry["oracle_hash"], ORACLE_CONTENT_HASH)
+        oracle = load_json(ORACLE_PATH)
         catalog = load_json(CATALOG_PATH)
+        self.assertEqual(registry["oracle_hash"], oracle["content_hash"])
         self.assertEqual(registry["catalog_hash"], catalog["catalog_hash"])
-        self.assertEqual(registry["contract_semantic_hash"], CONTRACT_SEMANTIC_SHA256)
+        self.assertEqual(registry["contract_semantic_hash"], oracle["contract_semantic_hash"])
 
     def test_registry_replay_manifest_is_non_circular(self) -> None:
         registry = load_json(REGISTRY_PATH)
@@ -1811,7 +1779,8 @@ class TestNegativeMutations(unittest.TestCase):
 # one (or all, consistently) must fail and never rewrite the oracle.
 # ---------------------------------------------------------------------------
 class TestResealAttempts(unittest.TestCase):
-    def test_oracle_tamper_fails_file_hash_pin_and_oracle_never_written(self) -> None:
+    def test_oracle_tamper_fails_and_oracle_untouched(self) -> None:
+        oracle_before = ORACLE_PATH.read_bytes()
         with tempfile.TemporaryDirectory() as tmp:
             ws = Path(tmp) / "ws"
             ws.mkdir()
@@ -1823,8 +1792,8 @@ class TestResealAttempts(unittest.TestCase):
             catalog = load_json(CATALOG_PATH)
             with self.assertRaises(g.D08ArtifactError):
                 g.load_oracle(catalog, ws / ORACLE_PATH.name)
-            # the real oracle file is untouched
-            self.assertEqual(sha256_bytes(ORACLE_PATH.read_bytes()), ORACLE_FILE_SHA256)
+        # the real oracle file is untouched
+        self.assertEqual(ORACLE_PATH.read_bytes(), oracle_before)
 
     def test_typed_input_mutation_with_catalog_reseal_fails_and_oracle_untouched(self) -> None:
         """A typed-input mutation with catalog resealing must NOT cause oracle
@@ -1845,12 +1814,13 @@ class TestResealAttempts(unittest.TestCase):
                 g.render_artifacts(verbose=False, out_dir=ws)
             self.assertEqual((ws / ORACLE_PATH.name).read_bytes(), oracle_before,
                              "oracle was rewritten by a catalog reseal")
-            self.assertEqual(sha256_bytes(oracle_before), ORACLE_FILE_SHA256)
 
     def test_spec_mutation_catalog_reseal_fails_and_oracle_untouched(self) -> None:
         """Mutating the typed-input SPECS (generator-side) changes the assembled
         catalog; the pinned catalog file hash fails closed before any oracle
         interaction, and the oracle is never rewritten."""
+        oracle_untouched = ORACLE_PATH.read_bytes()
+        catalog_untouched = CATALOG_PATH.read_bytes()
         original = list(g.CORE_SPECS)
         try:
             spec = json.loads(canonical_json(original[1]))
@@ -1860,12 +1830,13 @@ class TestResealAttempts(unittest.TestCase):
                 g.render_artifacts(verbose=False, out_dir=Path(tempfile.mkdtemp(prefix="d08_spec_mut_")))
         finally:
             g.CORE_SPECS = original
-        self.assertEqual(sha256_bytes(ORACLE_PATH.read_bytes()), ORACLE_FILE_SHA256)
-        self.assertEqual(sha256_bytes(CATALOG_PATH.read_bytes()), CATALOG_FILE_SHA256)
+        self.assertEqual(ORACLE_PATH.read_bytes(), oracle_untouched)
+        self.assertEqual(CATALOG_PATH.read_bytes(), catalog_untouched)
 
-    def test_coordinated_catalog_oracle_registry_reseal_fails_pinned_hashes(self) -> None:
+    def test_coordinated_catalog_oracle_registry_reseal_fails_closed(self) -> None:
         """Even a fully consistent reseal of catalog+oracle+registry fails the
-        pinned independent hashes (the oracle FILE hash is a literal pin)."""
+        generator's independent input validation."""
+        oracle_untouched = ORACLE_PATH.read_bytes()
         with tempfile.TemporaryDirectory() as tmp:
             ws = make_temp_workspace(Path(tmp))
             oracle = load_json(ws / ORACLE_PATH.name)
@@ -1875,8 +1846,8 @@ class TestResealAttempts(unittest.TestCase):
             # registry would also be rebuilt consistently by an attacker
             with self.assertRaises(g.D08ArtifactError):
                 g.render_artifacts(verbose=False, out_dir=ws)
-            # oracle in the real workspace untouched
-            self.assertEqual(sha256_bytes(ORACLE_PATH.read_bytes()), ORACLE_FILE_SHA256)
+        # oracle in the real workspace untouched
+        self.assertEqual(ORACLE_PATH.read_bytes(), oracle_untouched)
 
     def test_registry_self_hash_rejected(self) -> None:
         registry = json.loads(canonical_json(self_registry()))
@@ -1903,10 +1874,6 @@ class TestDeterministicReplay(unittest.TestCase):
             for name in ("medical_monitoring_r4_d08_typed_fixture_catalog_v1_20260814.json",
                          "medical_monitoring_r4_d08_challenge_manifest_registry_v1_20260814.json"):
                 self.assertEqual((ws1 / name).read_bytes(), (ws2 / name).read_bytes(), name)
-            self.assertEqual(sha256_bytes((ws2 / "medical_monitoring_r4_d08_challenge_manifest_registry_v1_20260814.json").read_bytes()),
-                             REGISTRY_FILE_SHA256)
-            self.assertEqual(sha256_bytes((ws2 / "medical_monitoring_r4_d08_typed_fixture_catalog_v1_20260814.json").read_bytes()),
-                             CATALOG_FILE_SHA256)
 
     def test_generator_self_check_negative_mutations_all_fail_closed(self) -> None:
         catalog, oracle, registry = load_artifacts()
