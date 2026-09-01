@@ -18,10 +18,10 @@ const pageSource = fs.readFileSync(path.join(root, files[0]), "utf8");
 const styleSource = fs.readFileSync(path.join(root, files[3]), "utf8");
 const contentWithoutSchemaName = content.replaceAll("read-model", "");
 const appContent = fs.readFileSync(path.join(root, "frontend/src/App.jsx"), "utf8");
-const appR5Start = appContent.indexOf('if (activePage === "monitoringR5") {');
-const appLegacyStart = appContent.indexOf('if (activePage === "monitoring") {', appR5Start + 1);
-assert.ok(appR5Start >= 0 && appLegacyStart > appR5Start, "App contains an isolated R5 branch before legacy monitoring");
-const appR5Branch = appContent.slice(appR5Start, appLegacyStart);
+const appProductStart = appContent.indexOf('if (activePage === "monitoringProduct") {');
+const appLegacyStart = appContent.indexOf('if (activePage === "monitoring") {', appProductStart + 1);
+assert.ok(appProductStart >= 0 && appLegacyStart > appProductStart, "App contains an isolated product branch before legacy monitoring");
+const appProductBranch = appContent.slice(appProductStart, appLegacyStart);
 const forbiddenProductionTerms = [
   "正式事实",
   "候选信号",
@@ -37,15 +37,15 @@ const forbiddenProductionTerms = [
   "AI gateway",
 ];
 for (const term of forbiddenProductionTerms) assert.equal(contentWithoutSchemaName.includes(term), false, `production R5 source excludes ${term}`);
-for (const term of forbiddenProductionTerms) assert.equal(appR5Branch.includes(term), false, `App R5 branch excludes ${term}`);
+for (const term of forbiddenProductionTerms) assert.equal(appProductBranch.includes(term), false, `App product branch excludes ${term}`);
 assert.equal(content.includes('method: "GET"'), true, "adapter declares GET transport");
 for (const method of ["POST", "PUT", "PATCH", "DELETE"]) assert.equal(content.includes(`method: "${method}"`), false, `adapter excludes ${method} transport`);
 assert.equal(content.includes("fallback"), false, "R5 production source excludes fallback paths");
 assert.equal(content.includes("subject-workspaces"), true, "R5 source contains the subject read surface");
 assert.equal(content.includes("source-evidence"), true, "R5 source contains the evidence read surface");
 assert.equal(content.includes("synthetic-project-r5"), true, "fixtures carry an unmistakable synthetic project identity");
-assert.equal(appR5Branch.includes("<MedicalMonitoringR5Page"), true, "App R5 branch mounts the R5 page");
-assert.equal(appR5Branch.includes("fetch("), false, "App R5 branch has no direct read transport");
+assert.equal(appProductBranch.includes("<MedicalMonitoringPage"), true, "App product branch mounts the canonical page");
+assert.equal(appProductBranch.includes("fetch("), false, "App product branch has no direct read transport");
 assert.equal(content.includes("currentRisksRef.current.find((risk) => risk.riskAnchorRef === riskAnchorRef)"), true, "event selection resolves the risk bound to the selected anchor");
 assert.equal(content.includes('risk_instance_ref: linkedRisk?.riskInstanceRef || ""'), true, "event selection clears a stale risk instance when the event has no bound risk");
 assert.equal(pageSource.includes("DomainTracks"), true, "subject workspace renders the eight-domain track surface");
