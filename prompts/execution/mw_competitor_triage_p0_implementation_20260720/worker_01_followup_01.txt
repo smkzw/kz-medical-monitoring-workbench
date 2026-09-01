@@ -1,0 +1,142 @@
+Continue the SAME competitor-triage implementation session. Do not start a new
+session: this is Codex acceptance feedback on the exact product code you just
+implemented. Fully reread `/Users/smkzw/.codex/AGENTS.md` and
+`/Users/smkzw/.hermes/SOUL.md`, then read the accepted architecture plan and
+current source before editing.
+
+Hard boundaries
+---------------
+- Work only in the current workbench workspace.
+- Product code must use the direct configured independent AI. It must not call
+  Codex, Hermes, Qoder, CodeBuddy or any agent runtime.
+- Do not modify frontend, frontend tests, the 12-lane harness, stable runtime,
+  real project data, user originals, configuration, credentials, or the
+  runner-managed report.
+- Do not duplicate the existing content-validation override endpoint,
+  preparation batch, translation batch or initial prefill adapter.
+- Keep the initial prefill adapter's no-evidence exact-fact restrictions.
+- Codex remains final authority.
+
+Read these files only:
+----------------------
+- `/Users/smkzw/.codex/AGENTS.md`
+- `/Users/smkzw/.hermes/SOUL.md`
+- `plans/codex_mw_pre_picos_evidence_loop_p0_20260720.md`
+- `runs/execution/mw_pre_picos_evidence_loop_p0_20260720/manager_plan.md`
+- `runs/execution/mw_competitor_triage_p0_implementation_20260720/worker_01.md`
+- `packages/contracts/workbench_contracts/models.py`
+- `packages/contracts/workbench_contracts/__init__.py`
+- `services/api/app/ai_gateway.py`
+- `services/api/app/medical_writing_competitor_triage.py`
+- `services/api/app/medical_writing_authoring_journey.py`
+- `services/api/app/writing_reference_repository.py`
+- `services/api/app/writing_reference_preparation_batch.py`
+- `services/api/app/writing_reference_translation_batch.py`
+- `services/api/app/main.py`
+- `tests/test_medical_writing_competitor_triage.py`
+
+This initial list does not prohibit direct service/contracts/tests required to
+prove the same causal path. Record every additional file and why it was needed.
+
+Codex independently accepted
+-----------------------------
+- The additive v4 repository migration.
+- Exact-permutation chunk validation, deterministic chunk/hash behavior,
+  partial-failure persistence/retry, and the single reference-database
+  transaction concept.
+- 177 focused and adjacent tests currently pass under Codex rerun.
+
+Codex rejects the following P0 semantics
+----------------------------------------
+1. `_resolve_triage_provider()` accepts any configured DeepSeek model. The
+   triage service must fail closed before a request unless both configured
+   `model_name` and the provider's verified response identity are exactly
+   `deepseek-v4-pro`. Add a wrong-model test using a strict fake; do not rely
+   only on recording `model_name`.
+2. `confirm_basket()` accepts `PARTIAL_FAILED`. A one-click AI recommendation
+   cannot be authoritative while any chunk failed. Confirmation must require a
+   fully `REVIEW_READY` run with every chunk succeeded.
+3. Confirmation currently allows retained/excluded lists that do not form an
+   exact, non-overlapping partition of all snapshot NCT IDs. Require complete
+   coverage, no overlap, no duplicate IDs and no unknown IDs.
+4. Failed/untriaged candidates must never default to `direct_competitor`.
+5. `confirm_basket()` receives a provider argument that is not used. Remove the
+   misleading parameter and do not resolve/call AI during the user's confirm
+   action.
+6. The current confirmation immediately calls
+   `finalize_corpus_triage()`, which requires `picos_complete`; pre-PICOS
+   confirmation therefore becomes a fake projection failure. Implement the
+   accepted architecture:
+   - the authoritative confirmation and decisions remain in
+     `writing_reference.sqlite3`;
+   - project a derived discovery-basket reference into the authoring journey
+     without claiming final corpus admission and without requiring PICOS;
+   - this projection is replayable across the database boundary;
+   - when PICOS later becomes complete, idempotently project the same
+     confirmation into final corpus triage without a second user confirmation;
+   - do not overload `corpus_triage=finalized` before PICOS and do not claim a
+     cross-database atomic transaction.
+7. `WritingReferencePreparationBatchService._frozen_scope()` must accept the
+   current authoritative discovery confirmation before PICOS, while preserving
+   the legacy post-PICOS finalized-corpus path. It must reject stale/mismatched
+   snapshot, confirmation or material-fact authority.
+8. After the existing content-validation override records
+   `validation_state=user_overridden`, automatically and idempotently reconcile
+   that artifact's cached `review_required` preparation item to `prepared`,
+   recompute the batch, and make the existing translation batch eligible.
+   Retry must not select only `failed` items and strand overridden items.
+9. Use decision semantics, not generic approval semantics. The medical
+   manager's basket confirmation is already the decision. No second
+   `待医学批准`/`医学批准` state or action may be introduced.
+
+Preferred typed semantics
+-------------------------
+- A separate journey field/model such as `discovery_basket_projection` is
+  preferred over adding a polymorphic `"discovery_confirmed"` meaning to final
+  corpus triage.
+- Distinguish:
+  `basket_confirmed -> sources_prepared -> design_adopted ->
+  picos_complete -> corpus_projected`.
+- Reference confirmation status may distinguish `projection_pending`,
+  `discovery_projected`, `deferred_until_picos`, and `corpus_projected`, but
+  names must have one meaning and be backward-compatible.
+
+Writable product scope
+----------------------
+- `packages/contracts/workbench_contracts/models.py`
+- `packages/contracts/workbench_contracts/__init__.py`
+- `services/api/app/medical_writing_competitor_triage.py`
+- `services/api/app/medical_writing_authoring_journey.py`
+- `services/api/app/writing_reference_repository.py`
+- `services/api/app/writing_reference_preparation_batch.py`
+- `services/api/app/main.py`
+- focused tests named for competitor triage, discovery projection, preparation
+  reconciliation and adjacent existing tests whose assertions must be updated.
+
+Do not implement the evidence-grounded 3-5 design-candidate service in this
+pass. This pass closes the authority/preparation loop on which that service
+depends.
+
+Required verification
+---------------------
+- Wrong configured/response model fails closed before usable results.
+- Partial-failed run cannot be confirmed.
+- Missing/overlapping/duplicate partition cannot be confirmed.
+- Pre-PICOS basket confirmation succeeds once and permits preparation without
+  finalizing corpus triage.
+- Projection failure is replayable without a second user action.
+- Content override reconciles `review_required` to `prepared` and makes the
+  existing translation path eligible.
+- PICOS completion projects the same confirmation into final corpus triage
+  idempotently, with no re-confirmation.
+- Existing manual relevance, post-PICOS corpus and preparation behavior remain
+  compatible.
+- Run focused tests plus all adjacent authoring-journey, reference repository,
+  preparation/translation batch, prefill and corpus-readiness tests.
+
+Return complete changed-file, state/transaction, test, migration/rollback,
+failure and residual-risk evidence in final text. Never write the
+runner-managed report.
+
+Runner-managed output path:
+`runs/execution/mw_competitor_triage_p0_implementation_20260720/worker_01_followup_01.md`

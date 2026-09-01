@@ -1,0 +1,398 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cms-medical-writing-final-5x3-slot-completion-v1",
+  "title": "Final 5x3 medical-writing per-slot completion",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tester",
+    "slot",
+    "scenario",
+    "runs",
+    "slot_gates",
+    "final_status",
+    "evidence_root"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "final-5x3-slot-completion-2026-07-28.1"
+    },
+    "tester": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "declared_identity",
+        "requested_selector",
+        "observed_provider",
+        "observed_model",
+        "identity_verified",
+        "route_receipt"
+      ],
+      "properties": {
+        "declared_identity": {"type": "string", "minLength": 1},
+        "requested_selector": {"type": "string", "minLength": 1},
+        "observed_provider": {"type": "string", "minLength": 1},
+        "observed_model": {"type": "string", "minLength": 1},
+        "identity_verified": {"const": true},
+        "route_receipt": {"type": "string", "minLength": 1}
+      }
+    },
+    "slot": {
+      "type": "string",
+      "pattern": "^[A-E][1-3]$"
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "indication",
+        "phase",
+        "route",
+        "project_route",
+        "category_duties",
+        "public_protocol_count_receipt",
+        "unique_indication_check",
+        "excluded_domain_check"
+      ],
+      "properties": {
+        "indication": {"type": "string", "minLength": 1},
+        "phase": {"type": "string", "minLength": 1},
+        "route": {"type": "string", "minLength": 1},
+        "project_route": {
+          "enum": ["greenfield", "synopsis_import"]
+        },
+        "category_duties": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "large_gt_10_public_protocols",
+              "rare_or_small",
+              "non_oral_non_injection",
+              "phase_i",
+              "phase_ii",
+              "phase_iii"
+            ]
+          }
+        },
+        "public_protocol_count_receipt": {"type": "string", "minLength": 1},
+        "unique_indication_check": {"const": true},
+        "excluded_domain_check": {"const": true}
+      }
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 2,
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "required": ["perspective"],
+            "properties": {
+              "perspective": {"const": "lazy_medical_writer"}
+            }
+          },
+          "minContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": ["perspective"],
+            "properties": {
+              "perspective": {"const": "engineer"}
+            }
+          },
+          "minContains": 1
+        }
+      ],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "round",
+          "perspective",
+          "run_id",
+          "project_id",
+          "project_identity_receipt",
+          "clean_state",
+          "real_browser",
+          "product_ai",
+          "research_pipeline",
+          "substantive_protocol",
+          "docx",
+          "word_native",
+          "loop_evidence",
+          "run_status"
+        ],
+        "properties": {
+          "round": {"type": "integer", "minimum": 1},
+          "perspective": {
+            "enum": ["lazy_medical_writer", "engineer"]
+          },
+          "run_id": {"type": "string", "minLength": 1},
+          "project_id": {"type": "string", "minLength": 1},
+          "project_identity_receipt": {"type": "string", "minLength": 1},
+          "clean_state": {
+            "$ref": "#/$defs/cleanStateGate"
+          },
+          "real_browser": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pass",
+              "visible_controls_only",
+              "api_only_actions_absent",
+              "browser_context_id",
+              "action_trace",
+              "action_trace_sha256",
+              "screenshots_or_video"
+            ],
+            "properties": {
+              "pass": {"const": true},
+              "visible_controls_only": {"const": true},
+              "api_only_actions_absent": {"const": true},
+              "browser_context_id": {"type": "string", "minLength": 1},
+              "action_trace": {"type": "string", "minLength": 1},
+              "action_trace_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "screenshots_or_video": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "minLength": 1}
+              }
+            }
+          },
+          "product_ai": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pass",
+              "separate_from_tester",
+              "provider",
+              "model",
+              "prompt_versions",
+              "job_receipts",
+              "input_output_hashes",
+              "stage_receipts",
+              "tester_substitution_absent",
+              "tester_generated_content_not_imported"
+            ],
+            "properties": {
+              "pass": {"const": true},
+              "separate_from_tester": {"const": true},
+              "provider": {"type": "string", "minLength": 1},
+              "model": {"type": "string", "minLength": 1},
+              "prompt_versions": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "minLength": 1}
+              },
+              "job_receipts": {"type": "string", "minLength": 1},
+              "input_output_hashes": {"type": "string", "minLength": 1},
+              "stage_receipts": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "competitor_search_triage",
+                  "corpus_analysis_admission",
+                  "framework_picos_prefill",
+                  "section_candidates",
+                  "revision_intents"
+                ],
+                "properties": {
+                  "competitor_search_triage": {"type": "string", "minLength": 1},
+                  "corpus_analysis_admission": {"type": "string", "minLength": 1},
+                  "framework_picos_prefill": {"type": "string", "minLength": 1},
+                  "section_candidates": {"type": "string", "minLength": 1},
+                  "revision_intents": {"type": "string", "minLength": 1}
+                }
+              },
+              "tester_substitution_absent": {"const": true},
+              "tester_generated_content_not_imported": {"const": true}
+            }
+          },
+          "research_pipeline": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pass",
+              "real_public_sources",
+              "content_validation",
+              "resumable_state",
+              "ocr_translation_gate",
+              "corpus_admission_without_override",
+              "lineage_receipt"
+            ],
+            "properties": {
+              "pass": {"const": true},
+              "real_public_sources": {"const": true},
+              "content_validation": {"const": true},
+              "resumable_state": {"const": true},
+              "ocr_translation_gate": {"const": true},
+              "corpus_admission_without_override": {"const": true},
+              "lineage_receipt": {"type": "string", "minLength": 1}
+            }
+          },
+          "substantive_protocol": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pass",
+              "all_applicable_sections_substantive",
+              "dynamic_applicability_correct",
+              "no_placeholders",
+              "no_pending_medical_approval_after_user_action",
+              "cross_section_consistency",
+              "scientific_scorecard"
+            ],
+            "properties": {
+              "pass": {"const": true},
+              "all_applicable_sections_substantive": {"const": true},
+              "dynamic_applicability_correct": {"const": true},
+              "no_placeholders": {"const": true},
+              "no_pending_medical_approval_after_user_action": {"const": true},
+              "cross_section_consistency": {"const": true},
+              "scientific_scorecard": {"type": "string", "minLength": 1}
+            }
+          },
+          "docx": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pass",
+              "path",
+              "sha256",
+              "ooxml_gate",
+              "rendered_pdf",
+              "complete_chapter_inventory",
+              "fonts_styles_numbering",
+              "toc_table_figure_fields",
+              "tables_flowchart_images",
+              "citations_reindexed"
+            ],
+            "properties": {
+              "pass": {"const": true},
+              "path": {"type": "string", "minLength": 1},
+              "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "ooxml_gate": {"type": "string", "minLength": 1},
+              "rendered_pdf": {"type": "string", "minLength": 1},
+              "complete_chapter_inventory": {"type": "string", "minLength": 1},
+              "fonts_styles_numbering": {"const": true},
+              "toc_table_figure_fields": {"const": true},
+              "tables_flowchart_images": {"const": true},
+              "citations_reindexed": {"const": true}
+            }
+          },
+          "word_native": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pass",
+              "opened",
+              "navigation_jump",
+              "edited",
+              "fields_updated",
+              "saved",
+              "reopened",
+              "word_resaved_sha256",
+              "inspection_report"
+            ],
+            "properties": {
+              "pass": {"const": true},
+              "opened": {"const": true},
+              "navigation_jump": {"const": true},
+              "edited": {"const": true},
+              "fields_updated": {"const": true},
+              "saved": {"const": true},
+              "reopened": {"const": true},
+              "word_resaved_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "inspection_report": {"type": "string", "minLength": 1}
+            }
+          },
+          "loop_evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "defect_ledger",
+              "fix_retest_ledger",
+              "failed_rounds_preserved",
+              "final_round_from_clean_state"
+            ],
+            "properties": {
+              "defect_ledger": {"type": "string", "minLength": 1},
+              "fix_retest_ledger": {"type": "string", "minLength": 1},
+              "failed_rounds_preserved": {"const": true},
+              "final_round_from_clean_state": {"const": true}
+            }
+          },
+          "run_status": {
+            "const": "pass"
+          }
+        }
+      }
+    },
+    "slot_gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lazy_medical_writer_pass",
+        "engineer_pass",
+        "slot_specific_medical_gate",
+        "common_docx_gate",
+        "no_override_or_skeleton_pass",
+        "distinct_project_ids_verified",
+        "all_release_blocking_defects_closed"
+      ],
+      "properties": {
+        "lazy_medical_writer_pass": {"const": true},
+        "engineer_pass": {"const": true},
+        "slot_specific_medical_gate": {"const": true},
+        "common_docx_gate": {"const": true},
+        "no_override_or_skeleton_pass": {"const": true},
+        "distinct_project_ids_verified": {"const": true},
+        "all_release_blocking_defects_closed": {"const": true}
+      }
+    },
+    "final_status": {
+      "const": "pass"
+    },
+    "evidence_root": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "cleanStateGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pass",
+        "receipt",
+        "visible_empty_project_list",
+        "project_state_zero_counts",
+        "isolated_runtime_root",
+        "isolated_browser_profile",
+        "isolated_download_root",
+        "no_writable_symlink_alias"
+      ],
+      "properties": {
+        "pass": {"const": true},
+        "receipt": {"type": "string", "minLength": 1},
+        "visible_empty_project_list": {"type": "string", "minLength": 1},
+        "project_state_zero_counts": {"type": "string", "minLength": 1},
+        "isolated_runtime_root": {"const": true},
+        "isolated_browser_profile": {"const": true},
+        "isolated_download_root": {"const": true},
+        "no_writable_symlink_alias": {"const": true}
+      }
+    }
+  },
+  "x-pass-rule": "PASS requires at least one isolated lazy-medical-writer run and one isolated engineer run with different new project IDs, real visible browser actions, stage-level product independent-AI receipts with no tester substitution or imported tester prose, a complete substantive chapter inventory, DOCX/OOXML and native Word open-edit-field-update-save-reopen evidence with a post-Word-save hash, preserved LOOP evidence, and closure of every release-blocking defect. Any false or missing required gate makes the slot non-pass."
+}

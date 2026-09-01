@@ -1,0 +1,168 @@
+Implement the P0 medical-writing working-copy authority and quarantine repair
+in the current workbench. This is a production-code execution task, not a
+read-only review. Codex remains final acceptance authority.
+
+Before working, reread the current global `/Users/smkzw/.codex/AGENTS.md` and
+`/Users/smkzw/.hermes/SOUL.md`.
+
+Hard boundaries:
+- Start only after Codex has accepted Worker 01 and explicitly dispatches this
+  task. Work only in the runner-provided current workbench workspace.
+- Preserve unrelated edits and current user data. This workspace has no Git;
+  use the Codex-recorded pre-worker backup as the rollback boundary.
+- The writable file list below is closed. Stop and report BLOCKED before
+  changing any other product source file.
+- Do not touch synopsis import, competitor triage, reference preparation or
+  translation, PV/Safety, monitoring, enrollment, product-AI routing,
+  credentials, user originals, or normal runtime records.
+- Do not use indication keywords to detect contamination. Cross-indication
+  scientific background can be legitimate. Authority is determined only from
+  project/document identity and StudyDefinition identity/revision/SHA-256.
+- A quarantined legacy/stale working copy must never appear as active editor
+  content, be silently adopted, be saved through the normal route, or enter
+  DOCX export.
+
+Read these files only:
+- `AGENTS.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/TASK_RECORD.md`
+- `runs/execution/mw_cross_project_document_contamination_p0_20260720/qoder_qwen37max_readonly_audit.md`
+- `runs/execution/mw_release_p0_resume_20260720/manager_plan.md`
+- `packages/contracts/workbench_contracts/models.py`
+- `packages/contracts/workbench_contracts/__init__.py`
+- `services/api/app/medical_writing_repository.py`
+- `services/api/app/medical_writing_document.py`
+- `services/api/app/medical_writing_document_exporter.py`
+- `services/api/app/medical_writing_study_consistency.py`
+- `services/api/app/sqlite_runtime_store.py`
+- `services/api/app/main.py`
+- `frontend/src/App.jsx`
+- `frontend/src/styles.css`
+- `frontend/src/features/medical-writing/StudySchemaEditor.jsx`
+- `tests/test_medical_writing_working_copy_persistence.py`
+- `tests/test_medical_writing_study_consistency.py`
+- `tests/test_medical_writing_document_export_api.py`
+- `tests/test_medical_writing_document_exporter.py`
+- `tests/test_medical_writing_greenfield_runtime.py`
+- `tests/test_medical_writing_real_project_flow.py`
+- `tests/test_frontend_medical_writing_contract.py`
+
+This list permits directly causal imported test helpers and adjacent
+working-copy/export tests. Record every addition and do not edit an added file
+unless it is in the closed writable list.
+
+Writable files:
+- `packages/contracts/workbench_contracts/models.py`
+- `packages/contracts/workbench_contracts/__init__.py`
+- `services/api/app/medical_writing_repository.py`
+- `services/api/app/medical_writing_document_exporter.py`
+- `services/api/app/sqlite_runtime_store.py`
+- `services/api/app/main.py`
+- `frontend/src/App.jsx`
+- `frontend/src/styles.css`
+- `tests/test_medical_writing_working_copy_persistence.py`
+- `tests/test_medical_writing_study_consistency.py`
+- `tests/test_medical_writing_document_export_api.py`
+- `tests/test_medical_writing_greenfield_runtime.py`
+- `tests/test_medical_writing_real_project_flow.py`
+- `tests/test_frontend_medical_writing_contract.py`
+- new directly scoped working-copy authority tests under `tests/`
+
+Observed production defect:
+- A real RA greenfield project has a correct RA StudyDefinition and correct
+  generated baseline, but one stored protocol-synopsis working copy contains
+  old AD text.
+- That stored copy has blank
+  `source_study_definition_id/revision/sha256` and
+  `study_definition_reconciliation_required=false`.
+- This is a legacy/unbound working-copy ownership defect, not proven
+  cross-project SQLite key leakage.
+
+Authority invariants:
+1. The authoritative StudyDefinition identity is the complete triple
+   `(id, revision, sha256)` on the current canonical protocol document.
+2. When no authoritative StudyDefinition exists, an unbound working copy may
+   remain editable. This preserves early/manual editing.
+3. Once authority exists, a stored copy is active only when its complete
+   StudyDefinition triple exactly matches the current authority.
+4. A blank, partial, stale revision/hash, or mismatched triple is quarantined.
+5. A quarantined copy is returned separately as `quarantined_blocks`; active
+   `content_blocks` come from the authoritative current baseline (or a last
+   valid bound copy), never from the quarantined copy.
+6. Normal save, AI revision application, table edit, approval, and export
+   fail closed while the active section has unresolved quarantine.
+7. The user gets two explicit, auditable recovery actions:
+   - `accept_and_bind`: deliberately adopt the quarantined blocks under the
+     current authority and create a new bound revision.
+   - `revert_to_authoritative_baseline`: discard only the quarantined working
+     content from the active path, restore current baseline, bind it to current
+     authority, and preserve the prior snapshot/audit record.
+8. Both recovery actions require expected working-copy revision plus current
+   authority identity, are idempotent, reject stale requests, and append an
+   audit event. Neither is called "medical approval".
+9. A later StudyDefinition revision/hash change quarantines the old bound copy
+   until explicit recovery; no silent text migration.
+
+Contract and UI:
+- Add a typed quarantine envelope with reason code, observed binding, current
+  authority, recovery actions, and read-only status.
+- Keep legacy convenience fields only where compatibility requires them, but
+  expose one unambiguous source of truth.
+- The main editor renders authoritative active blocks and remains editable
+  only when no unresolved quarantine exists.
+- Quarantined blocks are visible only in a concise compare/recovery drawer,
+  closed by default. Clearly label “历史工作副本” versus “当前权威基线”.
+- Do not show a large security/compliance banner or technical locator log.
+- The recovery drawer must not dominate the writing workspace and must not
+  require a second approval after the author chooses a recovery action.
+
+Persistence and export:
+- Add only the smallest additive persistence helpers needed for atomic binding
+  and recovery. Reuse immutable working-copy snapshots and existing audit
+  storage.
+- Preserve all prior snapshots; never rewrite them.
+- A cold restart must reproduce the same quarantine decision.
+- DOCX export must use exactly the active editor content and reject unresolved
+  quarantine. It must never fall back to the quarantined payload.
+
+Required deterministic tests:
+- No-authority unbound save is allowed.
+- Authority plus exact binding remains editable.
+- Authority plus blank/partial/stale/mismatched binding returns active
+  authoritative content and separate read-only quarantined blocks.
+- The contaminated AD legacy copy never appears in the RA active editor.
+- Normal save, AI apply, table edit, approval, and export reject unresolved
+  quarantine.
+- `accept_and_bind` and `revert_to_authoritative_baseline` are atomic,
+  idempotent, stale-safe, audited, and survive cold restart.
+- A later StudyDefinition revision change re-quarantines the old copy.
+- Two projects with different indications/documents never read each other's
+  working-copy or quarantine blocks.
+- Existing valid bound working-copy, rich-text, table, citation, revision, and
+  DOCX export paths remain green.
+- Frontend contract proves quarantined blocks are absent from the active
+  editor and are shown only in the recovery drawer.
+
+Verification:
+- Compile every changed Python file.
+- Run focused working-copy authority/quarantine tests.
+- Run all directly causal persistence, study-consistency, editor, table,
+  revision, approval, citation, and export tests.
+- Run frontend syntax/build and medical-writing contract tests.
+- Exercise an isolated two-project API flow, restart the repository/service,
+  and inspect the returned JSON plus exported DOCX content.
+- Record exact commands and exact pass/fail counts.
+
+Stop and report BLOCKED if:
+- the canonical document cannot provide a complete authority triple;
+- an atomic recovery action requires destructive rewriting of snapshots;
+- meeting the contract requires a forbidden file;
+- active baseline content cannot be obtained without silently using the
+  quarantined copy.
+
+Return a compact loop trace with sources read, observations, changed files,
+schema/persistence changes, tests, isolated two-project evidence, failed
+paths, uncertainty, rollback boundary, and recommended next step. Do not write
+the runner-managed report with tools.
+
+Runner-managed output path:
+`runs/execution/mw_release_p0_resume_20260720/worker_02_working_copy_authority_quarantine.md`

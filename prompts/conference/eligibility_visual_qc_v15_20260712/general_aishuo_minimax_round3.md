@@ -1,0 +1,1 @@
+Continue in the same session. Produce the final corrected sub-venue review after one last skeptical pass. Keep only findings that survive direct source cross-check, clearly label accepted open gates, and give Codex a concise go/revise recommendation for this bounded slice. Return the complete review.

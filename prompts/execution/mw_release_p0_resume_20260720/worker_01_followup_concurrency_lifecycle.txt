@@ -1,0 +1,105 @@
+Continue the same synopsis-import P0 in Hermes session
+`20260720_192913_568b18`. Codex independently reran the focused suite after your
+last pass. The nominal result was 48 passed, but pytest emitted an unhandled
+background-thread exception after a temporary SQLite directory was removed:
+`sqlite3.OperationalError: disk I/O error`, followed by `unable to open database
+file`, from `_run_chunked_worker` and `_fail_job`. The current implementation is
+not accepted. Fix the causal concurrency and lifecycle defects below; do not
+write another optimistic summary around weak tests.
+
+Before editing, reread `/Users/smkzw/.codex/AGENTS.md`, project `AGENTS.md`, the
+two previous worker prompts/reports, Codex review
+`reviews/medical_writing_synopsis_async_codex_review_20260722.md`, current
+`TASK_RECORD.md`, and the exact current source/tests. Codex is final authority.
+
+Hard boundaries:
+- Same closed synopsis-import scope and original writable-file list. Preserve
+  unrelated concurrent changes. Do not edit DOCX, working-copy binding,
+  citation, monitoring, PV, enrollment, runtime-readiness, or AI policy files.
+- Keep direct product AI. Do not use an Agent answer as product output.
+- Do not inspect, print, copy, or report credential values. A separate Codex
+  production-env probe has already proven direct `deepseek-v4-pro` transport;
+  therefore do not claim the capability is absent merely because your process
+  environment does not expose a key. Real business E2E remains a later Codex
+  gate.
+- Preserve exact source-fidelity validators and deterministic anchor authority.
+
+Confirmed defects in the current source:
+1. `_claim_chunk` creates a claim token but returns only bool. `_complete_chunk`
+   and `_fail_chunk` do not require that token/status and do not check rowcount.
+   An expired/stale owner can overwrite a reclaimed chunk.
+2. Default chunk lease is shorter than previously observed long direct model
+   calls and no heartbeat extends the lease. Recovery can duplicate a live call.
+3. When a worker cannot claim a live chunk, it `continue`s and may reach merge
+   while another worker still owns unfinished work.
+4. `_merge_chunks` accepts any non-empty done subset. It does not require exactly
+   `chunk_total` contiguous done indices before final commit.
+5. Public progress is written from caller parameters and can regress when two
+   workers interleave. It must derive monotonically from committed DB state.
+6. `recover_stale_jobs` fabricates source metadata (`actual_size=1`, blank parser
+   and extraction revision, matched validation statuses). Exact source identity,
+   validation and extraction metadata must be persisted and reconstructed.
+7. Anchor materialization catches all exceptions and silently continues. A
+   deterministic anchor failure must fail validation/job, not produce a
+   review-ready result.
+8. Tests allow daemon workers to survive fixture/TemporaryDirectory teardown,
+   causing the reproduced unhandled thread exception. The service needs bounded
+   worker lifecycle tracking/join for tests and shutdown, and tests must not
+   pass before all spawned workers terminate.
+9. Cold recovery assertion `requeued >= 0` proves nothing. It must prove an
+   expired incomplete job is requeued, completes, preserves source metadata and
+   does not replay done chunks.
+10. Stable public `job_id` must be returned consistently by start/status/result,
+    cancel/resume and idempotent replay. Do not substitute idempotency_key.
+
+Required implementation and tests:
+- Return an opaque claim token from atomic claim. Heartbeat and terminal updates
+  must use `WHERE status='running' AND claim_token=?`; stale-owner updates must
+  affect zero rows and must not change chunk/job state.
+- Add a bounded heartbeat for every provider call, with a lease interval derived
+  from configured provider timeout plus margin or periodic renewal. Stop/join
+  heartbeat reliably on success, failure and cancellation. Prove a slow provider
+  beyond the original lease is called once despite concurrent recovery.
+- A worker encountering a live foreign claim must not merge or fail the job.
+  It may exit/detach and leave the owning worker to finalize, or wait boundedly;
+  whichever route is simpler and deterministic.
+- Before merge and before `_complete_job`, perform one transactionally coherent
+  readiness check: exactly `chunk_total` rows, contiguous indices, all done,
+  no cancellation. Otherwise leave the job recoverable/pending; never publish a
+  partial result.
+- Compute progress from committed chunk counts and preserve monotonicity under
+  two-worker interleavings. Add a concurrent test that records observed public
+  indices and proves no regression.
+- Additively persist every `MedicalWritingSynopsisSource` field needed for exact
+  reconstruction, or persist the validated source JSON/hash as an immutable job
+  field. Recovery must reproduce the original object exactly; no invented
+  matched status or size.
+- Remove broad best-effort anchor swallowing. Add a test where materialization
+  fails and prove no completed/review-ready result is committed.
+- Track spawned worker/heartbeat threads in the service. Provide a bounded
+  wait/shutdown hook used by tests and app shutdown. Add FastAPI shutdown
+  integration if the current app lifecycle requires it. Replace deprecated
+  startup-only lifecycle only if narrowly causal; do not refactor unrelated app
+  startup.
+- Strengthen cold-recovery and duplicate-worker tests. All tests using temp DBs
+  must join workers before cleanup. Run with pytest warnings treated as errors
+  for `PytestUnhandledThreadExceptionWarning` or an equivalent explicit guard.
+- Keep existing UI reconnect/cancel/retry behavior, but correct public job_id
+  use if current frontend stores idempotency_key under a misleading `jobId`.
+
+Verification:
+- Compile changed Python; build frontend if touched.
+- Run `tests/test_synopsis_async_real_chunks.py`, full
+  `tests/test_medical_writing_synopsis_import.py`, source-fidelity, relevant
+  frontend contract and lifecycle tests. Report exact counts.
+- Run the focused synopsis suite at least twice with thread warnings made fatal.
+- Use an isolated SQLite service instance to prove POST returns before a blocked
+  provider, second worker/recovery does not duplicate, service shutdown joins,
+  restart resumes first incomplete chunk, and final result only appears after
+  every chunk is done.
+
+Return a compact loop trace with exact files, tests and residual E3/E5 gaps. Do
+not write the runner-managed report path with tools.
+
+Runner-managed output path:
+`runs/execution/mw_release_p0_resume_20260720/worker_01_followup_concurrency_lifecycle.md`

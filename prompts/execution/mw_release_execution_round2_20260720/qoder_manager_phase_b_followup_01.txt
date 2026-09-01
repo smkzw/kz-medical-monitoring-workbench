@@ -1,0 +1,65 @@
+继续同一Phase B执行经理会话，纠正上一版
+`runs/execution/mw_release_execution_round2_20260720/manager_review.md`。
+不要新开会话，不要阶段性询问，不要修改产品源码或测试。
+
+上一版复核未通过Codex验收，必须重新核对并覆盖写回同一个唯一输出文件
+`runs/execution/mw_release_execution_round2_20260720/manager_review.md`。
+
+开始前完整读取而不是只读前50行：
+- `/Users/smkzw/.codex/AGENTS.md`
+- `/Users/smkzw/.hermes/SOUL.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/ACCEPTANCE_CONTRACT.md`
+- `reviews/codex_execution_mw_release_execution_round2_20260720_review.md`
+- `prompts/execution/mw_release_execution_round2_20260720/worker_02_rerun_01.md`
+
+你上一版遗漏了以下直接证据，必须逐项复现：
+
+1. 合同原文要求每条lane有独立项目、独立StudyDefinition、独立来源和独立
+   导出；第4条设计要求明确是“每个lane fresh isolated runtime and
+   project”。但parent在lane循环外仅调用一次`mkdtemp`，12条lane共享同一个
+   `WORKBENCH_RUNTIME_DIR`。这不是合格的逐lane隔离。
+2. 用户提供的RA真实摘要文件存在：
+   `/Users/smkzw/Documents/朗来项目资料/MY004/RA/MY004-RA-2b 研究方案摘要_V0.3-with Comments to ABBV.docx`
+   SHA-256为
+   `f6c8fdf53535a58f0f05055fe07c3a34bb0932f30c8bc2a7cdb6f8fc97dc8be4`。
+   config却把全部RA import source设为null。上一版不应称这是“Codex需
+   决策”或“本地缺失”。
+3. config把`NCT04654468`用于全部RA lane，而现有
+   `cross_indication_e2e_config.mjs`把它映射为PNH。还把同一个NCT跨I期/
+   III期重复使用而没有任何phase/design/document证据。20/20静态QC没有
+   发现此问题，因此不能当成有效完成证据。
+4. `final_release_12lane_child.mjs`第926-927行明确写着完整竞品检索、
+   下载、OCR、翻译、候选和DOCX导出由Worker 03负责；实际full mode只走到
+   framing/摘要确认。Worker 03提示词禁止修改源码，它只是执行现有harness，
+   不可能凭空补全缺失链路。故Worker 02未完成任务5/6。
+5. AD I import使用AD III protocol，AD III active comparator import使用
+   AD II template，PsO I import使用II/III期protocol；这些来源与声明lane
+   不匹配且未通过产品内容校验+显式override留证。
+6. 你把dry-run失败无证据归因于“环境启动慢”，但输出是`fetch failed`，
+   且没有检查API/Vite stderr或等待机制。旧harness也失败不能证明新harness
+   正确。此项只能记为未验证/需诊断，不能作为放行理由。
+7. 你报告“Qoder不暴露模型身份”，但可见CLI页脚清楚显示
+   `Qwen3.8-Max-Preview Model`。请据实际可见证据修正。
+
+必须重新完成：
+- 对上述7项给出直接观察、文件/行号或命令证据。
+- 明确指出原20/20 QC为什么是假绿，以及需要增加哪些语义断言。
+- 将Worker 02同会话返工任务
+  `prompts/execution/mw_release_execution_round2_20260720/worker_02_rerun_01.md`
+  作为精确rerun request审阅；补充遗漏但不得降低要求。
+- Worker 01可维持通过，但须将API冷重启仍未实测列为后续门，不得以
+  service实例重建等同真实API冷启动。
+- 最终门必须根据当前事实写成`BLOCK_WORKER_03`。只有Worker 02同会话
+  返工后完成逐lane隔离、真实输入/主证据映射、完整产品链和有效dry-run，
+  才能重新复核放行。
+
+Hard boundaries:
+- 仅执行只读复核和覆盖写回唯一manager review。
+- 不修改源码、测试、稳定运行时或用户原始文件。
+- 不用LibreOffice替代Microsoft Word。
+- 不把另一个模型的声称当成可复现证据。
+- Codex保留最终验收权。
+
+输出中保留上一版可复现通过的Worker 01测试证据，但删除错误的
+`AUTHORIZE_WORKER_03`结论，提供修正后的阻断项、rerun验收清单和下一次
+复核命令。

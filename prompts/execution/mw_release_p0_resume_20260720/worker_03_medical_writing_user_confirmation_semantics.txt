@@ -1,0 +1,163 @@
+Implement the P0 medical-writing user-confirmation semantics repair in the
+current workbench. This is a production-code execution task, not a read-only
+review. Codex remains final acceptance authority.
+
+Before working, reread the current global `/Users/smkzw/.codex/AGENTS.md` and
+`/Users/smkzw/.hermes/SOUL.md`.
+
+Hard boundaries:
+- Start only after Codex has accepted Workers 01 and 02 and explicitly
+  dispatches this task. Work only in the runner-provided current workspace.
+- Preserve unrelated edits and current user data.
+- The writable file list below is closed. Stop and report BLOCKED before
+  changing any other product source file.
+- Scope is the medical-writing subsystem only. Do not rename or change genuine
+  medical/PV review states in Safety/PV, medical monitoring, enrollment,
+  translation-fidelity review, or other subsystems.
+- Do not weaken evidence, consistency, source-fidelity, unresolved-decision,
+  quarantine, or formal-export gates.
+- Do not add a new role or approval layer. The medical manager is the author
+  and decision owner.
+
+Read these files only:
+- `AGENTS.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/TASK_RECORD.md`
+- `runs/execution/mw_release_p0_resume_20260720/manager_plan.md`
+- `packages/contracts/workbench_contracts/models.py`
+- `packages/contracts/workbench_contracts/__init__.py`
+- `services/api/app/medical_writing.py`
+- `services/api/app/medical_writing_repository.py`
+- `services/api/app/medical_writing_document.py`
+- `services/api/app/medical_writing_greenfield.py`
+- `services/api/app/medical_writing_manifest.py`
+- `services/api/app/medical_writing_study_consistency.py`
+- `services/api/app/sqlite_runtime_store.py`
+- `services/api/app/main.py`
+- `frontend/src/App.jsx`
+- `frontend/src/styles.css`
+- `tests/test_medical_writing_revision_application.py`
+- `tests/test_medical_writing_working_copy_persistence.py`
+- `tests/test_medical_writing_document_export_api.py`
+- `tests/test_medical_writing_greenfield_runtime.py`
+- `tests/test_medical_writing_real_project_flow.py`
+- `tests/test_frontend_medical_writing_contract.py`
+
+This list permits directly causal imported test helpers and adjacent
+medical-writing revision/export tests. Record every addition and do not edit
+an added file unless it is in the closed writable list.
+
+Writable files:
+- `packages/contracts/workbench_contracts/models.py`
+- `packages/contracts/workbench_contracts/__init__.py`
+- `services/api/app/medical_writing.py`
+- `services/api/app/medical_writing_repository.py`
+- `services/api/app/medical_writing_document.py`
+- `services/api/app/medical_writing_greenfield.py`
+- `services/api/app/medical_writing_manifest.py`
+- `services/api/app/medical_writing_study_consistency.py`
+- `services/api/app/sqlite_runtime_store.py`
+- `services/api/app/main.py`
+- `frontend/src/App.jsx`
+- `frontend/src/styles.css`
+- `tests/test_medical_writing_revision_application.py`
+- `tests/test_medical_writing_working_copy_persistence.py`
+- `tests/test_medical_writing_document_export_api.py`
+- `tests/test_medical_writing_greenfield_runtime.py`
+- `tests/test_medical_writing_real_project_flow.py`
+- `tests/test_frontend_medical_writing_contract.py`
+- new directly scoped medical-writing confirmation tests under `tests/`
+
+User and product semantics:
+1. A candidate is not approved by the AI. It is proposed by AI and becomes
+   authoritative working content when the medical author selects it.
+2. Selecting an AI candidate must atomically:
+   - verify the candidate, source, target anchor, working-copy revision, and
+     current StudyDefinition authority;
+   - record `user_confirmed` with actor/time/source/candidate identity;
+   - apply the selected text/table content to the working copy;
+   - advance the working-copy revision;
+   - create the audit event.
+3. There is no intermediate
+   `accepted_pending_medical_approval` user workflow and no separate
+   “医学批准” click for the same candidate.
+4. Selecting one candidate does not automatically claim the whole chapter is
+   finished. The author can continue editing other content.
+5. A chapter-level “确认本章定稿” action freezes the exact current working-copy
+   revision as the export snapshot. It is version confirmation by the same
+   author, not approval by another role.
+6. Any later edit, StudyDefinition change, source change, quarantine, or
+   blocking consistency finding invalidates only the current chapter-final
+   status while preserving its historical snapshot and audit record.
+7. Formal DOCX export requires every included chapter to have a current
+   author-confirmed snapshot and all existing quality/source/consistency gates
+   to pass. It does not require a separate Approval Center action.
+8. Manual author edits remain normal working drafts until the author confirms
+   the chapter version; they do not require per-paragraph approval.
+9. Existing historical status values may be migrated or mapped for backward
+   compatibility, but public API/UI must expose one unambiguous current
+   semantics. Do not silently discard historical decisions.
+
+UI language and interaction:
+- In medical-writing views only, remove “待医学批准”, “提交审批”, “医学批准”,
+  and “审批后应用” for candidate/section actions.
+- Use concise labels such as “AI候选”, “已选用并写入”, “工作稿”,
+  “确认本章定稿”, “当前版本已定稿”, and “内容变更后需重新定稿”.
+- Clicking one of the 3-5 AI candidates must immediately update the left
+  editor after the atomic backend response. No second modal/approval screen.
+- Do not route medical-writing items to the general Approval Center.
+- Keep evidence/source affordances available but do not expose internal logs
+  as primary writing UI.
+
+Persistence and compatibility:
+- Prefer an additive migration and explicit compatibility mapping over a
+  destructive enum/table rewrite.
+- Exact idempotent replay returns the same result. Same key with changed
+  candidate/anchor/revision fails closed.
+- A stale working-copy revision, stale candidate, stale source, changed study
+  authority, unresolved quarantine, or changed chapter snapshot returns a
+  typed conflict and never applies content.
+- Preserve immutable snapshots and all audit events.
+
+Required deterministic tests:
+- Candidate selection applies once, advances the working-copy revision once,
+  records `user_confirmed`, and returns the updated active editor content.
+- Exact replay is idempotent; changed request under the same key fails.
+- Stale candidate/anchor/revision/source/StudyDefinition/quarantine rejects
+  without modifying the working copy.
+- No medical-writing path produces a new
+  `accepted_pending_medical_approval` item.
+- Chapter finalization freezes the current exact revision; later edits
+  invalidate current final status but preserve history.
+- Formal export accepts all-current author-confirmed chapter snapshots and
+  rejects stale/unconfirmed/quarantined/blocked chapters.
+- Historical legacy statuses load with a documented compatibility mapping.
+- Medical-writing UI contains no “提交审批/待医学批准/医学批准” action while
+  Safety/PV/monitoring labels remain unchanged.
+- Existing AI candidate generation, rich-text/table application, citations,
+  consistency gates, snapshots, and DOCX export tests remain green.
+
+Verification:
+- Compile every changed Python file.
+- Run focused candidate-selection and chapter-finalization tests.
+- Run directly causal revision, working-copy, study-consistency, greenfield,
+  real-project, export, and frontend contract tests.
+- Run frontend syntax/build checks.
+- Exercise an isolated API flow:
+  generate 3-5 candidates -> select one -> editor content changes -> edit
+  manually -> confirm chapter -> export current version -> edit again -> old
+  final status invalidates -> reconfirm -> export.
+- Record exact commands and exact pass/fail counts.
+
+Stop and report BLOCKED if:
+- atomic candidate apply requires bypassing source/anchor validation;
+- current persistence cannot preserve immutable historical snapshots;
+- a medical-writing change necessarily alters Safety/PV/monitoring semantics;
+- meeting the contract requires a forbidden file.
+
+Return a compact loop trace with sources read, observations, changed files,
+migration/compatibility mapping, tests, isolated flow evidence, failed paths,
+uncertainty, rollback boundary, and recommended next step. Do not write the
+runner-managed report with tools.
+
+Runner-managed output path:
+`runs/execution/mw_release_p0_resume_20260720/worker_03_medical_writing_user_confirmation_semantics.md`

@@ -1,0 +1,75 @@
+You are the execution manager for task `mw_confirmation_semantics_20260720`.
+Use the existing visible QoderVIP qodercli with model
+`Qwen3.8-Max-Preview`. This task is unrelated to the previous autonomy probe,
+so this prompt may only be sent after `/new` has completed.
+
+Read fully before planning:
+
+- `/Users/smkzw/.codex/AGENTS.md`
+- `/Users/smkzw/.codex/SOUL.md`
+- `AGENTS.md`
+- `context/mw_confirmation_semantics_20260720_context.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/ACCEPTANCE_CONTRACT.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/TASK_RECORD.md`
+- `tests/test_medical_writing_authoring_prefill.py`
+
+Then inspect the direct propagation path in current source and tests. You have
+full read/search/browser/terminal permissions. This first pass is architecture
+and execution planning only: do not modify product source, tests, stable
+runtime, or user data.
+
+Required work:
+
+1. Build the exact current state-transition map for:
+   - AI/system suggestion;
+   - medical-manager selection/adoption/confirmation;
+   - manual edit and save;
+   - PICOS writing handoff;
+   - competitor translation review and corpus admission;
+   - source/design change invalidation;
+   - chapter/table editing and DOCX export;
+   - legacy `pending_medical_approval` and
+     `accepted_pending_medical_approval` records.
+2. Identify every duplicate second-approval action, label, backend gate,
+   persistence assumption, test, and API contract in the scoped writing
+   workflow. Do not use bulk text matching as the architecture.
+3. Design one shared semantic matrix:
+   - unselected AI/system output = `建议` or `待确认`;
+   - explicit authenticated user action = immediately `已采纳`/`已确认`;
+   - automatic translation = `待审核`, user accept = `已审核`;
+   - changed dependent source/design = `需重新确认`;
+   - source/quality/consistency/export problems remain separate blockers;
+   - no visible or operational second `待医学批准` stage.
+4. Specify the atomic persistence/audit operation that captures actor,
+   revision, selected candidate/value, source hash, timestamp, and idempotency
+   key without requiring a second approval-center action.
+5. Preserve backward compatibility. Existing approval tables/enums may remain
+   as internal legacy storage, but must not create a second user action,
+   obsolete label, or export blocker. Define migration/read-adapter and
+   rollback behavior.
+6. Decompose implementation into bounded workers with non-overlapping file
+   ownership and explicit test/browser/API acceptance. At minimum cover:
+   backend/contracts+persistence, evidence/PICOS frontend+API, writing/reference
+   frontend+API, and cross-surface regression.
+7. Include a source-level grep gate proving that scoped user-facing writing
+   surfaces no longer contain `待医学批准`/`提交医学批准`, while allowing only
+   explicitly enumerated legacy compatibility or test-fixture occurrences.
+8. Do not weaken source traceability, factual completeness, consistency,
+   reference, translation-fidelity, or DOCX quality gates.
+
+Write only:
+`runs/execution/mw_confirmation_semantics_20260720/manager_plan.md`
+
+The plan must include:
+
+- architecture diagnosis;
+- semantic state matrix;
+- current-to-target transition map;
+- file-level worker ownership;
+- ordered implementation sequence;
+- deterministic tests and isolated-runtime/browser acceptance;
+- migration/rollback strategy;
+- known risks and explicit non-goals;
+- `READY_FOR_WORKERS` or `BLOCKED`, with evidence.
+
+Do not claim final acceptance. Codex remains final authority.

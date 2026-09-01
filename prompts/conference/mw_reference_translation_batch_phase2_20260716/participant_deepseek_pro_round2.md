@@ -1,0 +1,1 @@
+Round 2, same session. Attack your first-round design for duplicate AI calls, stale source revisions, race conditions between structure approval and batch start, service restart halfway through a provider call, and accidental automatic medical approval/admission. Correct any weak invariants.

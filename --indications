@@ -1,0 +1,503 @@
+{
+  "schema": "mw_lazy_writer_e2e_harness_v2",
+  "date": "2026-07-25",
+  "cases": [
+    {
+      "indication": "特应性皮炎",
+      "build_used": false,
+      "project_id": "proj_user_43e8bc22ca06",
+      "protocol_date": "2026-07-25",
+      "framing_complete_at_create": true,
+      "status_at_create": "stage1_complete",
+      "population_intent": "诊断为特应性皮炎并符合方案入选标准的试验参与者",
+      "errors": [],
+      "prefill_model": "deterministic_registry_prefill",
+      "partial_failures": [
+        "deepseek_prefill_adapter: enrich_package failed (TimeoutError)"
+      ],
+      "packages": [
+        "package.product",
+        "package.design",
+        "package.population",
+        "package.intervention",
+        "package.outcomes",
+        "package.statistics",
+        "package.soa"
+      ],
+      "adopts": {
+        "package.product": {
+          "applied_n": 4,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.design": {
+          "applied_n": 13,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.population": {
+          "applied_n": 4,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.intervention": {
+          "applied_n": 6,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.outcomes": {
+          "applied_n": 10,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.statistics": {
+          "applied_n": 7,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.soa": {
+          "applied_n": 2,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        }
+      },
+      "after": {
+        "framing_complete": true,
+        "picos_complete": true,
+        "status": "corpus_not_ready",
+        "current_stage": "corpus",
+        "design_archetype": "randomized_exploratory",
+        "has_comparator": true,
+        "inclusion_n": 4,
+        "has_dose": true,
+        "has_primary_endpoint": true,
+        "has_sample_size": true,
+        "has_visit": true,
+        "has_estimand": true,
+        "instruments_n": 3,
+        "epochs": [
+          "筛选期",
+          "基线/随机",
+          "治疗期",
+          "安全性随访期"
+        ],
+        "picos_missing": []
+      },
+      "writing": {
+        "corpus_override": true,
+        "access_permitted": true,
+        "missing_before_override": [
+          "竞品候选研究已完成人工相关性分诊",
+          "至少一份相关Protocol已完成内容校验与结构化解析",
+          "英文竞品方案关键章节已形成监管中文参考译文",
+          "项目适用中文语料已完成医学准入",
+          "PICOS关键设计事实与语料冲突已处置"
+        ],
+        "status": "writing_allowed"
+      },
+      "assembly_plan": {
+        "refreshed": true,
+        "confirmed": true,
+        "revision": 1,
+        "blocker_n": 0,
+        "blockers": []
+      },
+      "document": {
+        "created": true,
+        "section_n": 0,
+        "document_id": null,
+        "session_ok": true,
+        "session_section_n": 114
+      },
+      "export": {
+        "ok": true,
+        "bytes": 56078,
+        "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/execution/mw_lazy_writer_e2e_3x3_20260725/exports/CMS-AD-HARNESS2_bc22ca06.docx"
+      },
+      "pass": true
+    },
+    {
+      "indication": "类风湿关节炎",
+      "build_used": false,
+      "project_id": "proj_user_596b515ada3f",
+      "protocol_date": "2026-07-25",
+      "framing_complete_at_create": true,
+      "status_at_create": "stage1_complete",
+      "population_intent": "诊断为类风湿关节炎并符合方案入选标准的试验参与者",
+      "errors": [],
+      "prefill_model": "deterministic_registry_prefill",
+      "partial_failures": [
+        "deepseek_prefill_adapter: enrich_package failed (TimeoutError)"
+      ],
+      "packages": [
+        "package.product",
+        "package.design",
+        "package.population",
+        "package.intervention",
+        "package.outcomes",
+        "package.statistics",
+        "package.soa"
+      ],
+      "adopts": {
+        "package.product": {
+          "applied_n": 4,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.design": {
+          "applied_n": 13,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.population": {
+          "applied_n": 4,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.intervention": {
+          "applied_n": 6,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.outcomes": {
+          "applied_n": 10,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.statistics": {
+          "applied_n": 7,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.soa": {
+          "applied_n": 2,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        }
+      },
+      "after": {
+        "framing_complete": true,
+        "picos_complete": true,
+        "status": "corpus_not_ready",
+        "current_stage": "corpus",
+        "design_archetype": "randomized_exploratory",
+        "has_comparator": true,
+        "inclusion_n": 4,
+        "has_dose": true,
+        "has_primary_endpoint": true,
+        "has_sample_size": true,
+        "has_visit": true,
+        "has_estimand": true,
+        "instruments_n": 3,
+        "epochs": [
+          "筛选期",
+          "基线/随机",
+          "治疗期",
+          "安全性随访期"
+        ],
+        "picos_missing": []
+      },
+      "writing": {
+        "corpus_override": true,
+        "access_permitted": true,
+        "missing_before_override": [
+          "竞品候选研究已完成人工相关性分诊",
+          "至少一份相关Protocol已完成内容校验与结构化解析",
+          "英文竞品方案关键章节已形成监管中文参考译文",
+          "项目适用中文语料已完成医学准入",
+          "PICOS关键设计事实与语料冲突已处置"
+        ],
+        "status": "writing_allowed"
+      },
+      "assembly_plan": {
+        "refreshed": true,
+        "confirmed": true,
+        "revision": 1,
+        "blocker_n": 0,
+        "blockers": []
+      },
+      "document": {
+        "created": true,
+        "section_n": 0,
+        "document_id": null,
+        "session_ok": true,
+        "session_section_n": 114
+      },
+      "export": {
+        "ok": true,
+        "bytes": 56092,
+        "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/execution/mw_lazy_writer_e2e_3x3_20260725/exports/CMS-RA-HARNESS2_515ada3f.docx"
+      },
+      "pass": true
+    },
+    {
+      "indication": "银屑病",
+      "build_used": false,
+      "project_id": "proj_user_aacd2465b7af",
+      "protocol_date": "2026-07-25",
+      "framing_complete_at_create": true,
+      "status_at_create": "stage1_complete",
+      "population_intent": "诊断为银屑病并符合方案入选标准的试验参与者",
+      "errors": [],
+      "prefill_model": "deterministic_registry_prefill",
+      "partial_failures": [
+        "deepseek_prefill_adapter: enrich_package failed (TimeoutError)"
+      ],
+      "packages": [
+        "package.product",
+        "package.design",
+        "package.population",
+        "package.intervention",
+        "package.outcomes",
+        "package.statistics",
+        "package.soa"
+      ],
+      "adopts": {
+        "package.product": {
+          "applied_n": 4,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.design": {
+          "applied_n": 13,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.population": {
+          "applied_n": 4,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.intervention": {
+          "applied_n": 6,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.outcomes": {
+          "applied_n": 10,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.statistics": {
+          "applied_n": 7,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.soa": {
+          "applied_n": 2,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        }
+      },
+      "after": {
+        "framing_complete": true,
+        "picos_complete": true,
+        "status": "corpus_not_ready",
+        "current_stage": "corpus",
+        "design_archetype": "randomized_exploratory",
+        "has_comparator": true,
+        "inclusion_n": 4,
+        "has_dose": true,
+        "has_primary_endpoint": true,
+        "has_sample_size": true,
+        "has_visit": true,
+        "has_estimand": true,
+        "instruments_n": 3,
+        "epochs": [
+          "筛选期",
+          "基线/随机",
+          "治疗期",
+          "安全性随访期"
+        ],
+        "picos_missing": []
+      },
+      "writing": {
+        "corpus_override": true,
+        "access_permitted": true,
+        "missing_before_override": [
+          "竞品候选研究已完成人工相关性分诊",
+          "至少一份相关Protocol已完成内容校验与结构化解析",
+          "英文竞品方案关键章节已形成监管中文参考译文",
+          "项目适用中文语料已完成医学准入",
+          "PICOS关键设计事实与语料冲突已处置"
+        ],
+        "status": "writing_allowed"
+      },
+      "assembly_plan": {
+        "refreshed": true,
+        "confirmed": true,
+        "revision": 1,
+        "blocker_n": 0,
+        "blockers": []
+      },
+      "document": {
+        "created": true,
+        "section_n": 0,
+        "document_id": null,
+        "session_ok": true,
+        "session_section_n": 114
+      },
+      "export": {
+        "ok": true,
+        "bytes": 56073,
+        "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/execution/mw_lazy_writer_e2e_3x3_20260725/exports/CMS-PSO-HARNESS3_2465b7af.docx"
+      },
+      "pass": true
+    },
+    {
+      "indication": "溃疡性结肠炎",
+      "build_used": true,
+      "project_id": "proj_user_e685059feaa8",
+      "protocol_date": "2026-07-25",
+      "framing_complete_at_create": true,
+      "status_at_create": "stage1_complete",
+      "population_intent": "诊断为溃疡性结肠炎并符合方案入选标准的试验参与者",
+      "errors": [],
+      "prefill_model": "deterministic_registry_prefill",
+      "partial_failures": [
+        "deepseek_prefill_adapter: enrich_package failed (TimeoutError)"
+      ],
+      "packages": [
+        "package.product",
+        "package.design",
+        "package.population",
+        "package.intervention",
+        "package.outcomes",
+        "package.statistics",
+        "package.soa"
+      ],
+      "adopts": {
+        "package.product": {
+          "applied_n": 4,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.design": {
+          "applied_n": 13,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.population": {
+          "applied_n": 4,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.intervention": {
+          "applied_n": 6,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.outcomes": {
+          "applied_n": 10,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.statistics": {
+          "applied_n": 7,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        },
+        "package.soa": {
+          "applied_n": 2,
+          "skipped": [],
+          "candidate_n": 3,
+          "role": "recommended"
+        }
+      },
+      "after": {
+        "framing_complete": true,
+        "picos_complete": true,
+        "status": "corpus_not_ready",
+        "current_stage": "corpus",
+        "design_archetype": "randomized_exploratory",
+        "has_comparator": true,
+        "inclusion_n": 4,
+        "has_dose": true,
+        "has_primary_endpoint": true,
+        "has_sample_size": true,
+        "has_visit": true,
+        "has_estimand": true,
+        "instruments_n": 3,
+        "epochs": [
+          "筛选期",
+          "基线/随机",
+          "治疗期",
+          "安全性随访期"
+        ],
+        "picos_missing": []
+      },
+      "writing": {
+        "corpus_override": true,
+        "access_permitted": true,
+        "missing_before_override": [
+          "竞品候选研究已完成人工相关性分诊",
+          "至少一份相关Protocol已完成内容校验与结构化解析",
+          "英文竞品方案关键章节已形成监管中文参考译文",
+          "项目适用中文语料已完成医学准入",
+          "PICOS关键设计事实与语料冲突已处置"
+        ],
+        "status": "writing_allowed"
+      },
+      "assembly_plan": {
+        "refreshed": true,
+        "confirmed": true,
+        "revision": 1,
+        "blocker_n": 0,
+        "blockers": []
+      },
+      "document": {
+        "created": true,
+        "section_n": 0,
+        "document_id": null,
+        "session_ok": true,
+        "session_section_n": 114
+      },
+      "export": {
+        "ok": true,
+        "bytes": 56084,
+        "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/execution/mw_lazy_writer_e2e_3x3_20260725/exports/CMS-UC-HARNESS2_059feaa8.docx"
+      },
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total": 4,
+    "novel_n": 3,
+    "novel_pass": 3,
+    "all_pass": true,
+    "picos_complete_n": 4,
+    "document_n": 4,
+    "export_n": 4
+  }
+}

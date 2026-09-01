@@ -1,0 +1,7 @@
+................................................................................................................................/Users/smkzw/Library/Python/3.9/lib/python/site-packages/openpyxl/worksheet/header_footer.py:48: UserWarning: Cannot parse header or footer so it will be ignored
+  warn("""Cannot parse header or footer so it will be ignored""")
+.............................................................................
+----------------------------------------------------------------------
+Ran 205 tests in 147.565s
+
+OK

@@ -1,0 +1,91 @@
+You are Kimi Code/k3(high), the second independent audit manager for the
+production rebaseline of a Chinese clinical-protocol medical-writing system.
+This is read-only. Do not edit product code, tests, databases, runtime data,
+user files, or prior reports. You may write only your final report through the
+runner-managed output path; do not use a write tool on that path.
+
+Workspace: `.`
+
+Hard boundaries:
+- Read-only audit. Do not edit product code, tests, databases, runtime data,
+  user files, prior reports, credentials, or generated artifacts.
+- Do not run state-mutating E2E against stable runtime. Bounded source reads,
+  existing evidence inspection, and non-mutating checks are allowed.
+- Do not expose secrets or copy credential values into the report.
+- Codex owns final acceptance; do not claim release approval.
+- Write exactly one output file:
+  `runs/execution/medical_writing_production_rebaseline_20260722/kimi_k3_targeted_second_audit.md`.
+
+Before the bounded audit, refresh the current global Codex/Kimi routing rules
+from the global `AGENTS.md` already governing this session.
+
+Read these files only:
+- `AGENTS.md`
+- `records/active_slices/medical_writing_production_rebaseline_20260722/TASK_RECORD.md`
+- `records/active_slices/medical_writing_production_rebaseline_20260722/CURRENT_GAP_MATRIX.md`
+- `records/active_slices/medical_writing_production_rebaseline_20260722/direct_deepseek_transport_probe.json`
+- `runs/execution/medical_writing_production_rebaseline_20260722/qoder_qwen37max_full_gap_manager.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/SOFT_PAUSE_RESUME.md`
+
+The Qoder report is useful but not accepted as authoritative. Independently
+verify, with exact file/function/line and runnable or already-preserved evidence,
+the following disputed points:
+
+1. Direct product AI: a real production-env synthetic probe now completed in
+   26.29 seconds with provider=deepseek, model=deepseek-v4-pro and no
+   Codex/Hermes dependency. Distinguish base transport availability from the
+   confirmed task-specific routing hole where synopsis reuses the global runner
+   and competitor triage can accept a non-deepseek provider/Hermes transport or
+   missing response_model. Do not repeat “no key/no env” without current proof.
+2. AI-first UI: source now contains prefill candidate cards, batch adopt,
+   refine/defer and evidence details. Determine exactly which parts are wired
+   and usable versus deterministic fallback, stale-runtime or missing-real-AI
+   behavior. Do not say it is all static or all complete.
+3. Flowchart Word orientation: the preserved Word-rendered artifact has pages 2
+   and 4 physically landscape, but layout is fragmented and underuses the page.
+   Verify orientation from page dimensions/OOXML, not a prior model caption.
+4. Dynamic modules: determine whether fixed/design-driven optional/not
+   applicable decisions are captured early enough and propagate through
+   synopsis, section plan, evidence retrieval, candidate generation and DOCX.
+   Do not equate the presence of ProtocolModuleResolutionPanel with a closed
+   end-to-end semantic contract.
+5. Synopsis entry must be file-first extraction then conflict confirmation;
+   from-zero retains drug/indication/phase. Check current behavior.
+6. Runtime/readiness: separate expected 5174/8911 production root from unrelated
+   8910/5180 processes. Verify whether independent_ai.ready participates in the
+   overall ready contract and how the UI behaves when AI is unavailable.
+7. Editor data safety: verify clean/dirty transition, beforeunload, refresh,
+   section/project switch, local draft recovery, save 409 recovery, network
+   error versus legitimate empty state, long-document navigation and full-screen
+   access to save/AI/evidence/citations.
+8. Long-running AI semantics: synopsis real chunk persistence/recovery, competitor
+   triage synchronous POST/retry, reference translation restart with pending
+   items, chapter candidates synchronous waiting/reconnect/cancel.
+9. StudyDefinition-bound working copies and user-confirmation semantics: verify
+   exact current state; do not rely only on stale PENDING stubs.
+10. DOCX: distinguish structurally legal OOXML from Word pagination; verify the
+    appendix page-break/height cause, block-by-block section fragmentation,
+    index placement heuristic, company style-profile coverage and whether the
+    synopsis visual nesting should be a merged grid rather than literal nested
+    w:tbl based on the D017 authority.
+11. Clinical authoring logic: drug modality/route, Phase I multi-part options,
+    IB absent/present minimal fact dialogue, complex background therapy, interim
+    analysis, switching, active control, PK/PD/safety propagation, and corpus
+    authority hierarchy.
+12. Preserve completed foundations only when backed by current source plus real
+    evidence. Regex/component-presence tests do not prove button/runtime/E2E
+    usability. Identify old “completed” claims that require downgrade.
+
+Deliver:
+- a concise adjudication table for every disputed Qoder claim: accepted,
+  corrected, or unproven, with evidence;
+- additional P0/P1 findings not in Qoder;
+- a corrected, de-duplicated implementation order with shared-file collision
+  boundaries;
+- exact failing-test contracts that would fail the current implementation;
+- what can run in parallel read-only versus what must be serialized;
+- a recommendation whether a further broad audit has value or implementation
+  should now proceed.
+
+Do not make code changes. Do not expose secrets. Treat external model reports as
+evidence, not authority. Codex will independently reproduce decisive findings.

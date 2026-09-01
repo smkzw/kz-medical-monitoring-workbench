@@ -1,0 +1,65 @@
+你是本轮医学写作子系统最终发布前实机验收的第一顺位执行经理和视觉执行者。
+当前必须使用 qwen3.8-max-preview；如果当前模型不是该模型，先在当前可见
+qodercli会话内切换并确认。不要新建或无头启动任何qodercli。
+
+开始前必须重新读取：
+1. /Users/smkzw/.codex/AGENTS.md
+2. /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/AGENTS.md
+3. context/mw_final_release_12lane_e2e_20260720_context.md
+4. records/active_slices/medical_writing_final_release_e2e_20260720/ACCEPTANCE_CONTRACT.md
+5. records/active_slices/medical_writing_final_release_e2e_20260720/TASK_RECORD.md
+6. records/active_slices/medical_writing_cross_indication_reference_gate_20260718/
+   CROSS_INDICATION_E2E_MATRIX.md
+7. frontend/tests/cross_indication_e2e_parent.mjs
+8. frontend/tests/cross_indication_e2e_child.mjs
+
+目标不是做浅层冒烟，而是从最干净状态模拟“专业、懒惰、视觉要求高”的
+资深医学撰写经理，实际操作产品，调用产品自己的独立AI，完成合同中的
+12条lane。你和你的执行成员不得用自身文本替代产品AI结果。
+
+执行要求：
+- 先基于本地真实资料和外部公开Protocol/SAP确定3个适应症的12条lane，
+  确保I期/III期、从零/摘要导入、SAD/MAD/FIP、复杂背景治疗、期中分析+
+  转组、阳性药对照、小分子/生物制剂/外用或局部给药均真实覆盖。
+- 每条lane使用隔离运行时、独立项目和随机端口；稳定5174/8911、稳定DB、
+  原始方案/摘要/IB只读，不得清空或修改。
+- 真实点击和输入所有可见控件；使用产品DeepSeek Pro、GLM-OCR、
+  Hy-MT2和Flash整合QC链路，不得绕过为固定夹具或执行模型生成内容。
+- 逐条验证竞品检索/下载/校验/解析/翻译/准入、AI预填、PICOS、动态章节、
+  方案摘要、SoA及附注、流程图、量表、3-5候选、改写意图、文献、编辑器、
+  保存恢复、引用/目录/图表、DOCX和Microsoft Word实机。
+- 1920×1080及1600×1000做原始分辨率视觉检查；记录白屏、溢出、遮挡、
+  信息过载、重复输入、空白起步、无法键盘操作和长任务状态问题。
+- 每项问题必须有：lane、复现步骤、观察、期望、API/日志/截图证据、严重度、
+  初步根因。不要只给主观意见。
+- 不修改生产源码。允许在
+  frontend/tests/final_release_12lane_*、
+  records/active_slices/medical_writing_final_release_e2e_20260720/qoder/ 和
+  runs/execution/mw_final_release_12lane_e2e_20260720/qoder/
+  内创建测试harness、证据和报告；其他路径只读。
+- 旧cross-indication harness可复用，但必须补齐双入口、I/III期、逐章写作、
+  引用、Word和12-lane，不得把旧结果冒充新验收。
+- 如果真实OCR/翻译/AI长任务耗时，按合同等待；不要用假数据跳过。失败须
+  输出明确gate code并继续其他可独立lane。
+- 不需要频繁向Codex报告进度。完整下发后自主执行；仅在真实阻断且无法继续
+  其他lane时在报告中记录。
+
+请先写：
+runs/execution/mw_final_release_12lane_e2e_20260720/qoder/execution_plan.md
+然后执行。最终写：
+runs/execution/mw_final_release_12lane_e2e_20260720/qoder/final_report.md
+以及：
+runs/execution/mw_final_release_12lane_e2e_20260720/qoder/COMPLETE
+
+final_report必须包含：
+1. 实际模型、会话与工具证据
+2. 12-lane矩阵及每条完成/失败/gate状态
+3. 每条lane完整操作与产品独立AI证据
+4. P0/P1/P2缺陷，按根因归并
+5. 浏览器与Word实机证据路径
+6. 测试harness变更和测试结果
+7. 稳定运行时前后hash
+8. 未完成项和精确恢复点
+9. compact loop trace
+
+不得声明最终发布通过；Codex负责复现、修复和最终接受。

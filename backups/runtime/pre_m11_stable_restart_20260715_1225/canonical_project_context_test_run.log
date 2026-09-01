@@ -1,0 +1,15 @@
+.........................................................................................................................../Users/smkzw/Library/Python/3.9/lib/python/site-packages/openpyxl/worksheet/header_footer.py:48: UserWarning: Cannot parse header or footer so it will be ignored
+  warn("""Cannot parse header or footer so it will be ignored""")
+.............................................F...............................
+======================================================================
+FAIL: test_local_candidate_route_uses_server_side_mapping_and_hides_internal_path (test_source_registry.SourceRegistryTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/tests/test_source_registry.py", line 342, in test_local_candidate_route_uses_server_side_mapping_and_hides_internal_path
+    self.assertEqual(200, success.status_code)
+AssertionError: 200 != 400
+
+----------------------------------------------------------------------
+Ran 200 tests in 147.731s
+
+FAILED (failures=1)

@@ -1,0 +1,40 @@
+1 content_hash
+186:        content_hash=_file_sha256(config.protocol_path),
+2 inbox item builder
+236:    def _build_items(self, project_id: str) -> List[WorkbenchItem]:
+240:            return _dedupe_items(items)
+250:        return _dedupe_items(items)
+308:        return items
+365:        return items
+414:        return items
+421:            return items
+466:        return items
+473:            return items
+523:        return items
+530:            return items
+566:        return items
+573:            return items
+609:        return items
+616:            return items
+651:        return items
+763:        return items
+834:        return items
+1076:        return items
+1128:    return len(items) - 1
+3 monitoring demo fallback
+93:        sheets = request.sheets or self.demo_listing_payload()
+176:    def demo_listing_payload(self) -> List[Dict[str, Any]]:
+4 frontend static fallbacks
+5 hardcoded backend /Users count
+services/api/app/eligibility.py:6
+services/api/app/source_intake.py:1
+services/api/app/main.py:19
+services/api/app/safety_pv_manifest.py:6
+services/api/app/project_source_manifest.py:7
+services/api/app/tfl_manifest.py:3
+services/api/app/evidence_design_manifest.py:2
+services/api/app/enrollment_adapter.py:2
+services/api/app/medical_writing_manifest.py:3
+services/api/app/ai_gateway.py:1
+6 unittest skips
+      30

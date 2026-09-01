@@ -1,0 +1,49 @@
+你是本项目视觉执行/会商成员。当前任务是医学写作子系统的研究流程图、量表附件和
+Word成品的只读视觉验收。必须使用当前QoderVIP会话中的Qwen3.7-Plus视觉模型。
+这是与上一项非视觉任务无关的新任务。
+
+开始前请读取：
+1. /Users/smkzw/.codex/AGENTS.md
+2. /Users/smkzw/.hermes/SOUL.md
+3. /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/AGENTS.md
+4. /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/records/active_slices/mw_study_schema_scale_docx_20260720/acceptance_outputs/acceptance_trace.json
+5. /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/records/active_slices/mw_study_schema_scale_docx_20260720/reference_inputs/kangzhe_design.md
+6. 32张200 DPI页面图：
+   /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/records/active_slices/mw_study_schema_scale_docx_20260720/acceptance_outputs/render_word_v2_200dpi/
+7. 两个真实研究流程图的来源方案、IBDQ原始量表，以及当前DOCX/PDF，均在同一
+   active slice的reference_inputs/和acceptance_outputs/目录中。
+
+Hard boundaries:
+- 只读产品源码、真实来源和现有成品。
+- 不修改产品代码、数据库、运行时、用户原件或当前DOCX/PDF。
+- 仅允许新建下面这一份报告：
+  /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/execution/mw_study_schema_scale_docx_20260720/qoder_qwen37plus_visual_audit.md
+- 不建立新qodercli，不使用无头访问。
+
+Read these files only:
+- `AGENTS.md`
+- `records/active_slices/mw_study_schema_scale_docx_20260720/acceptance_outputs/acceptance_trace.json`
+- `records/active_slices/mw_study_schema_scale_docx_20260720/reference_inputs/kangzhe_design.md`
+- `records/active_slices/mw_study_schema_scale_docx_20260720/reference_inputs/`
+- `records/active_slices/mw_study_schema_scale_docx_20260720/acceptance_outputs/`
+
+以“懒惰但专业、视觉要求高的资深医学撰写经理”视角逐页检查，不要只看OpenXML
+合法性。至少覆盖：
+- CMS-D017 SAD/MAD流程图与MY009 UC条件转组流程图是否在横向页面充分利用空间，
+  字号能否在100% Word缩放和打印后直接阅读，流程、条件分支、组别、剂量、时间、
+  决策门是否一眼可辨；颜色是否符合康哲规范且不靠颜色单独传递含义。
+- 图题、正文、目录、图目录、页眉页脚、横竖分节切换是否出现孤立页、空白页、
+  过大留白、错误分页或索引断裂。
+- 9页IBDQ量表是否逐页保持原始比例、清晰度、勾选框、版权行和页码；是否被Word
+  页眉页脚遮挡；是否出现多余空白页。请明确核对当前32页中量表实页与空白页的
+  排列规律。
+- 当前成品与真实中文方案常见排版之间的差距。不要提出营销页或装饰性设计。
+- 给出可以直接由Codex实现的修复合同：页面/分节算法、图形宽高和字号范围、
+  分页前后不变量、自动回归指标、代表性截图页。将“必须修复才能发布”和“可优化”
+  分开。
+
+报告必须包含：读取来源、逐页观察摘要、确定缺陷、修复合同、验收矩阵、仍不确定
+事项。所有判断写明页面号或文件定位。不要声称最终验收通过，Codex保留最终验收权。
+
+Runner-managed output path:
+`runs/execution/mw_study_schema_scale_docx_20260720/qoder_qwen37plus_visual_audit.md`

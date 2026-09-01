@@ -1,0 +1,100 @@
+Continue the SAME Worker 02 harness session. Do not start a new session: these
+are direct defects in the harness you just reported ready. Fully reread the
+current global `/Users/smkzw/.codex/AGENTS.md` and
+`/Users/smkzw/.hermes/SOUL.md`, then inspect the exact product route contracts
+before editing.
+
+Hard boundaries:
+
+- Work only inside the current workspace.
+- Modify only the five explicitly writable harness files listed below.
+- Do not modify product source, frontend application source, stable runtime,
+  user data, configuration, credentials, or the runner-managed report.
+- Do not start Worker 03 or the 12-lane production-AI long run.
+- Codex remains final authority.
+
+Read these files only:
+
+- `records/active_slices/medical_writing_final_release_e2e_20260720/ACCEPTANCE_CONTRACT.md`
+- `runs/execution/mw_release_execution_round2_20260720/worker_02_rerun_01.md`
+- `frontend/tests/final_release_12lane_config.mjs`
+- `frontend/tests/final_release_12lane_child.mjs`
+- `frontend/tests/final_release_12lane_parent.mjs`
+- `frontend/tests/final_release_12lane_structure_qc.mjs`
+- `frontend/tests/final_release_12lane_pipeline.mjs`
+- `services/api/app/main.py`
+- `packages/contracts/workbench_contracts/models.py`
+
+This initial list does not prohibit reading direct route/service contracts and
+focused tests required to verify the exact causal path. Record every additional
+file and why it was needed.
+
+Codex independently accepted:
+- all five harness files parse;
+- structure QC passes 41/41;
+- isolated two-lane dry-run passes and leaves stable runtime unchanged.
+
+Codex rejects the full-mode readiness claim. The dry-run intentionally skipped
+the affected calls, and direct source comparison found these release-blocking
+harness defects:
+
+1. `final_release_12lane_pipeline.mjs#importLiterature` posts to the nonexistent
+   `/medical-writing/literature/import` with a non-product payload. The product
+   route is POST `/medical-writing/literature/imports` and accepts
+   `MedicalWritingReferenceImportRequest`: `source_input`, optional
+   `manual_metadata`, `override_validation`, `override_reason`, `actor`,
+   `idempotency_key`. Do not pass `document_id`, `import_type`, or `identifier`
+   unless the real contract accepts them.
+2. `exportDocx` posts JSON to nonexistent
+   `/medical-writing/documents/{documentId}/export` and expects a filesystem
+   path. The product route is GET
+   `/api/projects/{projectId}/medical-writing/document.docx?mode=draft_preview`
+   and returns binary DOCX plus provenance headers. Save the exact response
+   bytes under the lane evidence directory, hash them, and verify the returned
+   `X-Medical-Writing-Docx-Sha256`; do not require a server-side export path.
+3. Synopsis upload attaches the import and advances journey revision, but
+   `confirmSynopsis` sends the pre-upload revision. Refetch the journey or use
+   the upload response's current revision before confirmation. Use an integer.
+4. The confirmation payload must use the product-extracted synopsis source id,
+   nonblank extracted synopsis text, and normal validation warning/override
+   semantics. Do not fabricate or silently override a mismatch. If the imported
+   source has a genuine content warning, acknowledge/override only through the
+   product contract and preserve the exact reason.
+5. Current full-mode literature failure is caught and treated as nonblocking.
+   The release contract requires the reference module to be exercised. A valid
+   DOI/PMID/publication URL import failure must become a lane gate failure with
+   request/response evidence, while preserving the run for diagnosis.
+
+Required work:
+
+A. Modify only:
+   - `frontend/tests/final_release_12lane_pipeline.mjs`
+   - `frontend/tests/final_release_12lane_child.mjs`
+   - `frontend/tests/final_release_12lane_parent.mjs`
+   - `frontend/tests/final_release_12lane_config.mjs`
+   - `frontend/tests/final_release_12lane_structure_qc.mjs`
+B. Add structure assertions that reject the three nonexistent route strings,
+   require the real route strings, require binary DOCX persistence/hash/header
+   verification, and require post-upload revision refresh.
+C. Run `node --check` on every harness file, the 12-lane structure QC, the
+   existing 4-lane regression structure QC, and isolated dry-runs for one
+   greenfield plus one synopsis lane.
+D. Add a bounded API-contract probe in an isolated runtime that actually:
+   - creates a synopsis-import project;
+   - uploads a real local synopsis through the product endpoint;
+   - refetches and confirms with the new revision;
+   - creates enough normal product state to invoke literature import and binary
+     DOCX export, or records the precise legitimate prerequisite that prevents
+     the call.
+   This is not the 12-lane production-AI long run and must not use stable
+   runtime. Do not fake product state or edit SQLite.
+E. Preserve evidence under the existing Worker 02 run directory, check stable
+   runtime hashes, and stop/remove the isolated service/runtime.
+F. Return a compact complete report. Do not write the runner-managed report.
+   Do not recommend Worker 03 until the real contract probe passes.
+
+Runner-managed output path:
+`runs/execution/mw_release_execution_round2_20260720/worker_02_followup_02.md`
+
+If a product prerequisite exposes another harness defect, fix that same causal
+path and rerun. Do not ask routine questions. Codex remains final authority.

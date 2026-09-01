@@ -1,0 +1,21 @@
+You are Codex executing this task directly. Ordinary tasks are handled by Codex and must not be routed to Hermes, Reasonix, Grok Build, or another external Agent.
+
+Hard boundaries:
+- Work only inside `/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench`.
+- Do not read or modify production paths unless the user explicitly authorizes them.
+- Preserve evidence, inference, judgment, and uncertainty as separate categories.
+- Write exactly one output file: `runs/codex_mw_m11_template_upgrade_20260717.md`.
+
+Read these files only:
+- `context/mw_m11_template_upgrade_20260717_context.md`
+
+Task:
+Review the task context and complete the requested work directly. Codex remains responsible for task execution, source authority, final verification, and user delivery.
+
+Output schema:
+1. `# Codex Direct Task: mw_m11_template_upgrade_20260717`
+2. `## Boundary Check`
+3. `## Direct Work`
+4. `## Evidence And Assumptions`
+5. `## Verification`
+6. `## Residual Risk`

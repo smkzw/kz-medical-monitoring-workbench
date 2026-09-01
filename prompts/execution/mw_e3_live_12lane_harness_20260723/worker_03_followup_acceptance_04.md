@@ -1,0 +1,119 @@
+You are continuing the same Hermes/aishuo/cms-model Worker 03 execution session.
+Read and comply with `/Users/smkzw/.codex/AGENTS.md`, `/Users/smkzw/.hermes/SOUL.md`,
+the workspace `AGENTS.md`, and current files before editing. This is a consolidated
+Codex acceptance rerun after direct source and production-contract review. Do not
+merely explain and do not repeat acceptance_03 claims that the executable path disproves.
+
+Read these files only:
+- `context/mw_e3_live_12lane_harness_20260723_execution_context.md`
+- `runs/execution/mw_e3_live_12lane_harness_20260723/worker_03_followup_acceptance_03.md`
+- `runs/execution/mw_e3_live_12lane_harness_20260723/worker_01_oracle_authority_acceptance_01.md`
+- `frontend/tests/final_release_12lane_pipeline.mjs`
+- `frontend/tests/final_release_12lane_durable_client.mjs`
+- `frontend/tests/final_release_12lane_receipts.mjs`
+- `frontend/tests/final_release_12lane_child.mjs`
+- `frontend/tests/final_release_12lane_contract_probe.mjs`
+- `frontend/tests/final_release_12lane_behavior_tests.mjs`
+- `frontend/tests/final_release_12lane_behavior_openapi_integration.mjs`
+- `frontend/tests/final_release_12lane_config.mjs`
+- `services/api/app/main.py`
+- `services/api/app/medical_writing_synopsis_import.py`
+- `services/api/app/writing_reference_preparation_batch.py`
+- `services/api/app/writing_reference_translation_batch.py`
+- `packages/contracts/workbench_contracts/models.py`
+
+The initial read list is a starting set, not a tool prohibition. Read additional
+in-scope contract/service files only when needed to prove a listed defect and record
+them.
+
+Hard boundaries:
+
+Allowed writes remain the W3 harness files above, plus W3-only tests named
+`frontend/tests/final_release_12lane_behavior_*`. The W1 authority repair must already
+be complete; preserve its accepted authority lineage and tests. Do not edit W2,
+production source, fixtures, authoritative protocols, credentials or stable runtimes.
+- Runner-managed report path:
+  `runs/execution/mw_e3_live_12lane_harness_20260723/worker_03_followup_acceptance_04.md`.
+The runner owns this report path; return the full report in final text and never write
+that path.
+
+Codex rejects acceptance_03. Exact source review proves its report is still false in
+the executable chain:
+
+1. Preparation polling recognizes only `completed/failed/partial_failure`, but the
+   real service also returns `completed_with_review_required` and
+   `completed_with_manual_upload_required`. The child reads
+   `preparationBatch.artifacts[]`, while the real response carries artifacts in
+   `items[].artifact_id`. It therefore proceeds with undefined artifact identity.
+   Handle every real terminal explicitly: review-required must enter the documented
+   validation/review path; manual-upload-required must fail closed with evidence unless
+   a real artifact is available. Never mark either as ordinary completed.
+2. `LaneCheckpoint.load()` is not propagated into local `completedStages`,
+   `stageArtifacts`, report/search/preparation/translation/document state. Line 134 then
+   overwrites a resumed checkpoint with only `project_creation`, and skipped stages
+   leave required variables null. Rehydrate all durable state, validate project code,
+   project ID, runtime, lane, entry mode/source mode, source hash and allocation
+   attempt, and persist after every completed stage. Do not wait until lane end.
+3. `startAndPoll()` accepts an immediate `{status:"completed",result:...}` without the
+   required `/result` GET. Its `retry()` returns the status DTO after completion rather
+   than the fetched result artifact. Both paths must require and return the authoritative
+   `/result`; status alone never satisfies candidate/rewrite artifact gates.
+4. Atomic adoption response is `MedicalWritingRevisionApplyResult` with
+   `thread_id`, `suggestion_id`, and nested `working_copy`. The child checks flat
+   `working_copy_revision`, so real adoption always fails. Verify nested ID, section,
+   revision, working-copy ID/hash/content, thread selected state, chosen suggestion,
+   sibling states and replay behavior. Re-read both thread and working copy.
+5. After `saveReconciliation(... reconciled:false)`, the child unconditionally calls
+   `clearLocator()`, which changes the locator to reconciled=true. Never upgrade failed
+   or partial verification. Delete a locator only when its explicit reconciliation is
+   complete, the lane evidence bundle is atomically fsync+rename committed, and the lane
+   has no gate/failure involving that step. A crash between steps must resume, not rerun
+   or erase evidence.
+6. `markStageComplete()` is memory-only. Make checkpoint persistence part of each
+   successful stage transition. Required-stage verification must use successful
+   persisted transitions, not `journeyTrace.steps.map(stage)`, because failed/started/
+   skipped trace entries are not completion.
+7. Missing required chapter mappings are still appended to `excludedChapters` with an
+   autogenerated reason. That is the prohibited fail-open behavior. A required chapter
+   may be omitted only from a persisted, source-bound design decision/StudyDefinition
+   applicability record. Otherwise fail `GATE_PARTIAL_CHAPTER_SAMPLE`. Require at least
+   one included real section and exact `QC_MIN_CHAPTERS` coverage; zero cases fail.
+8. Rewrite retry sets `rewriteCompleted=true` without checking the retried terminal
+   result or artifact. Require authoritative `/result`, server receipt, resulting thread
+   state and a real new candidate/rewrite identity.
+9. Receipt applicability is still internally contradictory. Backend jobs such as
+   CT.gov/DOCX may legitimately have model=null. Production public status/result may
+   omit policy/input/output hashes. Distinguish:
+   - server-returned provider/model/policy fields, never invented;
+   - client-computed recursive canonical hashes of exact raw status and result DTOs;
+   - unavailable server input/output/policy fields, represented honestly and required
+     only where the actual role contract exposes them.
+   Every receipt must bind lane, project, step, job, status hash, result hash and
+   artifact IDs where applicable. Wrong lane/project/job/artifact and forged identities
+   must fail. Do not let a status hash substitute for a result hash.
+10. Polling currently swallows every HTTP/parse error until timeout. Preserve the last
+    observed error/status in locator and report, distinguish transient retries from
+    terminal contract errors, and fail closed on 4xx/schema mismatch.
+11. The OpenAPI test proves only route existence. Add a no-product-AI integration test
+    that validates every actual request payload builder against the current Pydantic
+    request models/OpenAPI schemas, including framing, PICOS, competitor search,
+    preparation, validation override, extraction review, translation, medical review,
+    admission, greenfield create, working-copy save, revision candidate, rewrite and
+    accept-and-apply. It must detect extra forbidden fields, wrong types and missing
+    required fields. A 404 route check is not payload validation.
+12. Add crash/resume behavior tests at project creation, search, preparation,
+    translation, candidate result, pre-adoption, post-adoption/pre-evidence and
+    post-evidence/pre-locator-delete. Prove no duplicate POST, no lost completed stage,
+    no cross-lane/project/runtime recovery and no half-adoption green result.
+
+Acceptance:
+- Wait for and preserve the completed W1 authority repair before editing shared config.
+- `node --check` every changed `.mjs`; syntax-check any new `.py`.
+- Run all W3 behavior tests, real OpenAPI test, exact Pydantic payload-contract test and
+  crash/resume adversarial tests.
+- Report a fixed explicit command list and exact counts; no globs standing in for tests.
+- Demonstrate negative cases for every defect above. Source-string tests do not count.
+- Do not call product AI, CT.gov, OCR, translation, browser or Word.
+- Do not claim W2, W4 or release acceptance.
+- End exactly with:
+  `WORKER_03_E3_ACCEPTANCE_REMEDIATION_04_COMPLETE`

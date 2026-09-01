@@ -1,0 +1,5 @@
+Same-session corrective review. Re-read the current `reviews/medical_monitoring_r4_d06_efficacy_slice_contract_v1_20260812.md` at SHA-256 `6c79c102358c2c9a074e696c426241768272db12456104fd07dab1fb1d0f32a4`. The parent addressed F-01 through F-11 and expanded the matrix to contiguous rows 1-172.
+
+Do not edit files. Verify each prior finding is actually closed, look for contradictions introduced by the changes, and check schema implementability, owner isolation, authoritative-source binding, closed numeric/temporal algorithms, complex endpoint traceability, priority precedence, D05/shared-axis binding, query_context, version semantics, root precedence, and the executable challenge contract.
+
+Use P0-P4 with exact section/row, counterexample, impact, and minimum correction. If any blocking P0-P4 remains, say `VERDICT: REJECT`. If none remains, say exactly `VERDICT: ACCEPT`. Limit acceptance to the synthetic/offline D06 contract only; do not accept implementation, R4 overall, R5 UI, real projects, statistical analysis, product, or medical writing.

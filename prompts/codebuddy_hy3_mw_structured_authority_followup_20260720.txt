@@ -1,0 +1,60 @@
+继续当前CodeBuddy/Hy3同一会话，执行一个窄范围、只读产品源码的补证据
+任务。不要新开会话，不要阶段性询问，不要重复12-lane全跑。
+
+开始前完整读取：
+- `/Users/smkzw/.codex/AGENTS.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/ACCEPTANCE_CONTRACT.md`
+- `runs/execution/mw_final_release_12lane_e2e_20260720/hy3/final_report.md`
+- `runs/execution/mw_release_execution_round2_20260720/manager_review.md`
+- `reviews/codex_execution_mw_release_execution_round2_20260720_review.md`
+
+角色边界：
+- 你仍是非视觉后端/API/状态/OOXML测试者，不是产品独立AI，也不是发布
+  验收人。
+- 不修改产品源码、测试、稳定运行时、用户原件或配置。
+- 允许修改`/tmp/hy3_runner.py`等临时runner，并在全新逐lane临时运行时
+  构建测试项目。
+- 本轮为合同结构证据，可使用明显标为`TEST_*`的合成值，但不得把它当成
+  真实临床内容或产品独立AI证据。
+
+必须完成：
+
+1. 仅运行两个独立lane：
+   - Phase I，`structured_design.interim_analysis.planned=false`；
+   - Phase III，`structured_design.interim_analysis.planned=true`。
+2. 两个lane均完成StudyDefinition、greenfield document和DOCX导出，保留
+   最终DOCX而不是删除。
+3. 对每个DOCX解析：
+   - `word/document.xml`中所有“期中分析”命中；
+   - 命中所在段落完整文本、段落样式、标题级别、相邻前后各2个段落；
+   - 是否来自目录字段缓存、表/图目录、真实标题、正文、不适用说明或其他；
+   - Phase I是否产生了不应存在的适用正文。
+4. 在Phase III使用明显合成的阳性对照：
+   `TEST_ACTIVE_COMPARATOR`，给药细节
+   `TEST_DOSE/TEST_ROUTE/TEST_FREQUENCY/TEST_DURATION`。分别导出：
+   - `structured_design.comparator_type`；
+   - `structured_design.comparator_intervention`；
+   - 全部IP regimens及`product_role`；
+   - synopsis和DOCX投影值。
+   判定给药细节是否只存在于`product_role=active_comparator`的IP regimen。
+5. 在Phase III使用明显合成背景治疗：
+   `TEST_BACKGROUND_THERAPY`。分别导出：
+   - `picos.required_background_rules`；
+   - 全部non-IP rules、rule class/policy/时限/条件；
+   - synopsis和DOCX投影值。
+   判定背景治疗是否有且仅有一个结构化non-IP `BACKGROUND`权威事实。
+6. 不要用“自由文本最终也能导出”作为通过标准。合同要求单一结构化权威；
+   如果IP/non-IP对象为空而自由文本非空，必须记为P1。
+7. 记录API顺序、状态码、隔离运行时、稳定运行时前后hash和每个证据文件的
+   SHA-256。
+
+Exact outputs:
+- `runs/execution/mw_final_release_12lane_e2e_20260720/hy3/followup_01.md`
+- `runs/execution/mw_final_release_12lane_e2e_20260720/hy3/artifacts/phase1_no_interim.docx`
+- `runs/execution/mw_final_release_12lane_e2e_20260720/hy3/artifacts/phase3_interim_authority.docx`
+- `runs/execution/mw_final_release_12lane_e2e_20260720/hy3/artifacts/structured_authority_evidence.json`
+
+报告区分直接API/SQLite/OOXML观察、静态推断和未验证项。禁止写“可发布”；
+最终只给出三项`PASS/P1/UNVERIFIED`：Phase I期中分析动态章节、阳性对照
+IP regimen单一权威、背景治疗non-IP单一权威，并提供产品实现worker可直接
+使用的最小失败断言。

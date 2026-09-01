@@ -1,0 +1,1 @@
+This is round 3 in the same OpenCode Go session. Produce the corrected final pass. Preserve exact screenshot/control evidence, resolve contradictions, state uncertainty, prioritize findings, and make each recommendation minimal and actionable. Return the complete updated Markdown output. Codex remains final authority.

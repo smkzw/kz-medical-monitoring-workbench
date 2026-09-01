@@ -1,0 +1,273 @@
+{
+  "results": {
+    "openWriting": "pass",
+    "diag1920": {
+      "label": "writing-page-1920",
+      "viewportW": 1920,
+      "viewportH": 1080,
+      "docScrollW": 1920,
+      "docClientW": 1920,
+      "bodyScrollW": 1920,
+      "horizontalScroll": 0,
+      "toolbar": {
+        "scrollW": 1246,
+        "clientW": 1246,
+        "overflowX": 0,
+        "rect": {
+          "left": 95,
+          "right": 1343,
+          "top": 254,
+          "bottom": 334
+        }
+      },
+      "toolbarRow1": {
+        "scrollW": 1234,
+        "clientW": 1234,
+        "overflowX": 0,
+        "rect": {
+          "left": 102,
+          "right": 1336,
+          "top": 260,
+          "bottom": 292
+        }
+      },
+      "toolbarRow2": {
+        "scrollW": 1234,
+        "clientW": 1234,
+        "overflowX": 0,
+        "rect": {
+          "left": 102,
+          "right": 1336,
+          "top": 296,
+          "bottom": 328
+        }
+      },
+      "editor": {
+        "scrollW": 1246,
+        "clientW": 1246,
+        "overflowX": 0,
+        "rect": {
+          "left": 96,
+          "right": 1342,
+          "top": 390,
+          "bottom": 950
+        }
+      },
+      "writingMain": null,
+      "writingContent": null,
+      "sectionTree": null,
+      "candidateSection": {
+        "scrollW": 508,
+        "clientW": 508,
+        "overflowX": 0,
+        "rect": {
+          "left": 1381,
+          "right": 1889,
+          "top": 578,
+          "bottom": 801
+        }
+      },
+      "topBar": null,
+      "projectHeader": null,
+      "consoleErrors": []
+    },
+    "tocSectionCount": 105,
+    "tocFilteredCount": 28,
+    "toc": "pass",
+    "createWorkingCopy": "pass",
+    "toolbar_bold": "pass",
+    "toolbar_italic": "pass",
+    "toolbar_underline": "pass",
+    "toolbar_superscript": "pass",
+    "toolbar_subscript": "pass",
+    "toolbar_clear": "pass",
+    "fontOptions": 6,
+    "sizeOptions": 8,
+    "toolbarColor": "pass",
+    "highlightOptions": 5,
+    "fontSizeColor": "pass",
+    "align_left": "pass",
+    "align_center": "pass",
+    "align_right": "pass",
+    "align_justify": "pass",
+    "align_bulletList": "pass",
+    "align_orderedList": "pass",
+    "align_indentIncrease": "pass",
+    "align_indentDecrease": "pass",
+    "paragraphPopoverLabels": 5,
+    "paragraphSettings": "pass",
+    "lineHeight": "pass",
+    "stylePresets": [
+      "一级标题",
+      "二级标题",
+      "三级标题",
+      "四级标题",
+      "正文",
+      "附注"
+    ],
+    "stylePresetsCheck": "pass",
+    "undoRedo": "pass",
+    "saveWorkingCopy": "pass",
+    "diagMaximized": {
+      "label": "maximized",
+      "viewportW": 1920,
+      "viewportH": 1080,
+      "docScrollW": 1920,
+      "docClientW": 1920,
+      "bodyScrollW": 1920,
+      "horizontalScroll": 0,
+      "toolbar": {
+        "scrollW": 1876,
+        "clientW": 1876,
+        "overflowX": 0,
+        "rect": {
+          "left": 21,
+          "right": 1899,
+          "top": 57,
+          "bottom": 137
+        }
+      },
+      "toolbarRow1": {
+        "scrollW": 1864,
+        "clientW": 1864,
+        "overflowX": 0,
+        "rect": {
+          "left": 28,
+          "right": 1892,
+          "top": 63,
+          "bottom": 95
+        }
+      },
+      "toolbarRow2": {
+        "scrollW": 1864,
+        "clientW": 1864,
+        "overflowX": 0,
+        "rect": {
+          "left": 28,
+          "right": 1892,
+          "top": 99,
+          "bottom": 131
+        }
+      },
+      "editor": {
+        "scrollW": 1876,
+        "clientW": 1876,
+        "overflowX": 0,
+        "rect": {
+          "left": 22,
+          "right": 1898,
+          "top": 194,
+          "bottom": 1058
+        }
+      },
+      "writingMain": null,
+      "writingContent": null,
+      "sectionTree": null,
+      "candidateSection": {
+        "scrollW": 508,
+        "clientW": 508,
+        "overflowX": 0,
+        "rect": {
+          "left": 1381,
+          "right": 1889,
+          "top": 578,
+          "bottom": 801
+        }
+      },
+      "topBar": null,
+      "projectHeader": null,
+      "consoleErrors": []
+    },
+    "editInMaximize": "pass",
+    "maximizeMinimize": "pass",
+    "diag2560": {
+      "label": "wide-2560",
+      "viewportW": 2560,
+      "viewportH": 1440,
+      "docScrollW": 2560,
+      "docClientW": 2560,
+      "bodyScrollW": 2560,
+      "horizontalScroll": 0,
+      "toolbar": {
+        "scrollW": 1698,
+        "clientW": 1698,
+        "overflowX": 0,
+        "rect": {
+          "left": 95,
+          "right": 1795,
+          "top": 254,
+          "bottom": 334
+        }
+      },
+      "toolbarRow1": {
+        "scrollW": 1686,
+        "clientW": 1686,
+        "overflowX": 0,
+        "rect": {
+          "left": 102,
+          "right": 1788,
+          "top": 260,
+          "bottom": 292
+        }
+      },
+      "toolbarRow2": {
+        "scrollW": 1686,
+        "clientW": 1686,
+        "overflowX": 0,
+        "rect": {
+          "left": 102,
+          "right": 1788,
+          "top": 296,
+          "bottom": 328
+        }
+      },
+      "editor": {
+        "scrollW": 1698,
+        "clientW": 1698,
+        "overflowX": 0,
+        "rect": {
+          "left": 96,
+          "right": 1794,
+          "top": 390,
+          "bottom": 950
+        }
+      },
+      "writingMain": null,
+      "writingContent": null,
+      "sectionTree": null,
+      "candidateSection": {
+        "scrollW": 696,
+        "clientW": 696,
+        "overflowX": 0,
+        "rect": {
+          "left": 1833,
+          "right": 2529,
+          "top": 578,
+          "bottom": 801
+        }
+      },
+      "topBar": null,
+      "projectHeader": null,
+      "consoleErrors": []
+    },
+    "widerViewport": "pass",
+    "tableEdit": "pass",
+    "tableControlCount": 0,
+    "structuredDesigner": "button-not-found",
+    "aiCandidateHeader": "当前轮次可直接采用的版本0 个",
+    "aiCandidateArea": "pass",
+    "keyboardShortcuts": "fail",
+    "devLogCheck": "pass",
+    "overflowingElements": []
+  },
+  "findings": [
+    {
+      "id": "F001",
+      "severity": "P1",
+      "category": "keyboard",
+      "title": "Enter/save/reload keyboard journey failed",
+      "detail": "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText('研究方案文档编辑与AI修订', { exact: true }) to be visible\u001b[22m\n",
+      "timestamp": "2026-07-19T13:45:28.899Z"
+    }
+  ]
+}

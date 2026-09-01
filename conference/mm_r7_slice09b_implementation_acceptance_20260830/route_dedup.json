@@ -1,0 +1,76 @@
+{
+  "policy": "execution-used-provider-model-nodes-are-excluded-from-conference",
+  "linked_execution_task_id": "mm_r7_slice09b_implementation_20260830",
+  "linked": true,
+  "execution_evidence": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r7_slice09b_implementation_20260830/worker_01_stdout.txt",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r7_slice09b_implementation_20260830/worker_02_followup_01_stdout.txt",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r7_slice09b_implementation_20260830/worker_02_stdout.txt",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r7_slice09b_implementation_20260830/worker_03_stdout.txt"
+  ],
+  "excluded_route_nodes": [
+    {
+      "agent": "pi",
+      "provider": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "source": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r7_slice09b_implementation_20260830/worker_01_stdout.txt",
+      "reason": "effective execution route"
+    }
+  ],
+  "effective_conference_roles": {
+    "general_single_object": {
+      "agent": "pi",
+      "provider": "cms-router",
+      "model": "minimax-m3",
+      "effort": "xhigh",
+      "default_provider": "cms-router",
+      "default_model": "minimax-m3",
+      "default_effort": "xhigh",
+      "escalate_provider": "cms-router",
+      "escalate_model": "minimax-m3",
+      "escalate_effort": "xhigh",
+      "primary": {
+        "agent": "pi",
+        "provider": "cms-router",
+        "model": "minimax-m3",
+        "effort": "xhigh"
+      },
+      "fallbacks": [
+        {
+          "agent": "pi",
+          "provider": "google-antigravity",
+          "model": "gemini-3.7-flash",
+          "effort": "high"
+        },
+        {
+          "agent": "pi",
+          "provider": "opencode-go",
+          "model": "muse-spark-1.2-contributor",
+          "effort": "xhigh"
+        }
+      ],
+      "execution_route": "Complex/logic/evidence/artifact-heavy object: Pi/cms-router/minimax-m3 xhigh -> Pi/google-antigravity/gemini-3.7-flash high -> Pi/OpenCode Go/Muse xhigh -> Pi/openai-codex/gpt-5.6-luna max",
+      "role": "single complex-task conference object; Codex chairs directly with no sub-venue chair",
+      "schedule": {
+        "policy": "beijing-day-night-v1",
+        "timezone": "Asia/Shanghai",
+        "period": "day",
+        "evaluated_at": "2026-08-30T18:22:16.117449+08:00"
+      },
+      "route_contract_frozen": true,
+      "deduplicated_against_execution": [
+        {
+          "provider": "openai-codex",
+          "model": "gpt-5.6-luna"
+        }
+      ]
+    }
+  },
+  "schedule": {
+    "policy": "beijing-day-night-v1",
+    "timezone": "Asia/Shanghai",
+    "period": "day",
+    "evaluated_at": "2026-08-30T18:22:16.117449+08:00"
+  },
+  "generated_at": "2026-08-30 18:22:16 CST"
+}

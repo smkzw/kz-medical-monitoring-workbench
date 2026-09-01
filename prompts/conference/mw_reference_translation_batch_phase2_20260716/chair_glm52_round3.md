@@ -1,0 +1,1 @@
+Round 3, same session. Produce the corrected final chair decision. Keep only implementable requirements for this phase, distinguish required from deferred hardening, and give Codex exact acceptance evidence for PNH, RA, restart recovery, failure isolation, current-review enforcement, frontend usability, and no automatic approval/admission.

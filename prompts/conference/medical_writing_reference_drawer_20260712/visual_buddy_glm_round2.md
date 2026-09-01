@@ -1,0 +1,1 @@
+Round 2 in the same session. Challenge your design against the screenshots, every backend state, desktop density, accessibility, overflow and accidental competitor-text injection. Return the complete corrected Markdown.

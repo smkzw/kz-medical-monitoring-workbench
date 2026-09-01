@@ -1,0 +1,1 @@
+Round 3, same session. Produce the corrected final backend contract and minimal implementation sequence, including exact exclusion reasons and testable invariants. Keep the existing single-span translation service authoritative.

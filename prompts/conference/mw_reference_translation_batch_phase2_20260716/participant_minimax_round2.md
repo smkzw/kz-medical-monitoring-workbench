@@ -1,0 +1,1 @@
+Round 2, same session. Challenge your own first-round recommendation. Assume an adversarial reviewer asks whether this batch UI hides excluded spans, silently widens authority, overloads the user, or creates false confidence from successful fidelity checks. Identify contradictions and revise only where evidence supports it.

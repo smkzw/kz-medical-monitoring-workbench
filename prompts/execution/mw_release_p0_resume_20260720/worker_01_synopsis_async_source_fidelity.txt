@@ -1,0 +1,172 @@
+Implement the P0 medical-writing protocol-synopsis import repair in the current
+workbench. This is a production-code execution task, not a read-only review.
+Codex remains final acceptance authority.
+
+Before working, reread the current global `/Users/smkzw/.codex/AGENTS.md` and
+`/Users/smkzw/.hermes/SOUL.md`. Use the existing direct independent product AI
+configuration only. Do not route product functionality through Hermes, Qoder,
+Codex, or any other Agent runtime.
+
+Hard boundaries:
+- Work only in the runner-provided current workbench workspace.
+- Preserve unrelated edits and the completed competitor-triage state.
+- The writable file list below is closed. Stop and report BLOCKED before
+  changing any other product source file.
+- Do not touch working-copy/quarantine, approval semantics, PV/Safety,
+  monitoring, enrollment, project data, user originals, credentials, stable
+  runtime data, or the runner-managed report.
+- Do not add Redis, Celery, RQ, Kafka, a paid component, or another runtime
+  dependency. Extend the existing synopsis-import SQLite lease store.
+- Do not expose any synchronous AI-dependent HTTP import path. Upload,
+  byte-storage, deterministic parsing, file-role/indication checks, and source
+  hashing may be synchronous; every model call must run after a `202` response.
+- Do not weaken the existing one-to-one source-fidelity validator.
+- Do not make a final LLM call that regenerates all already validated,
+  deterministically anchored fields. Exact source anchors are server-owned.
+
+Read these files only:
+- `AGENTS.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/TASK_RECORD.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/SOFT_PAUSE_RESUME.md`
+- `context/mw_synopsis_source_fidelity_p0_direct_evidence_20260720.md`
+- `runs/execution/mw_release_p0_resume_20260720/manager_plan.md`
+- `services/api/app/medical_writing_synopsis_import.py`
+- `services/api/app/ai_task_runner.py`
+- `services/api/app/ai_gateway.py`
+- `services/api/app/main.py`
+- `services/api/app/writing_reference_docx.py`
+- `services/api/app/writing_reference.py`
+- `packages/contracts/workbench_contracts/models.py`
+- `packages/contracts/workbench_contracts/__init__.py`
+- `frontend/src/features/medical-writing/MedicalWritingAuthoringJourneySetup.jsx`
+- `tests/test_medical_writing_synopsis_import.py`
+
+This list permits directly causal imported test helpers and adjacent synopsis
+tests when needed. Record every addition and do not edit an added file unless
+Codex's closed writable list below already permits it.
+
+Writable files:
+- `services/api/app/medical_writing_synopsis_import.py`
+- `services/api/app/ai_task_runner.py`
+- `services/api/app/main.py`
+- `packages/contracts/workbench_contracts/models.py`
+- `packages/contracts/workbench_contracts/__init__.py`
+- `frontend/src/features/medical-writing/MedicalWritingAuthoringJourneySetup.jsx`
+- `tests/test_medical_writing_synopsis_import.py`
+- `tests/test_ai_task_runner_source_fidelity.py`
+- new directly scoped synopsis-import tests under `tests/`
+
+Observed root cause and non-negotiable correction:
+- The real MY009 failure was
+  `picos.safety_endpoints: expected 1 ordered source item(s), got 0`.
+- `expected 1` proves `_protocol_synopsis_row_anchors` already recognized one
+  safety endpoint. The independent model, and then its generic repair pass,
+  omitted that field. Do not blame or bypass the anchor builder.
+- Build required-field hints from the deterministic anchors before calling the
+  model.
+- For any anchored field, materialize the exact ordered source items and their
+  evidence bindings into the unified structured result in deterministic code.
+  The model may supply semantic/unanchored fields, but it must not override,
+  delete, reorder, compress, or paraphrase exact anchored source items.
+- Validate the merged result with the existing strict one-to-one validator.
+- If the model omits an anchored field, a targeted repair may still be logged
+  for diagnosis, but deterministic restoration is the final authority and
+  must preserve exact source text and locators.
+- Per-chunk outputs must be merged by deterministic code. No whole-document
+  LLM synthesis is allowed after exact fields have been validated.
+
+Required async job contract:
+1. Extend the existing `medical_writing_synopsis_import.sqlite3` table and its
+   current claim/lease/heartbeat mechanism. Add only additive migrations.
+2. Persist job status, phase, true `chunk_index/chunk_total`, source SHA-256,
+   filename, progress payload, cancellation, attempts, error, and result.
+3. Persist per-chunk status/evidence/output hashes in a sibling table in the
+   same SQLite database.
+4. State machine:
+   `UPLOADED -> PARSING -> CHUNKING -> AI_SYNTHESIS[k/n] -> VALIDATING ->
+   REVIEW_READY`, with `CANCELLED`, `FAILED`, and `RECOVERABLE`.
+5. `POST .../synopsis-import/jobs` returns `202` with `job_id` after
+   deterministic parse/storage. It must not await product AI.
+6. Add job `GET`, result `GET`, idempotent cancel `POST`, and recover/resume
+   `POST` routes. Polling is the required P0 transport; SSE is optional and
+   must not block acceptance.
+7. Repeated identical idempotency key plus canonical request returns the same
+   job/result. Same key with changed canonical request returns `409`.
+8. Lease loss or process interruption is recoverable from the last completed
+   chunk. Completed chunks must not be replayed.
+9. Frontend submission must use `POST -> job_id -> polling -> result`, show
+   real phase and chunk progress, support cancel/retry, and never display an
+   invented 100% before `REVIEW_READY`.
+10. Keep `import_and_structure` available only as an internal worker/service
+    entry point if existing non-HTTP callers require it. No public HTTP handler
+    may synchronously invoke product AI.
+
+Chunking and merge:
+- Chunk deterministically by parsed table/section boundaries, preserving table
+  row order and source locators. Use a bounded size appropriate to the direct
+  provider context.
+- Do not split a table row or an ordered endpoint item across chunks.
+- Run strict schema and source checks on each applicable chunk.
+- The final merge must be deterministic, stable, idempotent, and deduplicated
+  only by source identity plus locator plus exact text. It must preserve
+  multiple distinct source rows even if semantically similar.
+- Record phase/chunk progress from the worker, not from frontend timers.
+
+Required deterministic tests:
+- All endpoint/objective labels, including punctuation and NFKC variants,
+  produce anchors in source order.
+- `expected 1, got 0` is repaired by deterministic anchor materialization and
+  still passes the unchanged one-to-one validator.
+- Existing exact source text and evidence locators survive chunk merge.
+- The HTTP start route returns `202` before a blocking fake AI runner is
+  released.
+- Identical replay returns the same job; changed request under the same key is
+  `409`.
+- Progress is monotonic and reaches `REVIEW_READY`; result is unavailable
+  before readiness.
+- Cancel is idempotent and preserves partial evidence.
+- Expired lease/cold recovery continues from the last completed chunk without
+  replay.
+- No synchronous AI-dependent synopsis import remains publicly exposed.
+- Existing synopsis import/attach/confirm compatibility tests remain green.
+
+Required real-product acceptance:
+- Use the direct configured production `deepseek-v4-pro`, not an Agent.
+- Run in an isolated runtime first, preserving user originals:
+  1. `/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/Ib期/MY009212A-UC-Ib-方案摘要-LXN.2024.01.27.docx`
+  2. `/Users/smkzw/Documents/朗来项目资料/MY004/RA/MY004-RA-2b 研究方案摘要_V0.3-with Comments to ABBV.docx`
+- For each: start returns `202` promptly; progress is observable and monotonic;
+  final result is review-ready; original SHA-256 is retained; every
+  deterministically anchored objective/endpoint item is present once, in
+  order, with exact source text and evidence locator; specifically
+  `picos.safety_endpoints` is non-empty when the source contains that row.
+- Record provider/model identity, wall time, attempts, repair count, chunk
+  count, anchor counts, and residual uncertainty without exposing secrets.
+- Do not mutate the normal stable runtime until Codex reviews isolated results.
+
+Verification:
+- Compile every changed Python file.
+- Run the focused synopsis-import and source-fidelity test files.
+- Run directly causal authoring-journey attach/confirm and main-route tests.
+- Run the broader medical-writing API test subset needed to detect shared
+  contract regressions.
+- Run frontend syntax/build checks for the changed setup component.
+- Report exact commands and exact pass/fail counts. A model statement is not
+  acceptance evidence.
+
+Stop and report BLOCKED if:
+- direct product-AI credentials/configuration are unavailable;
+- the real sources cannot be read;
+- meeting the contract requires changing a forbidden file or adding a runtime
+  dependency;
+- the existing table/section parser cannot preserve source order without a
+  broader architecture change;
+- a destructive migration would be required.
+
+Return a compact loop trace with sources read, observations, changed files,
+schema migration, test evidence, real-product evidence, failed paths,
+uncertainty, rollback boundary, and recommended next step. Do not write the
+runner-managed report with tools.
+
+Runner-managed output path:
+`runs/execution/mw_release_p0_resume_20260720/worker_01_synopsis_async_source_fidelity.md`
