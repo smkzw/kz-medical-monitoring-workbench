@@ -94,9 +94,7 @@ import {
   riskChecklistRoutePatch,
 } from "./features/medical-monitoring/medicalMonitoringChecklistState.mjs";
 import {
-  PatientProfilePage as MedicalMonitoringPatientProfilePage,
   ReferenceTimelineSvg as MedicalMonitoringReferenceTimelineSvg,
-  SubjectTimelinePage as MedicalMonitoringSubjectTimelinePage,
   TrendSparkline as MedicalMonitoringTrendSparkline,
 } from "./features/medical-monitoring/MedicalMonitoringSubjectViews";
 import {
@@ -128,7 +126,6 @@ import {
   resolveMedicalMonitoringSubjectRoute,
   serializeMedicalMonitoringRouteState,
 } from "./features/medical-monitoring/medicalMonitoringRouteState.mjs";
-import MedicalMonitoringPage from "./features/medical-monitoring/MedicalMonitoringPage.jsx";
 import {
   normalizeMedicalMonitoringProductRouteState,
 } from "./features/medical-monitoring/medicalMonitoringProductRouteState.mjs";
@@ -137,6 +134,8 @@ import {
   useMedicalMonitoringBrowserSync,
 } from "./features/medical-monitoring/useMedicalMonitoringBrowserState.js";
 import { useMedicalMonitoringProjectIsolation } from "./features/medical-monitoring/useMedicalMonitoringProjectIsolation.js";
+import MedicalMonitoringRouteOutlet from "./features/medical-monitoring/MedicalMonitoringRouteOutlet.jsx";
+import { isMedicalMonitoringPage } from "./features/medical-monitoring/medicalMonitoringRouteOutletState.mjs";
 import { WritingReferencePanel } from "./features/writing-reference/WritingReferencePanel";
 import { StructuredTableDesigner } from "./features/medical-writing/StructuredTableDesigner";
 import { MedicalWritingAuthoringJourneySetup } from "./features/medical-writing/MedicalWritingAuthoringJourneySetup";
@@ -15750,6 +15749,67 @@ export function App() {
         monitoringSubjectCatalog,
       )
       : null;
+    if (isMedicalMonitoringPage(activePage)) {
+      const readError = monitoringReadError || monitoringSubjectReadError || monitoringProfileReadError;
+      const readErrorSurface = monitoringReadError
+        ? "monitoring_inbox"
+        : monitoringSubjectReadError ? "monitoring_subjects" : "monitoring_profile";
+      const readErrorInfo = readError ? monitoringReadErrorInfo(readError, readErrorSurface) : null;
+      return (
+        <MedicalMonitoringRouteOutlet
+          activePage={activePage}
+          productRouteState={medicalMonitoringProductRouteState}
+          onProductRouteChange={requestMedicalMonitoringProductRouteChange}
+          onProductReturn={returnFromMedicalMonitoringProduct}
+          WorkspaceComponent={MonitoringPage}
+          workspaceProps={{
+            monitoringProjectId: monitoringRouteProjectId,
+            sourceManifest: activeManifest,
+            aiGatewayStatus,
+            selectedSubject,
+            setSelectedSubject,
+            subjectProfile: selectedSubjectProfile,
+            subjectCatalog: monitoringSubjectCatalog,
+            setActivePage: requestActivePage,
+            onOpenSubjectView: requestMonitoringSubjectView,
+            refreshDashboard,
+            workbenchInbox: monitoringWorkbenchInbox,
+            refreshWorkbenchInbox: refreshMonitoringWorkbenchInbox,
+            initialRiskId: monitoringFocusRiskId,
+            initialRiskView: monitoringRouteState.view || "checklist",
+            initialEvidenceTab: monitoringRouteState.evidence_tab || "disposition",
+            initialRiskScope: monitoringRouteState.scope || "trial",
+            initialRiskSiteId: monitoringRouteState.site_id || "",
+            initialRiskScrollTop: monitoringRouteState.risk_scroll_top || "",
+            initialChecklistQuery: riskChecklistQueryFromRoute(monitoringRouteState),
+            onRiskScopeChange: requestMonitoringRiskScope,
+            onRiskFocusChange: requestMonitoringRiskFocus,
+            onRiskFocusClear: requestMonitoringRiskFocusClear,
+            onEvidenceTabChange: requestMonitoringEvidenceTab,
+            onChecklistQueryChange: requestMonitoringChecklistQuery,
+            onRiskScrollTopChange: requestMonitoringScrollTop,
+            onInitialRiskConsumed: () => setMonitoringFocusRiskId(""),
+            subjectRouteError: monitoringSubjectRouteError,
+            monitoringDataError: monitoringDataError || (readErrorInfo
+              ? `${readErrorInfo.title}：${readErrorInfo.message}`
+              : ""),
+          }}
+          ReadUnavailableComponent={MonitoringReadUnavailable}
+          sourceManifestError={activeSourceManifestReadError}
+          UnavailableComponent={ModuleUnavailablePage}
+          monitoringProjectId={monitoringRouteProjectId}
+          monitoringReady={monitoringExecutionReady}
+          monitoringReadinessMessage={monitoringReadiness.message}
+          subject={subject}
+          subjectRouteError={monitoringSubjectRouteError}
+          setSelectedSubject={setSelectedSubject}
+          onNavigateWorkspace={requestMonitoringWorkspace}
+          subjectCatalog={monitoringSubjectCatalog}
+          subjectViewFocusRiskId={subjectViewFocusRiskId}
+          metricConfigurationContext={monitoringMetricConfigurationContext}
+        />
+      );
+    }
     if (activePage === "overview") {
       return (
         <OverviewPage
@@ -15783,93 +15843,6 @@ export function App() {
       return eligibilityRouteProjectId
         ? <EligibilityPage projectId={activeProjectId} routeProjectId={eligibilityRouteProjectId} />
         : <ModuleUnavailablePage moduleKey="eligibility_review" />;
-    }
-    if (activePage === "monitoringProduct") {
-      return (
-        <MedicalMonitoringPage
-          routeState={medicalMonitoringProductRouteState}
-          onRouteChange={requestMedicalMonitoringProductRouteChange}
-          onReturn={returnFromMedicalMonitoringProduct}
-        />
-      );
-    }
-    if (activePage === "monitoring") {
-      if (activeSourceManifestReadError) {
-        return <MonitoringReadUnavailable surface="monitoring_source_manifest" error={activeSourceManifestReadError} />;
-      }
-      if (!monitoringRouteProjectId) return <ModuleUnavailablePage moduleKey="medical_monitoring" />;
-      return (
-        <MonitoringPage
-          key={monitoringRouteProjectId}
-          monitoringProjectId={monitoringRouteProjectId}
-          sourceManifest={activeManifest}
-          aiGatewayStatus={aiGatewayStatus}
-          selectedSubject={selectedSubject}
-          setSelectedSubject={setSelectedSubject}
-          subjectProfile={selectedSubjectProfile}
-          subjectCatalog={monitoringSubjectCatalog}
-          setActivePage={requestActivePage}
-          onOpenSubjectView={requestMonitoringSubjectView}
-          refreshDashboard={refreshDashboard}
-          workbenchInbox={monitoringWorkbenchInbox}
-          refreshWorkbenchInbox={refreshMonitoringWorkbenchInbox}
-          initialRiskId={monitoringFocusRiskId}
-          initialRiskView={monitoringRouteState.view || "checklist"}
-          initialEvidenceTab={monitoringRouteState.evidence_tab || "disposition"}
-          initialRiskScope={monitoringRouteState.scope || "trial"}
-          initialRiskSiteId={monitoringRouteState.site_id || ""}
-          initialRiskScrollTop={monitoringRouteState.risk_scroll_top || ""}
-          initialChecklistQuery={riskChecklistQueryFromRoute(monitoringRouteState)}
-          onRiskScopeChange={requestMonitoringRiskScope}
-          onRiskFocusChange={requestMonitoringRiskFocus}
-          onRiskFocusClear={requestMonitoringRiskFocusClear}
-          onEvidenceTabChange={requestMonitoringEvidenceTab}
-          onChecklistQueryChange={requestMonitoringChecklistQuery}
-          onRiskScrollTopChange={requestMonitoringScrollTop}
-          onInitialRiskConsumed={() => setMonitoringFocusRiskId("")}
-          subjectRouteError={monitoringSubjectRouteError}
-          monitoringDataError={monitoringDataError || (monitoringReadError || monitoringSubjectReadError || monitoringProfileReadError
-            ? `${monitoringReadErrorInfo(
-              monitoringReadError || monitoringSubjectReadError || monitoringProfileReadError,
-              monitoringReadError ? "monitoring_inbox" : monitoringSubjectReadError ? "monitoring_subjects" : "monitoring_profile",
-            ).title}：${monitoringReadErrorInfo(
-              monitoringReadError || monitoringSubjectReadError || monitoringProfileReadError,
-              monitoringReadError ? "monitoring_inbox" : monitoringSubjectReadError ? "monitoring_subjects" : "monitoring_profile",
-            ).message}`
-            : "")}
-        />
-      );
-    }
-    if (activePage === "subjectTimeline") {
-      if (!monitoringRouteProjectId || !monitoringExecutionReady) {
-        return <ModuleUnavailablePage moduleKey="medical_monitoring" message={monitoringReadiness.message || "当前项目医学监查来源尚未达到可读取条件。"} />;
-      }
-      if (!subject) return <ModuleUnavailablePage moduleKey="medical_monitoring" message={monitoringSubjectRouteError || "当前项目尚无可用于Subject Timeline的真实受试者数据。"} />;
-      return (
-        <MedicalMonitoringSubjectTimelinePage
-          subject={subject}
-          setSelectedSubject={setSelectedSubject}
-          onNavigate={requestMonitoringWorkspace}
-          subjectCatalog={monitoringSubjectCatalog}
-          focusRiskId={subjectViewFocusRiskId}
-          metricConfigurationContext={monitoringMetricConfigurationContext}
-        />
-      );
-    }
-    if (activePage === "patientProfile") {
-      if (!monitoringRouteProjectId || !monitoringExecutionReady) {
-        return <ModuleUnavailablePage moduleKey="medical_monitoring" message={monitoringReadiness.message || "当前项目医学监查来源尚未达到可读取条件。"} />;
-      }
-      if (!subject) return <ModuleUnavailablePage moduleKey="medical_monitoring" message={monitoringSubjectRouteError || "当前项目尚无可用于Patient Profile的真实受试者数据。"} />;
-      return (
-        <MedicalMonitoringPatientProfilePage
-          subject={subject}
-          setSelectedSubject={setSelectedSubject}
-          onNavigate={requestMonitoringWorkspace}
-          subjectCatalog={monitoringSubjectCatalog}
-          focusRiskId={subjectViewFocusRiskId}
-        />
-      );
     }
     if (activePage === "tfl") {
       return activeManifest?.route_bindings?.data_analysis_tfl
