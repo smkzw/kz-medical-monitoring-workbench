@@ -216,3 +216,10 @@
 - The facade retains error-envelope helpers, request parsing and all publication provider/bridge seams; no I/O orchestration or endpoint body moved.
 - Verification: package and facade pass `py_compile`; R5/R7 product plus adjacent medical-writing checks pass `227 passed`.
 - Next slice: extract request/error helpers and legacy read-only projections, then close the module-level pure-projection checklist before introducing capability route contexts.
+
+## 2026-09-01 — B3 error envelopes
+
+- Moved error-code groups, Chinese authorization/runtime messages, HTTP status mapping, validation error handling and stable JSON error envelopes into `packages.medical_monitoring.api.r7_product.errors`.
+- A first mechanical boundary selected two lines beyond the intended constants and was corrected before commit; the process-wide backup/restore worker registry, lock and terminal sets remain a single facade-owned object.
+- Verification: package/facade pass `py_compile`; all 13 error symbols preserve facade identity; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `git diff --check` passes.
+- Next slice: extract legacy read-only profile/binding/run/risk/progress projections and setup/execution projections.
