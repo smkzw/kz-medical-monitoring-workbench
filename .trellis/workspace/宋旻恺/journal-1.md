@@ -118,3 +118,10 @@
 - `protocol_fixtures.py` remains outside product authority; inclusion/exclusion and protocol-deviation decisions remain driven by source-derived typed rules.
 - Verification: protocol authorities and compatibility modules pass `py_compile`; the complete protocol suite passes `277 passed`.
 - Next slice: migrate D05 visit-schedule evaluator/projection while retaining `visit_schedule_fixtures.py` outside product authority.
+
+## 2026-09-01 — B2 D05 visit-schedule family
+
+- Moved visit-schedule contracts/evaluation into `risks` and the visit-axis Journey projection into `projections`; challenge fixtures remain outside product authority.
+- Relocation exposed a legacy anti-forgery check tied to the old Python module name. It now accepts only the old compatibility module or the new authoritative projection module while retaining exact dataclass/type/content-address checks.
+- Verification: the initial visit suite had 331 passes and 11 relocation-identity failures; after the bounded module-identity correction, the complete visit-schedule suite passes `342 passed`.
+- Next slice: migrate D06 efficacy contracts/evaluator/projection while retaining `efficacy_fixtures.py` outside product authority.
