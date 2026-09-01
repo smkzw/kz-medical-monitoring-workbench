@@ -2,10 +2,10 @@
 
 This module is the single narrow bridge seam for R7 Slice-08B.
 It strictly reuses:
-1. R5 typed packet: ``mm_r5.r5_publication_authority.R5AuthorityPacket``
-2. R6 frozen ModeContract/validators: ``mm_r6.mode_output``
-3. R1 Store & ArtifactEnvelope: ``mm_r1.domain.ArtifactEnvelope``, ``mm_r1.store.Store``
-4. R7 continuity domain core: ``mm_r7.continuity``
+1. R5 typed packet: ``projections.publication.r5_publication_authority.R5AuthorityPacket``
+2. R6 frozen ModeContract/validators: ``reports.mode_output``
+3. R1 Store & ArtifactEnvelope: ``domain.execution.ArtifactEnvelope``, ``graph.store.Store``
+4. R7 continuity domain core: ``runtime.continuity``
 
 It implements:
 - R5 typed packet validation and member closure extraction
@@ -39,19 +39,12 @@ from ..projections.publication.r5_publication_authority import (
     R5PublicationAuthorityError,
 )
 from ..reports import mode_output as mo
-try:
-    from .continuity import (
-        OBJECT_TYPES,
-        CarryForwardItem,
-        determine_disposition,
-    )
-    from .launch_registry import content_digest
-except ImportError:
-    from mm_r7.continuity import (
-        CarryForwardItem,
-        determine_disposition,
-    )
-    from mm_r7.launch_registry import content_digest
+from .continuity import (
+    OBJECT_TYPES,
+    CarryForwardItem,
+    determine_disposition,
+)
+from .launch_registry import content_digest
 
 
 # ---------------------------------------------------------------------------

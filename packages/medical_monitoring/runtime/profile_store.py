@@ -9,7 +9,7 @@ revisions remain readable. Public serialization accepts credential references
 only and never a credential value field. Public and audit projections never
 emit credential *values* (opaque ``credential_ref`` strings are allowed).
 
-Effective freeze and Monitoring Run binding live in ``mm_r7.run_binding``
+Effective freeze and Monitoring Run binding live in ``runtime.run_binding``
 (worker_02). This module persists layer overrides and projects them.
 """
 
@@ -591,10 +591,10 @@ class ProfileStore:
         if existing is not None:
             return existing
         try:
-            from mm_r6 import agent_harness as ah
+            from . import agent_harness as ah
         except ImportError as exc:
             raise ProfileStoreError(
-                "mm_r6_unavailable_for_builtin_seed"
+                "agent_harness_unavailable_for_builtin_seed"
             ) from exc
         layer = ah.registered_profile_layer(ah.PROFILE_DEFAULT_ID)
         return self.append_revision(
@@ -606,10 +606,10 @@ class ProfileStore:
     ) -> ProfileLayerRecord:
         """Append explicit DeepSeek V4 Flash max as a capability_agent layer."""
         try:
-            from mm_r6 import agent_harness as ah
+            from . import agent_harness as ah
         except ImportError as exc:
             raise ProfileStoreError(
-                "mm_r6_unavailable_for_builtin_seed"
+                "agent_harness_unavailable_for_builtin_seed"
             ) from exc
         layer = ah.deepseek_profile_layer()
         return self.append_revision(

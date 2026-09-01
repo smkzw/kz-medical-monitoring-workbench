@@ -53,30 +53,6 @@ def _binding_exists(workspace: Path, run_id: str) -> bool | None:
         entry.close()
 
 
-def _ensure_r6_poc_importable() -> None:
-    """Make ``from mm_r6 import agent_harness`` work outside pytest.
-
-    The product ``profile_store.seed_builtin_global_default`` still imports
-    the R6 poc module (a B6 migration leftover); under pytest the poc
-    conftest puts that src dir on ``sys.path``, the bare runtime does not.
-    The synthetic startup adds it explicitly instead of touching the frozen
-    R6 source.
-    """
-
-    import sys
-
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / "poc" / "medical_monitoring_ai_native_r6" / "src"
-        if candidate.is_dir():
-            if str(candidate) not in sys.path:
-                sys.path.insert(0, str(candidate))
-            return
-    raise SystemExit(
-        "合成启动失败：未找到 poc/medical_monitoring_ai_native_r6/src，"
-        "无法完成工作区初始化（mm_r6 依赖）。"
-    )
-
-
 def _seed_synthetic_run(app: Any, *, runtime_dir: Path | None = None) -> dict[str, Any]:
     """Idempotently seed the deterministic run via the product's own routes.
 
@@ -98,7 +74,6 @@ def _seed_synthetic_run(app: Any, *, runtime_dir: Path | None = None) -> dict[st
     from .main import RUNTIME_DIR, SYNTHETIC_PROJECT_REF
 
     root = Path(runtime_dir) if runtime_dir is not None else RUNTIME_DIR
-    _ensure_r6_poc_importable()
     spec = load_synthetic_run_fixture()
     run_id = str(spec["run_id"])
     workspace = root / R7_WORKSPACE_ROOT_NAME / SYNTHETIC_PROJECT_REF
