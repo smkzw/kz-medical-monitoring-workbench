@@ -238,6 +238,15 @@
 - Verification: both authorities and facade pass `py_compile`; all nine facade identities match; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `git diff --check` passes.
 - Next slice: isolate provider-neutral invocation adapters while keeping `_build_r5_publication_packet` and `_read_publication_gate` late-bound in the facade, then start capability route-context extraction.
 
+## 2026-09-02 — B4 frontend single-generation closure
+
+- Lifted the medical-monitoring product, progress, continuity, Journey, browser-route, project-isolation and data-read ownership into generation-neutral feature modules; `App.jsx` now delegates rendering through one `MedicalMonitoringRouteOutlet` and one `MedicalMonitoringPage` mount.
+- Removed the complete parallel G6 frontend (`b20dd02`), then removed the 2,000-line legacy App monitoring workspace, its separate Profile/Timeline generation and the obsolete feature data hook (`af4a3e9`). Canonical setup/progress/result/Journey behavior remains the only mounted medical-monitoring path.
+- Preserved the product result contracts: horizontal shared visit/time axis, typed event/risk markers, marker detail drawer, center/subject flow, source drill-down, project isolation and candidate/fact separation. No medical-writing source or asset file changed.
+- Verification: 64 medical-monitoring Node suites pass; protected medical-writing durable-state contract reports 52 passed and 0 failed; Vite production build passes with 1,931 modules. The existing >500 kB chunk warning remains non-blocking; final browser/visual acceptance stays assigned to the Phase-B ego(lite) smoke task.
+- The production bundle decreased from about 2.37 MB JS / 526 KB CSS after G6 removal to about 1.93 MB JS / 458 KB CSS after legacy-path removal. B4 was archived by Trellis after acceptance.
+- Next safe action: start B5 and externalize synthetic product profiles so synthetic evidence enters through the canonical product without reviving a parallel application or hardcoding study/drug/disease/listing behavior.
+
 ## 2026-09-02 — B3 publication provider adapters
 
 - Moved lazy R5/R6 type loading, signature-aware provider invocation, mode-output acquisition and R5 packet validation into `publication_providers`.
