@@ -2,9 +2,9 @@
 
 ## 1. Inventory and freeze behavior
 
-- [ ] Map all current App/r5/r7/g6 imports, routes, state owners, tests and CSS dependencies.
-- [ ] Record which G6 behaviors are already present in the latest product page and which belong to B5 synthetic-profile work.
-- [ ] Run the focused pre-migration frontend behavior baseline.
+- [x] Map all current App/r5/r7/g6 imports, routes, state owners, tests and CSS dependencies.
+- [x] Record which G6 behaviors are already present in the latest product page and which belong to B5 synthetic-profile work.
+- [x] Run the focused pre-migration frontend behavior baseline.
 
 ## 2. Canonical product surface
 

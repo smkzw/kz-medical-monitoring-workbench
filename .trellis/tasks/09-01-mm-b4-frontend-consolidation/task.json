@@ -3,7 +3,7 @@
   "name": "mm-b4-frontend-consolidation",
   "title": "B4 前端单代化",
   "description": "合并为单代 medical-monitoring feature，并只从 App.jsx 抽离医学监查路由和状态。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
