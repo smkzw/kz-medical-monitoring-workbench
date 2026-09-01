@@ -3,7 +3,7 @@
   "name": "mm-b6-remove-duplicates",
   "title": "B6 删除平行应用与 POC 副本",
   "description": "迁移测试全绿后删除 deploy/medical_monitoring_local 与八棵 poc 工作副本，git 可恢复。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
