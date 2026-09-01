@@ -121,9 +121,7 @@ import { metricConfigurationContextFromMonitoring } from "./features/medical-mon
 import { normalizeMedicalMonitoringScrollTop } from "./features/medical-monitoring/medicalMonitoringScrollState.mjs";
 import { useMedicalMonitoringScrollRestoration } from "./features/medical-monitoring/medicalMonitoringScrollRestoration.mjs";
 import {
-  clearMedicalMonitoringRouteState,
   clearMedicalMonitoringRiskFocusState,
-  parseMedicalMonitoringRouteState,
   resolveMedicalMonitoringProjectRoute,
   resolveMedicalMonitoringRiskRoute,
   resolveMedicalMonitoringSiteRoute,
@@ -133,9 +131,15 @@ import {
 import MedicalMonitoringPage from "./features/medical-monitoring/MedicalMonitoringPage.jsx";
 import {
   normalizeMedicalMonitoringProductRouteState,
-  parseMedicalMonitoringProductRouteState,
-  serializeMedicalMonitoringProductRouteState,
 } from "./features/medical-monitoring/medicalMonitoringProductRouteState.mjs";
+import {
+  activePageFromMonitoringRoute,
+  clearMedicalMonitoringProductRouteState,
+  initialMedicalMonitoringBrowserState,
+  initialMedicalMonitoringProductBrowserState,
+  medicalMonitoringBrowserTarget,
+  parseMedicalMonitoringBrowserLocation,
+} from "./features/medical-monitoring/medicalMonitoringBrowserRoute.mjs";
 import { WritingReferencePanel } from "./features/writing-reference/WritingReferencePanel";
 import { StructuredTableDesigner } from "./features/medical-writing/StructuredTableDesigner";
 import { MedicalWritingAuthoringJourneySetup } from "./features/medical-writing/MedicalWritingAuthoringJourneySetup";
@@ -2321,54 +2325,6 @@ function monitoringRiskQueryErrorText(error) {
     return "当前筛选或排序条件无效，请清除相关条件后重试。";
   }
   return `项目风险读取失败：${apiErrorText(error)}`;
-}
-
-function activePageFromMonitoringRoute(routeState) {
-  if (routeState?.view === "timeline") return "subjectTimeline";
-  if (routeState?.view === "profile") return "patientProfile";
-  return "monitoring";
-}
-
-function monitoringViewFromActivePage(activePage, fallback = "checklist") {
-  if (activePage === "subjectTimeline") return "timeline";
-  if (activePage === "patientProfile") return "profile";
-  if (activePage === "monitoring") return "checklist";
-  return "";
-}
-
-function initialMonitoringBrowserState() {
-  if (typeof window === "undefined" || window.location.pathname !== "/monitoring") {
-    return {};
-  }
-  return parseMedicalMonitoringRouteState(window.location.search);
-}
-
-function initialMedicalMonitoringProductBrowserState() {
-  if (typeof window === "undefined" || window.location.pathname !== "/monitoring") {
-    return { isProduct: false, status: "legacy", valid: false, canonical: {} };
-  }
-  return parseMedicalMonitoringProductRouteState(window.location.search);
-}
-function clearMedicalMonitoringProductRouteState(search = "") {
-  const params = new URLSearchParams(clearMedicalMonitoringRouteState(search).replace(/^\?/, ""));
-  for (const key of [
-    "public_run_token",
-    "result_context_token",
-    "site_ref",
-    "subject_ref",
-    "spine_ref",
-    "window_start",
-    "window_end",
-    "risk_instance_ref",
-    "risk_anchor_ref",
-    "visit_ref",
-    "event_ref",
-    "source_locator_ref",
-  ]) {
-    params.delete(key);
-  }
-  const query = params.toString();
-  return query ? `?${query}` : "";
 }
 
 function MonitoringPage({
@@ -15076,7 +15032,7 @@ function MedicalWritingRuntimeGate({ readiness, onRetry }) {
 
 export function App() {
   const initialMedicalMonitoringProductRouteRef = useRef(initialMedicalMonitoringProductBrowserState());
-  const initialMonitoringRouteRef = useRef(initialMonitoringBrowserState());
+  const initialMonitoringRouteRef = useRef(initialMedicalMonitoringBrowserState());
   const monitoringReturnScopeRef = useRef(
     initialMonitoringRouteRef.current.scope || "trial",
   );
@@ -15188,14 +15144,16 @@ export function App() {
         }
         return;
       }
-      const nextProductRoute = parseMedicalMonitoringProductRouteState(window.location.search);
-      if (nextProductRoute.isProduct) {
-        setMedicalMonitoringProductRouteState(nextProductRoute);
-        if (nextProductRoute.canonical?.project_ref) setActiveProjectId(nextProductRoute.canonical.project_ref);
+      const parsedLocation = parseMedicalMonitoringBrowserLocation(window.location);
+      if (parsedLocation.kind === "product") {
+        setMedicalMonitoringProductRouteState(parsedLocation.productRoute);
+        if (parsedLocation.productRoute.canonical?.project_ref) {
+          setActiveProjectId(parsedLocation.productRoute.canonical.project_ref);
+        }
         setActivePage("monitoringProduct");
         return;
       }
-      const nextRoute = parseMedicalMonitoringRouteState(window.location.search);
+      const nextRoute = parsedLocation.routeState || {};
       if (nextRoute.view === "checklist") {
         monitoringReturnScopeRef.current = nextRoute.scope || "trial";
         monitoringReturnSiteIdRef.current = nextRoute.site_id || "";
@@ -15212,57 +15170,25 @@ export function App() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (isMedicalMonitoringProductRoute || activePage === "monitoringProduct") {
-      const nextCanonical = normalizeMedicalMonitoringProductRouteState({
-        ...(medicalMonitoringProductRouteState?.canonical || {}),
-        project_ref: activeProjectId || medicalMonitoringProductRouteState?.canonical?.project_ref || "",
-      });
-      const nextSearch = serializeMedicalMonitoringProductRouteState(nextCanonical);
-      const nextUrl = `/monitoring${nextSearch}${window.location.hash}`;
-      const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      if (nextUrl !== currentUrl) window.history.replaceState(window.history.state, "", nextUrl);
-      return;
-    }
-    const isMonitoringPage = ["monitoring", "subjectTimeline", "patientProfile"].includes(activePage);
-    if (!isMonitoringPage) {
-      if (window.location.pathname === "/monitoring") {
-        const preservedSearch = clearMedicalMonitoringProductRouteState(window.location.search);
-        window.history.replaceState(
-          window.history.state,
-          "",
-          `/${preservedSearch}${window.location.hash}`,
-        );
-      }
-      return;
-    }
-    const nextView = monitoringViewFromActivePage(activePage, monitoringRouteState.view);
-    const isSubjectView = ["subjectTimeline", "patientProfile"].includes(activePage);
-    const nextScope = isSubjectView
-      ? "subject"
-      : monitoringRouteState.scope || "trial";
-    const nextRoute = {
-      ...monitoringRouteState,
-      project_id: activeProjectId || monitoringRouteState.project_id,
-      scope: nextScope,
-      site_id: nextScope === "site" ? monitoringRouteState.site_id || "" : "",
-      subject_id: nextScope === "subject"
-        ? selectedSubject || monitoringRouteState.subject_id || ""
-        : "",
-      view: nextView,
-    };
-    const nextSearch = serializeMedicalMonitoringRouteState(
-      nextRoute,
-      window.location.search,
-    );
-    const nextUrl = `/monitoring${nextSearch}${window.location.hash}`;
+    const target = medicalMonitoringBrowserTarget({
+      activePage,
+      activeProjectId,
+      selectedSubject,
+      routeState: monitoringRouteState,
+      productRouteState: medicalMonitoringProductRouteState,
+      currentPath: window.location.pathname,
+      currentSearch: window.location.search,
+      currentHash: window.location.hash,
+    });
     const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    if (nextUrl !== currentUrl) {
-      window.history.replaceState(window.history.state, "", nextUrl);
+    if (target.url && target.url !== currentUrl) {
+      window.history.replaceState(window.history.state, "", target.url);
     }
+    if (target.kind !== "legacy") return;
     setMonitoringRouteState((current) => {
       const currentSerialized = serializeMedicalMonitoringRouteState(current);
-      const nextSerialized = serializeMedicalMonitoringRouteState(nextRoute);
-      return currentSerialized === nextSerialized ? current : nextRoute;
+      const nextSerialized = serializeMedicalMonitoringRouteState(target.routeState);
+      return currentSerialized === nextSerialized ? current : target.routeState;
     });
   }, [activePage, activeProjectId, selectedSubject, monitoringRouteState, isMedicalMonitoringProductRoute, medicalMonitoringProductRouteState]);
 
