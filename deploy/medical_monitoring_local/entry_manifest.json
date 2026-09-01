@@ -1,0 +1,97 @@
+{
+  "schema": "mm-monitoring-r8-g6-entry-manifest-v1",
+  "manifest_version": "1",
+  "contract_version": "medical_monitoring_r8_gate6_synthetic_ego_v0.2",
+  "product_name": "医学监查工作台",
+  "release_root": {
+    "relative_path": ".",
+    "identity": "g6-synthetic-release-root"
+  },
+  "entry": {
+    "type": "macos_application_bundle",
+    "relative_path": "MedicalMonitoring.app",
+    "executable_relative_path": "MedicalMonitoring.app/Contents/MacOS/MedicalMonitoring",
+    "static_root_relative_path": "frontend/dist",
+    "static_root_required": true,
+    "bundle_identifier": "com.medicalmonitoring.synthetic",
+    "file_digest": "sha256:ee51b1968e5cfe4811410a72847f5512a6805640ffadfe994dfe7534d76ecd30",
+    "directory_digest": "sha256:aacd7c910dbadb4b3de01b7acdee4bc4df6925effe5d700877b09d9d1adfbfb8"
+  },
+  "release_digest": "sha256:bd6f50d1d60f966f7fb4ffbcc2e9ca30a33adfbc647e960e28e283e03937b463",
+  "app_digest": "sha256:aacd7c910dbadb4b3de01b7acdee4bc4df6925effe5d700877b09d9d1adfbfb8",
+  "release_files": [
+    {
+      "path": "MedicalMonitoring.app/Contents/Info.plist",
+      "sha256": "sha256:1a93513e4d7fa6826454a1fffde991d8de2731a3cda421ad5eab11c36ca67edd"
+    },
+    {
+      "path": "MedicalMonitoring.app/Contents/MacOS/MedicalMonitoring",
+      "sha256": "sha256:ee51b1968e5cfe4811410a72847f5512a6805640ffadfe994dfe7534d76ecd30"
+    },
+    {
+      "path": "actual_app.py",
+      "sha256": "sha256:634c1555f7f7fdd0b734aee95673f7488856ed7bf46a996854d4be0ba07c29f5"
+    },
+    {
+      "path": "canonical_evidence.py",
+      "sha256": "sha256:84a0a7e4ba66e52b5ce9d16c5dcedef48376f0308a1392819d93f33e41cfa44e"
+    },
+    {
+      "path": "frontend/dist/assets/header_logo-clkbaD-d.png",
+      "sha256": "sha256:e984ba27ae5abc89639ac423ab8637b1e50c829db820958b7b46e5b6282cd90d"
+    },
+    {
+      "path": "frontend/dist/assets/index-C-35QwF8.css",
+      "sha256": "sha256:26b49c97f0c610ac0b9b4623fac41eb61170082ce0d06bb3360cb0fb1971d18d"
+    },
+    {
+      "path": "frontend/dist/assets/index-CdAbFeZ2.js",
+      "sha256": "sha256:8d5e86003837dd1b4ff1680e47c3595a40744f8556c08ac7760506b44322842b"
+    },
+    {
+      "path": "frontend/dist/index.html",
+      "sha256": "sha256:ed702b9dd2d79d952aa387828108c8a1af2dce4c3c4ff445a9ad0f79a29fed6b"
+    },
+    {
+      "path": "frontend/dist/runtime-build.json",
+      "sha256": "sha256:5c1931f30c7192e8d7d97cef697964062956bf296d175029bf1f65ecaf3552e2"
+    },
+    {
+      "path": "g6_manifests.py",
+      "sha256": "sha256:ae1d9c128159c8f84074bd4a4dd91aba2dec295b1fcc3d0a362597cf4f0635d4"
+    },
+    {
+      "path": "synthetic_ego.py",
+      "sha256": "sha256:422de4a7b2ddc4daba1792c2ed33a4141c23acc73cc7bbe461c0f66be4b59929"
+    },
+    {
+      "path": "synthetic_notification.py",
+      "sha256": "sha256:8d616a412e4a452b3a8beb03a50be0c5bbddf439bd331ef34145a27843e3f9fb"
+    }
+  ],
+  "owned_process_tree": {
+    "root": "MedicalMonitoring",
+    "processes": [
+      {
+        "name": "MedicalMonitoring",
+        "role": "app",
+        "cwd_policy": "release_root",
+        "executable_relative_path": "MedicalMonitoring.app/Contents/MacOS/MedicalMonitoring",
+        "argv_contains": "actual_app.py --launch"
+      }
+    ],
+    "unknown_process_policy": "fail_closed"
+  },
+  "protocol": {
+    "version": "mm-monitoring-r8-g6-app/1",
+    "ready_signal": "state.status=ready + health.ready=true + window.visible=true",
+    "failure_signal": "state.status absent after cleanup + user_safe_failure_message"
+  },
+  "window_identity": {
+    "kind": "browser_window",
+    "title": "医学监查工作台",
+    "identity": "medical-monitoring-synthetic",
+    "protocol_version": "mm-monitoring-r8-g6-app/1"
+  },
+  "manifest_digest": "sha256:b809654953bf240f3f9429239fdb971ccd49b8f3a32556802328b28d5bd913d8"
+}

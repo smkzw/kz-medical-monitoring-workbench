@@ -1,0 +1,93 @@
+{
+  "schema": "mm-monitoring-r8-g6-execution-boundary-manifest-v1",
+  "manifest_version": "1",
+  "contract_version": "medical_monitoring_r8_gate6_synthetic_ego_v0.2",
+  "synthetic_only": true,
+  "allowed_roots": {
+    "release_root": {
+      "kind": "release",
+      "relative_path": ".",
+      "access": "read_only"
+    },
+    "fixture_root": {
+      "kind": "workspace_relative",
+      "relative_path": "synthetic_fixture",
+      "access": "read_only"
+    },
+    "system_temp_runtime_root": {
+      "kind": "system_temp",
+      "prefix": "mm-g6-synthetic-",
+      "access": "read_write"
+    },
+    "application_data_root": {
+      "kind": "os_application_data",
+      "product_directory": "MedicalMonitoringSynthetic",
+      "access": "read_write"
+    }
+  },
+  "denied_roots": [
+    "real_project_roots",
+    "deploy/medical_writing_local",
+    "external_network"
+  ],
+  "network": {
+    "mode": "loopback_only",
+    "allow_dns": false,
+    "allow_external": false,
+    "allowed_endpoints": [
+      {
+        "host": "127.0.0.1",
+        "port": 8946,
+        "purpose": "actual_app"
+      }
+    ]
+  },
+  "owned_process_tree": {
+    "root": "MedicalMonitoring",
+    "allowed_process_names": [
+      "MedicalMonitoring"
+    ],
+    "max_processes": 1,
+    "allow_orphan_adoption": false,
+    "unknown_process_policy": "fail_closed"
+  },
+  "adapters": [
+    {
+      "id": "g6-mock-recorded-adapter",
+      "kind": "recorded",
+      "version": "1",
+      "network": "none",
+      "fallback": false,
+      "real_model": false
+    }
+  ],
+  "synthetic_binding": {
+    "synthetic_profile_id": "synthetic-profile-cross-domain-g6-v1",
+    "binding_digest": "sha256:1a8d65615d43535891b32948585a5d347caf8dfcb2b22fed68ab95a88896d956",
+    "profile_binding_digest": "sha256:1a8d65615d43535891b32948585a5d347caf8dfcb2b22fed68ab95a88896d956",
+    "fixture_digest": "sha256:5cc67a088c3b43b430e2ab3433184ac2b68fa8323f24bf7d7c6d9c962b5be053",
+    "provider_class": "synthetic",
+    "model_class": "recorded",
+    "fixture_digest_required": true
+  },
+  "independent_observation": {
+    "required_observers": [
+      "filesystem",
+      "process_tree",
+      "network",
+      "adapter_calls"
+    ],
+    "unavailable_policy": "blocked",
+    "unknown_event_policy": "blocked",
+    "app_ledger_reconciliation": "required"
+  },
+  "failure_policy": {
+    "unknown_manifest": "blocked",
+    "unknown_process": "blocked",
+    "foreign_port": "blocked",
+    "half_initialized_state": "removed_before_ready",
+    "default_allowed_residual_processes": 0,
+    "default_allowed_residual_ports": 0
+  },
+  "manifest_digest": "sha256:4a813a2c7ac577e0c16f396b5dadebcfc5afaf2e78fec570e01b5b99a66cd09f"
+}

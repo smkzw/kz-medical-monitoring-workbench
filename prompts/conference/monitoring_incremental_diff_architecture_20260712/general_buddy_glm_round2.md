@@ -1,0 +1,1 @@
+Round 2 in the same session. Challenge the prior design against every P0/P1, source boundary, user workflow, concurrency case and clinical-data governance objection. Return the complete corrected Markdown output.

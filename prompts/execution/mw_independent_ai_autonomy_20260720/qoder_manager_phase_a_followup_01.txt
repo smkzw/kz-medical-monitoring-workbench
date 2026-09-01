@@ -1,0 +1,77 @@
+继续当前Qoder同一会话，纠正
+`runs/execution/mw_independent_ai_autonomy_20260720/manager_plan.md`。
+不要新开会话，不要阶段性询问，不要修改产品源码。
+
+第一版没有完成任务中要求的真实隔离产品探测，不能给
+`AUTONOMY_IMPLEMENTATION_READY`。必须基于直接运行证据覆盖写回同一个
+唯一输出文件。
+
+必须纠正的错误：
+
+1. 仅curl `/api/ai-gateway/status`不能证明真实DeepSeek调用；状态页是声明。
+2. 仅curl ClinicalTrials.gov `/api/v2/version`不能证明产品
+   `ClinicalTrialsGovClient`或产品API真实检索/分页/持久化。
+3. 没有通过产品服务下载Protocol/SAP，不能证明下载链。
+4. 没有运行OCR/Hy-MT2/Flash状态或最小调用，不能声称服务已实现可用。
+5. `_screen_snapshot_candidates()`是Python确定性过滤，不是“真实独立AI
+   relevance screening”。重新阅读`medical_writing_authoring_prefill_ai.py`
+   中AI请求前后的数据流，准确区分确定性门和模型语义输出。
+6. Worker 03当前仍被正式`manager_review.md`的`BLOCK_WORKER_03`阻断，
+   不能把本轮尚未做的真实调用推给Worker 03后就放行自治链。
+
+本轮必须实际完成，不得只列“required evidence”：
+
+1. 创建全新逐任务isolated runtime，不复制可写稳定项目数据；启动隔离API，
+   记录实际Python架构、uvicorn命令、端口和健康检查。若隔离API无法启动，
+   诊断stderr并记阻断。
+2. 通过产品API创建一个测试项目，仅输入合成药物名
+   `AUTONOMY-TEST-DRUG`、适应症`Rheumatoid Arthritis`和I期。
+3. 通过产品authoring/prefill接口发起一次真实生产配置
+   DeepSeek `deepseek-v4-pro`调用。必须记录：
+   - HTTP状态和产品run/job ID；
+   - 响应模型身份；
+   - prompt版本；
+   - 输入事实/来源hash和输出hash；
+   - 是否生成英文condition term及框架候选；
+   - AI run持久化位置/记录；
+   - 无Codex/Hermes/你的文本注入。
+   不得把静态deterministic候选当作DeepSeek输出。
+4. 采用产品生成/用户确认的英文condition term，通过产品
+   `/medical-writing/references/search-snapshots`接口运行真实
+   ClinicalTrials.gov检索。记录产品query、分页、候选数、NCT/phase/
+   condition/公开文档元数据及snapshot持久化。禁止用你手工选择的NCT作为
+   请求输入。
+5. 通过产品relevance/prepare/ingest链选择一个产品发现且有公开Protocol或
+   SAP的候选，运行产品下载。记录artifact ID、最终官方URL、角色/适应症/
+   分期基本信息校验、文件hash、content type/size和产品存储/审计记录。
+6. 只在不会大规模消耗资源的前提下运行：
+   - GLM-OCR-bf16真实状态/最小1页OCR；若页面含图表，>=200 DPI；
+   - Hy-MT2最小一个短章节翻译；
+   - Flash章节识别或翻译整合QC。
+   若本地模型当前未加载、接口不存在或调用失败，如实记录确切状态和错误，
+   不得用源码存在代替。
+7. 检查真实DeepSeek调用是否参与了研究相关性/语义分析。如果当前产品只用
+   确定性过滤，或AI没有获得真实snapshot候选，明确记为产品缺口；给出最小
+   server-side orchestration和提示词/结构化输出实现任务。
+8. 清理隔离运行时和下载测试副本，确认稳定运行时hash不变。
+
+如任一步需要产品源码补建，立即停止该后续链，输出：
+- 精确失败端点/函数/状态码/错误；
+- 缺失的产品行为；
+- 拟修改文件、接口、数据模型、提示词版本；
+- 独立执行worker和回归测试任务；
+- manager Phase B重测命令。
+
+判定规则：
+- 只有真实DeepSeek + 产品ClinicalTrials检索 + 产品Protocol/SAP下载三项
+  都通过，且无外部Agent知识注入，才可写
+  `AUTONOMY_IMPLEMENTATION_READY`。
+- OCR/翻译/QC任一未真实探测必须单独记为未验证门，不能笼统写implemented。
+- 真实DeepSeek或产品检索/下载任一失败，必须写`AUTONOMY_BLOCKED`。
+
+Hard boundaries:
+- 完整读取最新全局AGENTS和SOUL，保持只读产品源码。
+- 仅写回
+  `runs/execution/mw_independent_ai_autonomy_20260720/manager_plan.md`。
+- 不读取/输出凭据，不写稳定运行时，不把Qoder搜索/文本写入项目。
+- Codex保留最终验收。

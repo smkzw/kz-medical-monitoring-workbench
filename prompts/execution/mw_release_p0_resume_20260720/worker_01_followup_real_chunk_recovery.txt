@@ -1,0 +1,140 @@
+Continue the same causal P0 synopsis-import task in session
+`20260720_192913_568b18`. The previous pass compiled and its narrow tests pass,
+but Codex rejects release because direct source inspection proves the async job
+contract is mostly simulated. Implement the missing behavior; do not merely add
+tests around the current implementation.
+
+Before working, reread `/Users/smkzw/.codex/AGENTS.md`,
+`/Users/smkzw/.hermes/SOUL.md`, project `AGENTS.md`, the original worker prompt,
+its report/stdout, and the 2026-07-22 task record. Codex is final authority.
+
+Hard boundaries:
+- Same closed product scope as the original worker. Preserve completed
+  competitor triage and unrelated changes.
+- Do not add Redis/Celery/RQ/Kafka or paid dependencies.
+- Do not touch working-copy quarantine, approval semantics, DOCX exporter,
+  monitoring/PV/enrollment, user originals, stable runtime data, credentials,
+  or runner-managed reports.
+- Direct product AI must remain the configured DeepSeek v4-pro route. Do not
+  use Hermes/Qoder/Codex output as product output.
+- Do not weaken strict source-fidelity validation or replace exact source text
+  with semantic/paraphrased matching.
+- No final whole-document LLM call may regenerate deterministic anchors.
+
+Read these files only:
+- `AGENTS.md`
+- `records/active_slices/medical_writing_production_rebaseline_20260722/TASK_RECORD.md`
+- `context/mw_synopsis_source_fidelity_p0_direct_evidence_20260720.md`
+- `prompts/execution/mw_release_p0_resume_20260720/worker_01_synopsis_async_source_fidelity.txt`
+- `runs/execution/mw_release_p0_resume_20260720/worker_01_synopsis_async_source_fidelity.md`
+- `runs/execution/mw_release_p0_resume_20260720/worker_01_synopsis_async_source_fidelity.stdout.log`
+- `services/api/app/medical_writing_synopsis_import.py`
+- `services/api/app/ai_task_runner.py`
+- `services/api/app/ai_gateway.py`
+- `services/api/app/main.py`
+- `packages/contracts/workbench_contracts/models.py`
+- `packages/contracts/workbench_contracts/__init__.py`
+- `frontend/src/features/medical-writing/MedicalWritingAuthoringJourneySetup.jsx`
+- `tests/test_medical_writing_synopsis_import.py`
+- `tests/test_ai_task_runner_source_fidelity.py`
+
+You may additionally read directly causal synopsis/API/frontend contract tests
+when an import or failing check requires them; record each added path.
+
+Writable files:
+- `services/api/app/medical_writing_synopsis_import.py`
+- `services/api/app/ai_task_runner.py` only if a narrowly causal chunk request
+  or deterministic merge helper belongs there
+- `services/api/app/main.py`
+- `packages/contracts/workbench_contracts/models.py`
+- `packages/contracts/workbench_contracts/__init__.py`
+- `frontend/src/features/medical-writing/MedicalWritingAuthoringJourneySetup.jsx`
+- `tests/test_medical_writing_synopsis_import.py`
+- `tests/test_ai_task_runner_source_fidelity.py`
+- new directly scoped synopsis async/recovery/frontend tests under `tests/`
+
+Confirmed defects to fix:
+1. `_deterministic_parse` computes `chunks`, but `_run_job_worker` ignores them
+   and calls full-document `import_and_structure`. The chunk table is never
+   populated. `chunk_index` jumps from zero to total, so UI progress is false.
+2. `resume_job` states it skips completed chunks, but there are no completed
+   chunk rows or outputs to resume. It reparses and replays the whole AI task.
+3. daemon-thread execution has no startup cold-recovery path and required
+   request metadata (expected indication, actor/media metadata) is not fully
+   persisted for exact recovery.
+4. a random `job_id` is returned but not stored; replay returns source SHA as
+   job_id, while status/result routes actually address the idempotency key.
+   Use one stable persisted/public task identity; never return a fake one.
+5. cancel does not interrupt between real chunks because chunks do not execute;
+   partial evidence is a list of JSON strings rather than flattened IDs.
+6. frontend stops polling at 600000 ms although real MY009 previously took
+   about 11 minutes. It has no refresh/tab-close reconnection to a persisted
+   active task and does not present recover/retry actions.
+7. real-product evidence was declared blocked solely from the current shell's
+   missing `DEEPSEEK_API_KEY`. Recheck the product deployment/direct-provider
+   configuration without exposing secrets. Do not read an Agent answer as AI.
+   If credentials truly cannot be supplied to an isolated process, record that
+   exact deployment/config gap after deterministic acceptance; do not fake it.
+
+Required implementation:
+- Persist canonical job ID, request metadata needed for exact recovery, source
+  artifact identity, chunk boundaries/source refs, chunk status, lease/attempt,
+  provider output hash, validated partial output, evidence IDs, timing and error.
+  Additive migration only.
+- Each pending chunk must invoke the direct product AI with only that chunk's
+  ordered source refs. The saved chunk output must pass schema and source checks
+  applicable to that chunk before being marked done.
+- Claim/lease each chunk atomically. A second worker or process must not execute
+  the same live chunk. Expired leases may be reclaimed.
+- Update public phase/progress only from committed chunk state. Progress must be
+  monotonic and truthful; no timer-estimated completion.
+- Merge completed chunk outputs with deterministic code in source/chunk order.
+  Evidence spans deduplicate only by source identity + locator + exact quote.
+  List fields preserve every distinct source item; scalar conflicts are retained
+  in conflict notes and resolved by a documented deterministic precedence.
+  Recalculate missing fields from the merged object. Deterministically anchored
+  fields override model omission/reordering and then pass the unchanged strict
+  validator. No final whole-document LLM synthesis.
+- On service/app startup, detect incomplete expired jobs and mark/requeue them
+  recoverably from the first incomplete chunk, without replaying done chunks.
+  Manual recover remains idempotent. Persist enough metadata to do this exactly.
+- Cancellation becomes requested/cancelled truthfully. Check it before every
+  chunk and after each provider return; never project a late result over a
+  cancelled job. Flatten and preserve partial evidence IDs.
+- Frontend persists active task identity per project in localStorage (no file
+  bytes), reconnects and resumes polling on mount/refresh, supports cancel and
+  recover/retry, and does not impose a 10-minute false failure. Use a long
+  operational ceiling only if the backend state is retained and the user can
+  reconnect; distinguish UI detach from job failure.
+- Compatibility: legacy internal `import_and_structure` may stay for non-HTTP
+  callers, but no public AI-dependent HTTP path may call it synchronously.
+
+Required tests must fail on the previous implementation:
+- 2+ chunks cause 2+ separate fake-provider calls, each seeing only its source
+  subset; chunk rows progress pending->running->done with real indices.
+- Simulated crash after chunk 1, new service instance/startup recovery, then
+  completion without replaying chunk 1.
+- Two workers cannot claim the same chunk; expired chunk lease is reclaimable.
+- deterministic multi-chunk merge preserves exact ordered duplicate-looking but
+  distinct source rows, scalar conflicts, locators and safety endpoint anchors.
+- stable job ID on first start and idempotent replay; changed request is 409.
+- cancel during provider call discards late output and preserves flattened
+  partial evidence; repeated cancel is idempotent.
+- frontend refresh reconnect contract and no 600000 ms hard failure.
+- existing source-fidelity, synopsis attach/confirm, authoring journey, gateway,
+  and frontend contract suites remain green.
+
+Verification:
+- Compile all changed Python files; run focused and adjacent tests with exact
+  counts; build frontend.
+- Use isolated runtime and fake slow/blocking provider to prove POST returns 202
+  before AI and status remains queryable across a service restart.
+- Then run the two real sources through direct production DeepSeek v4-pro if
+  deployment configuration is available. Record HTTP start latency, wall time,
+  chunk calls, attempts, provider/model identity, anchors, repairs, source hash,
+  and final source-fidelity result. Preserve user originals.
+
+Return a compact loop trace. Do not write the runner-managed report with tools.
+
+Runner-managed output path:
+`runs/execution/mw_release_p0_resume_20260720/worker_01_followup_real_chunk_recovery.md`

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>医学监查进度</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="shell">
+  <header class="shell__header">
+    <h1 class="shell__title">医学监查进度</h1>
+    <p class="shell__leave-note">您可以离开此页面，医学监查将在后台继续进行；返回或刷新后即可看到最新进度。</p>
+    <p class="shell__synthetic-note">当前展示为演示数据，不涉及真实研究或受试者。</p>
+  </header>
+
+  <section class="panel panel--overall" aria-label="总体进度">
+    <h2 id="overall-headline" class="panel__headline">正在读取最新进度…</h2>
+    <div class="bar" role="progressbar" id="overall-bar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="bar__fill" id="overall-bar-fill"></div>
+    </div>
+    <p class="panel__counter" id="overall-counter">已处理 0/0 项</p>
+    <ul class="chips" id="status-chips" aria-label="状态概览"></ul>
+  </section>
+
+  <section class="panel" aria-label="阶段进度">
+    <h2 class="panel__title">各阶段进度</h2>
+    <ul class="stages" id="stage-list"></ul>
+  </section>
+
+  <section class="panel" id="current-panel" aria-label="当前正在处理">
+    <h2 class="panel__title">当前正在处理</h2>
+    <ul class="current" id="current-list"></ul>
+  </section>
+
+  <section class="panel" aria-label="最新动态">
+    <h2 class="panel__title">最新动态</h2>
+    <ul class="updates" id="update-list"></ul>
+  </section>
+
+  <p class="shell__offline" id="offline-note" hidden>暂时无法显示最新进度，页面将继续尝试读取。</p>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

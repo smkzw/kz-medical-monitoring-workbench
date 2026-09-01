@@ -1,0 +1,1 @@
+Round 2, same session. Skeptically challenge your own test plan: find untested concurrency, idempotency, stale-source, empty-scope, retry, and browser-state cases. Distinguish deterministic unit tests from real-provider and browser acceptance.

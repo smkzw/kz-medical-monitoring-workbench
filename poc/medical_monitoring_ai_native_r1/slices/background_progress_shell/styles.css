@@ -1,0 +1,240 @@
+/* 医学监查后台进度 shell — 平静、克制的中文演示界面（合成数据） */
+
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --ink: #1f2937;
+  --ink-soft: #4b5563;
+  --ink-faint: #6b7280;
+  --line: #e5e7eb;
+  --accent: #2f6f5e;
+  --accent-soft: #e3efe9;
+  --warn: #9a3412;
+  --warn-soft: #fdeee4;
+  --bar-track: #e8eaee;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+}
+
+.shell {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 28px 20px 48px;
+}
+
+.shell__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.shell__leave-note {
+  margin: 10px 0 0;
+  color: var(--accent);
+  font-size: 14px;
+  line-height: 1.6;
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  padding: 8px 12px;
+  border-radius: 0 6px 6px 0;
+}
+
+.shell__synthetic-note {
+  margin: 8px 0 0;
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-top: 16px;
+}
+
+.panel__title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.panel__headline {
+  margin: 0 0 14px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.bar {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--bar-track);
+  overflow: hidden;
+}
+
+.bar__fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 6px;
+  background: var(--accent);
+}
+
+.panel__counter {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.chips {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.chips li {
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chips li[data-tone="failed"] {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: #f3d6c4;
+}
+
+.chips li[data-tone="blocked"] {
+  color: #8a5a00;
+  background: #fff7df;
+  border-color: #ecd8a5;
+}
+
+.stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.stages li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.stages li:last-child { border-bottom: none; }
+
+.stages__name { color: var(--ink); }
+
+.stages__bar {
+  flex: 1;
+  max-width: 260px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bar-track);
+  overflow: hidden;
+}
+
+.stages__bar-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+}
+
+.stages__text {
+  color: var(--ink-soft);
+  font-size: 13px;
+  min-width: 118px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.current {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.current li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.current li:last-child { border-bottom: none; }
+
+.current__label { font-weight: 600; }
+
+.current__meta {
+  color: var(--ink-faint);
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.updates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.updates li {
+  display: flex;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.updates li:last-child { border-bottom: none; }
+
+.updates__time {
+  color: var(--ink-faint);
+  min-width: 104px;
+  font-variant-numeric: tabular-nums;
+}
+
+.updates__message { color: var(--ink-soft); }
+
+.updates li[data-tone="failed"] .updates__message { color: var(--warn); }
+
+.updates li[data-tone="blocked"] .updates__message { color: #8a5a00; }
+
+.empty {
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+
+.shell__offline {
+  margin: 16px 0 0;
+  color: var(--warn);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .stages li { flex-wrap: wrap; }
+  .stages__bar { max-width: none; width: 100%; order: 3; }
+  .updates li { flex-wrap: wrap; }
+}

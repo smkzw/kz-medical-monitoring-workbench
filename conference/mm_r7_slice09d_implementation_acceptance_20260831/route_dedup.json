@@ -1,0 +1,104 @@
+{
+  "policy": "execution-used-provider-model-nodes-are-excluded-from-conference",
+  "linked_execution_task_id": "mm_r7_slice09d_implementation_20260831",
+  "linked": true,
+  "execution_evidence": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r7_slice09d_implementation_20260831/worker_01_stdout.txt",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r7_slice09d_implementation_20260831/worker_02_stdout.txt",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r7_slice09d_implementation_20260831/worker_03_stdout.txt"
+  ],
+  "excluded_route_nodes": [
+    {
+      "agent": "codex-subagent",
+      "provider": "codex",
+      "model": "gpt-5.6-luna",
+      "source": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r7_slice09d_implementation_20260831/worker_01_stdout.txt",
+      "reason": "effective execution route"
+    }
+  ],
+  "effective_conference_roles": {
+    "general_single_object": {
+      "agent": "codebuddy",
+      "provider": "codebuddy-cli",
+      "model": "deepseek-v4-flash",
+      "effort": "max",
+      "default_provider": "codebuddy-cli",
+      "default_model": "deepseek-v4-flash",
+      "default_effort": "max",
+      "escalate_provider": "codebuddy-cli",
+      "escalate_model": "deepseek-v4-flash",
+      "escalate_effort": "max",
+      "primary": {
+        "agent": "codebuddy",
+        "provider": "codebuddy-cli",
+        "model": "deepseek-v4-flash",
+        "effort": "max"
+      },
+      "fallbacks": [
+        {
+          "agent": "codebuddy",
+          "provider": "codebuddy-cli",
+          "model": "glm-5.3-flash",
+          "effort": "max"
+        },
+        {
+          "agent": "grok",
+          "provider": "grok-build",
+          "model": "grok-4.6",
+          "effort": "medium"
+        },
+        {
+          "agent": "pi",
+          "provider": "cursor",
+          "model": "cursor-grok-4.6",
+          "effort": "medium"
+        },
+        {
+          "agent": "pi",
+          "provider": "openai-codex",
+          "model": "gpt-5.6-luna",
+          "effort": "max"
+        }
+      ],
+      "execution_route": "Complex/logic/evidence/artifact-heavy object: CodeBuddy/deepseek-v4-flash max -> CodeBuddy/glm-5.3-flash max -> Grok Build/grok-4.6 medium -> Pi/Cursor/cursor-grok-4.6 medium -> Pi/openai-codex/gpt-5.6-luna max",
+      "role": "single complex-task conference object; Codex chairs directly with no sub-venue chair",
+      "schedule": {
+        "policy": "beijing-day-night-v1",
+        "timezone": "Asia/Shanghai",
+        "period": "night",
+        "evaluated_at": "2026-08-31T01:16:49.594936+08:00"
+      },
+      "route_contract_frozen": true,
+      "deduplicated_against_execution": [
+        {
+          "provider": "codex",
+          "model": "gpt-5.6-luna"
+        }
+      ]
+    }
+  },
+  "preferred_advisory": {
+    "role": "chatgpt-web-pro-advisory",
+    "transport": "codex-with-chatgpt",
+    "requested_ui_model": "GPT-5.6 Sol",
+    "requested_ui_tier": "Pro",
+    "selection_contract": "Select the current Pro model in the ChatGPT UI and positively verify the visible model/tier; do not infer a machine model slug from the subscription or chat URL.",
+    "assignment": "preferred advisory chair for complex, logic-, evidence-, or artifact-heavy work",
+    "phase": "conference_chair_review",
+    "dispatchable": false,
+    "workspace_access": "read-only MCP",
+    "write_capability": false,
+    "shell_capability": false,
+    "automatic_callback": false,
+    "session_contract": "reuse the same C2C conversation for this workspace and task",
+    "completion_contract": "parent Codex observes the same in-app-browser tab with a cheap DOM check every 20-30 seconds; browser or JavaScript timeout remains pending",
+    "fallback_contract": "if no valid complete advisory response is observed, continue the declared executable route; never dispatch this role through the runner"
+  },
+  "schedule": {
+    "policy": "beijing-day-night-v1",
+    "timezone": "Asia/Shanghai",
+    "period": "night",
+    "evaluated_at": "2026-08-31T01:16:49.594936+08:00"
+  },
+  "generated_at": "2026-08-31 01:16:49 CST"
+}

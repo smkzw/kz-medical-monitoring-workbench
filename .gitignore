@@ -1,0 +1,53 @@
+# macOS / editor metadata
+.DS_Store
+.superpowers/
+*.swp
+*.swo
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# JavaScript build and dependency output
+node_modules/
+dist/
+.vite/
+
+# Browser automation caches
+.playwright-*/
+
+# Large generated execution evidence and transient output
+artifacts/
+archives/
+evidence/
+output/
+runs/
+logs/
+records/
+metrics/
+tmp/
+
+# Local runtime state and secrets
+*.sqlite3
+*.sqlite3-*
+.env
+.env.*
+!.env.example
+
+# Coverage / test output
+.coverage
+coverage/
+htmlcov/
+
+# Generated compiler/build trees
+bin/
+obj/
+
+# Historical root-level visual review captures
+final-*.png
+k3*.png

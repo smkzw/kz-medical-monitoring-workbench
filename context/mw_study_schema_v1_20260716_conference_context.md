@@ -1,0 +1,74 @@
+# Conference Context: mw_study_schema_v1_20260716
+
+Created: 2026-07-16 10:51:19
+Objective: 设计并实现医学写作研究流程图语义编辑器：由已确认StudyDefinition事实生成、医学经理可有限调整布局、版本化审计、确定性SVG与DOCX插入，并用PNH与D017Ⅰ期两个真实项目及RA合成反例完成桌面端E2E验收
+Task type: `complex_delivery_conference`
+Risk: `high`
+Conference mode: `parallel`
+
+## Codex Main Venue
+
+- Chair: Codex.
+- Duties: understand the real task, decompose, define sources of truth, route work, protect boundaries, verify final artifacts, own visual/browser/PPT/PDF checks, own production writes, and deliver to the user.
+
+## Conference Panel Assignment
+
+- Visual/design tasks use a Codex-led panel with no Hermes sub-venue chair: Hermes `aishuo / MiniMax-M3` and Kimi Code (`kimi-code` / `kimi-code/kimi-for-coding`) latest authenticated model. If either is unavailable, the runner tries Grok Build `grok-4.5` (`grok-build`), then Hermes OpenCode Go `qwen3.7-plus` and `mimo-v2.5`. Hermes' own Grok route is not used.
+- Chinese labels or Chinese sentence review is handled directly by Codex and does not start a conference.
+- Other complex tasks use Grok Build `grok-4.5` as the sub-venue chair, leading Hermes `aishuo / MiniMax-M3` and Hermes OpenCode Go `deepseek-v4-flash`. Any unavailable complex-task role follows Reasonix CLI `deepseek-v4-flash`, Kimi Code (`kimi-code` / `kimi-code/kimi-for-coding`) latest authenticated model, then Hermes OpenCode Go `qwen3.7-plus` and `mimo-v2.5`. Hermes' own Grok route is not used.
+- Reasonix is used here only as a declared fallback, not as a second review.
+- Every conference role starts with one bounded same-session pass. Codex reviews its quality and may dispatch zero or more targeted follow-up prompts through the same session. A new session is a routing failure unless a primary role failed before a resumable session existed and the documented fallback was activated.
+
+## Source Of Truth
+
+- User product decision: `records/active_slices/medical_writing_full_gap_review_20260714/USER_DECISIONS.json` (`schema_editor=semantic_limited_drag`).
+- Target architecture and object boundaries: `records/active_slices/medical_writing_full_gap_review_20260714/M11_TARGET_MODEL.md`, `GAP_REPORT.md`, `GAP_MATRIX.md`.
+- Current study facts and invalidation contract: `packages/contracts/workbench_contracts/models.py`, `services/api/app/medical_writing_authoring_journey.py`.
+- Current document/work-copy/export contract: `services/api/app/medical_writing_document.py`, `medical_writing_repository.py`, `medical_writing_document_exporter.py`.
+- Current authoring UX: `frontend/src/App.jsx`, `frontend/src/features/medical-writing/MedicalWritingAuthoringJourneySetup.jsx`, `StructuredTableDesigner.jsx`, `frontend/src/styles.css`.
+- Real-project evidence already captured inside the workspace: `records/active_slices/medical_writing_end_to_end_authoring_20260716/TASK_RECORD.md` and its RA/PNH browser-QC reports.
+- Second real-project source: `/Users/smkzw/Documents/康哲项目资料/模版/方案模版/CMS-D017Ⅰ期方案-v1.1-20260209-clean.docx` (SHA-256 `0299282a5ac2d10749931ed0d06eecc7a4b3a1d912f395722553c0345055b1b5`), especially the SAD/MAD study-design figure and its surrounding design text. RA remains a synthetic greenfield generalization fixture, not a real project.
+- The NMPA/CDE Chinese M11 package is a structural reference only. Company protocol/synopsis sources remain the wording and visual authority; the study schema may not invent facts from either source.
+
+## Scope
+
+- In scope: a versioned semantic graph for study parts, arms/cohorts, epochs, decision gates, typed transitions, allocation/randomization and follow-up; deterministic projection from confirmed StudyDefinition facts; explicit unresolved-fact review; controlled semantic edits routed through StudyDefinition impact-preview/commit; limited layout overrides; server-rendered sanitized SVG; insertion/update as a governed document figure; DOCX vector preservation where the target format supports it; desktop editor and PNH/D017Ⅰ期/RA verification.
+- Out of scope: arbitrary free drawing, AI-authored study facts, mobile-first layout, unconstrained SVG/HTML upload, direct work-copy-only topology changes that bypass StudyDefinition, replacing the Schedule of Activities editor, final approval/e-signature, and silent mutation of existing work copies.
+
+## Success Criteria
+
+- The graph cannot be created from unconfirmed/conflicting facts without an explicit medical-manager resolution path; no client-only node or edge may become a medical fact.
+- Graph identity, revision, source StudyDefinition revision/hash, layout revision, actor, reason and audit events are persisted; stale updates and duplicate requests are handled deterministically.
+- Automatic layout is reproducible. User movement stores only bounded presentation offsets/order and never changes graph topology or clinical labels.
+- SVG is generated on the server from typed data, contains no executable content or arbitrary markup, remains legible at desktop and Word page width, and can be regenerated byte-for-byte for the same canonical graph and layout.
+- The document contains a stable figure object with caption/source linkage. Insert/update/reorder does not create silent duplicates and does not mutate the source protocol.
+- PNH and D017Ⅰ期 produce clinically distinct diagrams from their own confirmed facts; the synthetic RA fixture exercises negative inference rules. Missing/ambiguous facts fail closed instead of borrowing defaults from another project.
+- API, repository, exporter, frontend contracts, browser interactions, DOCX render checks and regression tests pass. Codex performs final visual and clinical acceptance.
+
+## Parallel Work Rule
+
+For logic-heavy, rigor-sensitive, or artifact-heavy tasks, each participant independently runs the whole bounded workflow and writes a separate output. Leads compare after all available participant outputs are in or explicitly marked pending.
+
+## Timeout Policy
+
+- Participant soft wait: 20 minutes.
+- Large-task participant wait: 45 minutes.
+- Chair hard wait: 90 minutes.
+- Failure rule: Do not fail a model for slow response alone; fail only on terminal error, provider exhaustion/rate limit after controlled retry, empty/truncated retry output, or no progress after hard wait plus one retry.
+- Pass/turn boundary: one conference prompt is one conference pass. The
+  `--max-turns` value controls internal Agent tool-calling turns and is never
+  set to 1 for substantive conference execution; generated participant and
+  chair commands use 30 and 40 respectively.
+
+## Risk Boundaries
+
+- Hermes is advisory; Codex remains final authority.
+- Codex owns visual/browser/PPT/PDF/rendered checks, live authority checks, final clinical/regulatory conclusions, and production writes.
+- Do not mark a slow model failed solely due to latency.
+- Do not recommend a general-purpose diagramming library as the clinical truth layer. A layout library may position typed nodes only after its license, maintenance and deterministic behavior are verified.
+- Do not treat a protocol flow diagram as the Schedule of Activities. The former represents design topology; the latter remains the visit/activity matrix.
+
+## Loop Log
+
+- 2026-07-16 10:51:19: Conference initialized by `hermes_workflow_guard.py init-conference`.
+- 2026-07-16: Codex reread the current global and workspace AGENTS rules. This is a complex logic/artifact conference: Grok Build `grok-4.5` chairs; MiniMax-M3 and OpenCode Go `deepseek-v4-flash` participate; one complete pass first, same-session follow-up only if evidence is insufficient.

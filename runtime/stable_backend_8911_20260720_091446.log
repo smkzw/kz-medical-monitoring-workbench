@@ -1,0 +1,58 @@
+INFO:     Started server process [56571]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8911 (Press CTRL+C to quit)
+INFO:     127.0.0.1:63057 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58673 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58818 - "GET /api/projects/proj_my009_uc/medical-writing/authoring-journey/study-schema HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58820 - "GET /api/projects/proj_ra_greenfield_sandbox/medical-writing/authoring-journey/study-schema HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:58844 - "GET /api/projects/proj_my008_pnh_3_01/medical-writing/authoring-journey/study-schema HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59451 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59591 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59593 - "GET /api/projects/proj_rux_03_002/source-manifest HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59594 - "GET /api/ai-gateway/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59595 - "GET /api/projects/proj_rux_03_002/ai-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59603 - "GET /api/projects/proj_rux_03_002/source-manifest HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59601 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59608 - "GET /api/projects/proj_rux_03_002/ai-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59606 - "GET /api/ai-gateway/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59599 - "GET /api/runtime-readiness HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59590 - "GET /api/runtime-readiness HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59610 - "GET /api/projects/proj_rux_03_002/monitoring/subjects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59592 - "GET /api/projects/proj_rux_03_002/dashboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59688 - "GET /api/projects/proj_rux_03_002/dashboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59703 - "GET /api/projects/proj_rux_03_002/subjects/S01001/monitoring HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59689 - "GET /api/projects/proj_rux_03_002/workbench-inbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59597 - "GET /api/projects/proj_rux_03_002/workbench-inbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59691 - "GET /api/projects/proj_rux_03_002/workbench-inbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59756 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59828 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59858 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59893 - "GET /api/projects/proj_my008_pnh_3_01/medical-writing/authoring-journey/study-schema HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59895 - "GET /api/projects/proj_user_be2b6fdf2156/medical-writing/authoring-journey/study-schema HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59897 - "GET /api/projects/proj_user_51869747a1c2/medical-writing/authoring-journey/study-schema HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59899 - "GET /api/projects/proj_user_4ef4aa3da246/medical-writing/authoring-journey/study-schema HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59901 - "GET /api/projects/proj_user_b65099c669f5/medical-writing/authoring-journey/study-schema HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59989 - "GET /api/projects/proj_user_4ef4aa3da246/medical-writing/authoring-journey/study-schema/proposal HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:60045 - "GET /api/projects/proj_user_be2b6fdf2156/medical-writing/authoring-journey/study-schema/proposal HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:60047 - "GET /api/projects/proj_user_51869747a1c2/medical-writing/authoring-journey/study-schema/proposal HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:60049 - "GET /api/projects/proj_user_b65099c669f5/medical-writing/authoring-journey/study-schema/proposal HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:60051 - "GET /api/projects/proj_ra_greenfield_sandbox/medical-writing/authoring-journey/study-schema/proposal HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:60122 - "GET /api/projects/proj_user_4ef4aa3da246/medical-writing/authoring-journey HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60463 - "GET /api/projects/proj_user_4ef4aa3da246/medical-writing/authoring-journey HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60465 - "POST /api/projects/proj_user_4ef4aa3da246/medical-writing/authoring-journey/stages/picos/commit HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:60526 - "GET /api/projects/proj_user_4ef4aa3da246/medical-writing/authoring-journey HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60528 - "POST /api/projects/proj_user_4ef4aa3da246/medical-writing/authoring-journey/stages/picos/commit HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:60617 - "GET /api/projects/proj_user_4ef4aa3da246/medical-writing/authoring-journey HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60619 - "POST /api/projects/proj_user_4ef4aa3da246/medical-writing/authoring-journey/stages/picos/commit HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:60711 - "GET /api/projects/proj_user_4ef4aa3da246/medical-writing/authoring-journey HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60713 - "POST /api/projects/proj_user_4ef4aa3da246/medical-writing/authoring-journey/stages/picos/commit HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60862 - "GET /api/ai-gateway/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60863 - "GET /api/projects/proj_user_4ef4aa3da246/ai-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60864 - "GET /api/projects/proj_user_4ef4aa3da246/workbench-inbox HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60861 - "GET /api/projects/proj_user_4ef4aa3da246/source-manifest HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60860 - "GET /api/projects/proj_user_4ef4aa3da246/dashboard HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [56571]

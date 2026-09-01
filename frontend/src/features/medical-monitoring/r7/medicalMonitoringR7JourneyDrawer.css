@@ -1,0 +1,338 @@
+/* R7 Slice-08C-3: R7-only Journey change markers and the right-side detail
+ * drawer. Only rendered inside R7 product routes; legacy R5 is untouched.
+ * The semantic tone keys come from worker_01's closed set; exact hues stay
+ * in 08C-4 real-browser visual acceptance.
+ */
+
+/* --- compact change marker (§4.3): Lucide icon + Chinese word + tone --- */
+.r7-journey-marker {
+  --r7-journey-danger: #b83b3b;
+  --r7-journey-warning: #a56b00;
+  --r7-journey-success: #1e7b45;
+  --r7-journey-info: #3269b1;
+  --r7-journey-neutral: #6b7785;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 16px;
+  max-width: 92px;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--r7-journey-neutral);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex: none;
+}
+
+.r7-journey-marker > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.r7-journey-marker svg {
+  flex: none;
+}
+
+.r7-journey-tone-danger { color: var(--r7-journey-danger); }
+.r7-journey-tone-warning { color: var(--r7-journey-warning); }
+.r7-journey-tone-success { color: var(--r7-journey-success); }
+.r7-journey-tone-info { color: var(--r7-journey-info); }
+.r7-journey-tone-neutral { color: var(--r7-journey-neutral); }
+
+/* Visually hidden helper: carries the change wording into the accessible
+ * name of buttons whose visible text is the marker itself. */
+.r7-journey-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* R7-only wrapper for the change marker + R5 change label on risk rows.
+ * Rendered only when a journey row is bound to the risk, so legacy R5 row
+ * markup stays untouched. */
+.r5-risk-tail {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+/* --- truncation prompt under the shared axis title (§3.6) --- */
+.r7-journey-truncation {
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  border: 1px dashed var(--r5-line, #dce3e9);
+  border-radius: 8px;
+  background: var(--r5-soft, #f6f8fa);
+  color: var(--r5-muted, #6b7785);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* --- drawer: overlay and push share the aside shell (§5.3) --- */
+.r7-journey-drawer {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--r5-line, #dce3e9);
+  background: #fff;
+}
+
+/* overlay: fixed right panel, <=480px, own scroll, slide-in + shadow */
+.r7-journey-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: flex-end;
+  background: transparent;
+}
+
+.r7-journey-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(23, 33, 43, 0.28);
+}
+
+.r7-journey-overlay .r7-journey-drawer {
+  position: relative;
+  width: min(480px, calc(100vw - 32px));
+  max-width: 480px;
+  height: 100%;
+  border-left: 1px solid var(--r5-line, #dce3e9);
+  box-shadow: 0 12px 32px rgba(23, 33, 43, 0.16);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* push: non-modal aside filling the fixed 420px inspector column */
+.r7-journey-drawer-push {
+  width: 420px;
+  max-width: 420px;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  box-shadow: 0 8px 24px rgba(23, 33, 43, 0.12);
+}
+
+/* Push mode: keep a 420px grid spacer for the journey column, and pin the
+ * drawer to the viewport with position:fixed. Sticky-in-column + flex footer
+ * previously reported in-viewport DOM boxes while CDP screenshots still showed
+ * only the scrolling body (source painted below the clipped inspector). */
+.r5-subject-columns.is-r7-drawer-push {
+  grid-template-columns: minmax(760px, 1fr) 420px;
+  gap: 16px;
+  align-items: start;
+}
+
+.r5-subject-columns.is-r7-drawer-push > .r5-inspector {
+  width: 420px;
+  max-width: 420px;
+  min-width: 420px;
+  box-sizing: border-box;
+  position: relative;
+  top: auto;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  display: block;
+  padding: 0;
+  gap: 0;
+  align-self: start;
+  /* Spacer only — the fixed drawer paints over this column. */
+  min-height: 70vh;
+  pointer-events: none;
+}
+
+/* Push drawer owns the 420px aside: hide the risk stack so title/close/
+ * switcher/summary/source stay inside the 900px viewport without page scroll. */
+.r5-subject-columns.is-r7-drawer-push > .r5-inspector > .r5-section-heading,
+.r5-subject-columns.is-r7-drawer-push > .r5-inspector > .r5-risk-list,
+.r5-subject-columns.is-r7-drawer-push > .r5-inspector > .r5-event-lane-note {
+  display: none;
+}
+
+.r5-subject-columns.is-r7-drawer-push .r7-journey-drawer-push {
+  pointer-events: auto;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  width: 420px;
+  max-width: 420px;
+  height: 100vh;
+  max-height: 100vh;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  border-radius: 0;
+  border-left: 1px solid var(--r5-line, #dce3e9);
+  border-bottom: 1px solid var(--r5-line, #dce3e9);
+  box-shadow: -8px 0 24px rgba(23, 33, 43, 0.12);
+  background: #fff;
+}
+
+.r5-subject-columns.is-r7-drawer-push .r7-journey-drawer-push .r7-journey-drawer-head {
+  grid-row: 1;
+}
+
+.r5-subject-columns.is-r7-drawer-push .r7-journey-drawer-push .r7-journey-drawer-body {
+  grid-row: 2;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.r5-subject-columns.is-r7-drawer-push .r7-journey-drawer-push .r7-journey-source {
+  grid-row: 3;
+  flex: none;
+  position: relative;
+  z-index: 2;
+  margin-top: 0;
+  background: #fff;
+  border-top: 1px solid var(--r5-line, #dce3e9);
+  box-shadow: 0 -6px 12px rgba(23, 33, 43, 0.06);
+}
+
+.r5-subject-columns.is-r7-drawer-push .r7-journey-drawer-push .r7-journey-source .r5-source-button {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  box-sizing: border-box;
+  border: 1px solid var(--r5-line, #dce3e9);
+  border-radius: 8px;
+  background: #fff7f2;
+  color: var(--r5-orange, #e96828);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.r7-journey-drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--r5-line, #dce3e9);
+  flex: 0 0 auto;
+}
+
+.r7-journey-drawer-head h2 {
+  margin: 4px 0 0;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.r7-journey-drawer-body {
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.r7-journey-sections {
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.r7-journey-sections > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.r7-journey-sections dt {
+  color: var(--r5-muted, #6b7785);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.r7-journey-sections dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: break-word;
+}
+
+.r7-journey-change-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.r7-journey-change-switcher button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 4px 12px;
+  border: 1px solid var(--r5-line, #dce3e9);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--r5-ink, #17212b);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.r7-journey-change-switcher button.is-active {
+  border-color: var(--r5-orange, #e96828);
+  background: #fff3ec;
+  color: var(--r5-orange, #e96828);
+}
+
+.r7-journey-source {
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--r5-line, #dce3e9);
+  background: #fff;
+}
+
+/* aria-live polite region: announces the current drawer title on
+ * open/switch (§7.3). Visually hidden, never clipped by the drawer shell. */
+.r7-journey-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .r7-journey-overlay,
+  .r7-journey-drawer,
+  .r7-journey-drawer-push {
+    transition: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .r7-journey-drawer-push {
+    width: min(420px, calc(100vw - 24px));
+    max-width: min(420px, calc(100vw - 24px));
+  }
+}

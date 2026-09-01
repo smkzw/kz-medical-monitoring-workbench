@@ -1,0 +1,145 @@
+{
+  "policy": "execution-used-provider-model-nodes-are-excluded-from-conference",
+  "linked_execution_task_id": "mm_r5_s5_subject_workspace_contract_20260826",
+  "linked": true,
+  "execution_evidence": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r5_s5_subject_workspace_contract_20260826/worker_01_stdout.txt",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r5_s5_subject_workspace_contract_20260826/worker_02_stdout.txt",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r5_s5_subject_workspace_contract_20260826/worker_03_stdout.txt"
+  ],
+  "excluded_route_nodes": [
+    {
+      "agent": "codex-subagent",
+      "provider": "codex",
+      "model": "gpt-5.6-luna",
+      "source": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r5_s5_subject_workspace_contract_20260826/worker_01_stdout.txt",
+      "reason": "effective execution route"
+    }
+  ],
+  "effective_conference_roles": {
+    "general_pi_qwen38": {
+      "agent": "pi",
+      "provider": "alibaba",
+      "model": "qwen3.8-max",
+      "effort": "xhigh",
+      "default_provider": "alibaba",
+      "default_model": "qwen3.8-max",
+      "default_effort": "xhigh",
+      "escalate_provider": "alibaba",
+      "escalate_model": "qwen3.8-max",
+      "escalate_effort": "xhigh",
+      "primary": {
+        "agent": "pi",
+        "provider": "alibaba",
+        "model": "qwen3.8-max",
+        "effort": "xhigh"
+      },
+      "fallbacks": [
+        {
+          "agent": "pi",
+          "provider": "opencode-go",
+          "model": "muse-spark-1.2-contributor",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "kimi",
+          "provider": "kimi-code",
+          "model": "kimi-code/k3-256k",
+          "effort": "high"
+        }
+      ],
+      "role": "participant 1 for complex, logic-heavy, evidence-sensitive, artifact-heavy, and high-risk contradiction review",
+      "schedule_window": {
+        "start": "22:00",
+        "end": "07:00",
+        "timezone": "Asia/Shanghai"
+      },
+      "nighttime_override": {
+        "primary": {
+          "agent": "pi",
+          "provider": "alibaba",
+          "model": "qwen3.8-max",
+          "effort": "xhigh"
+        },
+        "fallbacks": [
+          {
+            "agent": "pi",
+            "provider": "opencode-go",
+            "model": "muse-spark-1.2-contributor",
+            "effort": "xhigh"
+          },
+          {
+            "agent": "kimi",
+            "provider": "kimi-code",
+            "model": "kimi-code/k3-256k",
+            "effort": "high"
+          }
+        ]
+      },
+      "daytime_override": {
+        "primary": {
+          "agent": "pi",
+          "provider": "opencode-go",
+          "model": "muse-spark-1.2-contributor",
+          "effort": "xhigh"
+        },
+        "fallbacks": [
+          {
+            "agent": "kimi",
+            "provider": "kimi-code",
+            "model": "kimi-code/k3-256k",
+            "effort": "high"
+          }
+        ]
+      },
+      "route_contract_frozen": true,
+      "deduplicated_against_execution": [
+        {
+          "provider": "codex",
+          "model": "gpt-5.6-luna"
+        }
+      ]
+    },
+    "general_grok46": {
+      "agent": "cursor",
+      "provider": "cursor-cli",
+      "model": "auto",
+      "effort": "",
+      "default_provider": "cursor-cli",
+      "default_model": "auto",
+      "default_effort": "",
+      "escalate_provider": "cursor-cli",
+      "escalate_model": "auto",
+      "escalate_effort": "",
+      "primary": {
+        "agent": "cursor",
+        "provider": "cursor-cli",
+        "model": "auto",
+        "effort": ""
+      },
+      "fallbacks": [
+        {
+          "agent": "grok",
+          "provider": "grok-build",
+          "model": "grok-4.6",
+          "effort": "medium"
+        },
+        {
+          "agent": "pi",
+          "provider": "cms-router",
+          "model": "minimax-m3",
+          "effort": ""
+        }
+      ],
+      "role": "participant 2 for complex, logic-heavy, evidence-sensitive, artifact-heavy, and high-risk contradiction review; Cursor leads, Grok Build is fallback",
+      "route_contract_frozen": true,
+      "deduplicated_against_execution": [
+        {
+          "provider": "codex",
+          "model": "gpt-5.6-luna"
+        }
+      ]
+    }
+  },
+  "generated_at": "2026-08-26 05:48:54"
+}

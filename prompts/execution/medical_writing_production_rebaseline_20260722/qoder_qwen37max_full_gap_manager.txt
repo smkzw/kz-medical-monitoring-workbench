@@ -1,0 +1,65 @@
+你是医学写作子系统生产重基线的只读执行经理。使用当前用户已启动的QoderVIP/
+qodercli，模型必须为Qwen3.7-Max。不要使用qwen3.8，不要新建qodercli，不要无头
+访问。Codex是总架构师和最终验收者。
+
+开始前读取全局`/Users/smkzw/.codex/AGENTS.md`、`/Users/smkzw/.hermes/SOUL.md`
+及项目`AGENTS.md`。这是与上一视觉任务无关的新任务，应使用`/new`的新上下文。
+
+Hard boundaries:
+- 这是全链只读差距审计和修订规划，不修改产品代码、测试、数据库、运行时、用户
+  原件、既有报告或生成成品。
+- 仅允许写一个新报告，路径在末尾。
+- 必须以当前文件、真实API/页面和现有任务记录为证据；旧报告与测试结论均需核验，
+  不得因为存在测试就判定功能完成。
+- 可执行只读命令、运行测试、启动隔离只读实例和浏览器检查；不得更改常态运行时。
+- 产品未来必须脱离Codex/Qoder/Hermes独立运行。凡需AI的步骤必须定位到产品内
+  DeepSeek v4-pro/flash、oMLX OCR/Hy-MT2或确定性代码，不得用Qoder答案替代产品AI。
+
+Read these files only:
+- `AGENTS.md`
+- `records/active_slices/medical_writing_production_rebaseline_20260722/TASK_RECORD.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/`
+- `records/active_slices/medical_writing_gap_rebaseline_20260717/`
+- `records/active_slices/medical_writing_ai_first_authoring_redesign_20260718/`
+- `records/active_slices/medical_writing_frontend_kimi_progressive_20260719/`
+- `records/active_slices/medical_writing_prelaunch_acceptance_20260717/`
+- `records/active_slices/mw_study_schema_scale_docx_20260720/`
+- `records/qoder_full_system_audit_20260719/`
+- `runs/execution/mw_release_p0_resume_20260720/`
+- `runs/execution/mw_study_schema_scale_docx_20260720/`
+- `frontend/src/features/medical-writing/`
+- `services/api/app/`
+- `packages/contracts/workbench_contracts/`
+- `tests/`
+
+按真实医学撰写顺序建立需求-实现-证据矩阵：
+1. 收到任务后的最小建项：药物、适应症、分期；药物类型/途径对I期和安全性/PK/PD
+   的全链影响；IB可选及无IB时的最小事实对话。
+2. 摘要导入与从零两条入口：AI预填、用户以修改/确认为主、自然语言其他项、I期
+   多分型多选、动态研究设计和动态章节。
+3. ClinicalTrials.gov竞品方案/SAP检索下载、文件角色/适应症基本校验与override、
+   批量解析、英文OCR/翻译/衔接QC、语料库优先级和来源追溯。
+4. PICOS、入排、干预/背景/禁限用药、对照、终点/AESI、统计/期中分析/转组、
+   运营设计、研究流程表/图和量表。
+5. 写作台：文档编辑为核心、动态目录、富文本和表格完整编辑、3-5个AI候选、
+   监管语气/一致性/补证据/改写提示词、对话修订、证据与参考文献GBT2015。
+6. 全文结构：以公司模板/指定摘要为最高样式语料，ICH M11仅作框架补充；摘要、
+   前言至附录、可选章节语义、目录/图目录/表目录/交叉引用。
+7. DOCX：中文宋体、英文数字Times New Roman、Word标题样式和可跳转目录、首页、
+   摘要嵌套表、段落缩进、表格、SVG流程图、200 DPI以上量表页、页眉页脚和分页。
+8. 版本、工作副本、StudyDefinition指纹、跨项目隔离、用户选择即确认、审计和恢复。
+9. 桌面端前端的懒惰用户体验：减少重复填写、信息不过载、后台进度可见、刷新重连、
+   所有按钮/键盘编辑/全屏/错误和空状态。
+10. 独立AI、真实数据、多适应症双路径测试、发布和私有化运行。
+
+每一项必须给出：当前状态（完成/部分/反证/缺证据/未实现）、源文件/API/页面定位、
+可复现证据、用户影响、P0/P1/P2、与其他模块冲突、最小闭合修复包、依赖和验收门。
+特别复核当前摘要异步代码是否真正逐块执行/恢复，工作副本污染是否已修复，确认语义
+是否仍含错误的待医学批准，DOCX空白页是否可发布。最后给出严格串行的共享文件碰撞
+矩阵与可并行的只读/测试工作包。不要给泛泛路线图，不要声明最终通过。
+
+报告包含：执行摘要、完整矩阵、已证实完成项、确定反证、缺失证据、修订后的架构/计划、
+写入包顺序、真实E2E矩阵、发布门、回滚/恢复边界、建议Codex下一步。
+
+Runner-managed output path:
+`runs/execution/medical_writing_production_rebaseline_20260722/qoder_qwen37max_full_gap_manager.md`

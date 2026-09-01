@@ -1,0 +1,63 @@
+继续当前同一缺陷审计会话，不要 /new，继续使用 Qwen3.7-Max。
+
+Codex 已对你首版报告做真实 8911 运行时交叉核对，发现你检查了错误的数据库根，因此首版“当前运行库为空”和“StudyDefinition contamination 为高置信主因”不能保留为结论。
+
+必须重新读取并核对以下真实证据：
+
+1. 8911 监听进程 PID 12950 的 cwd 是：
+   `/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench`
+2. 但 `services/api/app/main.py` 的 `PROJECT_ROOT` 解析使稳定运行时实际位于：
+   `/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/runtime`
+3. 真实数据库：
+   - `/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/runtime/medical_writing_greenfield.sqlite3`
+   - `/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/runtime/medical_writing_authoring_journey.sqlite3`
+   - `/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/runtime/workbench_runtime.sqlite3`
+4. `proj_ra_greenfield_sandbox` 的 greenfield baseline row 存在，document_id 为
+   `mwdoc_greenfield_proj_ra_greenfield_sandbox_7c152b48e76f9840`，baseline payload
+   只命中“类风湿关节炎”和“CMS-RA-201”，不命中“特应性皮炎”或“测试乳膏”。
+5. authoring journey revision 15 同样只命中 RA/CMS-RA-201，当前 framing 与
+   PICOS 都是正确 RA 内容。
+6. 污染只存在于 `workbench_runtime.sqlite3.medical_writing_working_copies`：
+   - project_id=`proj_ra_greenfield_sandbox`
+   - document_id=`mwdoc_greenfield_proj_ra_greenfield_sandbox_7c152b48e76f9840`
+   - section_id=`mwsec_greenfield_proj_ra_greenfield_sandbox_bf4a45ce76583f38`
+   - revision=2
+   - created_at=`2026-07-19T14:33:21.530570Z`
+   - updated_at=`2026-07-19T14:48:00.674286Z`
+   - 具体正文是测试乳膏治疗中重度特应性皮炎成人患者
+   - `source_study_definition_id=""`
+   - `source_study_definition_revision=null`
+   - `source_study_definition_sha256=""`
+   - `study_definition_reconciliation_required=false`
+7. 真实 API 返回的“研究设计”section 已是正确 RA 内容；只有“方案摘要”的
+   working copy 返回 AD 文本。
+
+请重新检查：
+
+- `PROJECT_ROOT` 和 `RUNTIME_DIR` 的真实解析。
+- working-copy 初次创建、保存、研究事实变更后的 reconciliation/stale
+  标记、读取和渲染规则。
+- 为什么 source-study-definition 绑定为空的旧工作副本仍被当作可编辑当前
+  正文返回。
+- 当前 `MedicalWritingStudyConsistencyService` 已有哪些检测/导出阻断，
+  为什么没有做到“先隐藏或隔离不可信工作副本，再要求用户显式恢复/对账”。
+- 是否存在内容层项目事实验证；不要建议用简单关键词硬拦截合法跨适应症
+  背景内容。
+- 精确区分：跨项目数据库键泄漏、用户/测试流程误保存、工作副本事实绑定缺失、
+  旧版本失效/隔离缺失、前端竞态。
+
+请直接修订原报告：
+
+`/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/execution/mw_cross_project_document_contamination_p0_20260720/qoder_qwen37max_readonly_audit.md`
+
+修订要求：
+
+- 首版所有错误结论必须明确标为 superseded，不得让接手者误用。
+- 给出基于真实运行库的根因排序和精确源码行号。
+- 给出最小修复合同，重点考虑：
+  authoritative study-definition fingerprint binding、legacy/unbound working-copy
+  quarantine、stale/reconciliation state、读取端 fail-closed、用户显式恢复/迁移、
+  无第二次“医学批准”、导出与页面展示一致。
+- 给出真实运行时的无损迁移策略与双项目/同项目事实更新回归矩阵。
+- 只改该报告，不得修改产品代码、数据库或稳定运行时。
+- 完成后返回新报告 SHA-256、字节数和关键结论变化。

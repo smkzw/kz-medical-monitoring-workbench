@@ -1,0 +1,1 @@
+This is round 2 of a three-round conference loop in the same session. Challenge the previous answer against every source boundary, P0 gate, user workflow and likely medical/legal/QA objection. Return the complete corrected Markdown output. Codex remains final authority.

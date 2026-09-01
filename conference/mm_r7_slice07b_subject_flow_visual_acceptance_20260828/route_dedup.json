@@ -1,0 +1,71 @@
+{
+  "policy": "execution-used-provider-model-nodes-are-excluded-from-conference",
+  "linked_execution_task_id": "mm_r7_slice07b_subject_flow_implementation_20260828",
+  "linked": true,
+  "execution_evidence": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r7_slice07b_subject_flow_implementation_20260828/worker_01_stdout.txt",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r7_slice07b_subject_flow_implementation_20260828/worker_02_stdout.txt",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r7_slice07b_subject_flow_implementation_20260828/worker_03_stdout.txt"
+  ],
+  "excluded_route_nodes": [
+    {
+      "agent": "codebuddy",
+      "provider": "codebuddy-cli",
+      "model": "glm-5.3-flash",
+      "source": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/logs/execution/mm_r7_slice07b_subject_flow_implementation_20260828/worker_01_stdout.txt",
+      "reason": "effective execution route"
+    }
+  ],
+  "effective_conference_roles": {
+    "visual_single_object": {
+      "agent": "grok",
+      "provider": "grok-build",
+      "model": "grok-4.6",
+      "effort": "high",
+      "default_provider": "grok-build",
+      "default_model": "grok-4.6",
+      "default_effort": "high",
+      "escalate_provider": "grok-build",
+      "escalate_model": "grok-4.6",
+      "escalate_effort": "high",
+      "primary": {
+        "agent": "grok",
+        "provider": "grok-build",
+        "model": "grok-4.6",
+        "effort": "high"
+      },
+      "fallbacks": [
+        {
+          "agent": "pi",
+          "provider": "cursor",
+          "model": "cursor-grok-4.6",
+          "effort": "high"
+        }
+      ],
+      "execution_route": "Visual/HTML/PPT/visual-QC object: Grok Build/grok-4.6 high -> Pi/Cursor/cursor-grok-4.6 high -> CodeBuddy/glm-5.3-flash max",
+      "role": "single visual/design conference object; Codex chairs directly with no sub-venue chair",
+      "skills_enabled": true,
+      "tools_enabled": true,
+      "schedule": {
+        "policy": "beijing-day-night-v1",
+        "timezone": "Asia/Shanghai",
+        "period": "night",
+        "evaluated_at": "2026-08-28T23:55:51.224695+08:00"
+      },
+      "route_contract_frozen": true,
+      "deduplicated_against_execution": [
+        {
+          "provider": "codebuddy-cli",
+          "model": "glm-5.3-flash"
+        }
+      ]
+    }
+  },
+  "schedule": {
+    "policy": "beijing-day-night-v1",
+    "timezone": "Asia/Shanghai",
+    "period": "night",
+    "evaluated_at": "2026-08-28T23:55:51.224695+08:00"
+  },
+  "generated_at": "2026-08-28 23:55:51 CST"
+}

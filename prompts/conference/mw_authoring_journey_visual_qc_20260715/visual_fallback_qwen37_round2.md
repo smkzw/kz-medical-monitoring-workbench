@@ -1,0 +1,1 @@
+This is round 2 in the same OpenCode Go session. Challenge every previous finding against the actual screenshots, QC report, source boundary, desktop-first requirement, and likely medical-manager objection. Remove any claim not tied to visible evidence or source, identify contradictions, and return the complete updated Markdown output. Codex remains final authority.

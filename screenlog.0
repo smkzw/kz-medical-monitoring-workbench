@@ -1,0 +1,14 @@
+[32mINFO[0m:     Started server process [[36m45439[0m]
+[32mINFO[0m:     Waiting for application startup.
+[32mINFO[0m:     Application startup complete.
+[32mINFO[0m:     Uvicorn running on [1mhttp://127.0.0.1:8911[0m (Press CTRL+C to quit)
+[32mINFO[0m:     127.0.0.1:57544 - "[1mGET /api/health HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:57562 - "[1mGET /api/runtime-readiness HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:57569 - "[1mGET /api/projects HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:57619 - "[1mPOST /api/projects/proj_user_3ecb0bc287c0/medical-writing/authoring-journey/competitor-triage HTTP/1.1[0m" [32m202 Accepted[0m
+[32mINFO[0m:     127.0.0.1:57703 - "[1mGET /api/projects/proj_user_3ecb0bc287c0/medical-writing/authoring-journey/competitor-triage/ct_run_1b32ff8ebd49a6abc0b3 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:57766 - "[1mGET /api/projects/proj_user_3ecb0bc287c0/medical-writing/authoring-journey/competitor-triage/ct_run_1b32ff8ebd49a6abc0b3 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:58386 - "[1mGET /api/projects/proj_user_3ecb0bc287c0/medical-writing/authoring-journey/competitor-triage/ct_run_1b32ff8ebd49a6abc0b3 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:58974 - "[1mGET /api/projects/proj_user_3ecb0bc287c0/medical-writing/authoring-journey/competitor-triage/ct_run_1b32ff8ebd49a6abc0b3 HTTP/1.1[0m" [32m200 OK[0m
+[32mINFO[0m:     127.0.0.1:59085 - "[1mPOST /api/projects/proj_user_3ecb0bc287c0/medical-writing/authoring-journey/competitor-triage/ct_run_1b32ff8ebd49a6abc0b3/retry HTTP/1.1[0m" [32m202 Accepted[0m
+[32mINFO[0m:     127.0.0.1:59589 - "[1mGET /api/projects/proj_user_3ecb0bc287c0/medical-writing/authoring-journey/competitor-triage/ct_run_1b32ff8ebd49a6abc0b3 HTTP/1.1[0m" [32m200 OK[0m

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>R1 AE/MH 受众监查看板（SYNTHETIC）</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="kz-app" data-kz-theme="kangzhe-light">
+  <a class="kz-skip" href="#kz-main">跳到主内容</a>
+
+  <header class="kz-chrome" role="banner">
+    <div class="kz-chrome__brand">
+      <div class="kz-logo" data-qc-id="logo-full">
+        <img src="assets/logo_bot.svg" width="158" height="33" alt="CMS 康哲药业">
+      </div>
+      <div class="kz-chrome__titles">
+        <p class="kz-chrome__eyebrow">医学监查 · 合成演示数据</p>
+        <h1 class="kz-chrome__title">AE/MH 受众监查看板</h1>
+      </div>
+    </div>
+    <div class="kz-chrome__meta" id="kz-lineage" aria-live="polite"></div>
+  </header>
+
+  <aside class="kz-boundary" role="note" aria-label="AI 边界说明">
+    <p><strong>AI辅助定位证据与风险，医学经理终审</strong>。本页用于风险查阅与来源定位；不构成任务队列、人工复核清单或正式医学判断。</p>
+    <p id="kz-disclaimer" class="kz-boundary__disclaimer"></p>
+  </aside>
+
+  <section class="kz-progress" id="kz-progress" aria-label="运行进度" hidden>
+    <div class="kz-progress__head">
+      <h2 class="kz-progress__title">运行进度</h2>
+      <p class="kz-progress__ratio" id="kz-progress-ratio"></p>
+    </div>
+    <p class="kz-progress__current" id="kz-progress-current"></p>
+    <details class="kz-progress__detail" id="kz-progress-detail">
+      <summary id="kz-progress-summary">查看处理明细</summary>
+      <ol class="kz-progress__nodes" id="kz-progress-nodes"></ol>
+    </details>
+  </section>
+
+  <div id="kz-error" class="kz-error" role="alert" hidden>
+    <h2 class="kz-error__title">数据合同不可用</h2>
+    <p class="kz-error__body" id="kz-error-body"></p>
+    <p class="kz-error__hint">请确认看板数据包与页面位于同一发布目录后重新打开。系统不会在缺少数据时显示空白结果或临时数据。</p>
+  </div>
+
+  <div id="kz-shell" class="kz-shell" hidden>
+    <nav class="kz-nav" aria-label="上下文导航">
+      <ol class="kz-crumb" id="kz-crumb"></ol>
+      <button type="button" class="kz-btn kz-btn--ghost" id="kz-back" hidden>返回上层</button>
+    </nav>
+
+    <section class="kz-filters" aria-label="筛选">
+      <div class="kz-filters__row">
+        <label class="kz-field">
+          <span class="kz-field__label">严重程度</span>
+          <select id="kz-filter-severity" class="kz-select">
+            <option value="all">全部</option>
+            <option value="severe">严重</option>
+            <option value="high">高</option>
+            <option value="medium">中</option>
+            <option value="low">低</option>
+            <option value="mild">轻微</option>
+          </select>
+        </label>
+        <label class="kz-field">
+          <span class="kz-field__label">生命周期</span>
+          <select id="kz-filter-lifecycle" class="kz-select">
+            <option value="all">全部</option>
+            <option value="established">已建立</option>
+            <option value="escalated">已升级</option>
+            <option value="reopened">重新出现</option>
+            <option value="de_escalated">已降级</option>
+            <option value="not_evaluable">暂不可评估</option>
+            <option value="resolved_by_data">数据已确认解决</option>
+            <option value="superseded">已被新风险替代</option>
+            <option value="closed">已关闭</option>
+          </select>
+        </label>
+        <label class="kz-field">
+          <span class="kz-field__label">风险类型</span>
+          <select id="kz-filter-risk-type" class="kz-select">
+            <option value="all">全部</option>
+          </select>
+        </label>
+        <label class="kz-field">
+          <span class="kz-field__label">中心</span>
+          <select id="kz-filter-site" class="kz-select">
+            <option value="all">全部</option>
+          </select>
+        </label>
+        <label class="kz-field kz-field--grow">
+          <span class="kz-field__label">关键词</span>
+          <input id="kz-filter-q" class="kz-input" type="search" placeholder="受试者 / 风险概念 / 中心" autocomplete="off">
+        </label>
+        <label class="kz-check">
+          <input id="kz-filter-change-first" type="checkbox" checked>
+          <span>变化优先（中高严重度与生命周期变化）</span>
+        </label>
+        <button type="button" class="kz-btn" id="kz-filter-reset">重置筛选</button>
+      </div>
+    </section>
+
+    <div class="kz-summary" id="kz-summary" aria-live="polite"></div>
+
+    <main id="kz-main" class="kz-main" tabindex="-1">
+      <section id="kz-view-project" class="kz-view" hidden></section>
+      <section id="kz-view-site" class="kz-view" hidden></section>
+      <section id="kz-view-subject" class="kz-view" hidden></section>
+      <section id="kz-empty" class="kz-empty" hidden>
+        <h2 class="kz-empty__title">当前筛选无匹配项</h2>
+        <p class="kz-empty__body" id="kz-empty-body">请放宽筛选条件，或重置后查看变化优先列表。</p>
+        <button type="button" class="kz-btn kz-btn--primary" id="kz-empty-reset">重置筛选并返回</button>
+      </section>
+    </main>
+  </div>
+
+  <div id="kz-drawer-root" class="kz-drawer-root" hidden>
+    <div class="kz-drawer-backdrop" id="kz-drawer-backdrop" tabindex="-1"></div>
+    <aside class="kz-drawer" id="kz-drawer" role="dialog" aria-modal="true" aria-labelledby="kz-drawer-title" tabindex="-1">
+      <header class="kz-drawer__head">
+        <h2 class="kz-drawer__title" id="kz-drawer-title">证据详情</h2>
+        <button type="button" class="kz-btn kz-btn--ghost" id="kz-drawer-close" aria-label="关闭抽屉">关闭</button>
+      </header>
+      <div class="kz-drawer__body" id="kz-drawer-body"></div>
+    </aside>
+  </div>
+
+  <footer class="kz-footer">
+    <p class="kz-footer__id">产品中心-医学部｜2026年08月</p>
+    <p class="kz-footer__mark">合成演示数据 · 非生产用途</p>
+  </footer>
+
+  <script src="data/mm_r1_data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

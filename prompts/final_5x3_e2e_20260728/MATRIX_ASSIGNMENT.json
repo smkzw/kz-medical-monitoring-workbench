@@ -1,0 +1,237 @@
+{
+  "schema_version": "final-5x3-assignment-2026-07-28.1",
+  "status": "prepared_not_executed",
+  "excluded_domains": [
+    "oncology",
+    "cell_therapy",
+    "gene_therapy",
+    "medical_device"
+  ],
+  "global_constraints": {
+    "tester_count": 5,
+    "slot_count": 15,
+    "unique_indication_count": 15,
+    "serial_testers": true,
+    "perspectives": [
+      "lazy_medical_writer",
+      "engineer"
+    ],
+    "product_independent_ai_required": true,
+    "corpus_override_pass_forbidden": true,
+    "testers_do_not_start_in_this_package": true
+  },
+  "testers": [
+    {
+      "tester": "Codex subAgent/gpt-5.6-luna-high",
+      "requested_selector": "gpt-5.6-luna",
+      "reasoning_effort": "high",
+      "slots": [
+        {
+          "slot": "A1",
+          "indication": "慢性阻塞性肺疾病",
+          "phase": "III",
+          "route": "吸入",
+          "project_route": "greenfield",
+          "category_duties": [
+            "large_gt_10_public_protocols",
+            "non_oral_non_injection",
+            "phase_iii"
+          ]
+        },
+        {
+          "slot": "A2",
+          "indication": "α1-抗胰蛋白酶缺乏症",
+          "phase": "I",
+          "route": "口服",
+          "project_route": "synopsis_import",
+          "category_duties": [
+            "rare_or_small",
+            "phase_i"
+          ]
+        },
+        {
+          "slot": "A3",
+          "indication": "不伴鼻息肉的慢性鼻窦炎",
+          "phase": "II",
+          "route": "鼻喷",
+          "project_route": "greenfield",
+          "category_duties": [
+            "non_oral_non_injection",
+            "phase_ii"
+          ]
+        }
+      ]
+    },
+    {
+      "tester": "pi/aishuo/cms-model",
+      "requested_selector": "aishuo/cms-model",
+      "reasoning_effort": "high",
+      "slots": [
+        {
+          "slot": "B1",
+          "indication": "2型糖尿病",
+          "phase": "III",
+          "route": "口服",
+          "project_route": "synopsis_import",
+          "category_duties": [
+            "large_gt_10_public_protocols",
+            "phase_iii"
+          ]
+        },
+        {
+          "slot": "B2",
+          "indication": "发作性睡病",
+          "phase": "I",
+          "route": "口服",
+          "project_route": "greenfield",
+          "category_duties": [
+            "rare_or_small",
+            "phase_i"
+          ]
+        },
+        {
+          "slot": "B3",
+          "indication": "过敏性结膜炎",
+          "phase": "II",
+          "route": "眼用滴剂",
+          "project_route": "synopsis_import",
+          "category_duties": [
+            "non_oral_non_injection",
+            "phase_ii"
+          ]
+        }
+      ],
+      "blackout_window_beijing": {
+        "start": "23:30",
+        "end": "08:30",
+        "inclusive_end_minute": true
+      }
+    },
+    {
+      "tester": "codebuddy cli/hy3",
+      "requested_selector": "hy3",
+      "reasoning_effort": "max",
+      "slots": [
+        {
+          "slot": "C1",
+          "indication": "重度抑郁障碍",
+          "phase": "III",
+          "route": "口服",
+          "project_route": "greenfield",
+          "category_duties": [
+            "large_gt_10_public_protocols",
+            "phase_iii"
+          ]
+        },
+        {
+          "slot": "C2",
+          "indication": "C3肾小球病",
+          "phase": "II",
+          "route": "口服",
+          "project_route": "synopsis_import",
+          "category_duties": [
+            "rare_or_small",
+            "phase_ii"
+          ]
+        },
+        {
+          "slot": "C3",
+          "indication": "脂溢性皮炎",
+          "phase": "I",
+          "route": "外用泡沫",
+          "project_route": "greenfield",
+          "category_duties": [
+            "non_oral_non_injection",
+            "phase_i"
+          ]
+        }
+      ]
+    },
+    {
+      "tester": "pi/google-antigravity/gemini-3.6-flash",
+      "requested_selector": "google-antigravity/gemini-3.6-flash",
+      "reasoning_effort": "high",
+      "slots": [
+        {
+          "slot": "D1",
+          "indication": "帕金森病",
+          "phase": "III",
+          "route": "口服",
+          "project_route": "synopsis_import",
+          "category_duties": [
+            "large_gt_10_public_protocols",
+            "phase_iii"
+          ]
+        },
+        {
+          "slot": "D2",
+          "indication": "杜氏肌营养不良",
+          "phase": "IIb",
+          "route": "口服",
+          "project_route": "greenfield",
+          "category_duties": [
+            "rare_or_small",
+            "phase_ii"
+          ]
+        },
+        {
+          "slot": "D3",
+          "indication": "玫瑰痤疮",
+          "phase": "I",
+          "route": "外用乳膏",
+          "project_route": "synopsis_import",
+          "category_duties": [
+            "non_oral_non_injection",
+            "phase_i"
+          ]
+        }
+      ]
+    },
+    {
+      "tester": "pi/alibaba/qwen3.8-max-preview",
+      "requested_selector": "alibaba/qwen3.8-max-preview",
+      "reasoning_effort": "xhigh",
+      "slots": [
+        {
+          "slot": "E1",
+          "indication": "类风湿关节炎",
+          "phase": "III",
+          "route": "口服",
+          "project_route": "greenfield",
+          "category_duties": [
+            "large_gt_10_public_protocols",
+            "phase_iii"
+          ]
+        },
+        {
+          "slot": "E2",
+          "indication": "遗传性血管性水肿",
+          "phase": "I",
+          "route": "皮下注射",
+          "project_route": "synopsis_import",
+          "category_duties": [
+            "rare_or_small",
+            "phase_i"
+          ]
+        },
+        {
+          "slot": "E3",
+          "indication": "溃疡性结肠炎",
+          "phase": "II",
+          "route": "直肠泡沫",
+          "project_route": "greenfield",
+          "category_duties": [
+            "non_oral_non_injection",
+            "phase_ii"
+          ]
+        }
+      ],
+      "new_launch_window_beijing": {
+        "start": "22:00",
+        "end": "06:00",
+        "strict": true,
+        "outside_requires_reason": false
+      }
+    }
+  ]
+}

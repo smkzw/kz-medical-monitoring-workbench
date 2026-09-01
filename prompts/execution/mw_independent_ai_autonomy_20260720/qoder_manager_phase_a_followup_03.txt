@@ -1,0 +1,58 @@
+Continue the SAME Qoder autonomy-probe session. Do not use `/new`: this is a
+direct continuation of the same task and prior result, not an unrelated work
+package. Read this whole message before acting. Do not modify product source,
+tests, stable runtime, user data, or credentials.
+
+Your v2 report correctly keeps `AUTONOMY_BLOCKED`, proves the correct
+authoring-journey endpoint binds the search snapshot, and identifies the
+missing AI triage/provenance/local-model execution. It is still incomplete
+because it stopped at `picos_complete=false` and deferred the rest to Worker
+03. Worker 03 is not allowed to start yet and cannot replace this bounded
+component probe.
+
+Required continuation in a fresh isolated runtime:
+
+1. Use only normal product APIs and product-generated recommendations:
+   - create project and authoring journey;
+   - run real DeepSeek v4-pro prefill;
+   - adopt/commit the product-recommended minimum framing and PICOS candidates
+     needed to satisfy the normal journey gate, acting only as the simulated
+     user selecting product output;
+   - do not invent clinical text, inject database state, or bypass revision
+     checks.
+2. Run the product authoring-journey competitor search and preserve the bound
+   snapshot metadata and hash.
+3. Keep the autonomy verdict blocked because formal AI semantic triage is
+   absent. For COMPONENT PROBE ONLY, mechanically select the first
+   product-discovered candidate that meets exact indication, exact phase, and
+   public Protocol/SAP availability. This mechanical choice is not a medical
+   judgement and must not be reported as AI triage.
+4. Through normal product APIs, record that bounded relevance decision,
+   finalize the basket, run preparation/download, and preserve at least one
+   downloaded public Protocol/SAP plus SHA-256 under:
+   `runs/execution/mw_independent_ai_autonomy_20260720/artifacts/`.
+5. From that downloaded product artifact, invoke the smallest real product
+   OCR/chapter-recognition/translation path that exists:
+   - GLM-OCR-bf16, with image/table pages rendered at >=200 DPI;
+   - DeepSeek v4-flash for TOC/chapter recognition;
+   - Hy-MT2-30B-A3B-oQ8-MLX for chapter translation;
+   - DeepSeek v4-flash for integration/boundary QC.
+   Record real run/item ids, actual model identities, prompt versions,
+   input/output hashes, DPI, artifacts, and exact errors. A status endpoint or
+   configured model name is not execution evidence.
+6. If any step cannot be reached through normal product APIs, stop only at the
+   exact failing step, capture request/response and state evidence, and classify
+   the missing orchestration. Do not manually edit SQLite or ask Worker 03 to
+   finish it.
+7. Recheck stable runtime hashes, stop and remove the isolated service/runtime,
+   and retain only bounded evidence artifacts.
+
+Overwrite only:
+`runs/execution/mw_independent_ai_autonomy_20260720/manager_plan.md`
+
+You may add bounded artifacts only under:
+`runs/execution/mw_independent_ai_autonomy_20260720/artifacts/`
+
+Keep `AUTONOMY_BLOCKED` unless the missing audited AI triage and every required
+runtime capability actually execute. Return the full evidence report. Codex
+remains final authority.

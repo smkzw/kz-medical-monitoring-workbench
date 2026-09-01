@@ -1,0 +1,83 @@
+Continue the SAME Qoder autonomy-probe session. Do not use `/new`: this is a
+direct correction/follow-up to the same task. Read this whole message before
+acting. Do not modify product source, tests, stable runtime, user data, or
+credentials.
+
+Codex accepts these parts of your corrected report:
+
+- the product did make a real DeepSeek prefill call;
+- the product did perform a real paginated ClinicalTrials.gov search;
+- current candidate screening is deterministic rather than a persisted
+  DeepSeek semantic triage run;
+- OCR/Hy-MT2/Flash were not actually exercised;
+- autonomy remains blocked.
+
+Codex rejects or narrows these parts:
+
+1. You used the low-level
+   `/medical-writing/references/search-snapshots` endpoint. The intended product
+   user journey already exposes
+   `/medical-writing/authoring-journey/competitor-search`, which calls
+   `build_competitor_search_request`, creates the snapshot, and then calls
+   `attach_search_snapshot`. Therefore "add search snapshot binding to the
+   low-level endpoint" is not an established product gap. Rerun through the
+   correct authoring-journey endpoint.
+2. Do not put formal competitor triage into `DeepSeekPrefillAdapter`. Prefill
+   and auditable batch competitor triage are separate responsibilities. The
+   required target is a dedicated product service/repository/run model, as
+   specified in
+   `plans/codex_mw_competitor_autonomy_p0_20260720.md`.
+3. An OCR status endpoint is observability only. It cannot replace a real
+   GLM-OCR/Hy-MT2/Flash call and must not be reported as closing the capability
+   gate.
+4. Deterministic fallback may produce a provisional basket but must not silently
+   masquerade as completed DeepSeek semantic triage.
+5. Your DeepSeek evidence lacks a durable product run id and input/output hashes.
+   Determine whether those already exist in the isolated runtime. If not, record
+   this as a provenance/observability gap rather than overclaiming.
+
+Required follow-up:
+
+A. Create a fresh isolated runtime and use the correct product journey only:
+   project/journey creation -> product prefill generate -> adopt the recommended
+   English ClinicalTrials.gov condition term when present -> product
+   authoring-journey competitor-search. Preserve the returned journey revision,
+   search_plan_id/latest_snapshot_id, snapshot hash, product AI model/prompt
+   identity, and any real product AI run id/hashes that exist.
+B. Prove whether the correct endpoint binds the snapshot. If it does, remove
+   Gap 3. If it does not, show the exact response and state diff.
+C. Because formal AI triage is missing, do NOT let Qoder provide a medical
+   relevance judgement and call autonomy passed. You may perform one explicitly
+   labelled deterministic COMPONENT probe by selecting the first product result
+   that passes purely mechanical assertions (exact indication/phase and a
+   product-discovered public Protocol/SAP) solely to exercise:
+   relevance record -> triage finalization -> preparation/download. This
+   harness selection is not product AI and cannot satisfy the autonomy gate.
+D. Preserve the downloaded product artifact and SHA-256 under:
+   `runs/execution/mw_independent_ai_autonomy_20260720/artifacts/`.
+E. From that product-downloaded artifact, execute the smallest real product
+   preparation/OCR/chapter-recognition/translation path available. Do not stop
+   at a status endpoint. Record real run/item ids, model identities, prompt
+   versions, input/output hashes, DPI for image/table pages, and exact failure
+   if the local service/model is unavailable. If the product path cannot be
+   invoked without undocumented manual database manipulation, mark it as a
+   product orchestration gap.
+F. Replace the implementation work packages with:
+   - dedicated audited competitor-triage service/repository/run and one-confirm
+     basket workflow from
+     `plans/codex_mw_competitor_autonomy_p0_20260720.md`;
+   - actual local-model pipeline execution/observability and retry, not merely
+     a status endpoint;
+   - isolated tester only after implementation.
+G. Verify stable runtime hashes and stop the isolated service; retain only the
+   bounded evidence artifacts.
+
+Overwrite only:
+`runs/execution/mw_independent_ai_autonomy_20260720/manager_plan.md`
+
+You may add bounded evidence artifacts only under:
+`runs/execution/mw_independent_ai_autonomy_20260720/artifacts/`
+
+Keep `AUTONOMY_BLOCKED` unless all three core product capabilities are actually
+executed and audited. Do not dispatch workers or modify product source. Codex
+remains final authority.

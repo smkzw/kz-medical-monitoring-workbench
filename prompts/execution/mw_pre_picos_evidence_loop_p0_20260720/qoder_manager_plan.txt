@@ -1,0 +1,69 @@
+You are the execution manager for
+`mw_pre_picos_evidence_loop_p0_20260720`. This is a new task, unrelated to the
+completed component-probe conversation. Fully read the current global
+`/Users/smkzw/.codex/AGENTS.md`, the workspace `AGENTS.md`, and the following
+sources before reaching a conclusion:
+
+- `plans/codex_mw_pre_picos_evidence_loop_p0_20260720.md`
+- `context/mw_competitor_triage_p0_implementation_20260720_context.md`
+- `runs/execution/mw_independent_ai_autonomy_20260720/manager_plan.md`
+- `services/api/app/medical_writing_authoring_journey.py`
+- `services/api/app/medical_writing_authoring_prefill.py`
+- `services/api/app/medical_writing_authoring_prefill_ai.py`
+- `services/api/app/writing_reference_preparation_batch.py`
+- `services/api/app/writing_reference_translation_batch.py`
+- `services/api/app/chapter_translation_pipeline.py`
+- `services/api/app/writing_reference_repository.py`
+- `packages/contracts/workbench_contracts/models.py`
+- directly relevant focused tests
+
+Do not modify product source, frontend, tests, configuration, stable runtime,
+user files, or databases. This is a read-only execution-manager review.
+
+User outcome:
+
+The medical writer should initially enter only drug, indication and phase. The
+product then searches ClinicalTrials.gov, uses direct product DeepSeek
+`deepseek-v4-pro` to recommend a public competitor Protocol/SAP basket, and
+after one user confirmation downloads/parses/translates those sources. The
+source spans must then prefill structured framing/PICOS/design candidates so
+the user edits and confirms instead of writing from blank fields. Production
+must not depend on Qoder, Codex, Hermes or another agent.
+
+Review tasks:
+
+1. Reproduce from code whether preparation truly requires `picos_complete`
+   indirectly through finalized journey corpus triage.
+2. Critique the proposed separation:
+   - discovery-basket confirmation;
+   - pre-PICOS preparation/translation;
+   - evidence-grounded structured-design proposal;
+   - final writing-corpus projection.
+3. Identify every invariant needed to prevent:
+   - an AI-created NCT/document;
+   - exact facts without registered source spans;
+   - duplicate user approval;
+   - stale basket/source/design adoption;
+   - accidental mixing of IP, active comparator, background therapy, CM,
+     rescue treatment and dose adjustment;
+   - a false cross-database atomicity claim.
+4. Define the smallest coherent file-level implementation sequence. Explicitly
+   identify which changes belong in the already-running competitor-triage
+   worker's same-session follow-up, which belong in preparation-batch, and
+   which require a new evidence-grounded design-proposal service.
+5. Define typed states, API commands, optimistic concurrency, idempotency,
+   projection recovery and progress labels.
+6. From a lazy but senior Chinese clinical-protocol writer's perspective,
+   simulate the shortest acceptable click path and list any repeated or
+   unnecessary confirmation.
+7. Define focused tests and one real-product E2E proof using at least one
+   active-comparator trial and one complex-background-therapy trial.
+8. Challenge the architecture if a simpler, safer sequence exists. Do not
+   endorse Codex's plan by default.
+
+Write exactly one report:
+`runs/execution/mw_pre_picos_evidence_loop_p0_20260720/manager_plan.md`
+
+Include direct source observations, proposed state machine, file-level worker
+packages with disjoint write scopes, acceptance checks, unresolved risks, and
+a compact loop trace. Do not claim implementation or release acceptance.

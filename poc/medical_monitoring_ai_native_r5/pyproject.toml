@@ -1,0 +1,21 @@
+[project]
+name = "mm-r5"
+version = "0.1.0"
+description = "R5 medical monitoring exact typed contract surface and canonical hashing (synthetic, offline)."
+requires-python = ">=3.9"
+
+# R5 POC is test-only: no installation, no build backend, no network.  The
+# runtime package (`src/mm_r5`) imports nothing outside the workspace; the
+# pytest `pythonpath` below mirrors the R4 POC conftest sys.path setup so the
+# later R5 slices (W2 adapter, W3 challenge tests) can import the frozen R4
+# public dataclasses read-only without any package installation.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [
+    "src",
+    "../medical_monitoring_ai_native_r1/src",
+    "../medical_monitoring_ai_native_r2/src",
+    "../medical_monitoring_ai_native_r3/src",
+    "../medical_monitoring_ai_native_r4/src",
+]

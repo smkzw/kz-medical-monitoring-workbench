@@ -1,0 +1,5 @@
+This is continuation round 2 in the same Grok Build session.
+
+The first pass ended after four progress sentences because the resident session encountered a tool-output failure; no substantive report was produced. Do not restart broad research. Use the evidence already read in this session and complete the entire original output schema now. Focus on the highest-value adversarial contract findings: 0/1/N; duplicate worker binding/session; input/version/source/hash drift; baseline-as-gold; fabricated consensus; majority/high-risk/mutual-negation/baseline-miss hiding; self-adjudication; label-only evidence verification; raw-output rewriting; hidden/source leakage; Query task/send/close semantics; ordinary Chinese versus audit-only metadata; exact mapping/deferred gaps; fixed error codes and non-LLM oracles.
+
+Return one consolidated self-contained Markdown report with P0-P4 alignment and a precise freeze recommendation. Keep evidence, inference, recommendation, and uncertainty separate. Do not edit files or implement runtime/UI. Codex remains the final authority.

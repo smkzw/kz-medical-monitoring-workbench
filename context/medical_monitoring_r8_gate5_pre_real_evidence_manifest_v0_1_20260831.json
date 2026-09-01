@@ -1,0 +1,43 @@
+{
+  "schema": "medical-monitoring-r8-g5-pre-real-evidence-v1",
+  "version": "0.1",
+  "status": "candidate_for_independent_review",
+  "claim_boundary": "synthetic_offline_only",
+  "dependencies": [
+    {"path": "reviews/medical_monitoring_r8_gate0_source_admission_anti_overfit_contract_v0_1_20260831.md", "sha256": "19a855bf51e2ed5cecd3f294cdeed823bc972a01ce84aaa9095a29089e344e74"},
+    {"path": "context/medical_monitoring_r8_gate0_contract_acceptance_record_20260831.md", "sha256": "7a09dbe848b272927a03ff9cf729c97359a1b8790070e21643fbb3df38e523d2"},
+    {"path": "context/medical_monitoring_r8_gate2_synthetic_runtime_acceptance_record_20260831.md", "sha256": "b9743032509210ca7cb3512f6d91d297f701add49579507d3588ca8ea566b9db"},
+    {"path": "reviews/medical_monitoring_r8_gate3_notification_decision_contract_v0_3_20260831.md", "sha256": "97fba80a9d53901ac2c2c21abc828b22c1620b133347e58c0b1739b326026fdd"},
+    {"path": "context/medical_monitoring_r8_gate3_notification_decision_acceptance_record_20260831.md", "sha256": "de77c69a5f691fe69895d660fca70e5308fae928a354eb2520e1750ac89d497a"},
+    {"path": "context/medical_monitoring_r8_gate4_synthetic_15_4_implementation_contract_v0_1_20260831.md", "sha256": "b55d263a499b424cd755a64998acbd4b1491ab1214fa54967e960be27133723c"},
+    {"path": "context/medical_monitoring_r8_gate4_synthetic_15_4_acceptance_record_20260831.md", "sha256": "9ef67123f7ab0211d851195b5424bb6cfc2b46ddea248d2626583972f9270713"},
+    {"path": "reviews/codex_conference_mm_r8_gate4_acceptance_20260831_review.md", "sha256": "ba449feb4a04d532783b2c122197d16bd514c310abc250affbd3aebead524c66"},
+    {"path": "reviews/medical_monitoring_r8_gate5_pre_real_independent_review_round1_20260831.md", "sha256": "49b76f879cd589f200ea9361cba2b928a39287fef7fc650fb754da10d35d23f4"},
+    {"path": "deploy/medical_monitoring_local/canonical_evidence.py", "sha256": "84a0a7e4ba66e52b5ce9d16c5dcedef48376f0308a1392819d93f33e41cfa44e"},
+    {"path": "deploy/medical_monitoring_local/synthetic_manifest.py", "sha256": "c7928ac0625e7acedc609321f8e33c25cd06423b989aeb8a17f655862aaae001"},
+    {"path": "deploy/medical_monitoring_local/source_access_profile.py", "sha256": "c15a417a6731c025ade0f91453a091de8fb522af9de0e2101f796a92b6e9a19e"},
+    {"path": "deploy/medical_monitoring_local/synthetic_lifecycle.py", "sha256": "60a2646b346562d7bc17476f2e74332a328fa1c72d758cd2372f3e907a92583e"},
+    {"path": "deploy/medical_monitoring_local/synthetic_notification.py", "sha256": "8d616a412e4a452b3a8beb03a50be0c5bbddf439bd331ef34145a27843e3f9fb"},
+    {"path": "deploy/medical_monitoring_local/synthetic_15_4.py", "sha256": "3b9a705c06013d602bed030eb8c686ccbf9fac7e923866b4cf79b5b85cd2d1a3"},
+    {"path": "deploy/medical_monitoring_local/manage.py", "sha256": "4b7a646d306e92bdd098470371fb3b7da8cc7cba4d12e5c8357da3d0d4d96658"},
+    {"path": "deploy/medical_monitoring_local/release_sources.json", "sha256": "e5803a43ccaff6b33ed035d28d20275456f3a94862c1adf8927557aae9a26bec"},
+    {"path": "tests/test_medical_monitoring_r8_gate4_notification.py", "sha256": "326cddfee8bbe6f7c99350bf767b79230d3a1175f1e592f4016a5e71fef55f40"},
+    {"path": "tests/test_medical_monitoring_r8_gate4_15_4.py", "sha256": "30e7bca7e97f1b885341463463f6aa55659f963f2e72677d06d552610270beb9"},
+    {"path": "tests/test_medical_monitoring_r8_gate4_distribution.py", "sha256": "20b3b1f2c1dd659c786da21f6e4700ee6314d7c9ef1f091c9a25e2b26573a095"},
+    {"path": "tests/test_medical_monitoring_local_distribution.py", "sha256": "01500edb1bea053cd4f2b7b39d409080e949caafd4f2f0bfeb78007fc0a466ec"}
+  ],
+  "required_gates": [
+    "G2_RUNTIME_LAUNCH_READY_SYNTHETIC",
+    "G3_NOTIFICATION_DECISION_LOCKED",
+    "G4_SYNTHETIC_15_4_PROCEDURE_READY"
+  ],
+  "forbidden_claims": [
+    "real_notification_delivery",
+    "real_15_4",
+    "real_project_or_model",
+    "product_browser",
+    "medical_quality",
+    "G6_to_G15",
+    "R8_overall"
+  ]
+}

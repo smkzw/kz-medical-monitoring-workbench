@@ -1,0 +1,91 @@
+你是医学写作子系统“独立AI自治链”执行经理，运行于用户现有可见
+`~/Downloads/QoderVIP` qodercli会话，模型必须为可见页脚显示的
+Qwen3.8-Max-Preview。不要新开或无头调用Qoder，不要阶段性询问。
+
+开始前完整读取：
+- `/Users/smkzw/.codex/AGENTS.md`
+- `/Users/smkzw/.hermes/SOUL.md`
+- `AGENTS.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/ACCEPTANCE_CONTRACT.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/TASK_RECORD.md`
+- `context/mw_release_execution_round2_20260720_execution_context.md`
+
+Hard boundaries:
+- 本轮是执行经理Phase A，只读审计、实机非破坏性探测和任务拆解。
+- 不修改产品源码、测试、稳定运行时、用户原件或配置，不输出凭据。
+- 可读取直接传播路径上的产品源码、测试、运行状态和最新官方技术资料。
+- 可在全新isolated runtime发起真实产品API探测，但不得用你自己的文本、
+  搜索结果或医学判断写入产品，冒充产品独立AI输出。
+- Codex保留最终医学、浏览器、Word和上线验收。
+- Write exactly one output file:
+  `runs/execution/mw_independent_ai_autonomy_20260720/manager_plan.md`
+
+Source of truth:
+
+正式项目运行时不会有Codex、Qoder、Hermes、CodeBuddy或测试harness提供医学
+知识、文本、检索、下载、解析或决策。harness只模拟用户点击/输入/确认并
+收集证据。产品必须依靠自身后端工具和生产配置的独立AI完成下列链路。
+
+已知生产路由：
+- 医学写作语义AI：DeepSeek供应商`deepseek-v4-pro`，必须是产品直接调用，
+  不是通过Hermes。
+- OCR：oMLX `GLM-OCR-bf16`，最多8路并发，图/表页>=200 DPI。
+- 章节识别/翻译后整合QC：`deepseek-v4-flash`，不能替代Hy-MT2正文翻译；
+  Flash不胜任时该细节可升级Pro。
+- 翻译：oMLX `Hy-MT2-30B-A3B-oQ8-MLX`按章节分块。
+
+必须审计并形成可执行拆解：
+
+1. 画出从最少输入“药物+适应症+分期”到以下最终结果的真实产品调用链：
+   - AI生成英文ClinicalTrials.gov condition/query策略；
+   - 产品确定性ClinicalTrials.gov API检索、分页、版本与公开文档发现；
+   - DeepSeek Pro按适应症、分期、药物模态/给药途径、靶点、设计压力筛选
+     和排序，而不是靠harness硬编码NCT；
+   - 产品下载Protocol/SAP并做基本信息/内容校验和override；
+   - 产品OCR/章节识别/Hy-MT2翻译/Flash整合QC/语料候选准入；
+   - DeepSeek Pro基于真实来源形成框架、PICOS、动态章节和3-5个候选；
+   - 引文、编辑、保存恢复和DOCX导出。
+2. 对每个节点标记：
+   - deterministic product service；
+   - real independent AI；
+   - local model；
+   - human confirmation；
+   - harness-only observation。
+   harness不得承担任何生产逻辑。
+3. 审阅并实测当前实现中的：
+   - `ClinicalTrialsGovClient`和`WritingReferenceDiscoveryService`；
+   - preparation/download/validation/extraction/translation/admission服务；
+   - `medical_writing_authoring_prefill_ai.py`及DeepSeek模型身份校验；
+   - AI run provenance、prompt版本、输入/输出hash、来源ID和失败原因；
+   - `/api/ai-gateway/status`中`codex_runtime_dependency=false`是否只是声明，
+     还是调用路径真的不import/exec Codex、Hermes或外部Agent。
+4. 使用全新isolated runtime做最小真实探测（不得污染稳定运行时）：
+   - 一次真实ClinicalTrials.gov检索；
+   - 至少一次公开Protocol/SAP发现和产品下载；
+   - 一次真实DeepSeek Pro prefill/筛选/分析调用，记录模型身份、prompt版本、
+     AI run和是否使用真实来源；
+   - 只在本地路由已配置且无风险时探测OCR/Hy-MT2/Flash状态；不要在本轮
+     大规模处理文档。
+5. 明确判断：
+   - 当前是否能在没有Agent/harness知识注入时独立完成查询、下载和分析；
+   - 哪些节点只是单元测试mock或harness硬编码；
+   - 哪些节点缺API编排、缺提示词、缺模型工具上下文、缺进度/失败重试、
+     缺来源追踪或会把模型输出误当事实；
+   - DeepSeek普通OpenAI-compatible接口本身不能直接浏览/下载时，产品是否
+     已用可靠的server-side tool orchestration补齐，而不是假设模型会浏览。
+6. 如存在缺口，基于第一性原理和最新官方主资料做有边界的外部调研：
+   ClinicalTrials.gov API/文档下载、可靠的server-side tool orchestration、
+   长任务状态机、结构化输出/重试/幂等/可观测性。仅建议许可证明确且适用
+   的开源组件；优先复用现有产品服务，不为“Agent化”而Agent化。
+7. 给出具体执行工作包：
+   - 产品实现worker文件所有权、接口和测试；
+   - 独立AI提示词LOOP worker；
+   - isolated real-run tester；
+   - manager Phase B复核命令和证据门。
+   必须避免与正在返工的
+   `frontend/tests/final_release_12lane_*.mjs` Worker 02文件冲突。
+
+报告必须区分直接观察、真实调用结果、mock/静态检查、推断和建议；不得把
+HTTP 200、状态页、模型声称或已有单元测试当成独立自治链已通过。最终给出
+`AUTONOMY_IMPLEMENTATION_READY`或`AUTONOMY_BLOCKED`，并列出下一步可直接
+下发给执行成员的文件级任务。

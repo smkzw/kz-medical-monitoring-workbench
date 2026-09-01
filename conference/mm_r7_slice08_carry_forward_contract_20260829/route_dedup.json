@@ -1,0 +1,56 @@
+{
+  "policy": "execution-used-provider-model-nodes-are-excluded-from-conference",
+  "linked_execution_task_id": "mm_r7_slice08_carry_forward_contract_20260829",
+  "linked": false,
+  "execution_evidence": [],
+  "excluded_route_nodes": [],
+  "effective_conference_roles": {
+    "general_single_object": {
+      "agent": "pi",
+      "provider": "google-antigravity",
+      "model": "gemini-3.7-flash",
+      "effort": "high",
+      "default_provider": "google-antigravity",
+      "default_model": "gemini-3.7-flash",
+      "default_effort": "high",
+      "escalate_provider": "google-antigravity",
+      "escalate_model": "gemini-3.7-flash",
+      "escalate_effort": "high",
+      "primary": {
+        "agent": "pi",
+        "provider": "google-antigravity",
+        "model": "gemini-3.7-flash",
+        "effort": "high"
+      },
+      "fallbacks": [
+        {
+          "agent": "pi",
+          "provider": "opencode-go",
+          "model": "muse-spark-1.2-contributor",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "pi",
+          "provider": "cms-router",
+          "model": "minimax-m3",
+          "effort": "xhigh"
+        }
+      ],
+      "execution_route": "Complex/logic/evidence/artifact-heavy object: Pi/google-antigravity/gemini-3.7-flash high -> Pi/OpenCode Go/Muse xhigh -> Pi/cms-router/minimax-m3 xhigh",
+      "role": "single complex-task conference object; Codex chairs directly with no sub-venue chair",
+      "schedule": {
+        "policy": "beijing-day-night-v1",
+        "timezone": "Asia/Shanghai",
+        "period": "day",
+        "evaluated_at": "2026-08-29T12:48:18.902995+08:00"
+      }
+    }
+  },
+  "schedule": {
+    "policy": "beijing-day-night-v1",
+    "timezone": "Asia/Shanghai",
+    "period": "day",
+    "evaluated_at": "2026-08-29T12:48:18.902995+08:00"
+  },
+  "generated_at": "2026-08-29 12:48:18 CST"
+}

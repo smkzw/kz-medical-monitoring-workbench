@@ -1,0 +1,57 @@
+Continue the SAME Qoder autonomy-probe session. Do not use `/new`: this is a
+direct correction of the v3 root-cause diagnosis and evidence retention.
+Do not modify product source, tests, stable runtime, user data, or credentials.
+
+Codex accepts the real prefill/search/download/extraction evidence and the
+`AUTONOMY_BLOCKED` verdict. Codex rejects two v3 claims:
+
+1. A document-level override endpoint already exists:
+   `POST /api/projects/{project_id}/medical-writing/references/documents/{artifact_id}/content-validation/override`
+   using `WritingReferenceDocumentValidationOverrideRequest`. The preparation
+   item exposes `artifact_id=wref_doc_ab18a95b4945de5dff38`. The exact gap is
+   narrower: preparation-batch retry selects only `status='failed'`, so after a
+   successful document override a `review_required` batch item has no normal
+   resume/reconciliation path to become `prepared`.
+2. The instruction required preserving the downloaded product artifact and
+   SHA-256. v3 cleaned the isolated runtime without preserving the PDF. Metadata
+   alone is insufficient.
+
+Required same-task follow-up in a fresh isolated runtime:
+
+A. Recreate the bounded RA Phase I/II component probe through product APIs.
+   You may reuse the same product-discovered NCT if the fresh search returns it,
+   but do not inject it before search.
+B. Preserve the exact downloaded public Protocol/SAP file before cleanup under
+   `runs/execution/mw_independent_ai_autonomy_20260720/artifacts/`, with
+   filename, source URL, byte size, and independently computed SHA-256.
+C. Use the existing document-level content-validation override endpoint with
+   the artifact id, current validation revision, actual warning codes, a clear
+   component-probe reason, and normal optimistic concurrency. Preserve the
+   request/response.
+D. Prove the actual orchestration behavior after override:
+   - refetch the document validation;
+   - refetch the preparation batch;
+   - call the normal batch retry once;
+   - record whether the `review_required` item is reconciled. Do not edit SQLite.
+E. If the batch remains stale but document validation is `user_overridden`, use
+   only documented normal product APIs to attempt the existing extraction review
+   and translation creation path for the artifact. This direct call is a bounded
+   component proof, not evidence that the batch orchestration is complete.
+F. Execute the real chapter-recognition/Hy-MT2/Flash path as far as normal APIs
+   allow. For a text-native PDF, record OCR as legitimately not required for
+   this document; do not fabricate a GLM-OCR call. Separately identify the
+   existing normal product route needed to test GLM-OCR on a scan/image page and
+   state the exact gap if no such route exists.
+G. Correct Worker B:
+   - do not add a duplicate validation override API;
+   - add preparation-batch reconciliation/resume after the existing override;
+   - add real local-model orchestration only where missing.
+H. Recheck stable hashes, stop/remove isolated runtime, and overwrite only:
+   `runs/execution/mw_independent_ai_autonomy_20260720/manager_plan.md`
+
+You may add bounded artifacts only under:
+`runs/execution/mw_independent_ai_autonomy_20260720/artifacts/`
+
+Keep `AUTONOMY_BLOCKED`. Return exact calls, ids, hashes, model execution, and
+failure evidence. Do not defer this bounded probe to Worker 03. Codex remains
+final authority.

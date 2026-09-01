@@ -1,0 +1,93 @@
+You are the write-capable implementation worker for
+`mw_structured_authority_p1_fix_20260720`. Before reading the task files, fully
+read the current global `/Users/smkzw/.hermes/SOUL.md` and
+`/Users/smkzw/.codex/AGENTS.md`.
+
+Hard boundaries:
+
+- Work only inside the current workspace.
+- Modify only the explicitly writable product/test paths below.
+- Do not modify frontend, frontend tests, 12-lane harness, stable runtime, real
+  project data, user originals, configuration, credentials, existing Hy3
+  artifacts, or the runner-managed report.
+- Codex remains final authority.
+
+Read these files only:
+
+- `AGENTS.md`
+- `context/mw_structured_authority_p1_fix_20260720_context.md`
+- `plans/codex_mw_structured_authority_p0_20260720.md`
+- `reviews/codex_execution_mw_release_execution_round2_20260720_review.md`
+- `runs/execution/mw_final_release_12lane_e2e_20260720/hy3/followup_01.md`
+- `runs/execution/mw_final_release_12lane_e2e_20260720/hy3/artifacts/structured_authority_evidence.json`
+
+This initial read list does not prohibit reading the direct propagation-path
+source and focused tests within the writable boundaries. Record each additional
+file and why it was needed.
+
+Use first principles and inspect the complete propagation path before editing.
+Do not ask routine questions. You have full terminal/search permissions inside
+the workspace.
+
+Writable product paths:
+
+- `packages/contracts/workbench_contracts/models.py`
+- `packages/contracts/workbench_contracts/__init__.py` only if an exported
+  helper/model changes
+- `services/api/app/medical_writing_authoring_prefill.py`
+- `services/api/app/medical_writing_authoring_journey.py`
+- `services/api/app/medical_writing_protocol_template.py`
+- `services/api/app/medical_writing_intervention_rules_projection.py`
+- focused tests under `tests/` whose names start with
+  `test_medical_writing_structured_` or
+  `test_medical_writing_intervention_rules_`
+
+Required implementation:
+
+1. Fix dynamic chapter construction, not post-export string deletion. When
+   `framing.structured_design.interim_analysis.planned=false`, the generated
+   document and DOCX must contain zero `期中分析` Heading2/Heading3 nodes and no
+   synopsis row or body. When true, the correct synopsis and sections remain.
+2. Add a deterministic structured-authority materialization path used by normal
+   authoring prefill/adoption/commit:
+   - active comparator identity lives in structured study design;
+   - an active-comparator IP regimen is upserted under
+     `picos.intervention_rules.ip_regimens`;
+   - explicit comparator regimen details carried by a structured candidate map
+     to `dose_and_frequency`, `route`, and `treatment_period`;
+   - never infer comparator regimen details from generic investigational-
+     product `picos.intervention_dose_regimen`.
+3. Materialize `picos.required_background_rules` as structured non-IP
+   `BACKGROUND` rules with stable deterministic IDs. Preserve source meaning
+   losslessly and do not infer a stronger policy than the input supports.
+   Ordinary allowed/prohibited CM, rescue therapy, background therapy, and IP
+   adjustment must remain separate classes.
+4. Set `intervention_rules.authority=structured` when the standard workflow
+   materializes these objects. Legacy fields then become deterministic one-way
+   compatibility projections. Avoid two independently editable truth sources.
+5. Preserve old payload loading. If a legacy record is migrated, the result
+   must be deterministic/idempotent and retain semantic content.
+6. Add tests that first reproduce and then close:
+   - Phase I false has zero interim headings in `word/document.xml`;
+   - Phase III true still contains required interim content;
+   - active comparator candidate adoption/commit creates exactly one
+     active-comparator IP regimen;
+   - comparator details are absent from structured-design regimen fields and
+     do not depend on generic IP free text;
+   - background strings create exactly one BACKGROUND non-IP rule each;
+   - CM, background, rescue, dose adjustment remain disjoint;
+   - save/reload/regenerate is idempotent;
+   - compatibility projection is deterministic.
+7. Run focused tests plus all adjacent intervention-rule, protocol-template,
+   authoring-prefill/journey, StudyDefinition and DOCX exporter tests.
+8. Generate fresh isolated Phase I false and Phase III true DOCX artifacts under
+   `runs/execution/mw_structured_authority_p1_fix_20260720/artifacts/`, parse
+   their OOXML, and record hashes. Do not touch stable runtime.
+
+Runner-managed output path:
+`runs/execution/mw_structured_authority_p1_fix_20260720/worker_01.md`
+
+Return the complete report in final text; never write/edit the runner-managed
+report path. Report changed files, exact behavior, tests, artifact hashes,
+stable-runtime evidence, failed paths, uncertainty, and remaining frontend
+work. Do not claim final release acceptance.

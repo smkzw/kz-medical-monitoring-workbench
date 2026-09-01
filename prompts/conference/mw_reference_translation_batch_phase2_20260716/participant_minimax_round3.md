@@ -1,0 +1,1 @@
+Round 3, same session. Produce a corrected final recommendation with an explicit user workflow, state labels in natural Chinese, hard medical boundaries, and a prioritized acceptance checklist. Preserve unresolved uncertainty.

@@ -1,0 +1,92 @@
+You are the write-capable backend implementation worker for
+`mw_competitor_triage_p0_implementation_20260720`. Before reading task files,
+fully read the current global `/Users/smkzw/.hermes/SOUL.md` and
+`/Users/smkzw/.codex/AGENTS.md`.
+
+Hard boundaries:
+
+- Work only inside the current workspace.
+- Modify only the explicit writable paths below.
+- Do not modify frontend, frontend tests, the 12-lane harness, stable runtime,
+  real project data, user originals, configuration, credentials, or the
+  runner-managed report.
+- Do not invoke Codex/Hermes/Qoder/CodeBuddy from product code.
+- Do not put this service inside `DeepSeekPrefillAdapter`.
+- Codex remains final authority.
+
+Read these files only:
+
+- `AGENTS.md`
+- `context/mw_competitor_triage_p0_implementation_20260720_context.md`
+- `plans/codex_mw_competitor_autonomy_p0_20260720.md`
+- `runs/execution/mw_independent_ai_autonomy_20260720/manager_plan.md`
+- `packages/contracts/workbench_contracts/models.py`
+- `packages/contracts/workbench_contracts/__init__.py`
+- `services/api/app/ai_gateway.py`
+- `services/api/app/medical_writing_authoring_prefill_ai.py`
+- `services/api/app/medical_writing_authoring_journey.py`
+- `services/api/app/writing_reference.py`
+- `services/api/app/writing_reference_repository.py`
+- `services/api/app/main.py`
+
+This initial list does not prohibit reading direct repository/service contracts
+and focused tests required for the causal path. Record each additional file and
+why it was needed.
+
+Writable product paths:
+
+- `packages/contracts/workbench_contracts/models.py`
+- `packages/contracts/workbench_contracts/__init__.py`
+- `services/api/app/medical_writing_competitor_triage.py` (new)
+- `services/api/app/medical_writing_competitor_triage_repository.py` (new only
+  if a separate repository wrapper is justified)
+- `services/api/app/writing_reference_repository.py`
+- `services/api/app/medical_writing_authoring_journey.py`
+- `services/api/app/main.py`
+- focused tests named `tests/test_medical_writing_competitor_triage*.py`
+
+Required implementation:
+
+1. Add typed run/chunk/candidate/confirmation/request/response contracts.
+2. Build a dedicated service using the existing direct OpenAI-compatible
+   provider abstraction with exact `deepseek-v4-pro` identity verification.
+3. Use one versioned JSON prompt/schema. Hash canonical input and validated
+   canonical output. Never allow model-created NCTs or documents.
+4. Deterministically chunk candidates. Validate each response as a complete
+   exact permutation of its chunk, with allowed classes only:
+   `direct_competitor`, `indirect_reference`, `excluded`.
+5. Persist run/chunk/result/provenance state in the same
+   `writing_reference.sqlite3` database used by reference relevance decisions.
+6. Implement partial failure and retry-only-failed-chunks behavior.
+7. Implement stale detection from snapshot identity/hash, authoring journey
+   revision, and material fact hash.
+8. Implement one basket-confirm command:
+   - atomically persist the authoritative confirmation and every selected/
+     excluded relevance decision in the reference database;
+   - use stable idempotency and optimistic concurrency;
+   - then project to authoring-journey corpus triage with the authoritative
+     confirmation id/hash;
+   - if projection fails, persist `projection_pending`; retry projection without
+     a second user approval;
+   - do not claim a cross-file SQLite transaction.
+9. Expose create/get/retry/confirm/projection-retry product endpoints under the
+   authoring journey. Return progress and provenance suitable for a later UI.
+10. Keep legacy one-item relevance APIs compatible.
+11. Add focused tests for exact model identity, unknown/duplicate/missing NCT,
+    invalid enums, deterministic hashes/chunks, partial retry, stale run,
+    atomic basket decisions, idempotency, projection retry, preparation-batch
+    eligibility, and unchanged legacy behavior.
+12. Run focused tests plus adjacent authoring-journey, writing-reference,
+    preparation-batch, and DeepSeek prefill tests.
+
+Do not use the real production key in unit tests. Use a strict injected fake
+provider that exposes the same verified identity contract. A later isolated
+Qoder/API probe will exercise the real production configuration.
+
+Runner-managed output path:
+`runs/execution/mw_competitor_triage_p0_implementation_20260720/worker_01.md`
+
+Return the complete report in final text; never write/edit the runner-managed
+report. Include changed files, schema/state behavior, test commands/results,
+failed paths, uncertainty, migration/rollback, and remaining frontend/local
+model work. Do not claim final release acceptance.

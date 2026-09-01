@@ -1,0 +1,5 @@
+This is continuation round 2 in the same session. Your first response stopped after two progress sentences and did not contain the required audit or verdict.
+
+Do not restart the task or open a new session. Codex has requested this continuation because the previous output needs additional quality work. Challenge your previous answer against every requirement, source boundary, edge case, and likely user/reviewer objection. Identify concrete omissions or contradictions and propose corrections.
+
+Complete the read-only engineering-contract and adversarial-test audit now. Read the exact source packet named in the initial prompt. Return all required sections, then `## Findings` with P0-P4 severity, exact locators, violated contract, failure mode and smallest remediation. Distinguish freeze blockers from implementation advice and finish with exactly `VERDICT: ACCEPT` or `VERDICT: VETO`. Do not output progress narration before the report. Keep evidence, inference, recommendation, and uncertainty separate. Codex remains the final authority.

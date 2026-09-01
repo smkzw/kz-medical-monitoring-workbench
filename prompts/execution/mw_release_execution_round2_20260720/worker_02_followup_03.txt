@@ -1,0 +1,108 @@
+Continue the SAME Worker 02 harness session. Do not start a new session. This is
+the Codex acceptance correction for the exact harness/API-probe defects left by
+your Worker 02 Followup 02 report. Fully reread the current global
+`/Users/smkzw/.codex/AGENTS.md` and `/Users/smkzw/.hermes/SOUL.md` before
+editing.
+
+Hard boundaries
+---------------
+- Work only in the current workbench workspace.
+- Modify only:
+  - `frontend/tests/final_release_12lane_pipeline.mjs`
+  - `frontend/tests/final_release_12lane_child.mjs`
+  - `frontend/tests/final_release_12lane_parent.mjs`
+  - `frontend/tests/final_release_12lane_config.mjs`
+  - `frontend/tests/final_release_12lane_structure_qc.mjs`
+  - `frontend/tests/final_release_12lane_contract_probe.mjs`
+- Do not modify product/backend/frontend application source, stable runtime,
+  user data, configuration, credentials, or the runner-managed report.
+- Do not start Worker 03 or the 12-lane production-AI long run.
+- Use product routes and the production-configured independent AI only; do not
+  replace product AI with your own reasoning or direct model calls.
+- Codex remains final authority.
+
+Read these files only initially
+-------------------------------
+- `/Users/smkzw/.codex/AGENTS.md`
+- `/Users/smkzw/.hermes/SOUL.md`
+- `runs/execution/mw_release_execution_round2_20260720/worker_02_followup_02.md`
+- `frontend/tests/final_release_12lane_pipeline.mjs`
+- `frontend/tests/final_release_12lane_child.mjs`
+- `frontend/tests/final_release_12lane_parent.mjs`
+- `frontend/tests/final_release_12lane_config.mjs`
+- `frontend/tests/final_release_12lane_structure_qc.mjs`
+- `frontend/tests/final_release_12lane_contract_probe.mjs`
+- `services/api/app/main.py`
+- `packages/contracts/workbench_contracts/models.py`
+
+This initial read list does not prohibit direct route/service/test files needed
+to verify the same causal path. Record each additional file and why it was
+needed.
+
+Codex independently accepted
+-----------------------------
+- `node --check` passes for all six current harness/probe files.
+- 12-lane structure QC passes 45/45.
+- 4-lane regression structure QC passes 67/67.
+- Main harness now uses the real plural literature route and binary DOCX route.
+- The left-behind isolated API PID 3710 was terminated by Codex.
+
+Codex rejects readiness because these defects remain
+----------------------------------------------------
+1. `final_release_12lane_contract_probe.mjs` sets `API_PORT=0` when
+   `PROBE_API_PORT` is absent, then starts uvicorn on port 0 while leaving
+   `API_BASE=http://127.0.0.1:0`. Self-start mode is therefore invalid.
+   Select a real free port before computing API_BASE and starting uvicorn.
+2. A fatal exception is appended to `results.errors`, but final exit status is
+   based only on `steps.status == fail`. A fatal setup/upload exception can
+   therefore exit 0. Every fatal error must produce nonzero exit and an explicit
+   failed step.
+3. `uploadSynopsis()` in the real child harness still has a fixed 120-second
+   timeout. The real product probe observed DeepSeek v4-pro extraction exceeding
+   10 minutes. Add a configurable bounded timeout suitable for full production
+   AI testing (default at least 20 minutes), and record start/end/duration. Do
+   not describe this as acceptable UX; it is only a release-harness transport
+   timeout.
+4. Parameterize the isolated probe's real synopsis source and matching project
+   facts through environment variables. Use a smaller real local synopsis by
+   default to test the route without fabricating content:
+   `/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/Ib期/MY009212A-UC-Ib-方案摘要-LXN.2024.01.27.docx`
+   with matching product/indication/phase facts derived from explicit probe
+   defaults. Preserve source path, size and SHA-256 in evidence. Never generate
+   a fake synopsis.
+5. Remove dead in-memory FormData/fileBlob code from the curl upload path.
+   Use an asynchronous child process or another bounded mechanism that permits
+   progress/timeout logging and always cleans up the isolated API.
+6. The probe must actually complete:
+   project creation -> journey fetch -> real synopsis upload -> post-upload
+   revision confirm -> real literature import -> binary DOCX download -> local
+   SHA/header verification. A literature or DOCX failure is a failed probe.
+   Preserve request/response/status/hash/duration evidence without secrets.
+7. If the product AI call still exceeds the bounded timeout, return a precise
+   product-latency P0 observation with timings and active-network evidence; do
+   not call the harness ready and do not weaken the independent-AI requirement.
+8. Correct false official design sentinels:
+   - `NCT06311682` is tralokinumab+TCS vs placebo+TCS, not an active-comparator
+     trial. It must not carry `design_match=active_comparator`.
+   - `NCT02277743` supports placebo/escape-treatment behavior but no verified
+     formal statistical interim-analysis claim. It must not be described as
+     scheduled interim analysis.
+   - `NCT04195698` has official Protocol evidence for Phase 3b, a Week 16
+     interim analysis, and switching from dupilumab to upadacitinib, but do not
+     call it placebo-controlled unless primary evidence proves that.
+   Remove or reclassify unsupported lane assertions and surface any remaining
+   matrix coverage gap explicitly. Never substitute an unverified claim.
+
+Required verification
+---------------------
+- `node --check` all six files.
+- 12-lane structure QC and 4-lane regression structure QC.
+- Isolated greenfield dry-run and synopsis dry-run, stable runtime unchanged.
+- Corrected self-starting isolated API contract probe with the real local
+  synopsis and real product AI configuration.
+- Verify no isolated uvicorn/Vite/Chrome child remains afterward.
+- Return exact commands/results, evidence paths, durations, failures, and
+  remaining product P0 issues. Do not write the runner-managed report.
+
+Runner-managed output path:
+`runs/execution/mw_release_execution_round2_20260720/worker_02_followup_03.md`

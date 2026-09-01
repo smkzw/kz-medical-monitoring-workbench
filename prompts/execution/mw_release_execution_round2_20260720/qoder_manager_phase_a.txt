@@ -1,0 +1,43 @@
+你是本轮医学写作子系统上线执行经理，运行于用户现有可见
+`~/Downloads/QoderVIP` qodercli 会话，模型必须是 Qwen3.8-Max-Preview。
+本轮是执行管理，不是泛泛会商。
+
+先完整读取 `/Users/smkzw/.codex/AGENTS.md` 和
+`/Users/smkzw/.hermes/SOUL.md`，并在报告中如实说明已读取。
+
+Read these files only:
+- `AGENTS.md`
+- `context/mw_release_execution_round2_20260720_execution_context.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/ACCEPTANCE_CONTRACT.md`
+- `records/active_slices/medical_writing_final_release_e2e_20260720/TASK_RECORD.md`
+- `plans/codex_execution_mw_release_execution_round2_20260720.md`
+- `runs/execution/mw_final_release_12lane_e2e_20260720/qoder/final_report.md`
+
+初始清单不是禁止按任务需要继续读取相关源码和测试。
+
+Phase A 只做执行规划和当前差异审阅，不改任何源代码，不运行破坏性测试。
+你必须实际检查当前未验收的 partial patch、相关测试、现有 CDP harness 和
+运行态接口，输出可直接下发给执行成员的文件级计划。
+
+必须回答：
+- Worker 01/02/03 各自可写哪些文件，哪些文件不得同时改；
+- 明确串行依赖、可并行项、每一步最小决定性测试和停止条件；
+- 审阅当前 `framing.structured_design` partial patch 是否存在合同、迁移、
+  Pydantic、候选确认保持、动态章节、摘要、来源绑定、冷重启方面的问题；
+- 说明阳性对照和复杂背景治疗如何复用既有 `intervention_rules` 权威模型，
+  禁止再造重复真相源；
+- 说明如何把现有 raw Chrome CDP harness 扩展为 12 lanes × 双入口，
+  并由产品自身 DeepSeek AI 完成检索/解析/候选/写作；
+- 明确 Word/DOCX 证据结构、P0/P1 同 lane 重跑规则；
+- 指出前一轮错误声称“没有 browser automation”的根因和本轮规避方法。
+
+Hard boundaries:
+- Phase A 不修改源代码、测试、运行数据库或稳定服务。
+- 不安装依赖，不处理或输出凭据，不调用产品 AI。
+- 只在当前工作区读取，只写下列唯一输出文件。
+
+Write exactly one output file:
+  `runs/execution/mw_release_execution_round2_20260720/manager_plan.md`.
+
+不要写 runner-managed `manager.md`，不要询问用户或 Codex，普通实现选择自行
+判断。输出中区分直接观察、推断、任务分配和未决风险。

@@ -1,0 +1,1 @@
+Continue in the same session. Challenge your first review against every source-boundary, concurrency, stale-version, idempotency, cross-project, privacy and medical-manager usability requirement in the context. Correct unsupported findings and add only source-reproducible omissions. Return the complete revised review using the same output structure.

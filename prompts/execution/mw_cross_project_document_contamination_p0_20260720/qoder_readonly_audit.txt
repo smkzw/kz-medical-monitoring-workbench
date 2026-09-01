@@ -1,0 +1,86 @@
+You are the Qoder CLI / qwen3.8-max-preview read-only execution auditor for
+`mw_cross_project_document_contamination_p0_20260720`.
+
+This is a genuinely new task, unrelated to the previous pre-PICOS evidence-loop
+review. The caller has already sent `/new` before this prompt. Fully read the
+current global `/Users/smkzw/.codex/AGENTS.md`, then inspect the current project
+instructions and source of truth.
+
+Goal
+----
+Find the exact causal path by which an existing project can display or edit a
+medical-writing working-copy paragraph belonging to another indication/project.
+Codex directly observed this in the stable UI:
+
+- selected project: `RA-GREENFIELD`
+- project indication shown in the header: `类风湿关节炎`
+- visible working-copy paragraph:
+  `本研究为一项随机、双盲、安慰剂对照的II期临床研究，评价测试乳膏在中重度特应性皮炎成人患者中的疗效与安全性。`
+- the product correctly displayed StudyDefinition/design-inconsistency warnings
+  and blocked formal Word export, but the stale AD text was still visible and
+  editable.
+
+This is a release-blocking data-isolation defect. Export blocking is not an
+acceptable substitute for preventing stale or cross-project content display.
+
+Hard boundaries
+---------------
+- Read-only product audit. Do not modify product source, tests, runtime data,
+  stable services, configuration, credentials, or user files.
+- Work only in the current workspace.
+- You may start an isolated disposable runtime and create disposable projects
+  only under a dedicated task-local runtime/evidence directory.
+- Do not use the stable frontend/API databases or mutate the stable
+  `RA-GREENFIELD` project.
+- Do not invoke Codex/Hermes/CodeBuddy.
+- Do not write the runner-managed report through a tool; return the report in
+  final text for the runner/caller to persist.
+- Codex remains final implementation and acceptance authority.
+
+Required audit
+--------------
+1. Trace all project/document identity boundaries from:
+   project selection -> route state -> frontend stores/local storage/cache ->
+   medical-writing journey -> document/workspace repository -> editor load ->
+   save/autosave/version/export.
+2. Determine whether the observed stale paragraph can arise from:
+   - shared/default document IDs;
+   - project-agnostic frontend cache/localStorage keys;
+   - stale React query/store state on project switch;
+   - backend repository lookup without project ownership checks;
+   - seed/demo fixtures reused by multiple projects;
+   - document creation copying another project's working copy;
+   - browser stale response/race;
+   - or another evidenced cause.
+3. Reproduce the defect in an isolated runtime with at least two projects and
+   different indications. Use only product endpoints/UI, never direct SQLite
+   mutation. Record exact requests, IDs, revisions, and visible text.
+4. Test both transitions:
+   - project A -> project B in one browser session;
+   - clean browser/session opening project B directly.
+5. Identify every affected surface: editor body, outline, AI evidence,
+   citations, tables, figures, attachments, autosave, DOCX draft preview,
+   formal export, and project deletion/recreation.
+6. Propose the smallest coherent fix with:
+   - server-side ownership invariants;
+   - frontend cache key and invalidation invariants;
+   - document bootstrap rules;
+   - stale-response cancellation;
+   - migration/quarantine strategy for already contaminated workspaces;
+   - focused tests and two-project E2E proof.
+7. Explicitly distinguish direct observations, source evidence, inference, and
+   unverified hypotheses.
+
+Acceptance for this audit
+-------------------------
+- Exact source files/functions/route contracts and identity fields named.
+- Reproduction or a precise reason reproduction was impossible.
+- One primary root cause or a ranked set of hypotheses with disconfirming tests.
+- A write-scope-safe implementation package that does not overlap unnecessarily
+  with the active competitor-triage worker.
+- A regression matrix proving no project A content can appear in project B,
+  including after browser switch, refresh, autosave, restart, and export.
+- Compact loop trace: sources read, rounds, observations, failed paths,
+  evidence, uncertainty, and next action.
+
+Return a complete report in final text. Do not claim final release acceptance.

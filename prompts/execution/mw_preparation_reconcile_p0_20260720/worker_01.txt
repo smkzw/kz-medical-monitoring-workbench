@@ -1,0 +1,66 @@
+You are the write-capable backend worker for
+`mw_preparation_reconcile_p0_20260720`. Before reading task files, fully read
+the current global `/Users/smkzw/.hermes/SOUL.md` and
+`/Users/smkzw/.codex/AGENTS.md`.
+
+Hard boundaries:
+
+- Work only inside the current workspace.
+- Modify only the explicit writable paths below.
+- Do not modify frontend, 12-lane harness, stable runtime, user data, model
+  configuration, credentials, or the runner-managed report.
+- Reuse the existing document override and composite translation pipeline.
+- Codex remains final authority.
+
+Read these files only:
+
+- `AGENTS.md`
+- `context/mw_preparation_reconcile_p0_20260720_context.md`
+- `runs/execution/mw_independent_ai_autonomy_20260720/manager_plan.md`
+- `packages/contracts/workbench_contracts/models.py`
+- `services/api/app/main.py`
+- `services/api/app/writing_reference_repository.py`
+- `services/api/app/writing_reference_preparation_batch.py`
+- `services/api/app/writing_reference_translation_batch.py`
+- `services/api/app/chapter_translation_pipeline.py`
+
+This initial list does not prohibit reading direct tests and contracts needed to
+verify the causal path. Record every additional file and reason.
+
+Writable paths:
+
+- `services/api/app/main.py`
+- `services/api/app/writing_reference_preparation_batch.py`
+- `services/api/app/writing_reference_repository.py` only if the existing
+  override transaction needs a bounded callback/outbox record
+- focused tests named
+  `tests/test_writing_reference_preparation_reconciliation*.py`
+
+Required work:
+
+1. Keep the existing document-level override endpoint. Do not add a duplicate
+   raw validation override endpoint.
+2. After a valid current override, reconcile all matching current
+   `review_required` preparation items for that project/artifact:
+   validation stage -> succeeded, validation_status -> user_overridden,
+   item -> prepared, batch counts/status recomputed.
+3. Make reconciliation optimistic, idempotent, auditable, and crash-recoverable.
+   Never advance a stale/invalidated artifact or mismatched validation revision.
+4. Do not alter retry-only-failed behavior.
+5. Prove translation-batch preview/create accepts the reconciled preparation
+   batch and the existing composite pipeline remains the execution path.
+6. Add focused tests for success, replay, stale revision, wrong artifact,
+   invalidation, multiple batches, batch counts, retry regression, and
+   translation scope availability.
+7. Run focused tests plus adjacent preparation, validation override,
+   translation batch, chapter pipeline, and API tests.
+
+Do not call real external models in unit tests. A later isolated Qoder probe
+will exercise GLM-OCR/Flash/Hy-MT2/Flash through the normal product API.
+
+Runner-managed output path:
+`runs/execution/mw_preparation_reconcile_p0_20260720/worker_01.md`
+
+Return the complete report in final text; never write the report path. Include
+changed files, exact state transitions, tests, failure paths, rollback, and
+remaining real-model evidence. Do not claim final release acceptance.

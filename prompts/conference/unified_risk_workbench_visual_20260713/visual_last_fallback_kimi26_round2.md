@@ -1,0 +1,1 @@
+This is round 2 in the same session. Skeptically challenge the previous complete answer against every source, medical-manager workflow, dense-data edge case and current-code constraint. Return a complete corrected Markdown output, not a diff.
