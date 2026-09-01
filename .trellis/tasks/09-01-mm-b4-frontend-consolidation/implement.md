@@ -15,10 +15,10 @@
 
 ## 3. App boundary extraction
 
-- [ ] Extract medical-monitoring browser route parsing and serialization from `App.jsx`.
-- [ ] Extract monitoring project isolation, focus reset and route synchronization state.
-- [ ] Extract the medical-monitoring render switch and data-loading orchestration behind one feature component/hook.
-- [ ] Keep application-shell navigation and all medical-writing code in place.
+- [x] Extract medical-monitoring browser route parsing and serialization from `App.jsx`.
+- [x] Extract monitoring project isolation, focus reset and route synchronization state.
+- [x] Extract the medical-monitoring render switch and data-loading orchestration behind one feature component/hook.
+- [x] Keep application-shell navigation and all medical-writing code in place.
 
 ## 4. Remove superseded frontend paths
 
