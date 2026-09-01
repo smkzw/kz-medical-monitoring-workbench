@@ -8,10 +8,10 @@
 
 ## 2. Canonical product surface
 
-- [ ] Introduce generation-neutral feature entry points for the current R5 workspace and R7 product loop.
-- [ ] Rename/move their supporting route, progress, continuity and Journey modules into the feature root without changing behavior.
-- [ ] Update imports and behavior tests to the canonical entry points.
-- [ ] Remove the superseded r5/r7 implementation directories once no runtime import references them.
+- [x] Introduce generation-neutral feature entry points for the current workspace and product loop.
+- [x] Rename/move their supporting route, progress, continuity and Journey modules into the feature root without changing behavior.
+- [x] Update imports and behavior tests to the canonical entry points.
+- [x] Remove the superseded r5/r7 implementation directories once no runtime import references them.
 
 ## 3. App boundary extraction
 
