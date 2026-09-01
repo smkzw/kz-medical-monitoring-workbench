@@ -125,3 +125,11 @@
 - Relocation exposed a legacy anti-forgery check tied to the old Python module name. It now accepts only the old compatibility module or the new authoritative projection module while retaining exact dataclass/type/content-address checks.
 - Verification: the initial visit suite had 331 passes and 11 relocation-identity failures; after the bounded module-identity correction, the complete visit-schedule suite passes `342 passed`.
 - Next slice: migrate D06 efficacy contracts/evaluator/projection while retaining `efficacy_fixtures.py` outside product authority.
+
+## 2026-09-01 — B2 D06 efficacy family
+
+- Moved efficacy contracts/evaluation into `risks` and its shared visit-axis Journey projection into `projections`.
+- Kept `efficacy_fixtures.py` and the frozen challenge corpus outside product authority; efficacy endpoints, estimands, thresholds and disease/drug semantics remain typed source-derived inputs.
+- The first relocation run exposed four stale same-package imports inside the projection. Updating them to the authoritative `risks.efficacy` path restored the unchanged runtime contract.
+- Verification: package and compatibility files pass `py_compile`; the complete efficacy suite passes `920 passed`.
+- Next slice: inventory the remaining top-level R4 POC modules, retain only fixture/test-bound artifacts there, run the complete R4 suite, and then begin R5 projection/product-adapter migration.
