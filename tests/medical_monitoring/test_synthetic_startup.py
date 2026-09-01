@@ -8,13 +8,6 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-# Same convention as tests/test_medical_monitoring_r7_product_router.py:
-# importing the poc fake harness places the R6 poc src dir on sys.path, which
-# the product profile_store's builtin-default seed needs (``import mm_r6``).
-from poc.medical_monitoring_ai_native_r7.tests.fake_harness import (  # noqa: F401
-    FakeCatalog,
-)
-
 from services.api.app.medical_monitoring_r7_product_router import (
     R7_PRODUCT_PREFIX,
     create_medical_monitoring_r7_product_router,

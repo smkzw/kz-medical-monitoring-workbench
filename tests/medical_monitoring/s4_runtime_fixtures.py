@@ -47,6 +47,7 @@ from __future__ import annotations
 import hashlib
 import json
 import unicodedata
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -90,7 +91,7 @@ ADJUDICATOR_CONTEXT = hashlib.sha256(b"adj:ctx").hexdigest()
 EVIDENCE_HASH = hashlib.sha256(b"evidence:e1").hexdigest()
 
 #: relative path of the accepted external authority anchor (test-only read).
-ACCEPTED_ANCHOR_JSON = Path(__file__).resolve().parent.parent.parent.parent / \
+ACCEPTED_ANCHOR_JSON = Path(__file__).resolve().parent.parent.parent / \
     "artifacts" / "medical_monitoring_r5_s4_contract_v0_1" / \
     "accepted_authority_anchor.json"
 
@@ -880,3 +881,84 @@ def build_max_cardinality_input() -> s4.R5S4RuntimeInput:
         history_log=build_history_log("multi_analysis"),
         audience_labels=build_audience_labels(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Accepted member collections for R5PublicationAuthorityInputAssembler.
+#
+# Moved from the R5 POC suite's ``test_r5_publication_authority.py`` during
+# B6 so the product router tests can import them package-natively instead of
+# injecting the POC tests directory into ``sys.path``.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class TypedSubject:
+    subject_ref: str
+    site_ref: str
+    spine_ref: str
+
+
+@dataclass(frozen=True)
+class TypedSite:
+    site_ref: str
+
+
+@dataclass(frozen=True)
+class TypedEvent:
+    event_ref: str
+    subject_ref: str
+    site_ref: str
+    spine_ref: str
+
+
+@dataclass(frozen=True)
+class TypedVisit:
+    visit_ref: str
+    subject_ref: str
+    site_ref: str
+    spine_ref: str
+
+
+@dataclass(frozen=True)
+class TypedSource:
+    locator_ref: str
+    snapshot_ref: str
+    source_revision_ref: str
+    source_revision_content_hash: str
+
+
+def r5_publication_members(runtime_input: s4.R5S4RuntimeInput) -> Dict[str, Tuple[Any, ...]]:
+    """Accepted typed members bound to one runtime input's authority."""
+    risk = runtime_input.anchor.accepted_risk_identity
+    source_pair = runtime_input.authority_receipt.source_revision_content_pairs[0]
+    return {
+        "accepted_subjects": (
+            TypedSubject(risk.subject_ref or "", risk.site_ref or "", risk.spine_ref),
+        ),
+        "accepted_sites": (TypedSite(risk.site_ref or ""),),
+        "accepted_events": (
+            TypedEvent(
+                runtime_input.deep_link_state.event_ref,
+                risk.subject_ref or "",
+                risk.site_ref or "",
+                risk.spine_ref,
+            ),
+        ),
+        "accepted_visits": (
+            TypedVisit(
+                runtime_input.deep_link_state.visit_ref,
+                risk.subject_ref or "",
+                risk.site_ref or "",
+                risk.spine_ref,
+            ),
+        ),
+        "accepted_sources": (
+            TypedSource(
+                runtime_input.deep_link_state.source_locator_ref,
+                runtime_input.authority_receipt.snapshot_ref,
+                source_pair.revision_id,
+                source_pair.content_hash,
+            ),
+        ),
+    }
