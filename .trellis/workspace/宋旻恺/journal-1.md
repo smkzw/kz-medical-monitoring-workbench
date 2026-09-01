@@ -104,3 +104,10 @@
 - `cm_fixtures.py` remains outside product authority; medication identity, prohibited-component and PD decisions remain typed inputs rather than drug-specific constants.
 - Verification: CM authorities and compatibility modules pass `py_compile`; the complete CM suite passes `194 passed`.
 - Next slice: migrate D03 IP evaluator/projection while retaining `ip_fixtures.py` outside product authority.
+
+## 2026-09-01 — B2 D03 IP family
+
+- Moved the investigational-product exposure/adherence/accountability evaluator into `risks` and its Journey/risk projection into `projections`.
+- `ip_fixtures.py` remains outside product authority; treatment assignments, dose rules and accountability expectations stay source-derived typed inputs.
+- Verification: IP authorities and compatibility modules pass `py_compile`; the complete IP suite passes `217 passed`.
+- Next slice: migrate D04 protocol-compliance evaluator/projection while retaining `protocol_fixtures.py` outside product authority.
