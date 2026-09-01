@@ -266,3 +266,10 @@
 - `_build_r5_publication_packet` and `_read_publication_gate` remain facade-late-bound through call-time wrappers, so tests or runtime overrides still resolve the facade symbols after router construction. Provider/bridge selection stays factory-owned.
 - Verification: extracted module (under the 1,500-line hard limit) and facade pass `py_compile`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; no service-layer or POC import exists in the extracted package module.
 - Next slice: extract project open/upgrade/backup/restore routes and their worker orchestration behind explicit contexts while retaining one facade-owned worker registry and lock; then reduce the root factory to wiring.
+
+## 2026-09-02 — B3 project lifecycle, backup and restore routes
+
+- Added `ProjectRouteContext` and moved project open/audit, schema upgrade, backup, restore and workspace bootstrap endpoints into `project_routes`, registered at the original pre-setup position.
+- The facade still owns the single backup-worker registry/lock and all migration/recovery worker helpers. Route code receives those operations explicitly, so this slice does not duplicate process state or alter lifecycle authority.
+- Verification: extracted module and facade pass `py_compile`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; no service-layer or POC import exists in the package route module.
+- Next slice: decompose the remaining factory-local lifecycle/backup and publication/result helper clusters so the root file becomes dependency wiring, then start oversized backend-domain modules.
