@@ -10,9 +10,6 @@ export function useMedicalMonitoringProjectIsolation({
   setFocusRiskId,
   setSubjectViewFocusRiskId,
   setSelectedSubject,
-  setWorkbenchInbox,
-  setDataError,
-  setSubjectRouteError,
   setProjectRouteError,
   returnScopeRef,
   returnSiteIdRef,
@@ -23,9 +20,6 @@ export function useMedicalMonitoringProjectIsolation({
     setFocusRiskId("");
     setSubjectViewFocusRiskId("");
     setSelectedSubject("");
-    setWorkbenchInbox(null);
-    setDataError("");
-    setSubjectRouteError("");
     setProjectRouteError("");
     returnScopeRef.current = "trial";
     returnSiteIdRef.current = "";
@@ -42,15 +36,12 @@ export function useMedicalMonitoringProjectIsolation({
   }, [
     returnScopeRef,
     returnSiteIdRef,
-    setDataError,
     setFocusRiskId,
     setProductRouteState,
     setProjectRouteError,
     setRouteState,
     setSelectedSubject,
-    setSubjectRouteError,
     setSubjectViewFocusRiskId,
-    setWorkbenchInbox,
   ]);
 
   return { resetProjectState };
