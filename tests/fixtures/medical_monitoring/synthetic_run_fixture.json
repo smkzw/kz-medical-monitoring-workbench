@@ -1,0 +1,31 @@
+{
+  "fixture_schema": "mm-medical-monitoring-synthetic-fixture-v1",
+  "fixture_version": "1",
+  "run_id": "s7-run-current-001",
+  "mode": "daily",
+  "execution_basis": "full",
+  "data_cutoff": "2026-08-28",
+  "source_revision_id": "synthetic-source-current",
+  "work_units": [
+    {
+      "work_unit_id": "s7-work-001",
+      "stage": "资料准备",
+      "label": "核对合成研究资料清单",
+      "scope": "source",
+      "target_ref": "SYN-DOC-1",
+      "ordinal": 1,
+      "mandatory": true,
+      "depends_on": []
+    },
+    {
+      "work_unit_id": "s7-work-002",
+      "stage": "数据解构",
+      "label": "整理受试者访视数据",
+      "scope": "subject",
+      "target_ref": "SYN-001",
+      "ordinal": 2,
+      "mandatory": true,
+      "depends_on": []
+    }
+  ]
+}

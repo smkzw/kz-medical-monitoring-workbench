@@ -1,0 +1,158 @@
+{
+  "fixture_schema": "mm-medical-monitoring-synthetic-fixture-v1",
+  "fixture_version": "1",
+  "snapshots": [
+    {
+      "snapshot_ref": "{project_id}:synthetic:daily-prior",
+      "data_cutoff": "2026-08-27",
+      "rows": [
+        {
+          "canonical_key": "site-01/S-001/lab-alt",
+          "site_ref": "site-01",
+          "subject_ref": "S-001",
+          "value": 42
+        },
+        {
+          "canonical_key": "site-01/S-002/lab-alt",
+          "site_ref": "site-01",
+          "subject_ref": "S-002",
+          "value": 35
+        }
+      ],
+      "key_fields": ["canonical_key"],
+      "imported_at": "2026-08-27T09:00:00Z",
+      "scope_description": "上一批完整合成数据",
+      "source_revision_id": "synthetic-source-prior"
+    },
+    {
+      "snapshot_ref": "{project_id}:synthetic:current",
+      "data_cutoff": "2026-08-28",
+      "rows": [
+        {
+          "canonical_key": "site-01/S-001/lab-alt",
+          "site_ref": "site-01",
+          "subject_ref": "S-001",
+          "value": 47
+        },
+        {
+          "canonical_key": "site-01/S-002/lab-alt",
+          "site_ref": "site-01",
+          "subject_ref": "S-002",
+          "value": 35
+        },
+        {
+          "canonical_key": "site-02/S-003/lab-alt",
+          "site_ref": "site-02",
+          "subject_ref": "S-003",
+          "value": 29
+        }
+      ],
+      "key_fields": ["canonical_key"],
+      "imported_at": "2026-08-28T09:00:00Z",
+      "scope_description": "当前完整合成数据",
+      "source_revision_id": "synthetic-source-current"
+    }
+  ],
+  "baselines": [
+    {
+      "mode": "daily",
+      "snapshot_ref": "{project_id}:synthetic:daily-prior",
+      "data_cutoff": "2026-08-27",
+      "run_id": "{project_id}:synthetic:daily-run",
+      "published": true,
+      "published_at": "2026-08-27T12:00:00Z",
+      "scope_description": "上一轮已发布日常监查",
+      "fixed_total": false,
+      "rows": [
+        {
+          "canonical_key": "site-01/S-001/lab-alt",
+          "site_ref": "site-01",
+          "subject_ref": "S-001",
+          "value": 42
+        },
+        {
+          "canonical_key": "site-01/S-002/lab-alt",
+          "site_ref": "site-01",
+          "subject_ref": "S-002",
+          "value": 35
+        }
+      ],
+      "key_fields": ["canonical_key"]
+    },
+    {
+      "mode": "pre_lock",
+      "snapshot_ref": "{project_id}:synthetic:pre-lock-prior",
+      "data_cutoff": "2026-08-27",
+      "run_id": "{project_id}:synthetic:pre-lock-run",
+      "published": true,
+      "published_at": "2026-08-27T13:00:00Z",
+      "scope_description": "上一轮已发布锁库前监查",
+      "fixed_total": false,
+      "rows": [
+        {
+          "canonical_key": "site-01/S-001/lab-alt",
+          "site_ref": "site-01",
+          "subject_ref": "S-001",
+          "value": 42
+        },
+        {
+          "canonical_key": "site-01/S-002/lab-alt",
+          "site_ref": "site-01",
+          "subject_ref": "S-002",
+          "value": 35
+        }
+      ],
+      "key_fields": ["canonical_key"]
+    },
+    {
+      "mode": "pre_lock",
+      "snapshot_ref": "{project_id}:synthetic:pre-lock-older",
+      "data_cutoff": "2026-08-26",
+      "run_id": "{project_id}:synthetic:pre-lock-older-run",
+      "published": true,
+      "published_at": "2026-08-26T13:00:00Z",
+      "scope_description": "更早一轮已发布锁库前监查",
+      "fixed_total": false,
+      "rows": [
+        {
+          "canonical_key": "site-01/S-001/lab-alt",
+          "site_ref": "site-01",
+          "subject_ref": "S-001",
+          "value": 42
+        },
+        {
+          "canonical_key": "site-01/S-002/lab-alt",
+          "site_ref": "site-01",
+          "subject_ref": "S-002",
+          "value": 35
+        }
+      ],
+      "key_fields": ["canonical_key"]
+    },
+    {
+      "mode": "post_lock_pre_cfdi",
+      "snapshot_ref": "{project_id}:synthetic:post-lock-fixed",
+      "data_cutoff": "2026-08-27",
+      "run_id": "{project_id}:synthetic:post-lock-run",
+      "published": true,
+      "published_at": "2026-08-27T14:00:00Z",
+      "scope_description": "固定总量核查前结果",
+      "fixed_total": true,
+      "rows": [
+        {
+          "canonical_key": "site-01/S-001/lab-alt",
+          "site_ref": "site-01",
+          "subject_ref": "S-001",
+          "value": 42
+        },
+        {
+          "canonical_key": "site-01/S-002/lab-alt",
+          "site_ref": "site-01",
+          "subject_ref": "S-002",
+          "value": 35
+        }
+      ],
+      "key_fields": ["canonical_key"]
+    }
+  ]
+}
