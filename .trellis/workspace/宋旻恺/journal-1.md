@@ -273,3 +273,11 @@
 - The facade still owns the single backup-worker registry/lock and all migration/recovery worker helpers. Route code receives those operations explicitly, so this slice does not duplicate process state or alter lifecycle authority.
 - Verification: extracted module and facade pass `py_compile`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; no service-layer or POC import exists in the package route module.
 - Next slice: decompose the remaining factory-local lifecycle/backup and publication/result helper clusters so the root file becomes dependency wiring, then start oversized backend-domain modules.
+
+## 2026-09-02 — B3 publication services and facade seams
+
+- Moved R5 packet assembly and runtime receipt-gate validation into `publication_services`; retained thin facade wrappers for `_build_r5_publication_packet` and `_read_publication_gate`, preserving call-time patchability required by the router contract.
+- Moved request/workspace helpers into `route_utils`. Moved the deterministic setup fixture into a clearly marked temporary compatibility module with a facade wrapper; it remains excluded from product authority and assigned for deletion in B5 rather than being generalized or promoted.
+- The first full product run failed broadly from one removed import pair (`PROFILE_DB_NAME`/`RUN_BINDING_DB_NAME`) still used by facade compatibility checks. Restoring that import pair recovered three representative tests and the complete product gate.
+- Verification: new modules and facade pass `py_compile`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`.
+- Next slice: split the remaining factory-local project-operation/common-context helper clusters, keeping startup recovery and the single backup worker registry/lock facade-owned until their explicit state object is introduced.

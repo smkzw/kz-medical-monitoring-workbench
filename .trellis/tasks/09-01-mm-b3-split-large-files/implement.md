@@ -5,7 +5,7 @@
 - [ ] Extract shared DTOs, public wording and pure projections.
   - [x] Move request contracts and publication error to one authoritative module.
   - [x] Move continuity response contracts and semantic projection helpers.
-  - [ ] Move shared public-text sanitization and remaining pure projections.
+  - [x] Move shared public-text sanitization and remaining pure projections.
     - [x] Move backup, restore and preflight audience projections.
     - [x] Move public secret-field filtering and generic projection sanitization.
     - [x] Move launch, publication-state and public-result projections.
