@@ -257,6 +257,14 @@
 - Medical-writing remained untouched. Its two stale translation source-contract assertions and one pre-existing collection import error were reproduced but not repaired across the subsystem boundary.
 - Next safe action: enter B7, remove obsolete frozen-SHA/optimizer/hash-seed/generator gates and stale uncalled POC scripts while retaining behavioral digest and shape assertions.
 
+## 2026-09-02 — B7 lossless pause during integrated verification
+
+- B7 planning is committed (`d012644`). Static classification completed: whole-file historical SHA pins are confined to the D07–D10 artifact-generator tests; runtime content-address, source SHA, CAS, identity/lifecycle, snapshot and behavioral digest assertions are explicitly retained.
+- Cleanup implementation is committed (`deee6eb`): removed 35 uncalled R5 S3–S6 POC-era generator/verifier scripts (including all remaining optimizer/hash-seed matrix machinery) and surgically removed historical whole-file pins from D07–D10 while retaining structure, self-consistency, tamper rejection, determinism and domain behavior coverage.
+- Completed evidence before pause: affected D07–D10 suite `370 passed`; full collection succeeds for 8,137 tests when excluding the already-known unrelated medical-writing collection error. No product or medical-writing source changed in B7.
+- User requested immediate lossless pause while the third governed worker was running integrated verification. The runner was interrupted with exit 130 before it produced a result; no uncommitted product/test change exists. B7 remains active and is not accepted or archived.
+- Resume exactly here: initialize/reuse a governed B7 verification pass, run medical-monitoring focused/integration regression, all 62 frontend medical-monitoring node suites, Vite build, protected medical-writing subset and residual scans; then Codex audit, decide whether to delete the now-orphaned existing D10 raw-SHA anchor artifact, journal the result, and archive B7. Do not redo the committed classification or cleanup.
+
 ## 2026-09-02 — B4 frontend single-generation closure
 
 - Lifted the medical-monitoring product, progress, continuity, Journey, browser-route, project-isolation and data-read ownership into generation-neutral feature modules; `App.jsx` now delegates rendering through one `MedicalMonitoringRouteOutlet` and one `MedicalMonitoringPage` mount.
