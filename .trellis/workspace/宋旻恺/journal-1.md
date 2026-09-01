@@ -111,3 +111,10 @@
 - `ip_fixtures.py` remains outside product authority; treatment assignments, dose rules and accountability expectations stay source-derived typed inputs.
 - Verification: IP authorities and compatibility modules pass `py_compile`; the complete IP suite passes `217 passed`.
 - Next slice: migrate D04 protocol-compliance evaluator/projection while retaining `protocol_fixtures.py` outside product authority.
+
+## 2026-09-01 — B2 D04 protocol family
+
+- Moved protocol-compliance evaluation into `risks` and its Journey/PD/Query-facing projection into `projections`.
+- `protocol_fixtures.py` remains outside product authority; inclusion/exclusion and protocol-deviation decisions remain driven by source-derived typed rules.
+- Verification: protocol authorities and compatibility modules pass `py_compile`; the complete protocol suite passes `277 passed`.
+- Next slice: migrate D05 visit-schedule evaluator/projection while retaining `visit_schedule_fixtures.py` outside product authority.
