@@ -11,6 +11,7 @@
 - [ ] Risks and projections: R4 modules, with fixture data externalized separately.
   - [x] Shared contracts, coverage, lifecycle and ensemble foundation.
   - [ ] Domain evaluators and renderer-neutral projections.
+    - [x] D08 cross-domain consistency contracts, evaluator and projection.
   - [ ] Fixture externalization and compatibility cleanup.
 - [ ] Projection authority: R5 modules and product adapter.
 - [ ] Reports and harness: R6 modules.

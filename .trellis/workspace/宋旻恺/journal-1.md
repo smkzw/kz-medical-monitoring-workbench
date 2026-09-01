@@ -61,3 +61,10 @@
 - R4 compatibility imports deliberately avoid `sys` and `sys.path`, preserving the existing no-runtime-path-mutation contract.
 - Verification: risk foundations and shims pass `py_compile`; the complete R4 suite reached `4397 passed` with three migration-test failures, then the corrected compatibility symbol and two no-`sys` AST gates pass `6 passed`. No behavioral R4 failure remained in the full run.
 - Next slice: migrate evaluator/projection families one domain at a time, beginning with the low-coupling D08-D10 contract/evaluator groups while keeping fixtures separate.
+
+## 2026-09-01 — B2 D08 risk/projection family
+
+- Moved D08 cross-domain consistency contracts and evaluation into `risks`, and its renderer-neutral audience projection into `projections`.
+- Added a temporary R4 compatibility bridge that preserves private legacy test probes while keeping the inspected D08 runtime shims limited to allowed `mm_r4` imports; it does not mutate `sys.path`.
+- Verification: package and compatibility files pass `py_compile`; all D08 tests plus package compatibility pass `190 passed`.
+- Next slice: repeat the same evaluator/projection separation for D09, then D10, without moving their challenge fixtures into product authority.
