@@ -1,9 +1,11 @@
-"""Deterministic R7-only catalog and transport fakes.
+"""Deterministic harness catalog and transport fakes for product tests.
 
 These fakes never start a process or contact a provider.  They expose the
-small R6 adapter surface consumed by ``HarnessCapabilityRuntime`` so the
-Slice-06 tests can inject catalog, receipt, blocking, and identity failures
-without changing the pinned R6 implementation.
+small adapter surface consumed by ``HarnessCapabilityRuntime`` so the
+product-router tests can inject catalog, receipt, blocking, and identity
+failures without touching a real model transport.  Moved from the R7 POC
+suite during B6; the adapter contract is the package-native authority in
+``packages.medical_monitoring.runtime.agent_harness``.
 """
 
 from __future__ import annotations
@@ -15,13 +17,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
-# Keep this test helper importable from both the POC suite (whose conftest
-# already pins R6) and the product-router suite (which runs without it).
-_R6_SRC = Path(__file__).resolve().parents[2] / "medical_monitoring_ai_native_r6" / "src"
-if _R6_SRC.is_dir() and str(_R6_SRC) not in sys.path:
-    sys.path.insert(0, str(_R6_SRC))
-
-from mm_r6.agent_harness import InvocationReceipt, PreflightResult
+from packages.medical_monitoring.runtime.agent_harness import (
+    InvocationReceipt,
+    PreflightResult,
+)
 
 
 @dataclass(frozen=True)
@@ -34,7 +33,7 @@ class FakeCatalog:
 
 
 class FakeHarnessAdapter:
-    """Thread-safe fake R6 adapter with deterministic fault injection."""
+    """Thread-safe fake adapter with deterministic fault injection."""
 
     def __init__(
         self,

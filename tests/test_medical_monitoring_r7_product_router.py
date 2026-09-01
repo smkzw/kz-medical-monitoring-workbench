@@ -33,19 +33,19 @@ from services.api.app.medical_monitoring_r7_product_router import (
 from services.api.app.monitoring_runtime_principal import (
     MonitoringAuthenticatedPrincipal,
 )
-from poc.medical_monitoring_ai_native_r7.src.mm_r7.run_entry import (
+from packages.medical_monitoring.runtime.run_entry import (
     RUN_BINDING_DB_NAME,
     MonitoringRunEntry,
 )
-from poc.medical_monitoring_ai_native_r7.src.mm_r7.background_recovery import (
+from packages.medical_monitoring.runtime.background_recovery import (
     BackgroundRecoveryAdapter,
 )
-from poc.medical_monitoring_ai_native_r7.src.mm_r7.maintenance_gate import (
+from packages.medical_monitoring.runtime.maintenance_gate import (
     ProjectMaintenanceGate,
 )
-from poc.medical_monitoring_ai_native_r7.src.mm_r7 import launch_registry as lr
-from poc.medical_monitoring_ai_native_r7.src.mm_r7 import project_backup as pb
-from poc.medical_monitoring_ai_native_r7.tests.fake_harness import (
+from packages.medical_monitoring.runtime import launch_registry as lr
+from packages.medical_monitoring.runtime import project_backup as pb
+from tests.medical_monitoring.fake_harness import (
     FakeCatalog,
     FakeHarnessAdapter,
 )
@@ -1166,7 +1166,7 @@ def test_non_r7_error_shape_unchanged_after_mount(tmp_path: Path) -> None:
 
 
 def test_per_request_entry_closes_both_stores(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7 import run_entry as re
+    from packages.medical_monitoring.runtime import run_entry as re
 
     closed: list[bool] = []
     original_close = re.MonitoringRunEntry.close
@@ -1364,7 +1364,7 @@ def test_slice04_prepare_and_progress_routes_return_only_public_chinese_view(
 def test_slice05_product_execution_actions_and_overlay_are_public_chinese(
     tmp_path: Path,
 ) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.background_recovery import (
+    from packages.medical_monitoring.runtime.background_recovery import (
         BackgroundRecoveryAdapter,
         ExecutionControlState,
     )
@@ -1436,8 +1436,8 @@ def test_slice05_product_execution_actions_and_overlay_are_public_chinese(
 def test_slice05_product_stop_continue_happy_path_uses_chinese_overlay(
     tmp_path: Path,
 ) -> None:
-    from poc.medical_monitoring_ai_native_r1.src.mm_r1.domain import NodeStatus
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.background_recovery import (
+    from packages.medical_monitoring.domain.execution import NodeStatus
+    from packages.medical_monitoring.runtime.background_recovery import (
         BackgroundOutcome,
         BackgroundRecoveryAdapter,
         ExecutionControlState,
@@ -1520,7 +1520,7 @@ def test_slice05_product_stop_continue_happy_path_uses_chinese_overlay(
 def test_slice06_product_harness_uses_injected_fake_and_public_progress(
     tmp_path: Path,
 ) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.background_recovery import (
+    from packages.medical_monitoring.runtime.background_recovery import (
         BackgroundRecoveryAdapter,
         ExecutionControlState,
     )
@@ -1571,7 +1571,7 @@ def test_slice06_product_harness_uses_injected_fake_and_public_progress(
 def test_slice06_product_harness_preflight_failure_is_public_and_no_dispatch(
     tmp_path: Path,
 ) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.background_recovery import (
+    from packages.medical_monitoring.runtime.background_recovery import (
         BackgroundRecoveryAdapter,
         ExecutionControlState,
     )
@@ -2020,7 +2020,7 @@ def test_slice04_product_scope_evolution_fails_closed(
 def test_slice07a_run_state_values_are_stable_and_action_responses_stay_overlay_only(
     tmp_path: Path,
 ) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.background_recovery import (
+    from packages.medical_monitoring.runtime.background_recovery import (
         RUN_STATE_VALUES,
     )
 
@@ -2294,7 +2294,7 @@ def test_slice07c2_prepare_and_start_start_failure_is_recoverable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.runtime_progress import (
+    from packages.medical_monitoring.runtime.runtime_progress import (
         RuntimeProgressAdapter,
         RuntimeProgressError,
     )
@@ -2340,7 +2340,7 @@ def test_slice07c2_start_failure_then_admin_start_reaches_completed_history(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.runtime_progress import (
+    from packages.medical_monitoring.runtime.runtime_progress import (
         RuntimeProgressAdapter,
         RuntimeProgressError,
     )
@@ -2400,7 +2400,7 @@ def test_slice07c2_retry_after_reservation_finishes_same_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.runtime_progress import (
+    from packages.medical_monitoring.runtime.runtime_progress import (
         RuntimeProgressAdapter,
         RuntimeProgressError,
     )
@@ -2869,19 +2869,14 @@ def test_slice07c3_product_route_uses_actual_typed_r5_bridge_and_refetches(
 ) -> None:
     import services.api.app.medical_monitoring_r7_product_router as product_mod
 
-    # Load the accepted R5 package through the same lazy source seam as the
-    # product route, then import only its deterministic test fixture helpers.
+    # Exercise the same lazy publication-type seam as the product route, then
+    # import the deterministic R5 fixture helpers from the migrated tests
+    # package.
     product_mod._r5_publication_types()
-    monkeypatch.syspath_prepend(
-        str(
-            Path(__file__).resolve().parents[1]
-            / "poc"
-            / "medical_monitoring_ai_native_r5"
-            / "tests"
-        )
+    from tests.medical_monitoring.s4_runtime_fixtures import (
+        build_runtime_input,
+        r5_publication_members as _members,
     )
-    from s4_runtime_fixtures import build_runtime_input
-    from test_r5_publication_authority import _members
     from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
@@ -3052,10 +3047,10 @@ def test_slice07c3_product_route_uses_actual_typed_r5_bridge_and_refetches(
     ) as registry:
         registry.mark_completed(run_id, project_id=project_id)
 
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.run_binding import (
+    from packages.medical_monitoring.runtime.run_binding import (
         RunBindingStore,
     )
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.runtime_progress import (
+    from packages.medical_monitoring.runtime.runtime_progress import (
         RuntimeProgressAdapter,
     )
 
@@ -3505,7 +3500,7 @@ def _make_slice08b_mode_outputs(
     **overrides: Any,
 ) -> tuple[dict[str, Any], ...]:
     from packages.medical_monitoring.reports import mode_output as mo
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7 import continuity_bridge as cb
+    from packages.medical_monitoring.runtime import continuity_bridge as cb
 
     binding = dict(run_binding)
     binding.setdefault("carry_forward_run_ids", [])
@@ -3730,21 +3725,15 @@ def test_slice08b_product_router_three_modes_synthetic_provider_happy_path(
 
     product_mod._r5_publication_types()
     product_mod._r6_publication_types()
-    monkeypatch.syspath_prepend(
-        str(
-            Path(__file__).resolve().parents[1]
-            / "poc"
-            / "medical_monitoring_ai_native_r5"
-            / "tests"
-        )
+    from tests.medical_monitoring.s4_runtime_fixtures import (
+        build_runtime_input,
+        r5_publication_members as _members,
     )
-    from s4_runtime_fixtures import build_runtime_input
-    from test_r5_publication_authority import _members
     from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
     from packages.medical_monitoring.graph.store import Store
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7 import continuity_bridge as cb
+    from packages.medical_monitoring.runtime import continuity_bridge as cb
 
     fixture_runtime = build_runtime_input("single_analysis")
     project_id = fixture_runtime.anchor.project_ref
@@ -3967,16 +3956,10 @@ def test_slice08b_product_router_missing_or_extra_outputs_fails_closed(
 
     product_mod._r5_publication_types()
     product_mod._r6_publication_types()
-    monkeypatch.syspath_prepend(
-        str(
-            Path(__file__).resolve().parents[1]
-            / "poc"
-            / "medical_monitoring_ai_native_r5"
-            / "tests"
-        )
+    from tests.medical_monitoring.s4_runtime_fixtures import (
+        build_runtime_input,
+        r5_publication_members as _members,
     )
-    from s4_runtime_fixtures import build_runtime_input
-    from test_r5_publication_authority import _members
     from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
@@ -4111,16 +4094,10 @@ def test_slice08b_product_router_r1_artifact_byte_tamper_blocks_result_entry(
 
     product_mod._r5_publication_types()
     product_mod._r6_publication_types()
-    monkeypatch.syspath_prepend(
-        str(
-            Path(__file__).resolve().parents[1]
-            / "poc"
-            / "medical_monitoring_ai_native_r5"
-            / "tests"
-        )
+    from tests.medical_monitoring.s4_runtime_fixtures import (
+        build_runtime_input,
+        r5_publication_members as _members,
     )
-    from s4_runtime_fixtures import build_runtime_input
-    from test_r5_publication_authority import _members
     from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
@@ -4263,16 +4240,10 @@ def test_slice08b_product_router_closure_violation_and_draft_pollution_blocked(
 
     product_mod._r5_publication_types()
     product_mod._r6_publication_types()
-    monkeypatch.syspath_prepend(
-        str(
-            Path(__file__).resolve().parents[1]
-            / "poc"
-            / "medical_monitoring_ai_native_r5"
-            / "tests"
-        )
+    from tests.medical_monitoring.s4_runtime_fixtures import (
+        build_runtime_input,
+        r5_publication_members as _members,
     )
-    from s4_runtime_fixtures import build_runtime_input
-    from test_r5_publication_authority import _members
     from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
@@ -4395,16 +4366,10 @@ def test_slice08b_product_router_query_draft_status_pollution_blocked(
 
     product_mod._r5_publication_types()
     product_mod._r6_publication_types()
-    monkeypatch.syspath_prepend(
-        str(
-            Path(__file__).resolve().parents[1]
-            / "poc"
-            / "medical_monitoring_ai_native_r5"
-            / "tests"
-        )
+    from tests.medical_monitoring.s4_runtime_fixtures import (
+        build_runtime_input,
+        r5_publication_members as _members,
     )
-    from s4_runtime_fixtures import build_runtime_input
-    from test_r5_publication_authority import _members
     from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
@@ -4541,22 +4506,16 @@ def test_slice08b_product_router_cross_layer_identity_verification(
 
     product_mod._r5_publication_types()
     product_mod._r6_publication_types()
-    monkeypatch.syspath_prepend(
-        str(
-            Path(__file__).resolve().parents[1]
-            / "poc"
-            / "medical_monitoring_ai_native_r5"
-            / "tests"
-        )
+    from tests.medical_monitoring.s4_runtime_fixtures import (
+        build_runtime_input,
+        r5_publication_members as _members,
     )
-    from s4_runtime_fixtures import build_runtime_input
-    from test_r5_publication_authority import _members
     from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
     from packages.medical_monitoring.graph.store import Store
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7 import continuity_bridge as cb
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity import CarryForwardPlan, DecisionBaseline
+    from packages.medical_monitoring.runtime import continuity_bridge as cb
+    from packages.medical_monitoring.runtime.continuity import CarryForwardPlan, DecisionBaseline
 
     fixture_runtime = build_runtime_input("single_analysis")
     project_id = fixture_runtime.anchor.project_ref
@@ -4719,16 +4678,10 @@ def test_slice08b_product_router_conflicting_replay_and_cas_conflict(
 
     product_mod._r5_publication_types()
     product_mod._r6_publication_types()
-    monkeypatch.syspath_prepend(
-        str(
-            Path(__file__).resolve().parents[1]
-            / "poc"
-            / "medical_monitoring_ai_native_r5"
-            / "tests"
-        )
+    from tests.medical_monitoring.s4_runtime_fixtures import (
+        build_runtime_input,
+        r5_publication_members as _members,
     )
-    from s4_runtime_fixtures import build_runtime_input
-    from test_r5_publication_authority import _members
     from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
@@ -4884,20 +4837,14 @@ def _make_slice08c_setup_and_publication(
 
     product_mod._r5_publication_types()
     product_mod._r6_publication_types()
-    monkeypatch.syspath_prepend(
-        str(
-            Path(__file__).resolve().parents[1]
-            / "poc"
-            / "medical_monitoring_ai_native_r5"
-            / "tests"
-        )
+    from tests.medical_monitoring.s4_runtime_fixtures import (
+        build_runtime_input,
+        r5_publication_members as _members,
     )
-    from s4_runtime_fixtures import build_runtime_input
-    from test_r5_publication_authority import _members
     from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity import (
+    from packages.medical_monitoring.runtime.continuity import (
         CarryForwardItem,
         CarryForwardPlan,
         DecisionBaseline,
@@ -5631,7 +5578,7 @@ def _make_slice08c_setup_and_publication(
             result_context_token = publication.result_context_token
 
         from packages.medical_monitoring.graph.store import Store
-        from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity_bridge import (
+        from packages.medical_monitoring.runtime.continuity_bridge import (
             extract_atomic_items,
         )
 
@@ -6235,7 +6182,7 @@ def test_slice08c1_continuity_endpoint_fail_closed_on_illegal_closed_set_and_inc
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verify fail closed when continuity plan contains invalid closed set or corrupted rows."""
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity import build_carry_forward_item
+    from packages.medical_monitoring.runtime.continuity import build_carry_forward_item
 
     # Build a corrupted item with invalid severity direction for upgraded
     # (upgraded but severity_before='high' and severity_after='low')
@@ -6292,7 +6239,7 @@ def test_slice08c1_continuity_rejects_forged_public_text_and_source_binding(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity import (
+    from packages.medical_monitoring.runtime.continuity import (
         build_carry_forward_item,
     )
 
@@ -6350,7 +6297,7 @@ def test_slice08c1_continuity_allows_event_bound_query_without_risk_mapping(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity import (
+    from packages.medical_monitoring.runtime.continuity import (
         build_carry_forward_item,
     )
 
@@ -6421,7 +6368,7 @@ def test_slice08c1_continuity_rejects_mixed_risk_and_event_binding(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity import (
+    from packages.medical_monitoring.runtime.continuity import (
         build_carry_forward_item,
     )
 
@@ -6495,7 +6442,7 @@ def test_slice08c1_continuity_rejects_false_closed_lifecycle(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity import (
+    from packages.medical_monitoring.runtime.continuity import (
         build_carry_forward_item,
     )
 
@@ -6545,7 +6492,7 @@ def test_slice08c1_continuity_keeps_new_risk_with_unconfirmed_severity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity import (
+    from packages.medical_monitoring.runtime.continuity import (
         build_carry_forward_item,
     )
 
@@ -6848,7 +6795,7 @@ def test_slice08c1_continuity_endpoint_truncation_over_200_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verify that plans with > 200 items truncate to 200 rows with shown_count=200 and truncated=True."""
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity import build_carry_forward_item
+    from packages.medical_monitoring.runtime.continuity import build_carry_forward_item
 
     # Build 210 items
     large_items = []
