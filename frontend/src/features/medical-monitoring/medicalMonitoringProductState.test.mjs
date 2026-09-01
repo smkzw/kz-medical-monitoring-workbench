@@ -1,28 +1,28 @@
 import assert from "node:assert/strict";
 
 import {
-  projectR7History,
-  projectR7SetupOptions,
+  projectMonitoringHistory,
+  projectMonitoringSetupOptions,
 } from "./medicalMonitoringProductProjection.mjs";
 import {
-  R7_NEW_RUN_ACTION_TEXT,
-  R7_RETURN_IN_FLIGHT_ACTION_TEXT,
-  advanceR7WizardStep,
-  buildR7PrepareAndStartPayload,
-  canAdvanceR7Wizard,
-  createR7IdempotencyController,
-  createR7IdempotencyState,
-  createR7WizardState,
-  handleR7PrepareTimeout,
-  markR7PrepareAttempt,
-  projectR7AwayRestore,
-  projectR7ProductState,
-  projectR7WizardState,
-  projectR7Workbar,
-  rotateR7IdempotencyKey,
-  selectR7Run,
-  setR7WizardSelection,
-  syncR7IdempotencySelection,
+  MONITORING_NEW_RUN_ACTION_TEXT,
+  MONITORING_RETURN_IN_FLIGHT_ACTION_TEXT,
+  advanceMonitoringWizardStep,
+  buildMonitoringPrepareAndStartPayload,
+  canAdvanceMonitoringWizard,
+  createMonitoringIdempotencyController,
+  createMonitoringIdempotencyState,
+  createMonitoringWizardState,
+  handleMonitoringPrepareTimeout,
+  markMonitoringPrepareAttempt,
+  projectMonitoringAwayRestore,
+  projectMonitoringProductState,
+  projectMonitoringWizardState,
+  projectMonitoringWorkbar,
+  rotateMonitoringIdempotencyKey,
+  selectMonitoringRun,
+  setMonitoringWizardSelection,
+  syncMonitoringIdempotencySelection,
 } from "./medicalMonitoringProductState.mjs";
 
 let passed = 0;
@@ -51,7 +51,7 @@ function setupPayload() {
     recommendation_reason: name === "daily" ? "服务端推荐" : "",
   });
   return {
-    schema_version: "mm-r7-slice07c1-run-setup-v1",
+    schema_version: "mm-monitoring-slice07c1-run-setup-v1",
     project_id: "project-a",
     data_batches: [{
       snapshot_token: "snapshot:current",
@@ -108,7 +108,7 @@ function setupPayload() {
   };
 }
 
-const setup = projectR7SetupOptions(setupPayload(), { projectId: "project-a" });
+const setup = projectMonitoringSetupOptions(setupPayload(), { projectId: "project-a" });
 const inFlight = {
   public_run_token: "run:active",
   mode_text: "日常监查",
@@ -129,17 +129,17 @@ const published = {
   main_action: "查看本次结果",
   status_text: "结果已整理完成",
 };
-const history = projectR7History({ runs: [inFlight, published] }, { projectId: "project-a" });
+const history = projectMonitoringHistory({ runs: [inFlight, published] }, { projectId: "project-a" });
 
-const defaultSelection = selectR7Run({ history });
+const defaultSelection = selectMonitoringRun({ history });
 check(defaultSelection.selectedPublicRunToken === "run:active", "default entry prefers the in-flight public run");
 check(defaultSelection.selectedRun.runState === "running", "default selection retains the machine state for routing");
-const explicitPublished = selectR7Run({ history, selectedPublicRunToken: "run:published" });
+const explicitPublished = selectMonitoringRun({ history, selectedPublicRunToken: "run:published" });
 check(explicitPublished.selectedPublicRunToken === "run:published", "explicit public run selection is preserved");
 check(explicitPublished.hasOtherInFlight === true, "historical result selection notices a separate in-flight run");
-check(projectR7Workbar(explicitPublished).secondaryAction === R7_RETURN_IN_FLIGHT_ACTION_TEXT, "selected historical result offers return to in-flight");
-check(projectR7Workbar(explicitPublished).showNewRun === false, "a separate in-flight run suppresses silent new-run switching");
-const explicitResult = selectR7Run({
+check(projectMonitoringWorkbar(explicitPublished).secondaryAction === MONITORING_RETURN_IN_FLIGHT_ACTION_TEXT, "selected historical result offers return to in-flight");
+check(projectMonitoringWorkbar(explicitPublished).showNewRun === false, "a separate in-flight run suppresses silent new-run switching");
+const explicitResult = selectMonitoringRun({
   history,
   selectedResultContextToken: "result-context:published",
   resultContext: {
@@ -150,18 +150,18 @@ const explicitResult = selectR7Run({
 });
 check(explicitResult.selectedResultContextToken === "result-context:published", "explicit result context wins over history refresh");
 check(explicitResult.selectedPublicRunToken === "run:published", "result context binds its public run");
-check(selectR7Run({ history, selectedResultContextToken: "result-context:missing" }).selectedPublicRunToken === "", "missing explicit context never falls back to latest history");
-const unresolvedProgress = selectR7Run({ history, selectedPublicRunToken: "run:outside-history-window" });
+check(selectMonitoringRun({ history, selectedResultContextToken: "result-context:missing" }).selectedPublicRunToken === "", "missing explicit context never falls back to latest history");
+const unresolvedProgress = selectMonitoringRun({ history, selectedPublicRunToken: "run:outside-history-window" });
 check(unresolvedProgress.unresolvedExplicitPublicRun === true, "explicit progress token is not replaced when history omits it");
-check(projectR7Workbar(unresolvedProgress).mainTarget === "progress", "omitted historical rows still route to the explicit progress token");
+check(projectMonitoringWorkbar(unresolvedProgress).mainTarget === "progress", "omitted historical rows still route to the explicit progress token");
 
-const activeState = projectR7ProductState({ projectId: "project-a", options: setup, history });
+const activeState = projectMonitoringProductState({ projectId: "project-a", options: setup, history });
 check(activeState.kind === "active_run", "product state exposes active run as the product state");
-const readyHistory = projectR7History({ runs: [published] }, { projectId: "project-a" });
-const resultState = projectR7ProductState({ projectId: "project-a", options: setup, history: readyHistory });
+const readyHistory = projectMonitoringHistory({ runs: [published] }, { projectId: "project-a" });
+const resultState = projectMonitoringProductState({ projectId: "project-a", options: setup, history: readyHistory });
 check(resultState.kind === "result_available", "product state exposes available result state");
-check(resultState.workbar.secondaryAction === R7_NEW_RUN_ACTION_TEXT, "available result exposes new-run secondary action");
-const contextOnlyState = projectR7ProductState({
+check(resultState.workbar.secondaryAction === MONITORING_NEW_RUN_ACTION_TEXT, "available result exposes new-run secondary action");
+const contextOnlyState = projectMonitoringProductState({
   projectId: "project-a",
   options: setup,
   history: { runs: [] },
@@ -174,69 +174,69 @@ const contextOnlyState = projectR7ProductState({
 });
 check(contextOnlyState.kind === "result_available", "explicit result context stays selected even outside the history window");
 check(contextOnlyState.workbar.mainAction === "查看本次结果", "context-only selection never falls back to start");
-const emptyState = projectR7ProductState({ projectId: "project-a", options: setup, history: { runs: [] } });
+const emptyState = projectMonitoringProductState({ projectId: "project-a", options: setup, history: { runs: [] } });
 check(emptyState.kind === "ready" && emptyState.workbar.mainAction === "开始一次监查", "empty history exposes the start action");
-check(projectR7ProductState({ options: null, history: null }).kind === "loading", "missing reads stay in loading state");
+check(projectMonitoringProductState({ options: null, history: null }).kind === "loading", "missing reads stay in loading state");
 
-let wizard = createR7WizardState(setup, { idempotencyKey: "nonce-1" });
+let wizard = createMonitoringWizardState(setup, { idempotencyKey: "nonce-1" });
 check(wizard.mode === "daily", "wizard uses the server recommended mode");
 check(wizard.executionBasis === "incremental", "wizard uses the server default basis");
 check(wizard.baselineToken === "baseline:daily:1", "wizard uses the server recommended baseline");
 check(wizard.riskRuleTokens.includes("rule-revision:project-a:1"), "wizard uses only server-recommended rules");
-check(canAdvanceR7Wizard(wizard, setup).ok === true, "wizard server recommendation satisfies the initial selection");
-wizard = setR7WizardSelection(wizard, "mode", "daily", setup);
-check(canAdvanceR7Wizard(wizard, setup).ok === true, "selected mode and server basis satisfy the first two steps");
-wizard = advanceR7WizardStep(wizard, setup, 1);
+check(canAdvanceMonitoringWizard(wizard, setup).ok === true, "wizard server recommendation satisfies the initial selection");
+wizard = setMonitoringWizardSelection(wizard, "mode", "daily", setup);
+check(canAdvanceMonitoringWizard(wizard, setup).ok === true, "selected mode and server basis satisfy the first two steps");
+wizard = advanceMonitoringWizardStep(wizard, setup, 1);
 check(wizard.step === 2, "wizard advances one step without rewriting selections");
-wizard = setR7WizardSelection(wizard, "executionBasis", "full", setup);
+wizard = setMonitoringWizardSelection(wizard, "executionBasis", "full", setup);
 check(wizard.baselineToken === "", "daily full analysis does not retain a prior baseline");
-wizard = setR7WizardSelection(wizard, "mode", "pre_lock", setup);
+wizard = setMonitoringWizardSelection(wizard, "mode", "pre_lock", setup);
 check(wizard.executionBasis === "full", "pre-lock mode uses its server basis");
-wizard = setR7WizardSelection(wizard, "baselineToken", "baseline:pre-lock:1", setup);
+wizard = setMonitoringWizardSelection(wizard, "baselineToken", "baseline:pre-lock:1", setup);
 wizard = { ...wizard, step: 4 };
-check(canAdvanceR7Wizard(wizard, setup).ok === true, "wizard confirmation step accepts a complete selection");
-const prepare = buildR7PrepareAndStartPayload(wizard, setup);
+check(canAdvanceMonitoringWizard(wizard, setup).ok === true, "wizard confirmation step accepts a complete selection");
+const prepare = buildMonitoringPrepareAndStartPayload(wizard, setup);
 check(prepare.current_snapshot_token === "snapshot:current", "prepare payload uses the selected public snapshot token");
 check(prepare.mode === "pre_lock" && prepare.execution_basis === "full", "prepare payload preserves selected mode and basis");
 check(prepare.baseline_token === "baseline:pre-lock:1", "prepare payload preserves selected baseline token");
 check(!Object.hasOwn(prepare, "run_id") && !Object.hasOwn(prepare, "snapshot_ref"), "prepare payload has no internal identity");
-const staleWizard = setR7WizardSelection(wizard, "currentSnapshotToken", "", setup);
+const staleWizard = setMonitoringWizardSelection(wizard, "currentSnapshotToken", "", setup);
 check(staleWizard.errorText === "监查范围已更新，请重新确认", "stale snapshot keeps the frozen Chinese refresh message");
 const invalidIncremental = { ...wizard, mode: "daily", executionBasis: "incremental", baselineToken: "", step: 2 };
-check(canAdvanceR7Wizard(invalidIncremental, setup).code === "baseline_required", "incremental mode requires a selectable baseline");
-const projectedWizard = projectR7WizardState(wizard, setup);
+check(canAdvanceMonitoringWizard(invalidIncremental, setup).code === "baseline_required", "incremental mode requires a selectable baseline");
+const projectedWizard = projectMonitoringWizardState(wizard, setup);
 check(projectedWizard.modeOptions.length === 3 && projectedWizard.summary.dataCutoffText === "2026-03-31", "wizard projection exposes server options and summary only");
 
 const nonceValues = ["r7_first", "r7_second", "r7_third"];
 const nonceFactory = () => nonceValues.shift();
-let idem = createR7IdempotencyState();
-idem = rotateR7IdempotencyKey(idem, { nonceFactory, selection: wizard });
+let idem = createMonitoringIdempotencyState();
+idem = rotateMonitoringIdempotencyKey(idem, { nonceFactory, selection: wizard });
 check(idem.key === "r7_first", "idempotency key is a random client nonce");
-const same = syncR7IdempotencySelection(idem, wizard, { nonceFactory });
+const same = syncMonitoringIdempotencySelection(idem, wizard, { nonceFactory });
 check(same.key === idem.key, "same substantive selection keeps the idempotency key");
 const changedSelection = { ...wizard, baselineToken: "baseline:other" };
-const rotated = syncR7IdempotencySelection(same, changedSelection, { nonceFactory });
+const rotated = syncMonitoringIdempotencySelection(same, changedSelection, { nonceFactory });
 check(rotated.key === "r7_second", "mode/data/baseline/rule changes rotate the nonce");
-const attempted = markR7PrepareAttempt(rotated);
+const attempted = markMonitoringPrepareAttempt(rotated);
 check(attempted.attemptCount === 1, "attempt count is local bookkeeping only");
-let timeout = handleR7PrepareTimeout(attempted);
+let timeout = handleMonitoringPrepareTimeout(attempted);
 check(timeout.action === "retry_same_key" && timeout.state.key === attempted.key, "tokenless timeout retries once with the same key");
-timeout = handleR7PrepareTimeout(timeout.state);
+timeout = handleMonitoringPrepareTimeout(timeout.state);
 check(timeout.action === "surface_timeout", "second tokenless timeout does not guess from history");
-timeout = handleR7PrepareTimeout(timeout.state, { publicRunToken: "run:returned" });
+timeout = handleMonitoringPrepareTimeout(timeout.state, { publicRunToken: "run:returned" });
 check(timeout.action === "lookup_public_run" && timeout.publicRunToken === "run:returned", "returned public token is looked up before any retry");
-check(handleR7PrepareTimeout(timeout.state).action === "surface_timeout", "a returned public token disables guessing retries");
-const controller = createR7IdempotencyController({ nonceFactory: () => "r7_controller" });
+check(handleMonitoringPrepareTimeout(timeout.state).action === "surface_timeout", "a returned public token disables guessing retries");
+const controller = createMonitoringIdempotencyController({ nonceFactory: () => "r7_controller" });
 check(controller.getState().key === "r7_controller", "idempotency controller initializes one nonce");
 
-const returned = projectR7AwayRestore({
+const returned = projectMonitoringAwayRestore({
   history,
   navigation: "return_overview",
   route: { result_context_token: "result-context:published", public_run_token: "run:published" },
 });
 check(returned.preservedResultContext === true, "return to overview preserves selected result context");
 check(returned.selectedResultContextToken === "result-context:published", "result context survives internal overview navigation");
-const reentered = projectR7AwayRestore({
+const reentered = projectMonitoringAwayRestore({
   history,
   navigation: "module_entry",
   route: { result_context_token: "result-context:published", public_run_token: "run:published" },

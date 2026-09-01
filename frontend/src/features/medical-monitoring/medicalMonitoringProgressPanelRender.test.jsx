@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { projectR7Progress } from "./medicalMonitoringProgressProjection.mjs";
-import { R7ProgressPanelView } from "./MedicalMonitoringProgressPanel.jsx";
+import { projectMonitoringProgress } from "./medicalMonitoringProgressProjection.mjs";
+import { MonitoringProgressPanelView } from "./MedicalMonitoringProgressPanel.jsx";
 
 function payload(overrides = {}) {
   return {
@@ -39,7 +39,7 @@ function payload(overrides = {}) {
 
 function render(panel) {
   return renderToStaticMarkup(
-    <R7ProgressPanelView
+    <MonitoringProgressPanelView
       panel={panel}
       onAction={() => {}}
       onRefresh={() => {}}
@@ -50,7 +50,7 @@ function render(panel) {
   );
 }
 
-const waitingView = projectR7Progress(payload({
+const waitingView = projectMonitoringProgress(payload({
   completed: 0,
   percent: 0,
   progress_text: "已处理 0/8 项（0%）",
@@ -61,9 +61,9 @@ const waitingView = projectR7Progress(payload({
   run_state: "waiting_start",
 }));
 
-const runningView = projectR7Progress(payload());
+const runningView = projectMonitoringProgress(payload());
 
-const failedView = projectR7Progress(payload({
+const failedView = projectMonitoringProgress(payload({
   current_work: [],
   run_status_text: "分析服务连接异常，本项分析未完成",
   available_actions: [],

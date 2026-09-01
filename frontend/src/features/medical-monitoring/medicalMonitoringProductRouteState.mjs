@@ -1,12 +1,12 @@
 import {
-  normalizeMedicalMonitoringR5RouteState,
-  parseMedicalMonitoringR5RouteState,
-  serializeMedicalMonitoringR5RouteState,
+  normalizeMedicalMonitoringWorkspaceRouteState,
+  parseMedicalMonitoringWorkspaceRouteState,
+  serializeMedicalMonitoringWorkspaceRouteState,
 } from "./medicalMonitoringWorkspaceRouteState.mjs";
 
 function productRouteResult(result) {
   return {
-    isProduct: result.isR5 === true,
+    isProduct: result.isWorkspace === true,
     status: result.status,
     valid: result.valid,
     canonical: result.canonical,
@@ -16,13 +16,13 @@ function productRouteResult(result) {
 }
 
 export function parseMedicalMonitoringProductRouteState(input = "") {
-  return productRouteResult(parseMedicalMonitoringR5RouteState(input));
+  return productRouteResult(parseMedicalMonitoringWorkspaceRouteState(input));
 }
 
 export function normalizeMedicalMonitoringProductRouteState(input = {}) {
-  return normalizeMedicalMonitoringR5RouteState(input);
+  return normalizeMedicalMonitoringWorkspaceRouteState(input);
 }
 
 export function serializeMedicalMonitoringProductRouteState(state = {}) {
-  return serializeMedicalMonitoringR5RouteState(state);
+  return serializeMedicalMonitoringWorkspaceRouteState(state);
 }

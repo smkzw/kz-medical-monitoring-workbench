@@ -28,7 +28,7 @@ function positionOf(html, needle) {
 }
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const bundlePath = path.join(here, ".r7-journey-drawer-render-bundle.cjs");
+const bundlePath = path.join(here, ".monitoring-journey-drawer-render-bundle.cjs");
 buildSync({
   entryPoints: [path.join(here, "medicalMonitoringJourneyDrawerRender.test.jsx")],
   bundle: true,
@@ -66,7 +66,7 @@ check(countOf(axis, 'data-timeline-mode="shared-horizontal"') === 1, "exactly on
 for (const domain of ["ae", "mh", "cm", "ip", "lab_exam", "hospital_procedure", "symptom_efficacy", "protocol_compliance"]) {
   check(axis.includes(`data-domain-track="${domain}"`), `eight-domain geometry keeps the ${domain} lane`);
 }
-check(axis.includes('id="r5-journey-axis-title"'), "shared axis title carries the stable focus-restore id");
+check(axis.includes('id="monitoring-journey-axis-title"'), "shared axis title carries the stable focus-restore id");
 check(axis.includes('tabindex="-1"'), "axis title is focusable as the drawer restore target");
 check(axis.includes("筛选访视") && axis.includes("第 2 次访视"), "visit axis nodes render on the same axis");
 for (const label of ["合并用药", "试验用药", "检验检查", "诊疗操作", "疗效/症状", "方案执行"]) {
@@ -80,58 +80,58 @@ check(axis.includes('data-change-kind="upgraded"'), "primary marker of the two-r
 check(axis.includes('data-change-kind="continued"'), "single-row event marker is 持续");
 check(axis.includes("，本轮变化：升级，共 2 条变化"), "accessible name states the change word and the total count");
 check(axis.includes("，本轮变化：持续"), "single-change accessible name states the change word");
-check(axis.includes("r7-journey-tone-danger") && axis.includes("r7-journey-tone-neutral"), "marker tone classes render for 升级/持续");
+check(axis.includes("monitoring-journey-tone-danger") && axis.includes("monitoring-journey-tone-neutral"), "marker tone classes render for 升级/持续");
 check(!axis.includes("既往史补录核查"), "risk-only unbound change never creates a virtual axis node");
 passed += 6;
 
 // --- axis: pending dates sink to the pending zone, never the axis (§4.2) ---
 check(axis.includes('data-timeline-geometry="pending"'), "pending event keeps the pending geometry");
-check(axis.includes("r5-pending-date"), "pending zone renders");
+check(axis.includes("monitoring-pending-date"), "pending zone renders");
 check(axis.includes("合并用药日期待确认"), "pending event appears in the pending zone");
 check(axis.includes("未按实际日期吸附到共享时间轴，单独列示"), "pending copy stays explicit");
 passed += 4;
 
 // --- axis: truncation prompt under the shared axis title (§3.6) ---
-check(axis.includes("r7-journey-truncation") && axis.includes('role="status"'), "truncation prompt renders with status role");
+check(axis.includes("monitoring-journey-truncation") && axis.includes('role="status"'), "truncation prompt renders with status role");
 check(axis.includes("本轮变化较多，当前仅显示服务端已返回的前 3 条"), "truncation prompt uses the frozen wording");
-check(positionOf(axis, "r7-journey-truncation") > positionOf(axis, "r5-axis-heading"), "truncation prompt sits under the axis heading");
+check(positionOf(axis, "monitoring-journey-truncation") > positionOf(axis, "monitoring-axis-heading"), "truncation prompt sits under the axis heading");
 passed += 3;
 
 // --- legacy R5 axis: geometry unchanged, no markers/drawer hooks ---
 check(countOf(legacyAxis, 'data-timeline-mode="shared-horizontal"') === 1, "legacy axis still renders the single shared axis");
 check(countOf(legacyAxis, 'data-domain-track="') === 8, "legacy axis keeps the eight lanes");
-check(!legacyAxis.includes("r7-journey-marker"), "legacy axis renders no R7-only markers");
-check(!legacyAxis.includes("r5-journey-axis-title"), "legacy axis title carries no drawer restore id");
-check(!legacyAxis.includes("r7-journey-truncation"), "legacy axis renders no truncation prompt");
+check(!legacyAxis.includes("monitoring-journey-marker"), "legacy axis renders no R7-only markers");
+check(!legacyAxis.includes("monitoring-journey-axis-title"), "legacy axis title carries no drawer restore id");
+check(!legacyAxis.includes("monitoring-journey-truncation"), "legacy axis renders no truncation prompt");
 check(legacyAxis.includes('data-timeline-geometry="pending"'), "legacy axis keeps the pending sink");
 passed += 6;
 
 // --- risk row marker (§3.5): right-side risk list carries bound changes ---
-check(riskRowWithMarker.includes("r7-journey-marker"), "risk row renders the R7-only marker");
+check(riskRowWithMarker.includes("monitoring-journey-marker"), "risk row renders the R7-only marker");
 check(riskRowWithMarker.includes('data-change-kind="continued"'), "risk row marker kind is preserved");
-check(riskRowWithMarker.includes("r7-journey-sr-only"), "risk row carries the visually hidden change wording");
+check(riskRowWithMarker.includes("monitoring-journey-sr-only"), "risk row carries the visually hidden change wording");
 check(riskRowWithMarker.includes("，本轮变化：持续"), "sr-only wording enters the accessible name");
-check(riskRowWithMarker.includes("r5-risk-tail"), "risk row keeps the R7 change tail wrapper");
-check(!/<span class="r5-change-label">/.test(riskRowWithMarker), "marker row does not duplicate the visible R5 change label");
+check(riskRowWithMarker.includes("monitoring-risk-tail"), "risk row keeps the R7 change tail wrapper");
+check(!/<span class="monitoring-change-label">/.test(riskRowWithMarker), "marker row does not duplicate the visible R5 change label");
 passed += 6;
 
 // --- overlay drawer (§5.3): dialog semantics, stable title id, close/backdrop ---
 check(overlayDrawer.includes('data-journey-drawer-mode="overlay"'), "overlay mode hook present");
 check(overlayDrawer.includes('role="dialog"') && overlayDrawer.includes('aria-modal="true"'), "overlay is a modal dialog");
-check(overlayDrawer.includes('aria-labelledby="r7-journey-drawer-title"'), "overlay labels by the stable title id");
-check(overlayDrawer.includes('id="r7-journey-drawer-title"'), "stable title id is on the h2");
+check(overlayDrawer.includes('aria-labelledby="monitoring-journey-drawer-title"'), "overlay labels by the stable title id");
+check(overlayDrawer.includes('id="monitoring-journey-drawer-title"'), "stable title id is on the h2");
 check(overlayDrawer.includes('data-journey-backdrop="true"'), "overlay backdrop present for click-to-close");
 check(overlayDrawer.includes('data-journey-close="true"') && overlayDrawer.includes('aria-label="关闭详情"'), "close button present with an accessible label");
-check(overlayDrawer.includes("r7-journey-overlay"), "overlay wrapper present");
-check(overlayDrawer.includes("r7-journey-drawer-body"), "drawer content area scrolls independently");
+check(overlayDrawer.includes("monitoring-journey-overlay"), "overlay wrapper present");
+check(overlayDrawer.includes("monitoring-journey-drawer-body"), "drawer content area scrolls independently");
 passed += 8;
 
 // --- push drawer (§5.3): non-modal aside, same stable title id, no trap ---
 check(pushDrawer.includes('data-journey-drawer-mode="push"'), "push mode hook present");
-check(pushDrawer.includes("r7-journey-drawer-push"), "push aside class present");
+check(pushDrawer.includes("monitoring-journey-drawer-push"), "push aside class present");
 check(!pushDrawer.includes("aria-modal") && !pushDrawer.includes('role="dialog"'), "push drawer is non-modal (no aria-modal, no dialog role)");
-check(pushDrawer.includes('aria-labelledby="r7-journey-drawer-title"'), "push drawer shares the stable title id");
-check(!pushDrawer.includes("r7-journey-overlay") && !pushDrawer.includes("r7-journey-backdrop"), "push drawer renders no backdrop");
+check(pushDrawer.includes('aria-labelledby="monitoring-journey-drawer-title"'), "push drawer shares the stable title id");
+check(!pushDrawer.includes("monitoring-journey-overlay") && !pushDrawer.includes("monitoring-journey-backdrop"), "push drawer renders no backdrop");
 passed += 5;
 
 // --- fixed content order (§5.2): title first, then the eight sections ---
@@ -212,7 +212,7 @@ passed += 2;
 // --- seven-kind marker integrity (§4.3): icon + word + tone for all kinds ---
 for (const kind of expected.changeKinds) {
   check(sevenMarkers.includes(`data-change-kind="${kind}"`), `marker render covers ${kind}`);
-  check(sevenMarkers.includes(`r7-journey-tone-`), `marker tone class present for ${kind}`);
+  check(sevenMarkers.includes(`monitoring-journey-tone-`), `marker tone class present for ${kind}`);
   check(sevenMarkers.includes(`>${expected.changeKindTexts[kind]}</span>`), `marker Chinese word ${expected.changeKindTexts[kind]} rendered for ${kind}`);
 }
 check(countOf(sevenMarkers, "data-change-kind=") === 7, "exactly the seven frozen kinds render");
@@ -272,11 +272,11 @@ passed += 4;
   const css = fs.readFileSync(path.join(here, "medicalMonitoringJourneyDrawer.css"), "utf8");
   check(css.includes("max-width: 480px"), "overlay drawer caps at 480px");
   check(css.includes("width: 420px"), "push drawer is 420px");
-  check(css.includes(".r5-subject-columns.is-r7-drawer-push") && css.includes("minmax(760px, 1fr) 420px"), "push mode keeps a 760px timeline column and a 420px inspector/drawer column");
+  check(css.includes(".monitoring-subject-columns.is-monitoring-drawer-push") && css.includes("minmax(760px, 1fr) 420px"), "push mode keeps a 760px timeline column and a 420px inspector/drawer column");
   check(css.includes("prefers-reduced-motion: reduce") && css.includes("transition: none"), "reduced-motion makes open/close transitions instant");
-  check(css.includes("--r7-journey-danger") && css.includes("--r7-journey-warning") && css.includes("--r7-journey-success") && css.includes("--r7-journey-info") && css.includes("--r7-journey-neutral"), "five semantic tones defined");
-  check(css.includes(".r7-journey-live"), "live region style present");
-  check(css.includes(".r7-journey-sr-only"), "sr-only style present");
+  check(css.includes("--monitoring-journey-danger") && css.includes("--monitoring-journey-warning") && css.includes("--monitoring-journey-success") && css.includes("--monitoring-journey-info") && css.includes("--monitoring-journey-neutral"), "five semantic tones defined");
+  check(css.includes(".monitoring-journey-live"), "live region style present");
+  check(css.includes(".monitoring-journey-sr-only"), "sr-only style present");
   check(!/linear-gradient|backdrop-filter|blur\(/.test(css), "no gradients or glass effects");
 }
 

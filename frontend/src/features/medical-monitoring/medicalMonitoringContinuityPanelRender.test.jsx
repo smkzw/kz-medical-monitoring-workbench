@@ -8,12 +8,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { MedicalMonitoringContinuityPanel } from "./MedicalMonitoringContinuityPanel.jsx";
 import {
-  R7_CONTINUITY_COMPARED_TEXT,
-  R7_CONTINUITY_FIRST_ANALYSIS_TEXT,
-  R7_CONTINUITY_ROW_LIMIT,
-  R7_CONTINUITY_UNAVAILABLE_TEXT,
-  normalizeR7ContinuityEnvelope,
-  rebuildR7ContinuityChangeCounts,
+  MONITORING_CONTINUITY_COMPARED_TEXT,
+  MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT,
+  MONITORING_CONTINUITY_ROW_LIMIT,
+  MONITORING_CONTINUITY_UNAVAILABLE_TEXT,
+  normalizeMonitoringContinuityEnvelope,
+  rebuildMonitoringContinuityChangeCounts,
 } from "./medicalMonitoringContinuityProjection.mjs";
 
 function row(overrides = {}) {
@@ -134,7 +134,7 @@ function outputRow(ordinal) {
   });
 }
 
-function envelope(rows, { totalCount, truncated, comparisonText = R7_CONTINUITY_COMPARED_TEXT, sourceRunText = "2026-03-01 监查批次" } = {}) {
+function envelope(rows, { totalCount, truncated, comparisonText = MONITORING_CONTINUITY_COMPARED_TEXT, sourceRunText = "2026-03-01 监查批次" } = {}) {
   return {
     result_context_token: "result-context:01",
     identity: {
@@ -150,7 +150,7 @@ function envelope(rows, { totalCount, truncated, comparisonText = R7_CONTINUITY_
       basis_text: "增量分析",
       comparison_text: comparisonText,
       source_run_text: sourceRunText,
-      change_counts: rebuildR7ContinuityChangeCounts(rows),
+      change_counts: rebuildMonitoringContinuityChangeCounts(rows),
       rows,
       shown_count: rows.length,
       total_count: totalCount ?? rows.length,
@@ -161,13 +161,13 @@ function envelope(rows, { totalCount, truncated, comparisonText = R7_CONTINUITY_
 }
 
 function normalized(rows, options) {
-  return normalizeR7ContinuityEnvelope(envelope(rows, options), {
+  return normalizeMonitoringContinuityEnvelope(envelope(rows, options), {
     projectId: "project-a",
     resultContextToken: "result-context:01",
   });
 }
 
-// Server sort order (r7ContinuityRowSortKey): group 0 (high priority changes),
+// Server sort order (monitoringContinuityRowSortKey): group 0 (high priority changes),
 // group 1 (mid priority changes), group 2 (closed), group 3 (low continued),
 // group 4 (query drafts), group 5 (monitoring outputs).
 const READY_ROWS = [
@@ -216,17 +216,17 @@ const EMPTY_ROWS = [];
 const emptyContinuity = normalized(EMPTY_ROWS);
 
 const TRUNCATED_ROWS = Array.from(
-  { length: R7_CONTINUITY_ROW_LIMIT },
+  { length: MONITORING_CONTINUITY_ROW_LIMIT },
   (_, index) => riskRow(index + 1, "continued", "低", "低", `S/${index + 1}`, { title: `持续观察项 ${index + 1}` }),
 );
 const truncatedContinuity = normalized(TRUNCATED_ROWS, {
-  totalCount: R7_CONTINUITY_ROW_LIMIT + 1,
+  totalCount: MONITORING_CONTINUITY_ROW_LIMIT + 1,
   truncated: true,
 });
 
 const readyFirstAnalysis = normalized(
   [riskRow(1, "new", "", "高", "S/01")],
-  { comparisonText: R7_CONTINUITY_FIRST_ANALYSIS_TEXT, sourceRunText: "" },
+  { comparisonText: MONITORING_CONTINUITY_FIRST_ANALYSIS_TEXT, sourceRunText: "" },
 );
 
 export const renders = {
@@ -256,7 +256,7 @@ export const renders = {
   ),
 };
 
-export const expectedCounts = rebuildR7ContinuityChangeCounts(READY_ROWS);
+export const expectedCounts = rebuildMonitoringContinuityChangeCounts(READY_ROWS);
 export const expectedTruncationText =
-  `变化较多，共 ${R7_CONTINUITY_ROW_LIMIT + 1} 条，当前显示前 ${R7_CONTINUITY_ROW_LIMIT} 条（服务端最多返回 ${R7_CONTINUITY_ROW_LIMIT} 条）。`;
-export const unavailableText = R7_CONTINUITY_UNAVAILABLE_TEXT;
+  `变化较多，共 ${MONITORING_CONTINUITY_ROW_LIMIT + 1} 条，当前显示前 ${MONITORING_CONTINUITY_ROW_LIMIT} 条（服务端最多返回 ${MONITORING_CONTINUITY_ROW_LIMIT} 条）。`;
+export const unavailableText = MONITORING_CONTINUITY_UNAVAILABLE_TEXT;

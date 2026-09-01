@@ -1,67 +1,67 @@
-/* R7 Slice-08C-2 "本轮变化" panel — reuses the r7 product design tokens. */
-.r7-continuity-panel {
+/* "本轮变化" panel. */
+.monitoring-continuity-panel {
   display: grid;
   gap: 12px;
   margin-bottom: 12px;
   padding: 16px 16px 14px;
-  border: 1px solid var(--r7-product-line);
-  border-left: 3px solid var(--r7-product-orange);
+  border: 1px solid var(--monitoring-product-line);
+  border-left: 3px solid var(--monitoring-product-orange);
   border-radius: 10px;
   background: #fff;
 }
 
-.r7-continuity-panel.is-placeholder {
+.monitoring-continuity-panel.is-placeholder {
   min-height: 64px;
   place-content: center;
   gap: 4px;
   text-align: center;
 }
 
-.r7-continuity-panel.is-placeholder p {
+.monitoring-continuity-panel.is-placeholder p {
   margin: 0;
-  color: var(--r7-product-muted);
+  color: var(--monitoring-product-muted);
   font-size: 12px;
 }
 
-.r7-continuity-panel.is-unavailable {
-  border-left-color: var(--r5-amber, #a56b00);
+.monitoring-continuity-panel.is-unavailable {
+  border-left-color: var(--monitoring-amber, #a56b00);
 }
 
-.r7-continuity-head h2 {
+.monitoring-continuity-head h2 {
   margin: 4px 0 2px;
   font-size: 18px;
   line-height: 1.35;
 }
 
-.r7-continuity-head p {
+.monitoring-continuity-head p {
   margin: 0;
-  color: var(--r7-product-muted);
+  color: var(--monitoring-product-muted);
   font-size: 12px;
   line-height: 1.5;
 }
 
-.r7-continuity-counts {
+.monitoring-continuity-counts {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   margin: 0;
 }
 
-.r7-continuity-count {
+.monitoring-continuity-count {
   min-width: 0;
   padding: 9px 11px;
-  border: 1px solid var(--r7-product-line);
+  border: 1px solid var(--monitoring-product-line);
   border-radius: 8px;
-  background: var(--r7-product-soft);
+  background: var(--monitoring-product-soft);
 }
 
-.r7-continuity-count dt {
-  color: var(--r7-product-muted);
+.monitoring-continuity-count dt {
+  color: var(--monitoring-product-muted);
   font-size: 11px;
   font-weight: 800;
 }
 
-.r7-continuity-count dd {
+.monitoring-continuity-count dd {
   margin: 4px 0 0;
   font-size: 20px;
   font-weight: 800;
@@ -69,28 +69,28 @@
   line-height: 1.2;
 }
 
-.r7-continuity-count.is-key {
+.monitoring-continuity-count.is-key {
   border-color: #f0c7ad;
   background: #fff8f3;
 }
 
-.r7-continuity-count.is-key dt,
-.r7-continuity-count.is-key dd {
-  color: var(--r7-product-orange);
+.monitoring-continuity-count.is-key dt,
+.monitoring-continuity-count.is-key dd {
+  color: var(--monitoring-product-orange);
 }
 
-.r7-continuity-filters {
+.monitoring-continuity-filters {
   display: grid;
   gap: 7px;
 }
 
-.r7-continuity-filter-group {
+.monitoring-continuity-filter-group {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.r7-continuity-filter-row {
+.monitoring-continuity-filter-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -98,7 +98,7 @@
   gap: 8px;
 }
 
-.r7-continuity-filter-extra {
+.monitoring-continuity-filter-extra {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -107,35 +107,35 @@
   flex-wrap: wrap;
 }
 
-.r7-continuity-chip {
+.monitoring-continuity-chip {
   min-height: 26px;
   padding: 0 10px;
-  border: 1px solid var(--r7-product-line);
+  border: 1px solid var(--monitoring-product-line);
   border-radius: 999px;
   background: #fff;
-  color: var(--r7-product-muted);
+  color: var(--monitoring-product-muted);
   font: inherit;
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
 }
 
-.r7-continuity-chip:hover {
-  border-color: var(--r7-product-orange);
-  color: var(--r7-product-orange);
+.monitoring-continuity-chip:hover {
+  border-color: var(--monitoring-product-orange);
+  color: var(--monitoring-product-orange);
 }
 
-.r7-continuity-chip.is-active {
-  border-color: var(--r7-product-ink);
-  background: var(--r7-product-ink);
+.monitoring-continuity-chip.is-active {
+  border-color: var(--monitoring-product-ink);
+  background: var(--monitoring-product-ink);
   color: #fff;
 }
 
-.r7-continuity-toggle {
+.monitoring-continuity-toggle {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: var(--r7-product-ink);
+  color: var(--monitoring-product-ink);
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
@@ -143,28 +143,28 @@
   width: max-content;
 }
 
-.r7-continuity-toggle input {
-  accent-color: var(--r7-product-orange);
+.monitoring-continuity-toggle input {
+  accent-color: var(--monitoring-product-orange);
 }
 
-.r7-continuity-subject-search {
+.monitoring-continuity-subject-search {
   width: 170px;
   min-height: 30px;
   box-sizing: border-box;
   padding: 0 10px;
-  border: 1px solid var(--r7-product-line);
+  border: 1px solid var(--monitoring-product-line);
   border-radius: 7px;
   background: #fff;
-  color: var(--r7-product-ink);
+  color: var(--monitoring-product-ink);
   font: inherit;
   font-size: 12px;
 }
 
-.r7-continuity-subject-search::placeholder {
-  color: var(--r7-product-muted);
+.monitoring-continuity-subject-search::placeholder {
+  color: var(--monitoring-product-muted);
 }
 
-.r7-continuity-list {
+.monitoring-continuity-list {
   display: grid;
   gap: 7px;
   margin: 0;
@@ -172,16 +172,16 @@
   list-style: none;
 }
 
-.r7-continuity-row {
+.monitoring-continuity-row {
   display: grid;
   gap: 6px;
   padding: 11px 12px;
-  border: 1px solid var(--r7-product-line);
+  border: 1px solid var(--monitoring-product-line);
   border-radius: 9px;
   background: #fff;
 }
 
-.r7-continuity-row-head {
+.monitoring-continuity-row-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -189,92 +189,92 @@
   gap: 8px;
 }
 
-.r7-continuity-row-tags,
-.r7-continuity-row-actions {
+.monitoring-continuity-row-tags,
+.monitoring-continuity-row-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.r7-continuity-tag {
+.monitoring-continuity-tag {
   padding: 2px 8px;
-  border: 1px solid var(--r7-product-line);
+  border: 1px solid var(--monitoring-product-line);
   border-radius: 999px;
-  background: var(--r7-product-soft);
-  color: var(--r7-product-muted);
+  background: var(--monitoring-product-soft);
+  color: var(--monitoring-product-muted);
   font-size: 11px;
   font-weight: 800;
   line-height: 1.5;
 }
 
-.r7-continuity-tag.is-change {
+.monitoring-continuity-tag.is-change {
   border-color: #f0c7ad;
   background: #fff8f3;
-  color: var(--r7-product-orange);
+  color: var(--monitoring-product-orange);
 }
 
-.r7-continuity-tag.is-severity {
+.monitoring-continuity-tag.is-severity {
   border-color: #f0c7ad;
   color: #c74f18;
 }
 
-.r7-continuity-row-title {
+.monitoring-continuity-row-title {
   font-size: 13px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
-.r7-continuity-row-meta,
-.r7-continuity-row-note,
-.r7-continuity-row-reason {
+.monitoring-continuity-row-meta,
+.monitoring-continuity-row-note,
+.monitoring-continuity-row-reason {
   margin: 0;
-  color: var(--r7-product-muted);
+  color: var(--monitoring-product-muted);
   font-size: 11px;
   line-height: 1.5;
 }
 
-.r7-continuity-row-note {
-  color: var(--r5-amber, #a56b00);
+.monitoring-continuity-row-note {
+  color: var(--monitoring-amber, #a56b00);
 }
 
-.r7-continuity-row-reason {
+.monitoring-continuity-row-reason {
   padding-top: 2px;
-  border-top: 1px dashed var(--r7-product-line);
+  border-top: 1px dashed var(--monitoring-product-line);
 }
 
-.r7-continuity-empty,
-.r7-continuity-truncate {
+.monitoring-continuity-empty,
+.monitoring-continuity-truncate {
   margin: 0;
-  color: var(--r7-product-muted);
+  color: var(--monitoring-product-muted);
   font-size: 12px;
   line-height: 1.5;
 }
 
-.r7-continuity-empty {
+.monitoring-continuity-empty {
   padding: 14px 12px;
-  border: 1px dashed var(--r7-product-line);
+  border: 1px dashed var(--monitoring-product-line);
   border-radius: 9px;
   text-align: center;
 }
 
 @media (max-width: 900px) {
-  .r7-continuity-counts {
+  .monitoring-continuity-counts {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 620px) {
-  .r7-continuity-counts {
+  .monitoring-continuity-counts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .r7-continuity-filter-row {
+  .monitoring-continuity-filter-row {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .r7-continuity-subject-search {
+  .monitoring-continuity-subject-search {
     width: 100%;
   }
 }

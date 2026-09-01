@@ -1,5 +1,5 @@
 /**
- * Shared horizontal timeline geometry for R5 Patient Journey.
+ * Shared horizontal timeline geometry for Patient Journey.
  * Dates are positioned on one calendar/study window; missing dates stay off-axis.
  */
 

@@ -4,7 +4,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { buildSync } from "esbuild";
-import { findR7ForbiddenTerms } from "./medicalMonitoringProgressProjection.mjs";
+import { findMonitoringForbiddenTerms } from "./medicalMonitoringProgressProjection.mjs";
 
 let passed = 0;
 function check(condition, message) {
@@ -18,7 +18,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // panel markup can be asserted without adding a DOM renderer dependency.
 // CJS output keeps node builtins requireable; the transient bundle is
 // removed right after loading.
-const bundlePath = path.join(here, ".r7-progress-panel-render-bundle.cjs");
+const bundlePath = path.join(here, ".monitoring-progress-panel-render-bundle.cjs");
 buildSync({
   entryPoints: [path.join(here, "medicalMonitoringProgressPanelRender.test.jsx")],
   bundle: true,
@@ -69,10 +69,10 @@ check(!renders.running.includes("核对访视日期"), "current work capped at 3
 check(renders.running.includes("10:31") && renders.running.includes("审阅合并用药"), "latest updates rendered");
 check(!renders.running.includes("10:26"), "latest updates capped at 5");
 check(
-  renders.running.includes('<p class="r7-progress-status" aria-live="polite">医学监查进行中</p>'),
+  renders.running.includes('<p class="monitoring-progress-status" aria-live="polite">医学监查进行中</p>'),
   "only the status text enters the polite live region",
 );
-check(renders.running.includes('data-r7-state="running"'), "run state exposed for styling");
+check(renders.running.includes('data-monitoring-state="running"'), "run state exposed for styling");
 
 // Inline stop confirmation replaces the action set.
 check(renders.confirming.includes(">确认停止</button>"), "confirm stop button rendered");
@@ -109,14 +109,14 @@ check(renders.loading.includes("正在读取本次监查进度"), "loading copy"
 check(!renders.loading.includes("progressbar"), "loading renders no progress bar");
 
 // failed: facts kept, server status copy, failure styling hook.
-check(renders.failed.includes('data-r7-state="failed"'), "failed state hook for red styling");
+check(renders.failed.includes('data-monitoring-state="failed"'), "failed state hook for red styling");
 check(renders.failed.includes("分析服务连接异常，本项分析未完成"), "failed server copy");
 check(renders.failed.includes("已处理 3/8 项（37.5%）"), "failed keeps completed facts");
 check(renders.failed.includes("本项未完成"), "failed adds a prominent non-completion badge");
 
 // Forbidden terms must not appear in any rendered state.
 for (const [name, html] of Object.entries(renders)) {
-  const hits = findR7ForbiddenTerms([stripTags(html)]);
+  const hits = findMonitoringForbiddenTerms([stripTags(html)]);
   check(hits.length === 0, `render ${name} excludes forbidden terms${hits.length ? `: ${JSON.stringify(hits)}` : ""}`);
 }
 
@@ -126,16 +126,16 @@ const css = fs.readFileSync(path.join(here, "medicalMonitoringProgressPanel.css"
 check(css.includes("prefers-reduced-motion"), "reduced motion supported");
 check(css.includes(":focus-visible"), "visible focus styles");
 check(css.includes("font-variant-numeric: tabular-nums"), "tabular numerals");
-check(css.includes('data-r7-state="failed"'), "red reserved for failure state");
-check(css.includes("r7-progress-outcome"), "terminal outcome badge is visually explicit");
+check(css.includes('data-monitoring-state="failed"'), "red reserved for failure state");
+check(css.includes("monitoring-progress-outcome"), "terminal outcome badge is visually explicit");
 check(
-  css.includes('.r7-progress[data-r7-state="failed"] .r7-progress-outcome')
-    && css.includes("background: var(--r5-red, #b83b3b)")
+  css.includes('.monitoring-progress[data-monitoring-state="failed"] .monitoring-progress-outcome')
+    && css.includes("background: var(--monitoring-red, #b83b3b)")
     && css.includes("color: #fff"),
   "failed outcome uses a solid risk-red badge rather than an outline chip",
 );
 check(
-  css.includes('.r7-progress[data-r7-state="failed"] .r7-progress-big')
+  css.includes('.monitoring-progress[data-monitoring-state="failed"] .monitoring-progress-big')
     && css.includes("font-size: 20px")
     && css.includes("font-weight: 700"),
   "failed numeric progress is visually de-emphasized below the outcome",

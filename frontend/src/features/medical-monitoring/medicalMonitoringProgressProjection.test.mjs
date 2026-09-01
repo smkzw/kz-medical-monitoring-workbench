@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
-import { parseMedicalMonitoringR5RouteState } from "./medicalMonitoringWorkspaceRouteState.mjs";
+import { parseMedicalMonitoringWorkspaceRouteState } from "./medicalMonitoringWorkspaceRouteState.mjs";
 import {
-  R7_FORBIDDEN_ACCOUNT_TEXT,
-  R7_FORBIDDEN_USER_VISIBLE_TERMS,
-  R7_NOT_PREPARED_TEXT,
-  R7_NO_RUN_TEXT,
-  R7_PREPARING_NEXT_WORK_TEXT,
-  R7_REFRESH_FAILED_TEXT,
-  R7_RUN_STATES,
-  collectR7UserVisibleTexts,
-  createR7ProgressGate,
-  findR7ForbiddenTerms,
-  projectR7Progress,
-  projectR7ProgressActions,
-  projectR7ProgressError,
-  r7PollDecision,
-  r7ProgressRequestContext,
-  r7RefreshBackoffMs,
+  MONITORING_FORBIDDEN_ACCOUNT_TEXT,
+  MONITORING_FORBIDDEN_USER_VISIBLE_TERMS,
+  MONITORING_NOT_PREPARED_TEXT,
+  MONITORING_NO_RUN_TEXT,
+  MONITORING_PREPARING_NEXT_WORK_TEXT,
+  MONITORING_REFRESH_FAILED_TEXT,
+  MONITORING_RUN_STATES,
+  collectMonitoringUserVisibleTexts,
+  createMonitoringProgressGate,
+  findMonitoringForbiddenTerms,
+  projectMonitoringProgress,
+  projectMonitoringProgressActions,
+  projectMonitoringProgressError,
+  monitoringPollDecision,
+  monitoringProgressRequestContext,
+  monitoringRefreshBackoffMs,
 } from "./medicalMonitoringProgressProjection.mjs";
 
 let passed = 0;
@@ -71,12 +71,12 @@ function apiError({ status = 500, code = "", message = "" } = {}) {
 
 // --- run_state authority and polling decisions -------------------------------
 
-const running = projectR7Progress(progressPayload());
+const running = projectMonitoringProgress(progressPayload());
 check(running.kind === "progress", "valid payload projects to a progress view");
 check(running.runState === "running", "keeps the machine-readable run state");
 check(running.poll.active === true && running.poll.intervalMs === 2000, "running polls every 2s");
 
-const stopping = projectR7Progress(progressPayload({
+const stopping = projectMonitoringProgress(progressPayload({
   run_state: "stopping",
   run_status_text: "正在停止，当前分析可能完成；系统不会开始下一项工作。",
   available_actions: [],
@@ -85,18 +85,18 @@ check(stopping.poll.active === true && stopping.poll.intervalMs === 2000, "stopp
 check(stopping.actions.length === 0, "stopping renders no actions");
 
 for (const state of ["waiting_start", "interrupted_resumable", "completed", "ended_incomplete", "failed"]) {
-  check(r7PollDecision(state).active === false, `${state} does not poll continuously`);
+  check(monitoringPollDecision(state).active === false, `${state} does not poll continuously`);
 }
-check(R7_RUN_STATES.length === 7, "run_state vocabulary stays at the contracted seven values");
+check(MONITORING_RUN_STATES.length === 7, "run_state vocabulary stays at the contracted seven values");
 
 check(
-  projectR7Progress(progressPayload({ run_state: "almost_done" })).kind === "invalid",
+  projectMonitoringProgress(progressPayload({ run_state: "almost_done" })).kind === "invalid",
   "unknown run_state never reaches the view",
 );
-check(projectR7Progress(null).kind === "invalid", "non-object payload projects invalid");
-check(projectR7Progress([1, 2]).kind === "invalid", "array payload projects invalid");
+check(projectMonitoringProgress(null).kind === "invalid", "non-object payload projects invalid");
+check(projectMonitoringProgress([1, 2]).kind === "invalid", "array payload projects invalid");
 check(
-  projectR7Progress(progressPayload({ run_state: undefined })).kind === "invalid",
+  projectMonitoringProgress(progressPayload({ run_state: undefined })).kind === "invalid",
   "missing run_state projects invalid instead of guessing",
 );
 
@@ -118,12 +118,12 @@ check(
   "latest updates keep the server order without re-sorting",
 );
 
-const emptyWork = projectR7Progress(progressPayload({ current_work: [] }));
+const emptyWork = projectMonitoringProgress(progressPayload({ current_work: [] }));
 check(
-  emptyWork.currentWorkEmptyText === R7_PREPARING_NEXT_WORK_TEXT,
+  emptyWork.currentWorkEmptyText === MONITORING_PREPARING_NEXT_WORK_TEXT,
   "running without current work shows the neutral preparing hint",
 );
-const waitingWork = projectR7Progress(progressPayload({
+const waitingWork = projectMonitoringProgress(progressPayload({
   run_state: "waiting_start",
   run_status_text: "等待开始医学监查",
   available_actions: ["开始"],
@@ -131,7 +131,7 @@ const waitingWork = projectR7Progress(progressPayload({
 }));
 check(waitingWork.currentWorkEmptyText === "", "waiting start shows no fabricated current-work hint");
 
-const failedOutcome = projectR7Progress(progressPayload({
+const failedOutcome = projectMonitoringProgress(progressPayload({
   run_state: "failed",
   run_status_text: "分析服务连接异常，本项分析未完成。",
   available_actions: [],
@@ -140,48 +140,48 @@ check(failedOutcome.outcomeLabel === "本项未完成", "failed exposes a promin
 
 // --- missing fields degrade without invented numbers --------------------------
 
-const sparse = projectR7Progress({ run_state: "completed" });
+const sparse = projectMonitoringProgress({ run_state: "completed" });
 check(sparse.kind === "progress", "missing optional fields still project");
 check(sparse.completed === 0 && sparse.total === 0 && sparse.percent === 0, "missing counts are zero, never extrapolated");
 check(sparse.progressText === "" && sparse.runStatusText === "", "missing texts stay empty for the caller to neutralize");
 check(sparse.stageProgress.length === 0 && sparse.latestUpdates.length === 0, "missing lists are empty");
 check(sparse.actions.length === 0, "missing actions render nothing");
 
-const overflow = projectR7Progress(progressPayload({ percent: 140 }));
+const overflow = projectMonitoringProgress(progressPayload({ percent: 140 }));
 check(overflow.percent === 100, "percent is clamped for the accessible progressbar range");
 
 // --- action mapping -------------------------------------------------------------
 
-const actions = projectR7ProgressActions(["开始", "停止", "继续"]);
+const actions = projectMonitoringProgressActions(["开始", "停止", "继续"]);
 check(
   actions.map((a) => a.action).join(",") === "start,cancel,resume",
   "开始/停止/继续 map to start/cancel/resume",
 );
 check(actions[0].label === "开始", "action labels stay in Chinese");
-const filtered = projectR7ProgressActions(["停止", "暂停", "", 42, null]);
+const filtered = projectMonitoringProgressActions(["停止", "暂停", "", 42, null]);
 check(filtered.length === 1 && filtered[0].action === "cancel", "unrecognized actions never become buttons");
-check(projectR7ProgressActions(undefined).length === 0, "missing action list maps to none");
+check(projectMonitoringProgressActions(undefined).length === 0, "missing action list maps to none");
 
 // --- route run_ref context ------------------------------------------------------
 
-const route = parseMedicalMonitoringR5RouteState(
+const route = parseMedicalMonitoringWorkspaceRouteState(
   "?view=overview&project_id=proj/01&run_id=run 07&snapshot_id=snap/1&cutoff=2026-08-28&scope=trial",
 );
 check(route.valid, "route fixture parses as a valid R5 route");
-const context = r7ProgressRequestContext(route.canonical);
+const context = monitoringProgressRequestContext(route.canonical);
 check(context?.projectRef === "proj/01" && context?.runRef === "run 07", "run identity comes from the route run_ref");
 
-const noRun = parseMedicalMonitoringR5RouteState("?view=overview&project_id=proj/01");
-check(r7ProgressRequestContext(noRun.canonical) === null, "missing run_ref yields no request context");
-check(r7ProgressRequestContext(null) === null, "absent route state yields no request context");
+const noRun = parseMedicalMonitoringWorkspaceRouteState("?view=overview&project_id=proj/01");
+check(monitoringProgressRequestContext(noRun.canonical) === null, "missing run_ref yields no request context");
+check(monitoringProgressRequestContext(null) === null, "absent route state yields no request context");
 check(
-  r7ProgressRequestContext({ project_ref: "p", run_ref: "  " }) === null,
+  monitoringProgressRequestContext({ project_ref: "p", run_ref: "  " }) === null,
   "blank run_ref yields no request context",
 );
 
 // --- late responses -------------------------------------------------------------
 
-const gate = createR7ProgressGate();
+const gate = createMonitoringProgressGate();
 const first = gate.begin({ projectRef: "p1", runRef: "r1" });
 check(gate.accept(first), "the current ticket is accepted");
 const second = gate.begin({ projectRef: "p1", runRef: "r1" });
@@ -199,54 +199,54 @@ check(!gate.accept(null), "missing tickets are rejected");
 
 // --- error-code empty states ------------------------------------------------------
 
-const noBinding = projectR7ProgressError(apiError({
+const noBinding = projectMonitoringProgressError(apiError({
   status: 404,
   code: "run_binding_not_found",
   message: "未找到指定的监查运行绑定。",
 }));
-check(noBinding.kind === "empty" && noBinding.text === R7_NO_RUN_TEXT, "run_binding_not_found maps to the neutral no-run empty state");
+check(noBinding.kind === "empty" && noBinding.text === MONITORING_NO_RUN_TEXT, "run_binding_not_found maps to the neutral no-run empty state");
 
-const notPrepared = projectR7ProgressError(apiError({
+const notPrepared = projectMonitoringProgressError(apiError({
   status: 409,
   code: "execution_not_prepared",
   message: "请先准备本次监查工作范围。",
 }));
-check(notPrepared.kind === "empty" && notPrepared.text === R7_NOT_PREPARED_TEXT, "execution_not_prepared maps to the not-prepared empty state");
+check(notPrepared.kind === "empty" && notPrepared.text === MONITORING_NOT_PREPARED_TEXT, "execution_not_prepared maps to the not-prepared empty state");
 check(noBinding.kind === "empty" && noBinding.text !== notPrepared.text, "the two empty states stay distinct");
 
-const forbidden = projectR7ProgressError(apiError({
+const forbidden = projectMonitoringProgressError(apiError({
   status: 403,
   code: "not_permitted",
   message: "当前身份无权执行该医学监查 R7 操作。",
 }));
-check(forbidden.kind === "forbidden" && forbidden.text === R7_FORBIDDEN_ACCOUNT_TEXT, "403 maps to the fixed account message");
+check(forbidden.kind === "forbidden" && forbidden.text === MONITORING_FORBIDDEN_ACCOUNT_TEXT, "403 maps to the fixed account message");
 
-const integrity = projectR7ProgressError(apiError({
+const integrity = projectMonitoringProgressError(apiError({
   status: 422,
   code: "runtime_integrity_failed",
   message: "本次监查进度无法核对，已阻断。",
 }));
 check(integrity.kind === "error" && integrity.text === "本次监查进度无法核对，已阻断。", "other failures surface the server Chinese text");
 
-const silent = projectR7ProgressError(apiError({ status: 0, code: "", message: "" }));
-check(silent.kind === "error" && silent.text === R7_REFRESH_FAILED_TEXT, "failures without server text fall back to the neutral refresh failure");
+const silent = projectMonitoringProgressError(apiError({ status: 0, code: "", message: "" }));
+check(silent.kind === "error" && silent.text === MONITORING_REFRESH_FAILED_TEXT, "failures without server text fall back to the neutral refresh failure");
 check(
-  projectR7ProgressError(new Error("network down")).text === R7_REFRESH_FAILED_TEXT,
+  projectMonitoringProgressError(new Error("network down")).text === MONITORING_REFRESH_FAILED_TEXT,
   "network failures fall back to the neutral refresh failure",
 );
 check(
-  projectR7ProgressError(apiError({ status: 404, code: "", message: "Not Found" })).kind === "error",
+  projectMonitoringProgressError(apiError({ status: 404, code: "", message: "Not Found" })).kind === "error",
   "HTTP status alone never decides the empty branch",
 );
 
 // --- retry backoff -----------------------------------------------------------------
 
-check(r7RefreshBackoffMs(1) === 2000, "first failure waits 2s");
-check(r7RefreshBackoffMs(2) === 5000, "second failure waits 5s");
-check(r7RefreshBackoffMs(3) === 10000, "third failure waits 10s");
-check(r7RefreshBackoffMs(4) === 30000, "fourth failure waits 30s");
-check(r7RefreshBackoffMs(12) === 30000, "backoff clamps at 30s");
-check(r7RefreshBackoffMs(0) === 2000, "non-positive counts start the sequence");
+check(monitoringRefreshBackoffMs(1) === 2000, "first failure waits 2s");
+check(monitoringRefreshBackoffMs(2) === 5000, "second failure waits 5s");
+check(monitoringRefreshBackoffMs(3) === 10000, "third failure waits 10s");
+check(monitoringRefreshBackoffMs(4) === 30000, "fourth failure waits 30s");
+check(monitoringRefreshBackoffMs(12) === 30000, "backoff clamps at 30s");
+check(monitoringRefreshBackoffMs(0) === 2000, "non-positive counts start the sequence");
 
 // --- forbidden-term scan across every state branch ----------------------------------
 
@@ -265,35 +265,35 @@ const branchPayloads = [
 check(branchPayloads.length === 10, "scan fixtures cover every state incl. retry-exhausted branches");
 
 const scannedViews = [
-  ...branchPayloads.map((payload) => projectR7Progress(payload)),
+  ...branchPayloads.map((payload) => projectMonitoringProgress(payload)),
   noBinding,
   notPrepared,
   forbidden,
   integrity,
   silent,
 ];
-const scannedTexts = scannedViews.flatMap((view) => collectR7UserVisibleTexts(view));
+const scannedTexts = scannedViews.flatMap((view) => collectMonitoringUserVisibleTexts(view));
 check(scannedTexts.length > 0, "the scan actually collected user-visible texts");
-const hits = findR7ForbiddenTerms(scannedTexts);
+const hits = findMonitoringForbiddenTerms(scannedTexts);
 check(hits.length === 0, `no forbidden user-visible terms across branches: ${JSON.stringify(hits)}`);
 
-const dirty = findR7ForbiddenTerms(["后端 token 已轮换", "使用 provider 配置"]);
+const dirty = findMonitoringForbiddenTerms(["后端 token 已轮换", "使用 provider 配置"]);
 check(
   dirty.map((hit) => hit.term).join(",") === "后端,token,provider",
   "the scanner reports every forbidden term per text",
 );
 check(
-  findR7ForbiddenTerms(["MODEL"].map((t) => t)).length === 1,
+  findMonitoringForbiddenTerms(["MODEL"].map((t) => t)).length === 1,
   "the scanner matches latin terms case-insensitively",
 );
-check(R7_FORBIDDEN_USER_VISIBLE_TERMS.length === 20, "the forbidden vocabulary matches contract §5");
+check(MONITORING_FORBIDDEN_USER_VISIBLE_TERMS.length === 20, "the forbidden vocabulary matches contract §5");
 
-const staticCopyHits = findR7ForbiddenTerms([
-  R7_NO_RUN_TEXT,
-  R7_NOT_PREPARED_TEXT,
-  R7_FORBIDDEN_ACCOUNT_TEXT,
-  R7_REFRESH_FAILED_TEXT,
-  R7_PREPARING_NEXT_WORK_TEXT,
+const staticCopyHits = findMonitoringForbiddenTerms([
+  MONITORING_NO_RUN_TEXT,
+  MONITORING_NOT_PREPARED_TEXT,
+  MONITORING_FORBIDDEN_ACCOUNT_TEXT,
+  MONITORING_REFRESH_FAILED_TEXT,
+  MONITORING_PREPARING_NEXT_WORK_TEXT,
 ]);
 check(staticCopyHits.length === 0, "the projection's own static copy is free of forbidden terms");
 

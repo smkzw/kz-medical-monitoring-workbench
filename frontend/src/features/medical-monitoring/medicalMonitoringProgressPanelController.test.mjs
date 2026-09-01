@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import {
-  R7_PANEL_TEXT,
-  R7_STOP_CONFIRM_TIMEOUT_MS,
-  createR7ProgressPanelStore,
-  r7PanelTimeText,
+  MONITORING_PANEL_TEXT,
+  MONITORING_STOP_CONFIRM_TIMEOUT_MS,
+  createMonitoringProgressPanelStore,
+  monitoringPanelTimeText,
 } from "./medicalMonitoringProgressPanelController.mjs";
 import {
-  R7_NO_RUN_TEXT,
-  R7_NOT_PREPARED_TEXT,
-  R7_FORBIDDEN_ACCOUNT_TEXT,
-  findR7ForbiddenTerms,
+  MONITORING_NO_RUN_TEXT,
+  MONITORING_NOT_PREPARED_TEXT,
+  MONITORING_FORBIDDEN_ACCOUNT_TEXT,
+  findMonitoringForbiddenTerms,
 } from "./medicalMonitoringProgressProjection.mjs";
 
 let passed = 0;
@@ -80,7 +80,7 @@ function createVisibility() {
 }
 
 const NOW = new Date(2026, 7, 28, 14, 5).getTime();
-check(r7PanelTimeText(NOW) === "14:05", "time text renders HH:MM");
+check(monitoringPanelTimeText(NOW) === "14:05", "time text renders HH:MM");
 
 function httpError(status, code, message) {
   const error = new Error(message);
@@ -159,7 +159,7 @@ function createHarness({ now = () => NOW } = {}) {
   const fake = createFakeApi();
   const timers = createTimers();
   const vis = createVisibility();
-  const store = createR7ProgressPanelStore({
+  const store = createMonitoringProgressPanelStore({
     api: fake.api,
     now,
     schedule: timers.schedule,
@@ -169,14 +169,14 @@ function createHarness({ now = () => NOW } = {}) {
   return { fake, timers, vis, store };
 }
 
-const ROUTE = { project_ref: "synthetic-project-r7-s07a", run_ref: "synthetic-run-r7-20260828" };
+const ROUTE = { project_ref: "synthetic-project-r5-s07a", run_ref: "synthetic-run-r5-20260828" };
 
 // 1. Missing run_ref: neutral empty state, no request.
 {
   const { fake, store } = createHarness();
-  store.show({ project_ref: "synthetic-project-r7-s07a" });
+  store.show({ project_ref: "synthetic-project-r5-s07a" });
   await flush();
-  check(store.getSnapshot().empty?.text === R7_NO_RUN_TEXT, "missing run_ref shows neutral empty state");
+  check(store.getSnapshot().empty?.text === MONITORING_NO_RUN_TEXT, "missing run_ref shows neutral empty state");
   check(fake.calls.length === 0, "missing run_ref sends no progress request");
   store.destroy();
 }
@@ -295,21 +295,21 @@ const ROUTE = { project_ref: "synthetic-project-r7-s07a", run_ref: "synthetic-ru
 // 8/9. Machine-code empty states.
 {
   const { fake, timers, store } = createHarness();
-  fake.queueProgress(() => Promise.reject(httpError(404, "run_binding_not_found", R7_NO_RUN_TEXT)));
+  fake.queueProgress(() => Promise.reject(httpError(404, "run_binding_not_found", MONITORING_NO_RUN_TEXT)));
   store.show(ROUTE);
   await flush();
   check(store.getSnapshot().empty?.reason === "no_run", "run_binding_not_found maps to no_run empty");
-  check(store.getSnapshot().empty?.text === R7_NO_RUN_TEXT, "no_run copy");
+  check(store.getSnapshot().empty?.text === MONITORING_NO_RUN_TEXT, "no_run copy");
   check(timers.pending().length === 0, "empty state does not poll");
   store.destroy();
 }
 {
   const { fake, store } = createHarness();
-  fake.queueProgress(() => Promise.reject(httpError(409, "execution_not_prepared", R7_NOT_PREPARED_TEXT)));
+  fake.queueProgress(() => Promise.reject(httpError(409, "execution_not_prepared", MONITORING_NOT_PREPARED_TEXT)));
   store.show(ROUTE);
   await flush();
   check(store.getSnapshot().empty?.reason === "not_prepared", "execution_not_prepared maps to not_prepared empty");
-  check(store.getSnapshot().empty?.text === R7_NOT_PREPARED_TEXT, "not_prepared copy");
+  check(store.getSnapshot().empty?.text === MONITORING_NOT_PREPARED_TEXT, "not_prepared copy");
   store.destroy();
 }
 
@@ -321,7 +321,7 @@ const ROUTE = { project_ref: "synthetic-project-r7-s07a", run_ref: "synthetic-ru
   await flush();
   const snap = store.getSnapshot();
   check(snap.notice?.kind === "forbidden", "403 maps to forbidden notice");
-  check(snap.notice?.text === R7_FORBIDDEN_ACCOUNT_TEXT, "forbidden copy");
+  check(snap.notice?.text === MONITORING_FORBIDDEN_ACCOUNT_TEXT, "forbidden copy");
   check(snap.actionsHidden === true, "403 hides actions for this load cycle");
   store.destroy();
 }
@@ -399,7 +399,7 @@ const ROUTE = { project_ref: "synthetic-project-r7-s07a", run_ref: "synthetic-ru
   check(fake.calls.filter((c) => c.method === "cancelExecution").length === 0, "stop requires confirm first");
   store.beginStopConfirm();
   check(store.getSnapshot().confirmStop === true, "confirm state shown inline");
-  check(timers.pending().includes(R7_STOP_CONFIRM_TIMEOUT_MS), "confirm auto-revert timer armed");
+  check(timers.pending().includes(MONITORING_STOP_CONFIRM_TIMEOUT_MS), "confirm auto-revert timer armed");
   await store.pressAction("cancel");
   await flush();
   check(fake.calls.filter((c) => c.method === "cancelExecution").length === 1, "confirmed stop posts cancel");
@@ -414,7 +414,7 @@ const ROUTE = { project_ref: "synthetic-project-r7-s07a", run_ref: "synthetic-ru
   store.show(ROUTE);
   await flush();
   store.beginStopConfirm();
-  await timers.fire(R7_STOP_CONFIRM_TIMEOUT_MS);
+  await timers.fire(MONITORING_STOP_CONFIRM_TIMEOUT_MS);
   check(store.getSnapshot().confirmStop === false, "confirm auto-reverts after timeout");
   check(fake.calls.filter((c) => c.method === "cancelExecution").length === 0, "timeout posts nothing");
   store.destroy();
@@ -429,7 +429,7 @@ const ROUTE = { project_ref: "synthetic-project-r7-s07a", run_ref: "synthetic-ru
   store.beginStopConfirm();
   store.cancelStopConfirm();
   check(store.getSnapshot().confirmStop === false, "Esc path reverts confirm");
-  check(!timers.pending().includes(R7_STOP_CONFIRM_TIMEOUT_MS), "confirm timer cleared on revert");
+  check(!timers.pending().includes(MONITORING_STOP_CONFIRM_TIMEOUT_MS), "confirm timer cleared on revert");
   check(fake.calls.filter((c) => c.method === "cancelExecution").length === 0, "revert posts nothing");
   store.destroy();
 }
@@ -526,7 +526,7 @@ const ROUTE = { project_ref: "synthetic-project-r7-s07a", run_ref: "synthetic-ru
   );
   store.show(ROUTE);
   await flush();
-  store.show({ project_ref: ROUTE.project_ref, run_ref: "synthetic-run-r7-next" });
+  store.show({ project_ref: ROUTE.project_ref, run_ref: "synthetic-run-r5-next" });
   await flush();
   stale.resolve(progressPayload({ progress_text: "已处理 9/9 项（100%）" }));
   await flush();
@@ -561,21 +561,21 @@ const ROUTE = { project_ref: "synthetic-project-r7-s07a", run_ref: "synthetic-ru
 // 25. Forbidden-term scan over panel copy and failure/confirm texts.
 {
   const texts = [
-    R7_PANEL_TEXT.title,
-    R7_PANEL_TEXT.loading,
-    R7_PANEL_TEXT.latestUpdatesEmpty,
-    R7_PANEL_TEXT.confirmStopAction,
-    R7_PANEL_TEXT.confirmStopHint,
-    R7_PANEL_TEXT.refreshAction,
-    R7_PANEL_TEXT.actionFailed,
-    R7_PANEL_TEXT.stageGroup,
-    R7_PANEL_TEXT.currentWorkGroup,
-    R7_PANEL_TEXT.latestUpdatesGroup,
-    R7_PANEL_TEXT.actionsGroup,
-    R7_PANEL_TEXT.refreshFailedAt("14:05"),
-    R7_PANEL_TEXT.moreCurrentWork(2),
+    MONITORING_PANEL_TEXT.title,
+    MONITORING_PANEL_TEXT.loading,
+    MONITORING_PANEL_TEXT.latestUpdatesEmpty,
+    MONITORING_PANEL_TEXT.confirmStopAction,
+    MONITORING_PANEL_TEXT.confirmStopHint,
+    MONITORING_PANEL_TEXT.refreshAction,
+    MONITORING_PANEL_TEXT.actionFailed,
+    MONITORING_PANEL_TEXT.stageGroup,
+    MONITORING_PANEL_TEXT.currentWorkGroup,
+    MONITORING_PANEL_TEXT.latestUpdatesGroup,
+    MONITORING_PANEL_TEXT.actionsGroup,
+    MONITORING_PANEL_TEXT.refreshFailedAt("14:05"),
+    MONITORING_PANEL_TEXT.moreCurrentWork(2),
   ];
-  const hits = findR7ForbiddenTerms(texts);
+  const hits = findMonitoringForbiddenTerms(texts);
   check(hits.length === 0, `panel copy excludes forbidden terms${hits.length ? `: ${JSON.stringify(hits)}` : ""}`);
 }
 

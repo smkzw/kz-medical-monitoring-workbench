@@ -1,32 +1,32 @@
 import {
-  R7_COMPARISON_UNAVAILABLE_TEXT,
-  R7_OPTIONS_REFRESH_TEXT,
-  R7_PRODUCT_IN_FLIGHT_STATES,
-  R7_PRODUCT_MODES,
-  R7_PRODUCT_STATE_KINDS,
-  R7_PUBLIC_RESULT_UNAVAILABLE_TEXT,
-  isR7InFlightRunState,
-  projectR7History,
-  projectR7ResultContext,
+  MONITORING_COMPARISON_UNAVAILABLE_TEXT,
+  MONITORING_OPTIONS_REFRESH_TEXT,
+  MONITORING_PRODUCT_IN_FLIGHT_STATES,
+  MONITORING_PRODUCT_MODES,
+  MONITORING_PRODUCT_STATE_KINDS,
+  MONITORING_PUBLIC_RESULT_UNAVAILABLE_TEXT,
+  isMonitoringInFlightRunState,
+  projectMonitoringHistory,
+  projectMonitoringResultContext,
 } from "./medicalMonitoringProductProjection.mjs";
 
-export const R7_WIZARD_STEP_COUNT = 4;
-export const R7_WIZARD_STEPS = Object.freeze([
+export const MONITORING_WIZARD_STEP_COUNT = 4;
+export const MONITORING_WIZARD_STEPS = Object.freeze([
   Object.freeze({ number: 1, key: "mode", label: "选择监查方式" }),
   Object.freeze({ number: 2, key: "scope", label: "确认数据范围" }),
   Object.freeze({ number: 3, key: "rules", label: "选择特殊关注" }),
   Object.freeze({ number: 4, key: "confirm", label: "确认并开始" }),
 ]);
 
-export const R7_START_ACTION_TEXT = "开始一次监查";
-export const R7_HISTORY_ACTION_TEXT = "查看历史";
-export const R7_PROGRESS_ACTION_TEXT = "查看本次进度";
-export const R7_RESULT_ACTION_TEXT = "查看本次结果";
-export const R7_NEW_RUN_ACTION_TEXT = "开始一次新的监查";
-export const R7_RETURN_IN_FLIGHT_ACTION_TEXT = "返回正在进行的监查";
+export const MONITORING_START_ACTION_TEXT = "开始一次监查";
+export const MONITORING_HISTORY_ACTION_TEXT = "查看历史";
+export const MONITORING_PROGRESS_ACTION_TEXT = "查看本次进度";
+export const MONITORING_RESULT_ACTION_TEXT = "查看本次结果";
+export const MONITORING_NEW_RUN_ACTION_TEXT = "开始一次新的监查";
+export const MONITORING_RETURN_IN_FLIGHT_ACTION_TEXT = "返回正在进行的监查";
 
-const IN_FLIGHT_SET = new Set(R7_PRODUCT_IN_FLIGHT_STATES);
-const MODE_SET = new Set(R7_PRODUCT_MODES);
+const IN_FLIGHT_SET = new Set(MONITORING_PRODUCT_IN_FLIGHT_STATES);
+const MODE_SET = new Set(MONITORING_PRODUCT_MODES);
 
 function isRecord(value) {
 
@@ -131,7 +131,7 @@ function contextPublicRunToken(context) {
  * replace an explicitly opened result context. Only public run/result tokens
  * enter this model; internal run/snapshot/cutoff identities are not accepted.
  */
-export function selectR7Run(input = {}) {
+export function selectMonitoringRun(input = {}) {
   const rows = runRows(input.history, input.runs);
   const explicitResultToken = selectedResultToken(input);
   const context = input.resultContext && input.resultContext.kind !== "invalid"
@@ -155,7 +155,7 @@ export function selectR7Run(input = {}) {
     const active = inFlightRows(rows)[0] || unpublishedClosureRows(rows)[0];
     selectedRun = active || latestAvailableRow(rows);
     selectionSource = selectedRun
-      ? (isR7InFlightRunState(selectedRun.runState) || !selectedRun.resultAvailable
+      ? (isMonitoringInFlightRunState(selectedRun.runState) || !selectedRun.resultAvailable
         ? "default_in_flight"
         : "default_latest_result")
       : "default_empty";
@@ -182,16 +182,16 @@ export function selectR7Run(input = {}) {
     hasInFlight: activeRows.length > 0,
     otherInFlightRun: selectedIsPublished ? otherInFlight : null,
     hasOtherInFlight: Boolean(selectedIsPublished && otherInFlight),
-    returnInFlightAction: selectedIsPublished && otherInFlight ? R7_RETURN_IN_FLIGHT_ACTION_TEXT : "",
+    returnInFlightAction: selectedIsPublished && otherInFlight ? MONITORING_RETURN_IN_FLIGHT_ACTION_TEXT : "",
   });
 }
 
-export const projectR7SelectedRun = selectR7Run;
-export const projectR7RunSelection = selectR7Run;
+export const projectMonitoringSelectedRun = selectMonitoringRun;
+export const projectMonitoringRunSelection = selectMonitoringRun;
 
 function selectedIsActive(selection) {
   const run = selection?.selectedRun;
-  return Boolean(run && (isR7InFlightRunState(run.runState) || (run.runState === "completed" && !run.resultAvailable)));
+  return Boolean(run && (isMonitoringInFlightRunState(run.runState) || (run.runState === "completed" && !run.resultAvailable)));
 }
 
 /**
@@ -199,17 +199,17 @@ function selectedIsActive(selection) {
  * the server history row; this function never translates run_state into a
  * replacement main label.
  */
-export function projectR7Workbar(selectionOrInput = {}) {
+export function projectMonitoringWorkbar(selectionOrInput = {}) {
   const selection = selectionOrInput?.kind === "selection"
     ? selectionOrInput
-    : selectR7Run(selectionOrInput);
+    : selectMonitoringRun(selectionOrInput);
   const selectedRun = selection.selectedRun;
   if (!selectedRun && selection.unresolvedExplicitPublicRun) {
     return freeze({
       kind: "workbar",
-      mainAction: R7_PROGRESS_ACTION_TEXT,
+      mainAction: MONITORING_PROGRESS_ACTION_TEXT,
       mainTarget: "progress",
-      secondaryAction: R7_HISTORY_ACTION_TEXT,
+      secondaryAction: MONITORING_HISTORY_ACTION_TEXT,
       secondaryTarget: "history",
       otherAction: "",
       otherTarget: "",
@@ -221,11 +221,11 @@ export function projectR7Workbar(selectionOrInput = {}) {
   if (!selectedRun && selection.selectedResultContext) {
     return freeze({
       kind: "workbar",
-      mainAction: R7_RESULT_ACTION_TEXT,
+      mainAction: MONITORING_RESULT_ACTION_TEXT,
       mainTarget: "result",
-      secondaryAction: selection.hasOtherInFlight ? R7_RETURN_IN_FLIGHT_ACTION_TEXT : "",
+      secondaryAction: selection.hasOtherInFlight ? MONITORING_RETURN_IN_FLIGHT_ACTION_TEXT : "",
       secondaryTarget: selection.hasOtherInFlight ? "progress" : "",
-      otherAction: R7_HISTORY_ACTION_TEXT,
+      otherAction: MONITORING_HISTORY_ACTION_TEXT,
       otherTarget: "history",
       showNewRun: false,
       selectedPublicRunToken: selection.selectedPublicRunToken || "",
@@ -235,9 +235,9 @@ export function projectR7Workbar(selectionOrInput = {}) {
   if (!selectedRun) {
     return freeze({
       kind: "workbar",
-      mainAction: R7_START_ACTION_TEXT,
+      mainAction: MONITORING_START_ACTION_TEXT,
       mainTarget: "wizard",
-      secondaryAction: R7_HISTORY_ACTION_TEXT,
+      secondaryAction: MONITORING_HISTORY_ACTION_TEXT,
       secondaryTarget: "history",
       otherAction: "",
       otherTarget: "",
@@ -258,7 +258,7 @@ export function projectR7Workbar(selectionOrInput = {}) {
     mainTarget: active ? "progress" : published ? "result" : "progress",
     secondaryAction: "",
     secondaryTarget: "",
-    otherAction: R7_HISTORY_ACTION_TEXT,
+    otherAction: MONITORING_HISTORY_ACTION_TEXT,
     otherTarget: "history",
     showNewRun: false,
     selectedPublicRunToken: selectedRun.publicRunToken,
@@ -266,10 +266,10 @@ export function projectR7Workbar(selectionOrInput = {}) {
   };
   if (published) {
     if (selection.hasOtherInFlight) {
-      workbar.secondaryAction = R7_RETURN_IN_FLIGHT_ACTION_TEXT;
+      workbar.secondaryAction = MONITORING_RETURN_IN_FLIGHT_ACTION_TEXT;
       workbar.secondaryTarget = "progress";
     } else {
-      workbar.secondaryAction = R7_NEW_RUN_ACTION_TEXT;
+      workbar.secondaryAction = MONITORING_NEW_RUN_ACTION_TEXT;
       workbar.secondaryTarget = "wizard";
       workbar.showNewRun = true;
     }
@@ -277,21 +277,21 @@ export function projectR7Workbar(selectionOrInput = {}) {
   return freeze(workbar);
 }
 
-export const projectR7MonitoringWorkbar = projectR7Workbar;
+export const projectMonitoringMonitoringWorkbar = projectMonitoringWorkbar;
 
 function normalizeOptions(options, projectId) {
   if (options?.kind === "setup") return options;
-  const projected = projectR7SetupOptions(options, { projectId });
+  const projected = projectMonitoringSetupOptions(options, { projectId });
   return projected.kind === "setup" ? projected : null;
 }
 
 function normalizeHistory(history, projectId) {
   if (history?.kind === "history") return history;
-  const projected = projectR7History(history, { projectId });
+  const projected = projectMonitoringHistory(history, { projectId });
   return projected.kind === "history" ? projected : null;
 }
 
-export function projectR7ProductState({
+export function projectMonitoringProductState({
   projectId = "",
   options = null,
   history = null,
@@ -323,7 +323,7 @@ export function projectR7ProductState({
   const resolvedResultContext = resultContext?.kind === "result"
     ? resultContext
     : resultContext
-      ? projectR7ResultContext(resultContext, {
+      ? projectMonitoringResultContext(resultContext, {
         projectId,
         resultContextToken: routeResultToken,
       })
@@ -348,17 +348,17 @@ export function projectR7ProductState({
       kind: "unavailable",
       selectedRun: null,
       workbar: null,
-      error: safeServerText(error) || R7_PUBLIC_RESULT_UNAVAILABLE_TEXT,
+      error: safeServerText(error) || MONITORING_PUBLIC_RESULT_UNAVAILABLE_TEXT,
     });
   }
-  const selection = selectR7Run({
+  const selection = selectMonitoringRun({
     history: runs,
     resultContext: resolvedResultContext,
     selectedPublicRunToken,
     selectedResultContextToken,
     route,
   });
-  const workbar = projectR7Workbar(selection);
+  const workbar = projectMonitoringWorkbar(selection);
   const resultSelected = Boolean(
     resolvedResultContext?.kind === "result"
       || selection.selectedRun?.resultAvailable,
@@ -369,8 +369,8 @@ export function projectR7ProductState({
     : activeSelected
       ? "active_run"
       : "ready";
-  if (!R7_PRODUCT_STATE_KINDS.includes(kind)) {
-    return freeze({ kind: "unavailable", status: "unavailable", selectedRun: null, workbar: null, error: R7_PUBLIC_RESULT_UNAVAILABLE_TEXT });
+  if (!MONITORING_PRODUCT_STATE_KINDS.includes(kind)) {
+    return freeze({ kind: "unavailable", status: "unavailable", selectedRun: null, workbar: null, error: MONITORING_PUBLIC_RESULT_UNAVAILABLE_TEXT });
   }
   return freeze({
     kind,
@@ -388,7 +388,7 @@ export function projectR7ProductState({
   });
 }
 
-export const projectR7MonitoringState = projectR7ProductState;
+export const projectMonitoringMonitoringState = projectMonitoringProductState;
 
 function modeOption(state, setup) {
   return setup?.modes?.find((item) => item.mode === state.mode) || null;
@@ -434,7 +434,7 @@ function idempotencySelectionEqual(left, right) {
     && JSON.stringify(a.riskRuleTokens) === JSON.stringify(b.riskRuleTokens);
 }
 
-export function createR7WizardState(options, initial = {}) {
+export function createMonitoringWizardState(options, initial = {}) {
   const setup = normalizeOptions(options, initial.projectId);
   const modeFromInput = text(initial.mode);
   const recommendedMode = text(setup?.recommendedMode);
@@ -463,8 +463,8 @@ export function createR7WizardState(options, initial = {}) {
   return freeze({
     kind: "wizard",
     projectId: text(initial.projectId) || text(setup?.projectId),
-    step: Number.isInteger(initial.step) && initial.step >= 1 && initial.step <= R7_WIZARD_STEP_COUNT ? initial.step : 1,
-    stepCount: R7_WIZARD_STEP_COUNT,
+    step: Number.isInteger(initial.step) && initial.step >= 1 && initial.step <= MONITORING_WIZARD_STEP_COUNT ? initial.step : 1,
+    stepCount: MONITORING_WIZARD_STEP_COUNT,
     mode,
     executionBasis,
     currentSnapshotToken: currentToken,
@@ -479,19 +479,19 @@ export function createR7WizardState(options, initial = {}) {
   });
 }
 
-export function projectR7WizardState(state, options) {
+export function projectMonitoringWizardState(state, options) {
   const setup = normalizeOptions(options, state?.projectId);
   if (!setup || !isRecord(state)) {
-    return freeze({ kind: "invalid", status: "invalid", text: R7_OPTIONS_REFRESH_TEXT });
+    return freeze({ kind: "invalid", status: "invalid", text: MONITORING_OPTIONS_REFRESH_TEXT });
   }
   const wizard = freeze({
     ...state,
     kind: "wizard",
     projectId: text(state.projectId) || text(setup.projectId),
-    step: Number.isInteger(state.step) && state.step >= 1 && state.step <= R7_WIZARD_STEP_COUNT
+    step: Number.isInteger(state.step) && state.step >= 1 && state.step <= MONITORING_WIZARD_STEP_COUNT
       ? state.step
       : 1,
-    stepCount: R7_WIZARD_STEP_COUNT,
+    stepCount: MONITORING_WIZARD_STEP_COUNT,
     mode: text(state.mode),
     executionBasis: text(state.executionBasis),
     currentSnapshotToken: text(state.currentSnapshotToken),
@@ -525,7 +525,7 @@ export function projectR7WizardState(state, options) {
     currentData: current,
     ruleRevisions: rules,
     summary: freeze(summary),
-    canAdvance: canAdvanceR7Wizard(wizard, setup).ok,
+    canAdvance: canAdvanceMonitoringWizard(wizard, setup).ok,
   });
 }
 
@@ -537,9 +537,9 @@ function wizardFailure(code, message, state) {
   });
 }
 
-export function setR7WizardSelection(state, field, value, options) {
+export function setMonitoringWizardSelection(state, field, value, options) {
   const setup = normalizeOptions(options, state?.projectId);
-  if (!setup || !isRecord(state)) return freeze({ kind: "invalid", status: "invalid", text: R7_OPTIONS_REFRESH_TEXT });
+  if (!setup || !isRecord(state)) return freeze({ kind: "invalid", status: "invalid", text: MONITORING_OPTIONS_REFRESH_TEXT });
   const next = { ...state, errorCode: "", errorText: "" };
   if (field === "mode") {
     const mode = text(value);
@@ -570,13 +570,13 @@ export function setR7WizardSelection(state, field, value, options) {
     const option = modeOption(state, setup);
     const token = text(value);
     if (token && !selectableBaseline(option, token)) {
-      return wizardFailure("invalid_baseline", R7_COMPARISON_UNAVAILABLE_TEXT, state);
+      return wizardFailure("invalid_baseline", MONITORING_COMPARISON_UNAVAILABLE_TEXT, state);
     }
     return freeze({ ...next, baselineToken: token });
   }
   if (field === "currentSnapshotToken") {
     const token = text(value);
-    if (!token) return wizardFailure("invalid_snapshot", R7_OPTIONS_REFRESH_TEXT, state);
+    if (!token) return wizardFailure("invalid_snapshot", MONITORING_OPTIONS_REFRESH_TEXT, state);
     return freeze({ ...next, currentSnapshotToken: token });
   }
   if (field === "riskRuleTokens") {
@@ -590,18 +590,18 @@ export function setR7WizardSelection(state, field, value, options) {
   return freeze({ ...next, [field]: clone(value) });
 }
 
-export function canAdvanceR7Wizard(state, options) {
+export function canAdvanceMonitoringWizard(state, options) {
   const setup = normalizeOptions(options, state?.projectId);
-  if (!setup || !isRecord(state)) return { ok: false, code: "options_invalid", text: R7_OPTIONS_REFRESH_TEXT };
+  if (!setup || !isRecord(state)) return { ok: false, code: "options_invalid", text: MONITORING_OPTIONS_REFRESH_TEXT };
   const option = modeOption(state, setup);
   const current = setup.currentData;
   if (state.step <= 1 && (!option || !option.available)) {
     return { ok: false, code: "mode_required", text: "请选择当前可用的监查方式。" };
   }
   if (state.step <= 2) {
-    if (!text(state.currentSnapshotToken) || !current) return { ok: false, code: "snapshot_required", text: R7_OPTIONS_REFRESH_TEXT };
+    if (!text(state.currentSnapshotToken) || !current) return { ok: false, code: "snapshot_required", text: MONITORING_OPTIONS_REFRESH_TEXT };
     if (state.executionBasis === "incremental" && current.canCompare !== true) {
-      return { ok: false, code: "no_stable_business_key", text: R7_COMPARISON_UNAVAILABLE_TEXT };
+      return { ok: false, code: "no_stable_business_key", text: MONITORING_COMPARISON_UNAVAILABLE_TEXT };
     }
     if (!validBasisOption(option, state.executionBasis)) return { ok: false, code: "basis_required", text: "请选择当前可用的执行基础。" };
     if (state.mode === "daily" && state.executionBasis === "full" && text(state.baselineToken)) {
@@ -611,7 +611,7 @@ export function canAdvanceR7Wizard(state, options) {
       return { ok: false, code: "baseline_forbidden", text: "核查前监查使用新的固定数据范围。" };
     }
     if (state.executionBasis === "incremental" && !selectableBaseline(option, state.baselineToken)) {
-      return { ok: false, code: "baseline_required", text: R7_COMPARISON_UNAVAILABLE_TEXT };
+      return { ok: false, code: "baseline_required", text: MONITORING_COMPARISON_UNAVAILABLE_TEXT };
     }
   }
   if (state.step >= 4 && !text(state.idempotencyKey)) {
@@ -620,24 +620,24 @@ export function canAdvanceR7Wizard(state, options) {
   return { ok: true, code: "", text: "" };
 }
 
-export function advanceR7WizardStep(state, options, direction = 1) {
+export function advanceMonitoringWizardStep(state, options, direction = 1) {
   const step = Number.isInteger(state?.step) ? state.step : 1;
   const target = step + (direction >= 0 ? 1 : -1);
-  if (target < 1 || target > R7_WIZARD_STEP_COUNT) return freeze(state);
+  if (target < 1 || target > MONITORING_WIZARD_STEP_COUNT) return freeze(state);
   if (direction >= 0) {
-    const check = canAdvanceR7Wizard(state, options);
+    const check = canAdvanceMonitoringWizard(state, options);
     if (!check.ok) return wizardFailure(check.code, check.text, state);
   }
   return freeze({ ...state, step: target, errorCode: "", errorText: "" });
 }
 
-export const moveR7WizardStep = advanceR7WizardStep;
+export const moveMonitoringWizardStep = advanceMonitoringWizardStep;
 
-export function buildR7PrepareAndStartPayload(state, options) {
+export function buildMonitoringPrepareAndStartPayload(state, options) {
   const setup = normalizeOptions(options, state?.projectId);
   const check = !setup
-    ? { ok: false, code: "options_invalid", text: R7_OPTIONS_REFRESH_TEXT }
-    : canAdvanceR7Wizard({ ...state, step: 2 }, setup);
+    ? { ok: false, code: "options_invalid", text: MONITORING_OPTIONS_REFRESH_TEXT }
+    : canAdvanceMonitoringWizard({ ...state, step: 2 }, setup);
   if (!check.ok || !text(state?.idempotencyKey)) {
     const failure = !check.ok
       ? check
@@ -667,8 +667,8 @@ export function buildR7PrepareAndStartPayload(state, options) {
 }
 
 function defaultNonce() {
-  if (typeof globalThis.crypto?.randomUUID === "function") return `r7_${globalThis.crypto.randomUUID()}`;
-  return `r7_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
+  if (typeof globalThis.crypto?.randomUUID === "function") return `monitoring_${globalThis.crypto.randomUUID()}`;
+  return `monitoring_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
 }
 
 function safeNonce(nonceFactory) {
@@ -679,7 +679,7 @@ function safeNonce(nonceFactory) {
   return value;
 }
 
-export function createR7IdempotencyState({ key = "", selection = null, timeoutRetryUsed = false } = {}) {
+export function createMonitoringIdempotencyState({ key = "", selection = null, timeoutRetryUsed = false } = {}) {
   return freeze({
     key: text(key),
     selection: selection ? stateSelection(selection) : null,
@@ -689,31 +689,31 @@ export function createR7IdempotencyState({ key = "", selection = null, timeoutRe
   });
 }
 
-export function ensureR7IdempotencyKey(state = {}, { nonceFactory } = {}) {
+export function ensureMonitoringIdempotencyKey(state = {}, { nonceFactory } = {}) {
   if (text(state.key)) return freeze({ ...state });
   return freeze({
-    ...createR7IdempotencyState(state),
+    ...createMonitoringIdempotencyState(state),
     key: safeNonce(nonceFactory),
   });
 }
 
-export function rotateR7IdempotencyKey(state = {}, { nonceFactory, selection = null } = {}) {
+export function rotateMonitoringIdempotencyKey(state = {}, { nonceFactory, selection = null } = {}) {
   return freeze({
-    ...createR7IdempotencyState(state),
+    ...createMonitoringIdempotencyState(state),
     key: safeNonce(nonceFactory),
     selection: selection ? stateSelection(selection) : state.selection || null,
   });
 }
 
-export function syncR7IdempotencySelection(state = {}, selection, { nonceFactory } = {}) {
+export function syncMonitoringIdempotencySelection(state = {}, selection, { nonceFactory } = {}) {
   const current = state.selection;
   if (!current || !idempotencySelectionEqual(current, selection)) {
-    return rotateR7IdempotencyKey(state, { nonceFactory, selection });
+    return rotateMonitoringIdempotencyKey(state, { nonceFactory, selection });
   }
   return freeze({ ...state, selection: stateSelection(selection) });
 }
 
-export function markR7PrepareAttempt(state = {}) {
+export function markMonitoringPrepareAttempt(state = {}) {
   return freeze({ ...state, attemptCount: (Number.isInteger(state.attemptCount) ? state.attemptCount : 0) + 1 });
 }
 
@@ -722,7 +722,7 @@ export function markR7PrepareAttempt(state = {}) {
  * with the same random nonce is permitted. A payload hash is never used as a
  * client idempotency key.
  */
-export function handleR7PrepareTimeout(state = {}, { publicRunToken = "" } = {}) {
+export function handleMonitoringPrepareTimeout(state = {}, { publicRunToken = "" } = {}) {
   const token = text(publicRunToken);
   if (token) {
     return freeze({
@@ -745,41 +745,41 @@ export function handleR7PrepareTimeout(state = {}, { publicRunToken = "" } = {})
   });
 }
 
-export function resetR7TimeoutRetry(state = {}) {
+export function resetMonitoringTimeoutRetry(state = {}) {
   return freeze({ ...state, timeoutRetryUsed: false, lastPublicRunToken: "" });
 }
 
-export function createR7IdempotencyController({ nonceFactory, initialState = {} } = {}) {
-  let current = ensureR7IdempotencyKey(createR7IdempotencyState(initialState), { nonceFactory });
+export function createMonitoringIdempotencyController({ nonceFactory, initialState = {} } = {}) {
+  let current = ensureMonitoringIdempotencyKey(createMonitoringIdempotencyState(initialState), { nonceFactory });
   return Object.freeze({
     getState() {
       return current;
     },
     syncSelection(selection) {
-      current = syncR7IdempotencySelection(current, selection, { nonceFactory });
+      current = syncMonitoringIdempotencySelection(current, selection, { nonceFactory });
       return current;
     },
     rotate(selection = null) {
-      current = rotateR7IdempotencyKey(current, { nonceFactory, selection });
+      current = rotateMonitoringIdempotencyKey(current, { nonceFactory, selection });
       return current;
     },
     markAttempt() {
-      current = markR7PrepareAttempt(current);
+      current = markMonitoringPrepareAttempt(current);
       return current;
     },
     handleTimeout(details = {}) {
-      const result = handleR7PrepareTimeout(current, details);
+      const result = handleMonitoringPrepareTimeout(current, details);
       current = freeze(result.state);
       return result;
     },
     resetTimeoutRetry() {
-      current = resetR7TimeoutRetry(current);
+      current = resetMonitoringTimeoutRetry(current);
       return current;
     },
   });
 }
 
-export function projectR7AwayRestore({
+export function projectMonitoringAwayRestore({
   runs = null,
   history = null,
   route = {},
@@ -799,7 +799,7 @@ export function projectR7AwayRestore({
       || route?.public_run_token
       || route?.publicRunToken,
   );
-  const selection = selectR7Run({
+  const selection = selectMonitoringRun({
     runs,
     history,
     // Module navigation intentionally re-applies default precedence; an old
@@ -823,17 +823,17 @@ export function projectR7AwayRestore({
   });
 }
 
-export const restoreR7SelectedRun = projectR7AwayRestore;
-export const projectR7ReturnState = projectR7AwayRestore;
+export const restoreMonitoringSelectedRun = projectMonitoringAwayRestore;
+export const projectMonitoringReturnState = projectMonitoringAwayRestore;
 
-export function markR7WizardOptionsStale(state) {
-  return wizardFailure("options_stale", R7_OPTIONS_REFRESH_TEXT, state || {});
+export function markMonitoringWizardOptionsStale(state) {
+  return wizardFailure("options_stale", MONITORING_OPTIONS_REFRESH_TEXT, state || {});
 }
 
-export function isR7ProductStateKind(value) {
-  return R7_PRODUCT_STATE_KINDS.includes(text(value));
+export function isMonitoringProductStateKind(value) {
+  return MONITORING_PRODUCT_STATE_KINDS.includes(text(value));
 }
 
-export function isR7InFlightProductRun(row) {
+export function isMonitoringInFlightProductRun(row) {
   return IN_FLIGHT_SET.has(text(rowValue(row, "runState", "run_state")));
 }

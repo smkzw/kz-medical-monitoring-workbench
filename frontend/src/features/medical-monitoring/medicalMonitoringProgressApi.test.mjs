@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { MedicalMonitoringApiError } from "./medicalMonitoringApi.mjs";
 import {
-  MEDICAL_MONITORING_R7_PROGRESS_PATHS,
-  createMedicalMonitoringR7ProgressApi,
+  MEDICAL_MONITORING_PROGRESS_PATHS,
+  createMedicalMonitoringProgressApi,
 } from "./medicalMonitoringProgressApi.mjs";
 
 let passed = 0;
@@ -19,7 +19,7 @@ function jsonResponse(body, status = 200) {
 }
 
 const calls = [];
-const api = createMedicalMonitoringR7ProgressApi({
+const api = createMedicalMonitoringProgressApi({
   baseUrl: "http://127.0.0.1:8911/",
   fetchImpl: async (url, options) => {
     calls.push({ url, options });
@@ -89,7 +89,7 @@ for (const [fn, args] of [
 }
 check(calls.length === 6, "invalid identifiers never reach fetch");
 
-const errorApi = createMedicalMonitoringR7ProgressApi({
+const errorApi = createMedicalMonitoringProgressApi({
   fetchImpl: async () => jsonResponse(
     { code: "run_binding_not_found", message: "未找到本次监查运行。" },
     404,
@@ -112,7 +112,7 @@ check(
   "error surfaces the server Chinese message",
 );
 
-const forbiddenApi = createMedicalMonitoringR7ProgressApi({
+const forbiddenApi = createMedicalMonitoringProgressApi({
   fetchImpl: async () => jsonResponse(
     { code: "not_permitted", message: "当前身份无权执行该医学监查 R7 操作。" },
     403,
@@ -127,7 +127,7 @@ try {
 check(forbiddenError?.status === 403, "action 403 is not swallowed");
 check(forbiddenError?.detail?.code === "not_permitted", "action 403 keeps its code");
 
-const networkApi = createMedicalMonitoringR7ProgressApi({
+const networkApi = createMedicalMonitoringProgressApi({
   fetchImpl: async () => {
     throw new Error("network down");
   },
@@ -140,7 +140,7 @@ try {
 }
 check(networkError?.message === "network down", "fetch rejections propagate unchanged");
 
-const abortApi = createMedicalMonitoringR7ProgressApi({
+const abortApi = createMedicalMonitoringProgressApi({
   fetchImpl: async () => {
     const error = new Error("aborted");
     error.name = "AbortError";
@@ -156,14 +156,14 @@ try {
 check(abortError?.name === "AbortError", "abort errors propagate unchanged");
 
 check(
-  MEDICAL_MONITORING_R7_PROGRESS_PATHS.progress("p", "r")
+  MEDICAL_MONITORING_PROGRESS_PATHS.progress("p", "r")
     === "/api/projects/p/modules/medical-monitoring/r7/runs/r/progress",
   "path helper stays on the mounted R7 module prefix",
 );
 
 let factoryError = null;
 try {
-  createMedicalMonitoringR7ProgressApi({ fetchImpl: null });
+  createMedicalMonitoringProgressApi({ fetchImpl: null });
 } catch (error) {
   factoryError = error;
 }

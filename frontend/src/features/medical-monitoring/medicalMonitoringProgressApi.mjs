@@ -12,16 +12,16 @@ function encodeSegment(value) {
   return encodeURIComponent(requireId(value, "path identifier"));
 }
 
-function r7RunPath(projectId, runRef) {
+function monitoringRunPath(projectId, runRef) {
   return `${API_PREFIX}/${encodeSegment(requireId(projectId, "projectId"))}`
     + `/modules/medical-monitoring/r7/runs/${encodeSegment(requireId(runRef, "runRef"))}`;
 }
 
-export const MEDICAL_MONITORING_R7_PROGRESS_PATHS = Object.freeze({
-  progress: (projectId, runRef) => `${r7RunPath(projectId, runRef)}/progress`,
-  executionStart: (projectId, runRef) => `${r7RunPath(projectId, runRef)}/execution/start`,
-  executionCancel: (projectId, runRef) => `${r7RunPath(projectId, runRef)}/execution/cancel`,
-  executionResume: (projectId, runRef) => `${r7RunPath(projectId, runRef)}/execution/resume`,
+export const MEDICAL_MONITORING_PROGRESS_PATHS = Object.freeze({
+  progress: (projectId, runRef) => `${monitoringRunPath(projectId, runRef)}/progress`,
+  executionStart: (projectId, runRef) => `${monitoringRunPath(projectId, runRef)}/execution/start`,
+  executionCancel: (projectId, runRef) => `${monitoringRunPath(projectId, runRef)}/execution/cancel`,
+  executionResume: (projectId, runRef) => `${monitoringRunPath(projectId, runRef)}/execution/resume`,
 });
 
 function joinBaseUrl(baseUrl, path) {
@@ -55,10 +55,10 @@ function errorMessage(payload, response) {
     if (typeof payload.code === "string") return payload.code;
   }
   if (typeof payload === "string" && payload.trim()) return payload.trim();
-  return `Medical monitoring R7 request failed (${response.status})`;
+  return `医学监查请求失败 (${response.status})`;
 }
 
-export function createMedicalMonitoringR7ProgressApi({
+export function createMedicalMonitoringProgressApi({
   fetchImpl = globalThis.fetch,
   baseUrl = "",
 } = {}) {
@@ -91,7 +91,7 @@ export function createMedicalMonitoringR7ProgressApi({
     getProgress(projectId, runRef, { signal } = {}) {
       return request(
         "GET",
-        MEDICAL_MONITORING_R7_PROGRESS_PATHS.progress(
+        MEDICAL_MONITORING_PROGRESS_PATHS.progress(
           requireId(projectId, "projectId"),
           requireId(runRef, "runRef"),
         ),
@@ -102,7 +102,7 @@ export function createMedicalMonitoringR7ProgressApi({
     startExecution(projectId, runRef, { signal } = {}) {
       return request(
         "POST",
-        MEDICAL_MONITORING_R7_PROGRESS_PATHS.executionStart(
+        MEDICAL_MONITORING_PROGRESS_PATHS.executionStart(
           requireId(projectId, "projectId"),
           requireId(runRef, "runRef"),
         ),
@@ -113,7 +113,7 @@ export function createMedicalMonitoringR7ProgressApi({
     cancelExecution(projectId, runRef, { signal } = {}) {
       return request(
         "POST",
-        MEDICAL_MONITORING_R7_PROGRESS_PATHS.executionCancel(
+        MEDICAL_MONITORING_PROGRESS_PATHS.executionCancel(
           requireId(projectId, "projectId"),
           requireId(runRef, "runRef"),
         ),
@@ -124,7 +124,7 @@ export function createMedicalMonitoringR7ProgressApi({
     resumeExecution(projectId, runRef, { signal } = {}) {
       return request(
         "POST",
-        MEDICAL_MONITORING_R7_PROGRESS_PATHS.executionResume(
+        MEDICAL_MONITORING_PROGRESS_PATHS.executionResume(
           requireId(projectId, "projectId"),
           requireId(runRef, "runRef"),
         ),

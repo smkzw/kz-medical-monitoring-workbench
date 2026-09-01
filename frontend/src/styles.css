@@ -59,7 +59,7 @@ button:disabled {
   grid-template-columns: 64px minmax(0, 1fr);
 }
 
-.app.monitoring-r5-active .topbar {
+.app.monitoring-product-active .topbar {
   display: none;
 }
 

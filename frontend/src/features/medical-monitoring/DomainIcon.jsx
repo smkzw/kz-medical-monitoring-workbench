@@ -53,7 +53,7 @@ export function DomainIcon({
   const iconSize = ICON_SIZES[size] || ICON_SIZES.legend;
   return (
     <span
-      className={`r5-event-mark r5-domain-icon r5-domain-icon-${size} r5-domain-icon-${domain || "unknown"}${className ? ` ${className}` : ""}`}
+      className={`monitoring-event-mark monitoring-domain-icon monitoring-domain-icon-${size} monitoring-domain-icon-${domain || "unknown"}${className ? ` ${className}` : ""}`}
       aria-hidden={ariaHidden}
       title={title}
     >

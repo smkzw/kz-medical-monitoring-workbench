@@ -1347,7 +1347,7 @@ function AppShell({
     }
   };
   return (
-    <div className={`app ${activePage === "writing" ? "writing-active" : ""} ${activePage === "monitoringProduct" ? "monitoring-r5-active" : ""}`}>
+    <div className={`app ${activePage === "writing" ? "writing-active" : ""} ${activePage === "monitoringProduct" ? "monitoring-product-active" : ""}`}>
       <aside className="sidebar">
         <button className="brand" onClick={() => setActivePage("overview")} aria-label="返回项目总看板">
           <img src={logo} alt="康哲药业" />

@@ -1,13 +1,13 @@
-.r7-progress {
+.monitoring-progress {
   background: #fff;
-  border: 1px solid var(--r5-line, #dce3e9);
+  border: 1px solid var(--monitoring-line, #dce3e9);
   border-radius: 10px;
   padding: 14px 18px 12px;
   margin-bottom: 16px;
-  color: var(--r5-ink, #17212b);
+  color: var(--monitoring-ink, #17212b);
 }
 
-.r7-progress-head {
+.monitoring-progress-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -15,30 +15,30 @@
   flex-wrap: wrap;
 }
 
-.r7-progress-heading h2 {
+.monitoring-progress-heading h2 {
   margin: 0;
   font-size: 15px;
   letter-spacing: -0.01em;
 }
 
-.r7-progress-scope {
+.monitoring-progress-scope {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--r5-muted, #6b7785);
+  color: var(--monitoring-muted, #6b7785);
 }
 
-.r7-progress-actions {
+.monitoring-progress-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.r7-progress-action,
-.r7-progress-refresh {
-  border: 1px solid var(--r5-line, #dce3e9);
+.monitoring-progress-action,
+.monitoring-progress-refresh {
+  border: 1px solid var(--monitoring-line, #dce3e9);
   background: #fff;
-  color: var(--r5-ink, #17212b);
+  color: var(--monitoring-ink, #17212b);
   border-radius: 7px;
   min-height: 32px;
   padding: 0 13px;
@@ -46,65 +46,65 @@
   cursor: pointer;
 }
 
-.r7-progress-action:hover:not(:disabled),
-.r7-progress-refresh:hover {
-  border-color: var(--r5-orange, #e96828);
-  color: var(--r5-orange, #e96828);
+.monitoring-progress-action:hover:not(:disabled),
+.monitoring-progress-refresh:hover {
+  border-color: var(--monitoring-orange, #e96828);
+  color: var(--monitoring-orange, #e96828);
 }
 
-.r7-progress-action.is-primary {
-  border-color: var(--r5-orange, #e96828);
-  background: var(--r5-orange, #e96828);
+.monitoring-progress-action.is-primary {
+  border-color: var(--monitoring-orange, #e96828);
+  background: var(--monitoring-orange, #e96828);
   color: #fff;
 }
 
-.r7-progress-action.is-primary:hover:not(:disabled) {
+.monitoring-progress-action.is-primary:hover:not(:disabled) {
   color: #fff;
   filter: brightness(0.94);
 }
 
-.r7-progress-action.is-confirm {
-  border-color: var(--r5-orange, #e96828);
+.monitoring-progress-action.is-confirm {
+  border-color: var(--monitoring-orange, #e96828);
   background: #fff4ed;
   color: #a74316;
 }
 
-.r7-progress-action:disabled {
+.monitoring-progress-action:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
-.r7-progress-action:focus-visible,
-.r7-progress-refresh:focus-visible {
-  outline: 2px solid var(--r5-orange, #e96828);
+.monitoring-progress-action:focus-visible,
+.monitoring-progress-refresh:focus-visible {
+  outline: 2px solid var(--monitoring-orange, #e96828);
   outline-offset: 2px;
 }
 
-.r7-progress-confirm-hint {
+.monitoring-progress-confirm-hint {
   font-size: 12px;
-  color: var(--r5-muted, #6b7785);
+  color: var(--monitoring-muted, #6b7785);
   max-width: 340px;
 }
 
-.r7-progress-body {
+.monitoring-progress-body {
   margin-top: 12px;
 }
 
-.r7-progress-main {
+.monitoring-progress-main {
   display: grid;
   grid-template-columns: auto minmax(180px, 1fr);
   align-items: center;
   gap: 14px;
 }
 
-.r7-progress-summary {
+.monitoring-progress-summary {
   display: flex;
   align-items: center;
   gap: 9px;
   flex-wrap: wrap;
 }
 
-.r7-progress-big {
+.monitoring-progress-big {
   font-size: 24px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -112,38 +112,38 @@
   white-space: nowrap;
 }
 
-.r7-progress-track {
+.monitoring-progress-track {
   height: 10px;
   border-radius: 999px;
   background: #e9eef2;
   overflow: hidden;
 }
 
-.r7-progress-fill {
+.monitoring-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: var(--r5-orange, #e96828);
+  background: var(--monitoring-orange, #e96828);
   transition: width 0.3s ease;
 }
 
-.r7-progress[data-r7-state="failed"] .r7-progress-fill {
-  background: var(--r5-red, #b83b3b);
+.monitoring-progress[data-monitoring-state="failed"] .monitoring-progress-fill {
+  background: var(--monitoring-red, #b83b3b);
   opacity: 0.42;
 }
 
-.r7-progress[data-r7-state="failed"] .r7-progress-track {
+.monitoring-progress[data-monitoring-state="failed"] .monitoring-progress-track {
   background: #f7e7e5;
   box-shadow: inset 0 0 0 1px rgba(184, 59, 59, 0.35);
 }
 
-.r7-progress-status {
+.monitoring-progress-status {
   grid-column: 1 / -1;
   margin: 0;
   font-size: 13px;
   font-weight: 700;
 }
 
-.r7-progress-outcome {
+.monitoring-progress-outcome {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -157,49 +157,49 @@
   white-space: nowrap;
 }
 
-.r7-progress[data-r7-state="failed"] .r7-progress-outcome {
+.monitoring-progress[data-monitoring-state="failed"] .monitoring-progress-outcome {
   min-height: 30px;
   padding: 0 11px;
-  border-color: var(--r5-red, #b83b3b);
-  background: var(--r5-red, #b83b3b);
+  border-color: var(--monitoring-red, #b83b3b);
+  background: var(--monitoring-red, #b83b3b);
   color: #fff;
   font-size: 14px;
   box-shadow: 0 2px 6px rgba(184, 59, 59, 0.2);
 }
 
-.r7-progress[data-r7-state="failed"] .r7-progress-big {
+.monitoring-progress[data-monitoring-state="failed"] .monitoring-progress-big {
   color: #7a2424;
   font-size: 20px;
   font-weight: 700;
 }
 
-.r7-progress[data-r7-state="ended_incomplete"] .r7-progress-outcome {
+.monitoring-progress[data-monitoring-state="ended_incomplete"] .monitoring-progress-outcome {
   border-color: #d89b56;
   background: #fff6e9;
   color: #91531d;
 }
 
-.r7-progress[data-r7-state="completed"] .r7-progress-outcome {
+.monitoring-progress[data-monitoring-state="completed"] .monitoring-progress-outcome {
   border-color: #a8c9b8;
   background: #eef7f2;
   color: #2f6b52;
 }
 
-.r7-progress-detail {
+.monitoring-progress-detail {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px 22px;
   margin-top: 12px;
 }
 
-.r7-progress-block h3 {
+.monitoring-progress-block h3 {
   margin: 0 0 6px;
   font-size: 12px;
   font-weight: 800;
-  color: var(--r5-muted, #6b7785);
+  color: var(--monitoring-muted, #6b7785);
 }
 
-.r7-progress-block ul {
+.monitoring-progress-block ul {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -209,79 +209,79 @@
   font-size: 13px;
 }
 
-.r7-progress-stages {
+.monitoring-progress-stages {
   flex-direction: row !important;
   flex-wrap: wrap;
   gap: 6px !important;
 }
 
-.r7-progress-stages li {
+.monitoring-progress-stages li {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  border: 1px solid var(--r5-line, #dce3e9);
-  background: var(--r5-soft, #f6f8fa);
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  background: var(--monitoring-soft, #f6f8fa);
   border-radius: 6px;
   padding: 3px 9px;
 }
 
-.r7-stage-count,
-.r7-cw-meta,
-.r7-up-time {
+.monitoring-stage-count,
+.monitoring-cw-meta,
+.monitoring-up-time {
   font-variant-numeric: tabular-nums;
-  color: var(--r5-muted, #6b7785);
+  color: var(--monitoring-muted, #6b7785);
   font-size: 12px;
 }
 
-.r7-progress-current li,
-.r7-progress-updates li {
+.monitoring-progress-current li,
+.monitoring-progress-updates li {
   display: flex;
   align-items: baseline;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.r7-progress-updates li.is-history {
-  color: var(--r5-muted, #6b7785);
+.monitoring-progress-updates li.is-history {
+  color: var(--monitoring-muted, #6b7785);
   opacity: 0.72;
 }
 
-.r7-cw-more,
-.r7-progress-minor,
-.r7-progress-empty,
-.r7-progress-loading {
+.monitoring-cw-more,
+.monitoring-progress-minor,
+.monitoring-progress-empty,
+.monitoring-progress-loading {
   font-size: 12px;
-  color: var(--r5-muted, #6b7785);
+  color: var(--monitoring-muted, #6b7785);
   margin: 0;
 }
 
-.r7-progress-empty,
-.r7-progress-loading {
+.monitoring-progress-empty,
+.monitoring-progress-loading {
   margin-top: 8px;
 }
 
-.r7-progress-notice {
+.monitoring-progress-notice {
   margin-top: 10px;
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  border: 1px solid var(--r5-red, #b83b3b);
+  border: 1px solid var(--monitoring-red, #b83b3b);
   border-radius: 7px;
   padding: 7px 12px;
   font-size: 13px;
-  color: var(--r5-red, #b83b3b);
+  color: var(--monitoring-red, #b83b3b);
   background: #fdf6f5;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .r7-progress-fill {
+  .monitoring-progress-fill {
     transition: none;
   }
 }
 
 @media (max-width: 900px) {
-  .r7-progress-main {
+  .monitoring-progress-main {
     grid-template-columns: 1fr;
     gap: 8px;
   }

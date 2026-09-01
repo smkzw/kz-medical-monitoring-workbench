@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
-  R7_PANEL_TEXT,
-  createR7ProgressPanelStore,
+  MONITORING_PANEL_TEXT,
+  createMonitoringProgressPanelStore,
 } from "./medicalMonitoringProgressPanelController.mjs";
 import "./medicalMonitoringProgressPanel.css";
 
@@ -28,7 +28,7 @@ function scopeLine(scope) {
     .join(" · ");
 }
 
-export function R7ProgressPanelView({
+export function MonitoringProgressPanelView({
   panel,
   onAction,
   onRefresh,
@@ -46,20 +46,20 @@ export function R7ProgressPanelView({
 
   return (
     <section
-      className="r7-progress"
-      data-r7-state={view?.runState || "none"}
-      aria-label={R7_PANEL_TEXT.title}
+      className="monitoring-progress"
+      data-monitoring-state={view?.runState || "none"}
+      aria-label={MONITORING_PANEL_TEXT.title}
     >
-      <div className="r7-progress-head">
-        <div className="r7-progress-heading">
-          <h2>{R7_PANEL_TEXT.title}</h2>
-          {view && scopeLine(view.scope) ? <p className="r7-progress-scope">{scopeLine(view.scope)}</p> : null}
+      <div className="monitoring-progress-head">
+        <div className="monitoring-progress-heading">
+          <h2>{MONITORING_PANEL_TEXT.title}</h2>
+          {view && scopeLine(view.scope) ? <p className="monitoring-progress-scope">{scopeLine(view.scope)}</p> : null}
         </div>
         {showActions ? (
           <div
-            className="r7-progress-actions"
+            className="monitoring-progress-actions"
             role="group"
-            aria-label={R7_PANEL_TEXT.actionsGroup}
+            aria-label={MONITORING_PANEL_TEXT.actionsGroup}
             onKeyDown={(event) => {
               if (event.key === "Escape") onCancelStopConfirm?.();
             }}
@@ -68,21 +68,21 @@ export function R7ProgressPanelView({
               <>
                 <button
                   type="button"
-                  className="r7-progress-action is-confirm"
+                  className="monitoring-progress-action is-confirm"
                   ref={confirmButtonRef}
                   disabled={busy}
                   onClick={() => onAction?.("cancel")}
                 >
-                  {R7_PANEL_TEXT.confirmStopAction}
+                  {MONITORING_PANEL_TEXT.confirmStopAction}
                 </button>
-                <span className="r7-progress-confirm-hint">{R7_PANEL_TEXT.confirmStopHint}</span>
+                <span className="monitoring-progress-confirm-hint">{MONITORING_PANEL_TEXT.confirmStopHint}</span>
               </>
             ) : (
               actions.map((action) => (
                 <button
                   key={action.action}
                   type="button"
-                  className={`r7-progress-action ${action.action === "cancel" ? "is-stop" : "is-primary"}`}
+                  className={`monitoring-progress-action ${action.action === "cancel" ? "is-stop" : "is-primary"}`}
                   disabled={busy}
                   onClick={() => (action.action === "cancel" ? onBeginStopConfirm?.() : onAction?.(action.action))}
                 >
@@ -95,99 +95,99 @@ export function R7ProgressPanelView({
       </div>
 
       {view ? (
-        <div className="r7-progress-body">
-          <div className="r7-progress-main">
-            <div className="r7-progress-summary">
-              <span className="r7-progress-big">{view.progressText}</span>
+        <div className="monitoring-progress-body">
+          <div className="monitoring-progress-main">
+            <div className="monitoring-progress-summary">
+              <span className="monitoring-progress-big">{view.progressText}</span>
               {view.outcomeLabel ? (
-                <span className="r7-progress-outcome">{view.outcomeLabel}</span>
+                <span className="monitoring-progress-outcome">{view.outcomeLabel}</span>
               ) : null}
             </div>
             <div
-              className="r7-progress-track"
+              className="monitoring-progress-track"
               role="progressbar"
               aria-valuenow={Math.round(view.percent)}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuetext={view.progressText || `${Math.round(view.percent)}%`}
             >
-              <div className="r7-progress-fill" style={{ width: `${view.percent}%` }} />
+              <div className="monitoring-progress-fill" style={{ width: `${view.percent}%` }} />
             </div>
-            <p className="r7-progress-status" aria-live="polite">{view.runStatusText}</p>
+            <p className="monitoring-progress-status" aria-live="polite">{view.runStatusText}</p>
           </div>
-          <div className="r7-progress-detail">
+          <div className="monitoring-progress-detail">
             {view.stageProgress.length > 0 ? (
-              <section className="r7-progress-block" aria-label={R7_PANEL_TEXT.stageGroup}>
-                <h3>{R7_PANEL_TEXT.stageGroup}</h3>
-                <ul className="r7-progress-stages">
+              <section className="monitoring-progress-block" aria-label={MONITORING_PANEL_TEXT.stageGroup}>
+                <h3>{MONITORING_PANEL_TEXT.stageGroup}</h3>
+                <ul className="monitoring-progress-stages">
                   {view.stageProgress.map((stage, index) => (
                     <li key={`${stage.stage}-${index}`}>
-                      <span className="r7-stage-name">{stage.stage}</span>
-                      <span className="r7-stage-count">{stage.progressText || `${stage.processed}/${stage.total}`}</span>
+                      <span className="monitoring-stage-name">{stage.stage}</span>
+                      <span className="monitoring-stage-count">{stage.progressText || `${stage.processed}/${stage.total}`}</span>
                     </li>
                   ))}
                 </ul>
               </section>
             ) : null}
             {view.currentWork.length > 0 || view.currentWorkEmptyText ? (
-              <section className="r7-progress-block" aria-label={R7_PANEL_TEXT.currentWorkGroup}>
-                <h3>{R7_PANEL_TEXT.currentWorkGroup}</h3>
+              <section className="monitoring-progress-block" aria-label={MONITORING_PANEL_TEXT.currentWorkGroup}>
+                <h3>{MONITORING_PANEL_TEXT.currentWorkGroup}</h3>
                 {view.currentWork.length > 0 ? (
-                  <ul className="r7-progress-current">
+                  <ul className="monitoring-progress-current">
                     {view.currentWork.map((item, index) => (
                       <li key={`${item.label}-${index}`}>
-                        <span className="r7-cw-label">{item.label}</span>
-                        <span className="r7-cw-meta">{[item.stateLabel, item.elapsedText].filter(Boolean).join(" · ")}</span>
+                        <span className="monitoring-cw-label">{item.label}</span>
+                        <span className="monitoring-cw-meta">{[item.stateLabel, item.elapsedText].filter(Boolean).join(" · ")}</span>
                       </li>
                     ))}
                     {view.currentWorkRemaining > 0 ? (
-                      <li className="r7-cw-more">{R7_PANEL_TEXT.moreCurrentWork(view.currentWorkRemaining)}</li>
+                      <li className="monitoring-cw-more">{MONITORING_PANEL_TEXT.moreCurrentWork(view.currentWorkRemaining)}</li>
                     ) : null}
                   </ul>
                 ) : (
-                  <p className="r7-progress-minor">{view.currentWorkEmptyText}</p>
+                  <p className="monitoring-progress-minor">{view.currentWorkEmptyText}</p>
                 )}
               </section>
             ) : null}
-            <section className="r7-progress-block" aria-label={R7_PANEL_TEXT.latestUpdatesGroup}>
-              <h3>{R7_PANEL_TEXT.latestUpdatesGroup}</h3>
+            <section className="monitoring-progress-block" aria-label={MONITORING_PANEL_TEXT.latestUpdatesGroup}>
+              <h3>{MONITORING_PANEL_TEXT.latestUpdatesGroup}</h3>
               {view.latestUpdates.length > 0 ? (
-                <ul className="r7-progress-updates">
+                <ul className="monitoring-progress-updates">
                   {view.latestUpdates.map((update, index) => (
                     <li
                       key={`${update.timeText}-${index}`}
                       className={update.historical ? "is-history" : undefined}
                     >
-                      <span className="r7-up-time">{update.timeText}</span>
-                      <span className="r7-up-label">{update.label}</span>
-                      <span className="r7-up-state">
+                      <span className="monitoring-up-time">{update.timeText}</span>
+                      <span className="monitoring-up-label">{update.label}</span>
+                      <span className="monitoring-up-state">
                         {update.historical ? `过程记录 · ${update.stateLabel}` : update.stateLabel}
                       </span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="r7-progress-minor">{R7_PANEL_TEXT.latestUpdatesEmpty}</p>
+                <p className="monitoring-progress-minor">{MONITORING_PANEL_TEXT.latestUpdatesEmpty}</p>
               )}
             </section>
           </div>
         </div>
       ) : null}
 
-      {!view && empty ? <p className="r7-progress-empty">{empty.text}</p> : null}
+      {!view && empty ? <p className="monitoring-progress-empty">{empty.text}</p> : null}
       {!view && !empty && !notice ? (
-        <p className="r7-progress-loading" role="status">{R7_PANEL_TEXT.loading}</p>
+        <p className="monitoring-progress-loading" role="status">{MONITORING_PANEL_TEXT.loading}</p>
       ) : null}
 
       {notice ? (
         <div
-          className={`r7-progress-notice${notice.kind === "forbidden" ? " is-forbidden" : ""}`}
+          className={`monitoring-progress-notice${notice.kind === "forbidden" ? " is-forbidden" : ""}`}
           role="alert"
         >
           <span>{notice.text}</span>
           {notice.kind !== "forbidden" ? (
-            <button type="button" className="r7-progress-refresh" onClick={() => onRefresh?.()}>
-              {R7_PANEL_TEXT.refreshAction}
+            <button type="button" className="monitoring-progress-refresh" onClick={() => onRefresh?.()}>
+              {MONITORING_PANEL_TEXT.refreshAction}
             </button>
           ) : null}
         </div>
@@ -205,7 +205,7 @@ export function MedicalMonitoringProgressPanel({ routeCanonical, api }) {
     // Create and destroy the store in the same effect so React StrictMode's
     // extra setup/cleanup cycle cannot leave a destroyed store bound to
     // useSyncExternalStore without a subscriber.
-    const next = createR7ProgressPanelStore(api ? { api } : {});
+    const next = createMonitoringProgressPanelStore(api ? { api } : {});
     setStore(next);
     next.show({ project_ref: projectRef, run_ref: runRef });
     return () => next.destroy();
@@ -224,7 +224,7 @@ export function MedicalMonitoringProgressPanel({ routeCanonical, api }) {
   }, [panel.confirmStop]);
 
   return (
-    <R7ProgressPanelView
+    <MonitoringProgressPanelView
       panel={panel}
       confirmButtonRef={confirmButtonRef}
       onAction={(action) => store?.pressAction(action)}
