@@ -3,6 +3,8 @@
 from packages.medical_monitoring.domain import acceptance, entities, execution
 from packages.medical_monitoring.domain import identity, risk, schema_registry, schema_shape
 from packages.medical_monitoring.graph import engine, store
+from packages.medical_monitoring.intelligence import normalization, primitives
+from packages.medical_monitoring.intelligence import schema_registry as intelligence_schemas
 from packages.medical_monitoring.runtime import adapters, background, capability, controller, progress
 
 from mm_r1 import adapters as legacy_r1_adapters
@@ -19,6 +21,9 @@ from mm_r2 import domain as legacy_r2_domain
 from mm_r2 import identity as legacy_r2_identity
 from mm_r2 import risk as legacy_r2_risk
 from mm_r2 import schema_registry as legacy_r2_schema_registry
+from mm_r3 import normalization as legacy_r3_normalization
+from mm_r3 import primitives as legacy_r3_primitives
+from mm_r3 import schema_registry as legacy_r3_schema_registry
 
 
 def test_r1_shims_resolve_to_package_authorities() -> None:
@@ -40,3 +45,9 @@ def test_r2_shims_resolve_to_package_authorities() -> None:
     assert legacy_r2_identity.RecordIdentity is identity.RecordIdentity
     assert legacy_r2_acceptance.AcceptanceService is acceptance.AcceptanceService
     assert legacy_r2_risk.RiskLifecycle is risk.RiskLifecycle
+
+
+def test_r3_shims_resolve_to_package_authorities() -> None:
+    assert legacy_r3_primitives.content_hash is primitives.content_hash
+    assert legacy_r3_normalization.normalize_value is normalization.normalize_value
+    assert legacy_r3_schema_registry.SchemaRegistry is intelligence_schemas.SchemaRegistry

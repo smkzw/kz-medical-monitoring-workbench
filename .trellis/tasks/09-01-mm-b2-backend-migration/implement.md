@@ -7,7 +7,7 @@
   - [x] Graph engine and authoritative store.
   - [x] Capability work-unit controller (moved with runtime dependencies).
 - [x] Runtime primitives: R1 adapters/capability/audience progress.
-- [ ] Intelligence: R3 normalization/primitives/schema registry.
+- [x] Intelligence: R3 normalization/primitives/schema registry.
 - [ ] Risks and projections: R4 modules, with fixture data externalized separately.
 - [ ] Projection authority: R5 modules and product adapter.
 - [ ] Reports and harness: R6 modules.
