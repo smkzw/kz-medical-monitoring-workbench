@@ -2,7 +2,7 @@
 
 ## Router decomposition
 
-- [ ] Extract shared DTOs, public wording and pure projections.
+- [x] Extract shared DTOs, public wording and pure projections.
   - [x] Move request contracts and publication error to one authoritative module.
   - [x] Move continuity response contracts and semantic projection helpers.
   - [x] Move shared public-text sanitization and remaining pure projections.
@@ -24,12 +24,12 @@
 - [x] Split protocol contracts/applicability/evidence/evaluation/materialization.
 - [x] Split efficacy validation/resolution/engine/output gates.
 - [x] Split launch registry records, publication store and continuity store.
-- [ ] Split remaining files above the hard limit by cohesive domain.
+- [x] Split remaining files above the hard limit by cohesive domain.
 
 ## Acceptance
 
-- [ ] No non-generated authoritative source file exceeds 1,500 lines without a documented exception.
-- [ ] Public route behavior remains compatible.
-- [ ] Complete affected risk suites pass.
-- [ ] Medical-writing route mounts and assets remain unchanged.
-- [ ] Trellis journal and git commits contain the phase evidence.
+- [x] No non-generated authoritative source file exceeds 1,500 lines without a documented exception.
+- [x] Public route behavior remains compatible.
+- [x] Complete affected risk suites pass.
+- [x] Medical-writing route mounts and assets remain unchanged.
+- [x] Trellis journal and git commits contain the phase evidence.

@@ -521,3 +521,10 @@
 - The result contract contains no study, indication, drug, score threshold, project identifier or listing-format branch; D10 evaluation continues to consume only closed typed inputs and the explicit evaluation authority.
 - Verification: the complete D10 adapter, mutation, projection, replay, runtime-closure, runtime-contract, verifier-probe and artifact-generator suites pass `293 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; both D10 modules pass `py_compile`, and `git diff --check` passes.
 - Authoritative Python inventory is now clear: no file under `packages/medical_monitoring` exceeds the 1,500-line hard limit; the largest is `risks/d08_evaluator.py` at 1,493 lines. Next action: close B3 acceptance with the consolidated behavior and protected-boundary evidence, then begin B4.
+
+## 2026-09-02 — B3 full-scope acceptance
+
+- B3 closes after 45 incremental commits: 152 authoritative Python files were moved or split by cohesive domain, and all 152 compile from the current consolidated package. The authoritative inventory has zero files above 1,500 lines; the largest is 1,493 lines.
+- Public R7 route behavior and the protected medical-writing contract gate pass `297 passed`. Across the complete B3 diff, the only file under `services/api/app` is the monitoring-only `medical_monitoring_r7_product_router.py`; no medical-writing route or asset was changed.
+- Every split was checked with its focused behavior/risk suite and recorded above. Frozen hash, optimizer, isolated-POC source-layout, file-count and create-only allowlist failures remain explicitly classified as B7 removal targets rather than refreshed acceptance gates.
+- Updated the engineering spec with the reusable compatibility-facade rule and the prohibition on repinning obsolete POC layout gates. B3 acceptance criteria are satisfied; next active child is B4 frontend single-generation consolidation.

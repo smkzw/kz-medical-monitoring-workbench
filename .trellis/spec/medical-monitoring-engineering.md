@@ -18,6 +18,7 @@
 - `services/api/app` keeps one thin medical-monitoring router mount; do not add domain logic to `main.py`.
 - `frontend/src/features/medical-monitoring/` is the only current medical-monitoring frontend. Keep medical-writing UI untouched.
 - Move behavior before changing it. For each layer: trace imports, move code and behavior tests, repair imports, run focused tests, then commit. Do not combine migration and redesign in one commit.
+- When splitting an authority module, keep its established import path as the compatibility facade and re-export every existing public symbol. Validate both the authoritative package and live compatibility consumers; do not duplicate new modules into frozen POC trees merely to satisfy obsolete source-layout or isolated-path gates.
 - Keep legacy `monitoring_*` LOOP/assurance/daily-run code read-only during Phase B unless a route collision requires the smallest isolation change.
 
 ## Code constraints
@@ -44,8 +45,8 @@
 ## Verification
 
 - Prefer behavior tests. Do not add frozen file-hash assertions, digest-refresh gates, optimizer/hash-seed matrices, or bulk synthetic case-count gates.
+- A frozen POC import-path, file-count, source-hash or create-only allowlist failure is migration evidence for B7, not permission to repin an obsolete gate. Record it separately from live behavior failures.
 - Verification order: real-data spot check, representative behavioral test, then larger synthetic coverage only when justified.
 - During a migration, run the smallest focused test first and broaden only across shared contracts.
 - For user-facing work, verify the actual workbench in `ego(lite)` at the user's primary wide-screen resolution. Mobile-specific work is out of scope.
 - Stage boundaries require one independent fresh-context review and user confirmation; stage-internal work uses Codex self-checks and focused tests.
-
