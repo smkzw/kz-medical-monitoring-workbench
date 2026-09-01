@@ -3,10 +3,10 @@
 ## Ordered slices
 
 - [x] Domain foundation: R1 domain/schema shape and complete R2 domain set.
-- [ ] Graph foundation: R1 graph/store/controller.
+- [x] Graph foundation: R1 graph/store/controller.
   - [x] Graph engine and authoritative store.
-  - [ ] Capability work-unit controller (moves with runtime dependencies).
-- [ ] Runtime primitives: R1 adapters/capability/audience progress.
+  - [x] Capability work-unit controller (moved with runtime dependencies).
+- [x] Runtime primitives: R1 adapters/capability/audience progress.
 - [ ] Intelligence: R3 normalization/primitives/schema registry.
 - [ ] Risks and projections: R4 modules, with fixture data externalized separately.
 - [ ] Projection authority: R5 modules and product adapter.
