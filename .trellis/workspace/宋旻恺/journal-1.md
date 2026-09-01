@@ -195,3 +195,10 @@
 - The facade eagerly re-exports all 16 contract/helper symbols, preserving class/function identity; the public-text sanitizer remains in the facade until its shared secret-field rules move as one unit.
 - Verification: package and facade pass `py_compile`; facade identity check passes for all 16 exported symbols; R5/R7 product routes plus adjacent medical-writing checks pass `227 passed`; `git diff --check` passes.
 - Next slice: extract shared public-text sanitization and remaining module-level projection helpers without moving any I/O-bearing route closure or patch seam.
+
+## 2026-09-01 — B3 backup and restore projections
+
+- Moved backup status/step/impact labels and the pure backup, restore and preflight audience projections into `packages.medical_monitoring.api.r7_product.backup_projections`.
+- The single process-wide backup worker registry and lock remain untouched in the facade; no background worker, persistence, route or recovery behavior moved in this slice.
+- Verification: new module and facade pass `py_compile`; R5/R7 product routes pass `100 passed`.
+- Next slice: move launch/publication and public-result pure projections, keeping facade patch seams and I/O orchestration in place.
