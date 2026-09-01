@@ -10,7 +10,7 @@
 // prompt and the legacy-R5 untouched render.
 
 import { renderToStaticMarkup } from "react-dom/server";
-import { DomainTracks, RiskRow } from "./r5/MedicalMonitoringR5Page.jsx";
+import { DomainTracks, RiskRow } from "./MedicalMonitoringR5Page.jsx";
 import {
   MedicalMonitoringR7JourneyDrawer,
   R7JourneyChangeMarker,

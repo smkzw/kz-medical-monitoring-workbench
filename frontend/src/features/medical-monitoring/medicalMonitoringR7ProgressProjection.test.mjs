@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { parseMedicalMonitoringR5RouteState } from "./r5/medicalMonitoringR5RouteState.mjs";
+import { parseMedicalMonitoringR5RouteState } from "./medicalMonitoringR5RouteState.mjs";
 import {
   R7_FORBIDDEN_ACCOUNT_TEXT,
   R7_FORBIDDEN_USER_VISIBLE_TERMS,

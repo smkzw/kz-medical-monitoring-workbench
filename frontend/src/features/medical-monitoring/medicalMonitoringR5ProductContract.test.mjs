@@ -4,14 +4,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, "../../../../..");
+const root = path.resolve(here, "../../../..");
 const files = [
-  "frontend/src/features/medical-monitoring/r5/MedicalMonitoringR5Page.jsx",
-  "frontend/src/features/medical-monitoring/r5/medicalMonitoringR5Adapter.mjs",
-  "frontend/src/features/medical-monitoring/r5/medicalMonitoringR5RouteState.mjs",
-  "frontend/src/features/medical-monitoring/r5/medicalMonitoringR5.css",
-  "frontend/src/features/medical-monitoring/r5/medicalMonitoringR5Fixtures.mjs",
-  "frontend/src/features/medical-monitoring/r5/medicalMonitoringR5Timeline.mjs",
+  "frontend/src/features/medical-monitoring/MedicalMonitoringR5Page.jsx",
+  "frontend/src/features/medical-monitoring/medicalMonitoringR5Adapter.mjs",
+  "frontend/src/features/medical-monitoring/medicalMonitoringR5RouteState.mjs",
+  "frontend/src/features/medical-monitoring/medicalMonitoringR5.css",
+  "frontend/src/features/medical-monitoring/medicalMonitoringR5Fixtures.mjs",
+  "frontend/src/features/medical-monitoring/medicalMonitoringR5Timeline.mjs",
 ];
 const content = files.map((file) => fs.readFileSync(path.join(root, file), "utf8")).join("\n");
 const pageSource = fs.readFileSync(path.join(root, files[0]), "utf8");
