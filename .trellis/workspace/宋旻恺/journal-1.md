@@ -489,3 +489,11 @@
 - Payload allowlists and forbidden nested content remain closed; the ledger stores opaque lifecycle references and digests rather than medical payloads, project files or user-facing report text.
 - Verification: project-audit behavior passes `8 passed`; project verifier, assurance-principal route and SQLite runtime-store adjacency pass `82 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `runtime/capability.py`, retaining one capability attempt/state authority, provider-neutral contracts and exact retry/terminal semantics.
+
+## 2026-09-02 — B3 capability runtime isolation decomposition
+
+- Split the 1,603-line capability runtime into a 1,391-line provider-neutral attempt/runtime authority and a 250-line harness-isolation/vocabulary module.
+- Preserved one capability-attempt lifecycle, canonical request hash, durable journal, exact retry and terminal semantics, frozen profile identity, API/harness neutrality and candidate-only clinical output boundary. No model-specific medical rule, study feature or listing-layout branch was added.
+- The extraction exposed two direct dependencies (`_path_within` and `_SANDBOX_EXEC_PATH`) and a late-bound test/runtime identity edge. The main profile verifier now checks the current sandbox executable identity, and command construction receives that verified path explicitly, retaining the prior fail-closed behavior when the backend disappears after profile freeze.
+- Verification: capability runtime, product capability guard and R7 harness runtime pass `90 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; both modules pass `py_compile`, and `git diff --check` passes.
+- Next slice: split `projections/d07_journey.py`, preserving the chronological visit axis, typed event/risk markers, source jumps and renderer-neutral Chinese audience semantics.
