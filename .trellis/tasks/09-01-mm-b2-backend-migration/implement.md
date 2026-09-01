@@ -20,6 +20,7 @@
     - [x] D03 investigational-product evaluator and projection.
     - [x] D04 protocol-compliance evaluator and projection.
     - [x] D05 visit-schedule contracts, evaluator and projection.
+    - [x] D06 efficacy contracts, evaluator and projection.
   - [ ] Fixture externalization and compatibility cleanup.
 - [ ] Projection authority: R5 modules and product adapter.
 - [ ] Reports and harness: R6 modules.
