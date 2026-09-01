@@ -230,3 +230,10 @@
 - Kept read-only view/store opening, mutable runtime construction, backup worker state and all endpoint closures in the facade. The nine moved symbols are eager facade re-exports, preserving compatibility identity.
 - Verification: package and facade pass `py_compile`; all nine facade identities match the extracted authority; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `git diff --check` passes.
 - Next slice: extract public-result request parsing and publication-manifest/provider-neutral metadata helpers, then begin capability route-context separation while retaining facade patch seams.
+
+## 2026-09-02 — B3 public-result requests and runtime manifest
+
+- Moved strict body/query/date parsing and comparison-range wording into `public_result_requests`; moved manifest identity/digest plus read-only runtime metadata/audit inspection into `runtime_manifest`.
+- The route factory still resolves all nine helpers through eager facade bindings, so endpoint monkeypatch boundaries and route order are unchanged. No provider, publication bridge, mutable store or medical semantic logic moved.
+- Verification: both authorities and facade pass `py_compile`; all nine facade identities match; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `git diff --check` passes.
+- Next slice: isolate provider-neutral invocation adapters while keeping `_build_r5_publication_packet` and `_read_publication_gate` late-bound in the facade, then start capability route-context extraction.

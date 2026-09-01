@@ -11,6 +11,7 @@
     - [x] Move launch, publication-state and public-result projections.
     - [x] Move HTTP status mapping and Chinese error envelopes.
     - [x] Move legacy read-only, setup and execution projections.
+    - [x] Move public-result request parsing and runtime-manifest helpers.
 - [ ] Extract project lifecycle, backup and restore capability router.
 - [ ] Extract setup, special-risk rule and profile capability router.
 - [ ] Extract run preparation, execution and progress capability router.

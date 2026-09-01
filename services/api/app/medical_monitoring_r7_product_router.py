@@ -60,8 +60,6 @@ from packages.medical_monitoring.runtime.capability import (
 from packages.medical_monitoring.domain.execution import (
     NodeStatus,
     NodeType,
-    content_hash,
-    to_jsonable,
 )
 from packages.medical_monitoring.graph.store import Store
 from packages.medical_monitoring.runtime import run_setup as rs
@@ -272,204 +270,22 @@ from packages.medical_monitoring.api.r7_product.legacy_projections import (
     _setup_projection,
     _runtime_work_units,
 )
+from packages.medical_monitoring.api.r7_product.public_result_requests import (
+    _reject_public_result_body,
+    _parse_public_result_query,
+    _canonical_public_result_value,
+    _parse_public_result_date,
+    _comparison_range_text,
+)
+from packages.medical_monitoring.api.r7_product.runtime_manifest import (
+    _publication_manifest_identity,
+    _runtime_manifest_digest,
+    _runtime_manifest_metadata,
+    _runtime_audit_chain_is_invalid,
+)
 
 
 
-
-
-async def _reject_public_result_body(request: Request) -> Optional[JSONResponse]:
-    if await request.body():
-        return _error_response(
-            422,
-            "request_validation_failed",
-            chinese_message_for("request_validation_failed"),
-        )
-    return None
-
-
-def _parse_public_result_query(
-    request: Request,
-    *,
-    allowed: frozenset[str],
-    required: frozenset[str] = frozenset(),
-) -> Union[dict[str, str], JSONResponse]:
-    values: dict[str, str] = {}
-    for key, raw_value in request.query_params.multi_items():
-        if key not in allowed or key in values:
-            return _error_response(
-                422,
-                "request_validation_failed",
-                chinese_message_for("request_validation_failed"),
-            )
-        value = str(raw_value or "").strip()
-        if not value:
-            return _error_response(
-                422,
-                "request_validation_failed",
-                chinese_message_for("request_validation_failed"),
-            )
-        values[key] = value
-    if not required.issubset(values):
-        return _error_response(
-            422,
-            "request_validation_failed",
-            chinese_message_for("request_validation_failed"),
-        )
-    return values
-
-
-def _canonical_public_result_value(
-    value: Any, *, field_name: str
-) -> Union[str, JSONResponse]:
-    if not isinstance(value, str) or not value.strip() or value != value.strip():
-        return _error_response(
-            422,
-            "request_validation_failed",
-            chinese_message_for("request_validation_failed"),
-        )
-    return value
-
-
-def _parse_public_result_date(
-    value: str,
-) -> Union[date, JSONResponse]:
-    try:
-        parsed = date.fromisoformat(value)
-    except ValueError:
-        return _error_response(
-            422,
-            "request_validation_failed",
-            chinese_message_for("request_validation_failed"),
-        )
-    if parsed.isoformat() != value:
-        return _error_response(
-            422,
-            "request_validation_failed",
-            chinese_message_for("request_validation_failed"),
-        )
-    return parsed
-
-def _comparison_range_text(
-    mode: str,
-    execution_basis: str,
-    baseline: Optional[rs.PublishedBaseline],
-) -> str:
-    if baseline is not None:
-        return f"{baseline.scope_description}（数据截止 {baseline.data_cutoff}）"
-    if mode == rs.MODE_POST_LOCK_PRE_CFDI:
-        return "当前固定总量完整数据（不使用比较基线）"
-    if execution_basis == rs.BASIS_INCREMENTAL:
-        return "同项目已发布数据基线"
-    return "当前完整数据（不使用比较基线）"
-
-
-
-
- 
-def _publication_manifest_identity(manifest: Any) -> dict[str, Any]:
-    """Return the cross-manifest identity subset frozen by 07C-3."""
-
-    units = getattr(manifest, "work_units", None)
-    if units is None:
-        units = getattr(manifest, "units", None)
-    values: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for unit in units:
-        work_unit_id = getattr(unit, "work_unit_id", None)
-        mandatory = getattr(unit, "mandatory", None)
-        if (
-            not isinstance(work_unit_id, str)
-            or not work_unit_id.strip()
-            or not isinstance(mandatory, bool)
-            or work_unit_id in seen
-        ):
-            raise ProductPublicationError("manifest_identity_mismatch")
-        seen.add(work_unit_id)
-        values.append({"work_unit_id": work_unit_id, "mandatory": mandatory})
-    values.sort(key=lambda item: item["work_unit_id"])
-    return {
-        "work_units": values,
-        "mandatory_denominator": sum(
-            bool(item["mandatory"]) for item in values
-        ),
-    }
-
-
-def _runtime_manifest_digest(manifest: Any) -> str:
-    try:
-        return content_hash(to_jsonable(manifest))
-    except Exception as exc:
-        raise ProductPublicationError("manifest_identity_mismatch") from exc
-
-
-
-
-def _runtime_manifest_metadata(
-    workspace: Path,
-    run_id: str,
-) -> Optional[dict[str, Any]]:
-    """Read existing R1 manifest metadata without creating runtime state."""
-
-    runtime_dir = workspace / RUNTIME_DIR_NAME
-    db_path = runtime_dir / RUNTIME_DB_NAME
-    artifact_dir = runtime_dir / ARTIFACT_DIR_NAME
-    if not db_path.is_file() or not artifact_dir.is_dir():
-        return None
-    store: Optional[Store] = None
-    try:
-        store = Store(db_path, artifact_dir)
-        run = store.get_run(run_id)
-        revision = int(run.manifest_revision)
-        if revision < 1:
-            return None
-        manifest = store.get_manifest(run_id, revision)
-        if manifest is None:
-            raise ProductPublicationError(
-                "runtime_read_failed", recoverable=True
-            )
-        return {
-            "revision": revision,
-            "manifest": manifest,
-            "identity": _publication_manifest_identity(manifest),
-            "digest": _runtime_manifest_digest(manifest),
-        }
-    except ProductPublicationError:
-        raise
-    except Exception as exc:
-        raise ProductPublicationError(
-            "runtime_read_failed", recoverable=True
-        ) from exc
-    finally:
-        if store is not None:
-            store.close()
-
-
-def _runtime_audit_chain_is_invalid(
-    workspace: Path,
-    run_id: str,
-) -> bool:
-    """Detect audit corruption after a progress read fails closed."""
-
-    runtime_dir = workspace / RUNTIME_DIR_NAME
-    db_path = runtime_dir / RUNTIME_DB_NAME
-    artifact_dir = runtime_dir / ARTIFACT_DIR_NAME
-    if not db_path.is_file() or not artifact_dir.is_dir():
-        return False
-    store: Optional[Store] = None
-    try:
-        store = Store(db_path, artifact_dir)
-        store.get_run(run_id)
-        result = store.verify_audit_chain()
-        return (
-            isinstance(result, tuple)
-            and len(result) == 3
-            and result[0] is False
-        )
-    except Exception:
-        return False
-    finally:
-        if store is not None:
-            store.close()
 
 
 def _r5_publication_types() -> tuple[Any, Any, Any, Any, Any]:
