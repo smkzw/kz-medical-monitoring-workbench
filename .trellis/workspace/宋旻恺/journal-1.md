@@ -505,3 +505,11 @@
 - The split is renderer-neutral and adds no card-layout assumption, study/drug/disease feature, score threshold or listing-format branch; the later interactive Patient Journey remains free to render the same ordered projection as one horizontal visit axis.
 - Verification: D07 Query/Journey, runtime-contract, mutation, replay, challenge-matrix and artifact-generator suites pass `1,543 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; all three D07 modules pass `py_compile`, and `git diff --check` passes.
 - Next slice: split the slightly oversized `runtime/agent_harness.py`, preserving one model-routing and invocation authority and the configured provider-neutral harness contract.
+
+## 2026-09-02 — B3 agent-harness audience vocabulary decomposition
+
+- Reduced the 1,508-line agent harness authority to 1,489 lines by extracting its 19-line audience-safe progress vocabulary into a dependency-free module. Model alias resolution, layered profile freeze, catalog/preflight, invocation, receipt and completion authority remain together in the original adapter.
+- Preserved provider-neutral invocation semantics, exact profile identity, no automatic fallback, durable receipt coverage and Chinese business-facing progress projection. The split does not expose provider/model/selector/attempt or transport terms to users and does not add medical inference logic.
+- Verification: the live agent-harness behavior excluding obsolete static/optimizer gates passes `24 passed`; R7 harness-runtime and run-binding adjacency passes `58 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate passes `297 passed`; both modules pass `py_compile`, and `git diff --check` passes.
+- The full historical R6 file reports 11 expected obsolete failures: nine isolated optimizer/hash-seed probes cannot import the post-consolidation `packages` authority from their frozen POC-only path, one frozen medical-writing file count is stale, and one create-only file allowlist is stale. These stage-B removal targets were recorded and not repinned.
+- Next slice: split the final oversized `risks/d10_evaluator.py`, preserving the single D10 evaluation authority, candidate/fact separation and provider-independent evidence contracts.
