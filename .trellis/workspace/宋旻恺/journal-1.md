@@ -252,3 +252,10 @@
 - The first complete product run exposed one omitted context dependency (`_workspace_dir`) in the two profile routes. After adding it to the explicit context, the five affected tests pass and the full gate is green.
 - Verification: package and facade pass `py_compile`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; no `services.api` or `mm_r*` import exists in the extracted module; `git diff --check` passes.
 - Next slice: extract the run preparation/execution/progress family behind a second explicit context, preserving the process-wide worker objects and facade-level publication seams.
+
+## 2026-09-02 — B3 run launch, execution and progress routes
+
+- Introduced one immutable `RunRouteContext` and moved nine run-facing endpoints into three registration groups placed at their original order boundaries: launch/list before publication, bind/execution/progress after publication, and run detail after public-result routes.
+- The split retains facade-local lifecycle, store and publication-overlay ownership through explicit injected dependencies. It does not move publication packet construction, receipt gates, worker state or the final catch-all route.
+- Verification: extracted route module and facade pass `py_compile`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; the extracted package imports no service-layer or POC module.
+- Next slice: extract publication/result/continuity route registration while keeping `_build_r5_publication_packet`, `_read_publication_gate` and provider selections facade-late-bound; then split project lifecycle/backup routes.
