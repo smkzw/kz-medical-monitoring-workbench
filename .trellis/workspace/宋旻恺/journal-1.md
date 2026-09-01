@@ -312,3 +312,11 @@
 - Every D06 evaluator source is below 1,500 lines (largest: `efficacy_unit_mixin.py`, 1,420 lines). No challenge-id branch, drug/disease constant or listing-layout hardcode was added.
 - Verification: original D06 contract, challenge-matrix and mutation suites pass `824 passed`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `py_compile`, whitespace and diff checks pass.
 - Next slice: split launch registry records, publication state and continuity-plan persistence while retaining one SQLite authority and transaction boundary.
+
+## 2026-09-02 — B3 launch, publication and continuity registry decomposition
+
+- Split the 4,713-line registry into canonical records/serialization plus mixins for lifecycle and launch reservation, publication reservation/retrieval, publication transitions/finalization, continuity persistence, and continuity/run-state transitions behind the existing `LaunchRegistry` facade.
+- Retained one SQLite connection, one transaction/failure-injection boundary and one public registry class. Replaced the former top-level class callback used by publication fingerprinting with the same pure alias-coalescing helper, shared by the facade mixin and fingerprint function.
+- Initial focused runs exposed three omitted `@staticmethod` decorators at mechanical slice boundaries; restored them before acceptance. Every registry source is below 1,500 lines (largest: `launch_registry_contracts.py`, 1,166 lines after the shared helper).
+- Verification: authoritative launch/continuity tests pass `53 passed, 1 skipped`; the single excluded POC-only case is the implementation-plan-obsolete optimizer/hash-seed subprocess matrix. R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `py_compile`, whitespace and diff checks pass.
+- Next slice: inventory and split the remaining authoritative files above the hard limit by cohesive domain, starting with visit-schedule and safety/risk evaluators before projection/runtime support files.
