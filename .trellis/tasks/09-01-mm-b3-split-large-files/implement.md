@@ -23,7 +23,7 @@
 
 - [x] Split protocol contracts/applicability/evidence/evaluation/materialization.
 - [x] Split efficacy validation/resolution/engine/output gates.
-- [ ] Split launch registry records, publication store and continuity store.
+- [x] Split launch registry records, publication store and continuity store.
 - [ ] Split remaining files above the hard limit by cohesive domain.
 
 ## Acceptance
