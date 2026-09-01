@@ -180,3 +180,11 @@
 - Final R4 closure rerun after all consolidated import repairs passes `4396 passed` in 199.51 seconds. `git diff --check` passes.
 - B2 is complete: domain, graph, intelligence, risks, projections, reports, runtime and thin API now have one package authority. Compatibility shims stay until B6; abolished frozen SHA/path/allowlist gates remain assigned to B7.
 - Next safe action: enter B3 and split the oversized product/API modules by capability without changing routes, payloads, Chinese audience wording or medical semantics.
+
+## 2026-09-01 — B3 planning and request-contract extraction
+
+- Activated the B3 Trellis task and recorded the route/evaluator decomposition, rollback and verification contract. A governed three-work-item execution review completed on `zcode/GLM-5.3-Flash:max`; execution audit passed with all three workers completed and no fallback.
+- Source and test evidence identified four hard compatibility constraints: facade-level monkeypatch seams must remain late-bound, backup worker state must remain a single object, the catch-all route must register last, and legacy `populate(vars())` shims require eager re-exports.
+- First bounded extraction moved all R7 request DTOs plus `ProductPublicationError` into `packages.medical_monitoring.api.r7_product.contracts`; the facade re-exports the same class objects and its runtime closure is unchanged.
+- Verification: new contract/facade files pass `py_compile`; R5/R7 product router behavior passes `100 passed`; no medical-writing source or asset changed.
+- Next slice: extract continuity DTOs and pure projection helpers while leaving publication seams and all I/O-bearing nested route functions in the facade.
