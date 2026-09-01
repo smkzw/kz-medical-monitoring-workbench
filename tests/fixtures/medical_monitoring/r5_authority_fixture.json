@@ -1,0 +1,588 @@
+{
+  "fixture_schema": "mm-medical-monitoring-synthetic-fixture-v1",
+  "fixture_version": "1",
+  "sources": [
+    {
+      "locator_ref": "s7-source-pd-10008",
+      "revision": "s7-rev-pd-001",
+      "record_ref": "方案执行 Data Listing 第 10008 行",
+      "canonical_location": "方案执行 Data Listing · 第 10008 行 · 访视日期单元格",
+      "excerpt": "参与者 10008；第 4 周访视；实际访视日期 2026-03-15；方案规定访视窗口 2026-03-08 至 2026-03-12。"
+    },
+    {
+      "locator_ref": "s7-source-ae-06021",
+      "revision": "s7-rev-ae-001",
+      "record_ref": "AE Data Listing 第 06021 行",
+      "canonical_location": "AE Data Listing · 第 06021 行 · 事件日期单元格",
+      "excerpt": "AE记录与对应访视的原始定位片段。"
+    },
+    {
+      "locator_ref": "s7-source-ae-mh-06021",
+      "revision": "s7-rev-aemh-001",
+      "record_ref": "AE/MH 核查表第 06021 行",
+      "canonical_location": "AE/MH 核查表 · 第 06021 行 · 匹配关系",
+      "excerpt": "AE/MH匹配历史的原始定位片段。"
+    },
+    {
+      "locator_ref": "s7-source-date-001",
+      "revision": "s7-rev-date-001",
+      "record_ref": "日期核查表第 001 行",
+      "canonical_location": "日期核查表 · 第 001 行 · 日期状态单元格",
+      "excerpt": "日期状态记录：保留缺失日期，不推断主轴日期。"
+    }
+  ],
+  "sites": [
+    {
+      "site_ref": "s7-site-006",
+      "subject_refs": ["s7-subject-06021"],
+      "pattern_refs": ["s7-pattern-site-006"],
+      "individual_risk_refs": ["s7-risk-key-ae-06021", "s7-risk-key-ae-mh-06021"],
+      "measure_refs": ["s7-measure-site-006"],
+      "domain": "ae",
+      "severity": "high",
+      "numerator": 2,
+      "denominator": 12,
+      "coverage_state": "complete"
+    },
+    {
+      "site_ref": "s7-site-010",
+      "subject_refs": ["s7-subject-10008", "s7-subject-date-001"],
+      "pattern_refs": ["s7-pattern-site-010"],
+      "individual_risk_refs": ["s7-risk-key-pd-10008"],
+      "measure_refs": ["s7-measure-site-010"],
+      "domain": "protocol_compliance",
+      "severity": "high",
+      "numerator": 1,
+      "denominator": 8,
+      "coverage_state": "complete"
+    },
+    {
+      "site_ref": "s7-site-small-001",
+      "subject_refs": [],
+      "pattern_refs": ["s7-pattern-site-small-001"],
+      "individual_risk_refs": [],
+      "measure_refs": ["s7-measure-site-small-001"],
+      "domain": "protocol_compliance",
+      "severity": "low",
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_state": "small_sample"
+    }
+  ],
+  "subjects": [
+    {
+      "subject_ref": "s7-subject-10008",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-10008",
+      "subject_label": "受试者 10008"
+    },
+    {
+      "subject_ref": "s7-subject-06021",
+      "site_ref": "s7-site-006",
+      "spine_ref": "s7-spine-06021",
+      "subject_label": "受试者 06021"
+    },
+    {
+      "subject_ref": "s7-subject-date-001",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-date-001",
+      "subject_label": "受试者 DATE-001"
+    }
+  ],
+  "events": [
+    {
+      "event_ref": "s7-event-pd-10008",
+      "subject_ref": "s7-subject-10008",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-10008",
+      "domain": "protocol_compliance",
+      "subtype": "protocol_deviation",
+      "date_state": "exact",
+      "start_date": "2026-03-15",
+      "end_date": "2026-03-15",
+      "visit_ref": "s7-visit-w4",
+      "risk_anchor_refs": ["s7-anchor-pd-10008"],
+      "source_locator_refs": ["s7-source-pd-10008"],
+      "label_zh": "方案执行偏离"
+    },
+    {
+      "event_ref": "s7-event-ae-06021",
+      "subject_ref": "s7-subject-06021",
+      "site_ref": "s7-site-006",
+      "spine_ref": "s7-spine-06021",
+      "domain": "ae",
+      "subtype": "ae",
+      "date_state": "exact",
+      "start_date": "2026-02-28",
+      "end_date": "2026-03-02",
+      "visit_ref": "s7-visit-w3",
+      "risk_anchor_refs": ["s7-anchor-ae-06021"],
+      "source_locator_refs": ["s7-source-ae-06021"],
+      "label_zh": "不良事件记录"
+    },
+    {
+      "event_ref": "s7-event-mh-06021",
+      "subject_ref": "s7-subject-06021",
+      "site_ref": "s7-site-006",
+      "spine_ref": "s7-spine-06021",
+      "domain": "mh",
+      "subtype": "mh",
+      "date_state": "exact",
+      "start_date": "2026-01-31",
+      "end_date": "2026-01-31",
+      "visit_ref": "s7-visit-06021-w2",
+      "risk_anchor_refs": ["s7-anchor-ae-mh-06021"],
+      "source_locator_refs": ["s7-source-ae-mh-06021"],
+      "label_zh": "既往病史记录"
+    },
+    {
+      "event_ref": "s7-event-cm-10008",
+      "subject_ref": "s7-subject-10008",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-10008",
+      "domain": "cm",
+      "subtype": "concomitant_medication",
+      "date_state": "exact",
+      "start_date": "2026-02-10",
+      "end_date": "2026-02-12",
+      "visit_ref": "s7-visit-w4",
+      "risk_anchor_refs": [],
+      "source_locator_refs": ["s7-source-pd-10008"],
+      "label_zh": "合并用药"
+    },
+    {
+      "event_ref": "s7-event-ip-10008",
+      "subject_ref": "s7-subject-10008",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-10008",
+      "domain": "ip",
+      "subtype": "ip_dose",
+      "date_state": "exact",
+      "start_date": "2026-01-15",
+      "end_date": "2026-03-15",
+      "visit_ref": "s7-visit-w4",
+      "risk_anchor_refs": [],
+      "source_locator_refs": ["s7-source-pd-10008"],
+      "label_zh": "试验药给药"
+    },
+    {
+      "event_ref": "s7-event-lab-10008",
+      "subject_ref": "s7-subject-10008",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-10008",
+      "domain": "lab_exam",
+      "subtype": "lab",
+      "date_state": "partial",
+      "start_date": "2026-02-20",
+      "end_date": null,
+      "visit_ref": "s7-visit-w4",
+      "risk_anchor_refs": [],
+      "source_locator_refs": ["s7-source-pd-10008"],
+      "label_zh": "实验室检查"
+    },
+    {
+      "event_ref": "s7-event-procedure-10008",
+      "subject_ref": "s7-subject-10008",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-10008",
+      "domain": "hospital_procedure",
+      "subtype": "procedure",
+      "date_state": "exact",
+      "start_date": "2026-02-22",
+      "end_date": "2026-02-22",
+      "visit_ref": "s7-visit-w4",
+      "risk_anchor_refs": [],
+      "source_locator_refs": ["s7-source-pd-10008"],
+      "label_zh": "操作记录"
+    },
+    {
+      "event_ref": "s7-event-symptom-10008",
+      "subject_ref": "s7-subject-10008",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-10008",
+      "domain": "symptom_efficacy",
+      "subtype": "symptom",
+      "date_state": "conflicted",
+      "start_date": "2026-02-01",
+      "end_date": "2026-02-10",
+      "visit_ref": "s7-visit-w4",
+      "risk_anchor_refs": [],
+      "source_locator_refs": ["s7-source-pd-10008"],
+      "label_zh": "症状/疗效指标"
+    },
+    {
+      "event_ref": "s7-event-date-exact",
+      "subject_ref": "s7-subject-date-001",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-date-001",
+      "domain": "ae",
+      "subtype": "ae",
+      "date_state": "exact",
+      "start_date": "2026-01-10",
+      "end_date": "2026-01-10",
+      "visit_ref": "s7-visit-date-exact",
+      "risk_anchor_refs": [],
+      "source_locator_refs": ["s7-source-date-001"],
+      "label_zh": "日期明确记录"
+    },
+    {
+      "event_ref": "s7-event-date-partial",
+      "subject_ref": "s7-subject-date-001",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-date-001",
+      "domain": "lab_exam",
+      "subtype": "lab",
+      "date_state": "partial",
+      "start_date": "2026-02-01",
+      "end_date": null,
+      "visit_ref": "s7-visit-date-pending",
+      "risk_anchor_refs": [],
+      "source_locator_refs": ["s7-source-date-001"],
+      "label_zh": "日期部分明确记录"
+    },
+    {
+      "event_ref": "s7-event-date-conflicted",
+      "subject_ref": "s7-subject-date-001",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-date-001",
+      "domain": "symptom_efficacy",
+      "subtype": "symptom",
+      "date_state": "conflicted",
+      "start_date": "2026-02-15",
+      "end_date": "2026-02-20",
+      "visit_ref": "s7-visit-date-pending",
+      "risk_anchor_refs": [],
+      "source_locator_refs": ["s7-source-date-001"],
+      "label_zh": "日期冲突记录"
+    },
+    {
+      "event_ref": "s7-event-date-missing",
+      "subject_ref": "s7-subject-date-001",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-date-001",
+      "domain": "protocol_compliance",
+      "subtype": "protocol_deviation",
+      "date_state": "missing",
+      "start_date": null,
+      "end_date": null,
+      "visit_ref": "s7-visit-date-pending",
+      "risk_anchor_refs": [],
+      "source_locator_refs": ["s7-source-date-001"],
+      "label_zh": "日期待核实记录"
+    }
+  ],
+  "visits": [
+    {
+      "visit_ref": "s7-visit-06021-w2",
+      "subject_ref": "s7-subject-06021",
+      "site_ref": "s7-site-006",
+      "spine_ref": "s7-spine-06021",
+      "visit_kind": "actual",
+      "date_state": "exact",
+      "actual_date": "2026-01-31",
+      "nominal_date": null,
+      "phase_ref": "s7-phase-screening",
+      "source_locator_refs": ["s7-source-ae-mh-06021"]
+    },
+    {
+      "visit_ref": "s7-visit-w3",
+      "subject_ref": "s7-subject-06021",
+      "site_ref": "s7-site-006",
+      "spine_ref": "s7-spine-06021",
+      "visit_kind": "actual",
+      "date_state": "exact",
+      "actual_date": "2026-02-28",
+      "nominal_date": null,
+      "phase_ref": "s7-phase-treatment",
+      "source_locator_refs": ["s7-source-ae-06021"]
+    },
+    {
+      "visit_ref": "s7-visit-w2",
+      "subject_ref": "s7-subject-10008",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-10008",
+      "visit_kind": "actual",
+      "date_state": "exact",
+      "actual_date": "2026-02-15",
+      "nominal_date": null,
+      "phase_ref": "s7-phase-treatment",
+      "source_locator_refs": ["s7-source-pd-10008"]
+    },
+    {
+      "visit_ref": "s7-visit-w4",
+      "subject_ref": "s7-subject-10008",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-10008",
+      "visit_kind": "actual",
+      "date_state": "exact",
+      "actual_date": "2026-03-15",
+      "nominal_date": null,
+      "phase_ref": "s7-phase-treatment",
+      "source_locator_refs": ["s7-source-pd-10008"]
+    },
+    {
+      "visit_ref": "s7-visit-date-exact",
+      "subject_ref": "s7-subject-date-001",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-date-001",
+      "visit_kind": "actual",
+      "date_state": "exact",
+      "actual_date": "2026-01-10",
+      "nominal_date": null,
+      "phase_ref": "s7-phase-screening",
+      "source_locator_refs": ["s7-source-date-001"]
+    },
+    {
+      "visit_ref": "s7-visit-date-pending",
+      "subject_ref": "s7-subject-date-001",
+      "site_ref": "s7-site-010",
+      "spine_ref": "s7-spine-date-001",
+      "visit_kind": "unscheduled",
+      "date_state": "missing",
+      "actual_date": null,
+      "nominal_date": null,
+      "phase_ref": null,
+      "source_locator_refs": ["s7-source-date-001"]
+    }
+  ],
+  "risks": [
+    {
+      "risk_instance_ref": "s7-risk-pd-10008",
+      "risk_key": "s7-risk-key-pd-10008",
+      "site_ref": "s7-site-010",
+      "subject_ref": "s7-subject-10008",
+      "spine_ref": "s7-spine-10008",
+      "domain": "protocol_compliance",
+      "severity": "high",
+      "risk_type_zh": "方案执行偏离",
+      "event_ref": "s7-event-pd-10008",
+      "visit_ref": "s7-visit-w4",
+      "source_locator_ref": "s7-source-pd-10008",
+      "change_kind": "new",
+      "change_cause": "data"
+    },
+    {
+      "risk_instance_ref": "s7-risk-ae-06021",
+      "risk_key": "s7-risk-key-ae-06021",
+      "site_ref": "s7-site-006",
+      "subject_ref": "s7-subject-06021",
+      "spine_ref": "s7-spine-06021",
+      "domain": "ae",
+      "severity": "medium",
+      "risk_type_zh": "不良事件与记录一致性",
+      "event_ref": "s7-event-ae-06021",
+      "visit_ref": "s7-visit-w3",
+      "source_locator_ref": "s7-source-ae-06021",
+      "change_kind": "continued",
+      "change_cause": "coverage"
+    },
+    {
+      "risk_instance_ref": "s7-risk-ae-mh-06021",
+      "risk_key": "s7-risk-key-ae-mh-06021",
+      "site_ref": "s7-site-006",
+      "subject_ref": "s7-subject-06021",
+      "spine_ref": "s7-spine-06021",
+      "domain": "ae",
+      "severity": "high",
+      "risk_type_zh": "AE/MH匹配历史",
+      "event_ref": "s7-event-mh-06021",
+      "visit_ref": "s7-visit-06021-w2",
+      "source_locator_ref": "s7-source-ae-mh-06021",
+      "change_kind": "upgraded",
+      "change_cause": "data"
+    }
+  ],
+  "histories": [
+    {
+      "subject_ref": "s7-subject-06021",
+      "candidate_ref": "s7-candidate-ae-mh-06021",
+      "later_fact_ref": "s7-later-fact-ae-mh-06021",
+      "event_kind": "reappeared",
+      "match_state": "exact",
+      "from_snapshot_ref": "s7-snapshot-prior-001",
+      "to_snapshot_ref": "{snapshot_ref}",
+      "identity_evidence_refs": ["s7-source-ae-mh-06021"]
+    }
+  ],
+  "flow_stages": [
+    {
+      "stage_ref": "s7-flow-stage-consent",
+      "stage_label_zh": "已签署知情同意",
+      "column_order": 0,
+      "row_order": 0,
+      "stage_kind": "main",
+      "is_entry": true,
+      "is_terminal": false,
+      "source_locator_refs": ["s7-source-pd-10008"]
+    },
+    {
+      "stage_ref": "s7-flow-stage-missing",
+      "stage_label_zh": "既往阶段数据未提供",
+      "column_order": 0,
+      "row_order": 1,
+      "stage_kind": "missing",
+      "is_entry": true,
+      "is_terminal": false,
+      "source_locator_refs": ["s7-source-pd-10008"]
+    },
+    {
+      "stage_ref": "s7-flow-stage-screening",
+      "stage_label_zh": "筛选",
+      "column_order": 1,
+      "row_order": 0,
+      "stage_kind": "main",
+      "is_entry": false,
+      "is_terminal": false,
+      "source_locator_refs": ["s7-source-pd-10008"]
+    },
+    {
+      "stage_ref": "s7-flow-stage-screen-fail",
+      "stage_label_zh": "筛选失败",
+      "column_order": 1,
+      "row_order": 1,
+      "stage_kind": "branch_terminal",
+      "is_entry": false,
+      "is_terminal": true,
+      "source_locator_refs": ["s7-source-pd-10008"]
+    },
+    {
+      "stage_ref": "s7-flow-stage-treatment",
+      "stage_label_zh": "治疗中",
+      "column_order": 2,
+      "row_order": 0,
+      "stage_kind": "main",
+      "is_entry": false,
+      "is_terminal": false,
+      "source_locator_refs": ["s7-source-pd-10008"]
+    },
+    {
+      "stage_ref": "s7-flow-stage-completed",
+      "stage_label_zh": "完成研究",
+      "column_order": 2,
+      "row_order": 1,
+      "stage_kind": "branch_terminal",
+      "is_entry": false,
+      "is_terminal": true,
+      "source_locator_refs": ["s7-source-pd-10008"]
+    },
+    {
+      "stage_ref": "s7-flow-stage-stopped",
+      "stage_label_zh": "永久停药",
+      "column_order": 3,
+      "row_order": 0,
+      "stage_kind": "branch_terminal",
+      "is_entry": false,
+      "is_terminal": true,
+      "source_locator_refs": ["s7-source-pd-10008"]
+    }
+  ],
+  "flow_paths": [
+    {
+      "subject_ref": "s7-subject-10008",
+      "site_ref": "s7-site-010",
+      "steps": [
+        {
+          "stage_ref": "s7-flow-stage-consent",
+          "entered_date": "2026-01-10",
+          "basis_date": "2026-01-10",
+          "date_state": "exact",
+          "transition_reason_zh": "签署知情同意，进入筛选",
+          "source_locator_refs": ["s7-source-pd-10008"]
+        },
+        {
+          "stage_ref": "s7-flow-stage-screening",
+          "entered_date": "2026-01-20",
+          "basis_date": "2026-01-20",
+          "date_state": "exact",
+          "transition_reason_zh": "筛选通过，进入治疗",
+          "source_locator_refs": ["s7-source-pd-10008"]
+        },
+        {
+          "stage_ref": "s7-flow-stage-treatment",
+          "entered_date": "2026-02-01",
+          "basis_date": "2026-02-01",
+          "date_state": "exact",
+          "transition_reason_zh": "入组治疗",
+          "source_locator_refs": ["s7-source-pd-10008"]
+        }
+      ],
+      "path_state": "complete",
+      "stage_change_kind": "unchanged",
+      "prior_run_current_stage_ref": "s7-flow-stage-treatment"
+    },
+    {
+      "subject_ref": "s7-subject-06021",
+      "site_ref": "s7-site-006",
+      "steps": [
+        {
+          "stage_ref": "s7-flow-stage-consent",
+          "entered_date": "2026-01-05",
+          "basis_date": "2026-01-05",
+          "date_state": "exact",
+          "transition_reason_zh": "签署知情同意，进入筛选",
+          "source_locator_refs": ["s7-source-pd-10008"]
+        },
+        {
+          "stage_ref": "s7-flow-stage-screening",
+          "entered_date": "2026-01-12",
+          "basis_date": "2026-01-12",
+          "date_state": "exact",
+          "transition_reason_zh": "筛选未通过",
+          "source_locator_refs": ["s7-source-pd-10008"]
+        },
+        {
+          "stage_ref": "s7-flow-stage-screen-fail",
+          "entered_date": "2026-01-20",
+          "basis_date": "2026-01-20",
+          "date_state": "exact",
+          "transition_reason_zh": "筛选失败，终止研究",
+          "source_locator_refs": ["s7-source-pd-10008"]
+        }
+      ],
+      "path_state": "complete",
+      "stage_change_kind": "advanced",
+      "prior_run_current_stage_ref": "s7-flow-stage-screening"
+    },
+    {
+      "subject_ref": "s7-subject-date-001",
+      "site_ref": "s7-site-010",
+      "steps": [
+        {
+          "stage_ref": "s7-flow-stage-missing",
+          "entered_date": null,
+          "basis_date": null,
+          "date_state": "missing",
+          "transition_reason_zh": "既往阶段数据未提供",
+          "source_locator_refs": ["s7-source-pd-10008"]
+        },
+        {
+          "stage_ref": "s7-flow-stage-screening",
+          "entered_date": "2026-02-01",
+          "basis_date": null,
+          "date_state": "partial",
+          "transition_reason_zh": "补录筛选记录",
+          "source_locator_refs": ["s7-source-pd-10008"]
+        },
+        {
+          "stage_ref": "s7-flow-stage-treatment",
+          "entered_date": "2026-02-10",
+          "basis_date": null,
+          "date_state": "partial",
+          "transition_reason_zh": "进入治疗",
+          "source_locator_refs": ["s7-source-pd-10008"]
+        },
+        {
+          "stage_ref": "s7-flow-stage-completed",
+          "entered_date": "2026-02-20",
+          "basis_date": null,
+          "date_state": "partial",
+          "transition_reason_zh": "完成研究",
+          "source_locator_refs": ["s7-source-pd-10008"]
+        }
+      ],
+      "path_state": "partial",
+      "stage_change_kind": "new",
+      "prior_run_current_stage_ref": null
+    }
+  ]
+}
