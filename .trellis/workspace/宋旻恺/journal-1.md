@@ -528,3 +528,11 @@
 - Public R7 route behavior and the protected medical-writing contract gate pass `297 passed`. Across the complete B3 diff, the only file under `services/api/app` is the monitoring-only `medical_monitoring_r7_product_router.py`; no medical-writing route or asset was changed.
 - Every split was checked with its focused behavior/risk suite and recorded above. Frozen hash, optimizer, isolated-POC source-layout, file-count and create-only allowlist failures remain explicitly classified as B7 removal targets rather than refreshed acceptance gates.
 - Updated the engineering spec with the reusable compatibility-facade rule and the prohibition on repinning obsolete POC layout gates. B3 acceptance criteria are satisfied; next active child is B4 frontend single-generation consolidation.
+
+## 2026-09-02 — B4 pre-migration inventory and baseline
+
+- Current product entry is `App.jsx -> r5/MedicalMonitoringR5Page.jsx`; that page already composes the R7 setup/progress/result/continuity runtime and the horizontal Journey drawer. The R5 overview also already carries the G6-equivalent subject-flow/Sankey, selection and drill-down behavior.
+- `main.jsx` alone mounts the G6 synthetic page as a parallel root. Its standalone bundle/digest adapter and synthetic route belong to B5 replacement/removal, not the canonical product surface. Root-level monitoring components are the older App path; R5/R7 are the newer path that must be renamed and merged before those older components can be removed.
+- Pre-migration JavaScript behavior baseline: `61` medical-monitoring test files pass; only the two G6 tests fail on the already-stale frozen bundle digest/render expectation that B4/B5 remove rather than refresh. Vite production build passes with 1,986 modules and the existing large-chunk advisory.
+- Python frontend contracts pass `248 passed`; two source-text assertions are already stale before B4 (`clearMedicalMonitoringRouteState(window.location.search)` literal and an old RUX subject-switcher literal). They are behavior-migration debt and will be replaced by feature-boundary assertions rather than preserved as App source pins.
+- B4 route: make the current R5+R7 product surface generation-neutral first, then extract App route/state ownership, and only then remove G6 and superseded root paths. Medical-writing code remains outside the edit boundary.
