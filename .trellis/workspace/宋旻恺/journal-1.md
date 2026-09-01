@@ -97,3 +97,10 @@
 - Preserved compatibility monkeypatch semantics for the lifecycle adapter through a module-object alias implemented in the nested compatibility bridge; root R4 runtime files still contain no `sys` import or `sys.path` mutation.
 - Verification: AE/MH authorities and shims pass `py_compile`; AE/MH plus lifecycle/projection tests produced `153 passed` with one compatibility-hook failure, and the corrected hook plus both no-private/no-`sys` gates pass `3 passed`.
 - Next slice: migrate D02 CM evaluator/projection, leaving `cm_fixtures.py` outside product authority.
+
+## 2026-09-01 — B2 D02 CM family
+
+- Moved the concomitant-medication semantic evaluator into `risks` and its interval/overlap Journey projection into `projections`.
+- `cm_fixtures.py` remains outside product authority; medication identity, prohibited-component and PD decisions remain typed inputs rather than drug-specific constants.
+- Verification: CM authorities and compatibility modules pass `py_compile`; the complete CM suite passes `194 passed`.
+- Next slice: migrate D03 IP evaluator/projection while retaining `ip_fixtures.py` outside product authority.
