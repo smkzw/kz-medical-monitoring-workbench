@@ -2,7 +2,7 @@ import {
   normalizeMedicalMonitoringR5RouteState,
   parseMedicalMonitoringR5RouteState,
   serializeMedicalMonitoringR5RouteState,
-} from "./medicalMonitoringR5RouteState.mjs";
+} from "./medicalMonitoringWorkspaceRouteState.mjs";
 
 function productRouteResult(result) {
   return {
