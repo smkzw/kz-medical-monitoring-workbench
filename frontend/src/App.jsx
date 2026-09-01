@@ -133,13 +133,12 @@ import {
   normalizeMedicalMonitoringProductRouteState,
 } from "./features/medical-monitoring/medicalMonitoringProductRouteState.mjs";
 import {
-  activePageFromMonitoringRoute,
   clearMedicalMonitoringProductRouteState,
-  initialMedicalMonitoringBrowserState,
-  initialMedicalMonitoringProductBrowserState,
-  medicalMonitoringBrowserTarget,
-  parseMedicalMonitoringBrowserLocation,
 } from "./features/medical-monitoring/medicalMonitoringBrowserRoute.mjs";
+import {
+  useMedicalMonitoringBrowserState,
+  useMedicalMonitoringBrowserSync,
+} from "./features/medical-monitoring/useMedicalMonitoringBrowserState.js";
 import { WritingReferencePanel } from "./features/writing-reference/WritingReferencePanel";
 import { StructuredTableDesigner } from "./features/medical-writing/StructuredTableDesigner";
 import { MedicalWritingAuthoringJourneySetup } from "./features/medical-writing/MedicalWritingAuthoringJourneySetup";
@@ -15031,39 +15030,28 @@ function MedicalWritingRuntimeGate({ readiness, onRetry }) {
 }
 
 export function App() {
-  const initialMedicalMonitoringProductRouteRef = useRef(initialMedicalMonitoringProductBrowserState());
-  const initialMonitoringRouteRef = useRef(initialMedicalMonitoringBrowserState());
-  const monitoringReturnScopeRef = useRef(
-    initialMonitoringRouteRef.current.scope || "trial",
-  );
-  const monitoringReturnSiteIdRef = useRef(
-    initialMonitoringRouteRef.current.site_id || "",
-  );
-  const [activePage, setActivePage] = useState(() => (
-    initialMedicalMonitoringProductRouteRef.current.isProduct
-      ? "monitoringProduct"
-      : typeof window !== "undefined" && window.location.pathname === "/monitoring"
-      ? activePageFromMonitoringRoute(initialMonitoringRouteRef.current)
-      : "overview"
-  ));
-  const [medicalMonitoringProductRouteState, setMedicalMonitoringProductRouteState] = useState(
-    initialMedicalMonitoringProductRouteRef.current,
-  );
-  const [monitoringRouteState, setMonitoringRouteState] = useState(initialMonitoringRouteRef.current);
-  const [monitoringFocusRiskId, setMonitoringFocusRiskId] = useState(
-    initialMonitoringRouteRef.current.risk_instance_id
-      || initialMonitoringRouteRef.current.risk_key
-      || "",
-  );
-  const [subjectViewFocusRiskId, setSubjectViewFocusRiskId] = useState("");
+  const monitoringBrowserState = useMedicalMonitoringBrowserState(DEFAULT_SUBJECT_ID);
+  const {
+    initialProductRouteRef: initialMedicalMonitoringProductRouteRef,
+    initialRouteRef: initialMonitoringRouteRef,
+    returnScopeRef: monitoringReturnScopeRef,
+    returnSiteIdRef: monitoringReturnSiteIdRef,
+    productRouteState: medicalMonitoringProductRouteState,
+    setProductRouteState: setMedicalMonitoringProductRouteState,
+    routeState: monitoringRouteState,
+    setRouteState: setMonitoringRouteState,
+    focusRiskId: monitoringFocusRiskId,
+    setFocusRiskId: setMonitoringFocusRiskId,
+    subjectViewFocusRiskId,
+    setSubjectViewFocusRiskId,
+  } = monitoringBrowserState;
+  const [activePage, setActivePage] = useState(monitoringBrowserState.initialActivePage);
   const [projects, setProjects] = useState([]);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [projectsLoadError, setProjectsLoadError] = useState("");
   const [monitoringProjectRouteError, setMonitoringProjectRouteError] = useState("");
   const [projectsRequestNonce, setProjectsRequestNonce] = useState(0);
-  const [activeProjectId, setActiveProjectId] = useState(
-    initialMedicalMonitoringProductRouteRef.current.canonical?.project_ref || "",
-  );
+  const [activeProjectId, setActiveProjectId] = useState(monitoringBrowserState.initialProjectId);
   const [dashboard, setDashboard] = useState({ project: null, modules: [], latest_batch: null, pending_approvals: [], recent_risks: [] });
   const [dashboardReadError, setDashboardReadError] = useState(null);
   const [sourceManifests, setSourceManifests] = useState({});
@@ -15071,9 +15059,7 @@ export function App() {
   const [workbenchInbox, setWorkbenchInbox] = useState(null);
   const [workbenchInboxReadError, setWorkbenchInboxReadError] = useState(null);
   const [monitoringWorkbenchInbox, setMonitoringWorkbenchInbox] = useState(null);
-  const [selectedSubject, setSelectedSubject] = useState(
-    initialMonitoringRouteRef.current.subject_id || DEFAULT_SUBJECT_ID,
-  );
+  const [selectedSubject, setSelectedSubject] = useState(monitoringBrowserState.initialSubjectId);
   const [monitoringSubjectCatalog, setMonitoringSubjectCatalog] = useState([]);
   const [subjectProfiles, setSubjectProfiles] = useState({});
   const [monitoringDataError, setMonitoringDataError] = useState("");
@@ -15121,76 +15107,22 @@ export function App() {
   activeProjectIdRef.current = activeProjectId;
   monitoringResponseProjectIdRef.current = activeProjectId;
 
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    const handlePopState = () => {
-      const isMonitoringPath = window.location.pathname === "/monitoring";
-      if (
-        isMonitoringPath
-        && activePage === "writing"
-        && writingNavigationGuard?.dirty
-      ) {
-        const preservedSearch = clearMedicalMonitoringProductRouteState(window.location.search);
-        window.history.replaceState(
-          window.history.state,
-          "",
-          `/${preservedSearch}${window.location.hash}`,
-        );
-        return;
-      }
-      if (!isMonitoringPath) {
-        if (["monitoring", "monitoringProduct", "subjectTimeline", "patientProfile"].includes(activePage)) {
-          setActivePage("overview");
-        }
-        return;
-      }
-      const parsedLocation = parseMedicalMonitoringBrowserLocation(window.location);
-      if (parsedLocation.kind === "product") {
-        setMedicalMonitoringProductRouteState(parsedLocation.productRoute);
-        if (parsedLocation.productRoute.canonical?.project_ref) {
-          setActiveProjectId(parsedLocation.productRoute.canonical.project_ref);
-        }
-        setActivePage("monitoringProduct");
-        return;
-      }
-      const nextRoute = parsedLocation.routeState || {};
-      if (nextRoute.view === "checklist") {
-        monitoringReturnScopeRef.current = nextRoute.scope || "trial";
-        monitoringReturnSiteIdRef.current = nextRoute.site_id || "";
-      }
-      setMonitoringRouteState(nextRoute);
-      setMonitoringFocusRiskId(nextRoute.risk_instance_id || nextRoute.risk_key || "");
-      if (nextRoute.subject_id) setSelectedSubject(nextRoute.subject_id);
-      if (nextRoute.project_id) setActiveProjectId(nextRoute.project_id);
-      setActivePage(activePageFromMonitoringRoute(nextRoute));
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [activePage, writingNavigationGuard]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const target = medicalMonitoringBrowserTarget({
-      activePage,
-      activeProjectId,
-      selectedSubject,
-      routeState: monitoringRouteState,
-      productRouteState: medicalMonitoringProductRouteState,
-      currentPath: window.location.pathname,
-      currentSearch: window.location.search,
-      currentHash: window.location.hash,
-    });
-    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    if (target.url && target.url !== currentUrl) {
-      window.history.replaceState(window.history.state, "", target.url);
-    }
-    if (target.kind !== "legacy") return;
-    setMonitoringRouteState((current) => {
-      const currentSerialized = serializeMedicalMonitoringRouteState(current);
-      const nextSerialized = serializeMedicalMonitoringRouteState(target.routeState);
-      return currentSerialized === nextSerialized ? current : target.routeState;
-    });
-  }, [activePage, activeProjectId, selectedSubject, monitoringRouteState, isMedicalMonitoringProductRoute, medicalMonitoringProductRouteState]);
+  useMedicalMonitoringBrowserSync({
+    activePage,
+    setActivePage,
+    activeProjectId,
+    setActiveProjectId,
+    selectedSubject,
+    setSelectedSubject,
+    writingNavigationDirty: writingNavigationGuard?.dirty === true,
+    productRouteState: medicalMonitoringProductRouteState,
+    setProductRouteState: setMedicalMonitoringProductRouteState,
+    routeState: monitoringRouteState,
+    setRouteState: setMonitoringRouteState,
+    setFocusRiskId: setMonitoringFocusRiskId,
+    returnScopeRef: monitoringReturnScopeRef,
+    returnSiteIdRef: monitoringReturnSiteIdRef,
+  });
 
   const refreshRuntimeReadiness = useCallback(async () => {
     setRuntimeReadiness({ status: "checking", assessment: null });
