@@ -573,3 +573,44 @@ Introduced generation-neutral application and route entry points without changin
 ### Next Steps
 
 - Move the R5/R7 implementation into generation-neutral feature-root modules, update imports/tests, and then remove empty generation directories.
+
+
+## Session 2: B4 canonical frontend surface
+
+**Date**: 2026-09-02
+**Task**: B4 canonical frontend surface
+**Branch**: `main`
+
+### Summary
+
+完成医学监查前端目录与命名归一：R5/R7 实现移至单一 feature root，组件、状态、样式及可见错误文案去代际化；冻结线协议字段与后端传输路径保持不变。
+
+### Main Changes
+
+- 移除已跟踪 npm 缓存并保留本地忽略缓存。
+- 建立单一产品入口，提升 workspace、进度、连续性与 Patient Journey 模块至 feature root。
+- 将组件符号、CSS 选择器和展示名称改为产品职责命名，示范项目名称重绑定响应摘要。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1f66f98` | (see git log) |
+| `6faed01` | (see git log) |
+| `375c1ab` | (see git log) |
+| `912f88d` | (see git log) |
+| `7d5f039` | (see git log) |
+
+### Testing
+
+- [OK] 医学监查 feature root 62 个 Node 测试套件全部通过。
+- [OK] Vite 生产构建通过（1988 modules；仅保留既有大 chunk 警告）。
+- [OK] services/api/app、medical-writing frontend 与 assets 无改动。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 抽离 App.jsx 中医学监查浏览器路由、项目隔离与渲染编排。
