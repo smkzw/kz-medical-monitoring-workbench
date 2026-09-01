@@ -14,7 +14,7 @@
     - [x] Move public-result request parsing and runtime-manifest helpers.
     - [x] Move provider-neutral R5/R6 publication invocation adapters.
 - [ ] Extract project lifecycle, backup and restore capability router.
-- [ ] Extract setup, special-risk rule and profile capability router.
+- [x] Extract setup, special-risk rule and profile capability router.
 - [ ] Extract run preparation, execution and progress capability router.
 - [ ] Extract publication, result and continuity capability router.
 - [ ] Reduce the root R7 product factory to dependency wiring and mounting.

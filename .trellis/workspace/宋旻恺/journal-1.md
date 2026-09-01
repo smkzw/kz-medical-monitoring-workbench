@@ -244,3 +244,11 @@
 - Kept `_build_r5_publication_packet` and `_read_publication_gate` in the facade as required late-bound seams; provider selection and injected bridge/factory ownership remain unchanged.
 - Verification: authority and facade pass `py_compile`; all eight facade identities match; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `git diff --check` passes.
 - Next slice: define an explicit capability dependency context and extract the first cohesive route family without changing route paths, registration order, request/response payloads or audience wording.
+
+## 2026-09-02 — B3 setup, risk-rule and profile route family
+
+- Introduced `SetupRouteContext` and moved six contiguous route closures—run setup options, special-risk preview/append/list, and execution-profile append/read—into `setup_routes` while registering them at their original point in router order.
+- The package route module imports no service-layer module. Authorization enum and all factory-local lifecycle/store dependencies are injected explicitly; request/response models, Chinese audience wording and legacy read-only projections remain unchanged.
+- The first complete product run exposed one omitted context dependency (`_workspace_dir`) in the two profile routes. After adding it to the explicit context, the five affected tests pass and the full gate is green.
+- Verification: package and facade pass `py_compile`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; no `services.api` or `mm_r*` import exists in the extracted module; `git diff --check` passes.
+- Next slice: extract the run preparation/execution/progress family behind a second explicit context, preserving the process-wide worker objects and facade-level publication seams.
