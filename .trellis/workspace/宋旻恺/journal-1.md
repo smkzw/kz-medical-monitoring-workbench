@@ -392,3 +392,11 @@
 - Every migration source is below the 1,500-line hard limit (largest: `migration_contracts.py`, 912 lines). Public functional entrypoints, failure-hook matrix and historically visible internal schema/DDL bindings remain available through the facade.
 - Verification: focused migration and continuity suites pass `54 passed, 1 skipped`; R1 authoritative-progress coverage passes `40 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass. A broader legacy scan still reports only the v2.0-obsolete launch-schema source-text assertion and optimizer/hash-seed subprocess gate; neither was refreshed or restored.
 - Next slice: split `projections/publication/s4_contracts.py`, preserving publication-state orthogonality, Query draft-only semantics and audience-language isolation.
+
+## 2026-09-02 — B3 S4 publication-contract decomposition
+
+- Split the 2,714-line S4 contract authority into canonical/hash/grammar and frozen-vocabulary core, packet/audience/audit/history contracts, externally accepted authority-anchor contracts, and runtime input/build-state contracts behind the existing `publication.s4_contracts` facade.
+- Restored the original deliberately closed `__all__` surface instead of exposing implementation helpers. Preserved the accepted-authority anchor as a separate input, six-node packet hash DAG, append-only history semantics, source-locatable/unavailable boundary, Query draft-only contract and distinct audience versus audit planes.
+- The first complete run exposed the original forward lookup from `R5S4ModelEvidenceRef` to the later `S4SourceRevisionPair`; the facade now binds that exact type after module loading. Every S4 contract source is below the 1,500-line hard limit (largest: `s4_packet_contracts.py`, 1,186 lines).
+- Verification: S4 contracts, authority builder, projection, validator, challenge matrix and publication authority pass `477 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
+- Next slice: split `risks/cm.py`, preserving medication-episode identity, temporal overlap, protocol prohibition and suspected-PD Query semantics without medication-specific hardcoding.
