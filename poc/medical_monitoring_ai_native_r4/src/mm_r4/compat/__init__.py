@@ -1,6 +1,7 @@
 """Temporary bridge from legacy R4 module names to consolidated authorities."""
 
 from importlib import import_module
+import sys
 from typing import Any, MutableMapping
 
 
@@ -13,3 +14,9 @@ def populate(namespace: MutableMapping[str, Any], target: str) -> None:
         for name, value in vars(authority).items()
         if not (name.startswith("__") and name.endswith("__"))
     )
+
+
+def alias(name: str, target: str) -> None:
+    """Bind a legacy module name to the authoritative module object."""
+
+    sys.modules[name] = import_module(target)
