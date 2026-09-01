@@ -28,7 +28,7 @@
   - [x] S4 Risk Inspector authority builder, projection and validator.
   - [x] Product read-model adapter.
   - [ ] Product route import cutover.
-- [ ] Reports and harness: R6 modules.
+- [x] Reports and harness: R6 modules.
 - [ ] Product runtime: R7 modules.
 - [ ] Thin API package and product import cutover.
 
