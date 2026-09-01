@@ -432,3 +432,12 @@
 - The first focused run exposed one fixture dependency omitted at the extraction boundary (`canonical_sha256`); the import was restored without changing fixture or authority semantics. Every product projection source is below the 1,500-line hard limit (largest: `product_types.py`, 695 lines).
 - Verification: R5 product adapter, subject-flow and route suites pass `49 passed`; the R7 product route suite passes `92 passed`; the protected medical-writing adjacent gate passes `156 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `runtime/project_verifier.py`, preserving independent read-only verification, closure evidence and fail-closed verdict boundaries.
+
+## 2026-09-02 — B3 independent project-verifier decomposition
+
+- Split the 2,280-line verification authority into canonical/read-only inspection and audit-bridge core, fixed-order project verification, accepted backup/migration recovery coordination, and the existing public facade.
+- Preserved the independent verifier event pair, public R1 audit-chain reuse, stable workspace fingerprint, fixed source-to-run-to-publication-to-continuity order, minimal Chinese DTO, fail-closed anomaly/recovery distinction, and delegation of filesystem recovery to the accepted 09A/09B runners.
+- The first focused run exposed two extraction-boundary omissions: `inspect_project_schema` in verification and recovery coordination, plus stale public aliases copied into the internal recovery module. These were corrected without changing verifier or recovery behavior. Every verifier source is below the 1,500-line hard limit (largest: `project_verifier_core.py`, 985 lines).
+- Verification: the complete independent project-verifier suite passes `15 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
+- The old R8 parallel-release inventory tests still require a static file list that excludes the new internal modules. Stage B removes that parallel application and its release gate, so the obsolete inventory was not refreshed.
+- Next slice: split `projections/publication/contracts.py`, preserving publication-state orthogonality, immutable receipts, accepted-snapshot authority and audience/audit separation.
