@@ -148,3 +148,10 @@
 - Compatibility review found `mm_r4.ensemble` must alias the authoritative module object so downstream monkeypatch verification remains real; its old star export also omitted imported public contracts. The alias fixes both without runtime path mutation.
 - Verification: foundation behavior `230 passed` with one obsolete old-module-name assertion deselected; S2 contracts/builders/challenges `136 passed`; S4 complete focused runtime `472 passed`; publication bridge `5 passed`. The separate S2 thin-slice file is blocked only by its abolished whole-file SHA autouse gate, which Phase B7 removes; its thin-slice challenge suite is included in the 136 passes.
 - Next slice: move the live R5 product read-model adapter into the consolidated projection package, keep the API module as a temporary compatibility entry, and run product adapter/router behavior before product-wide import cutover.
+
+## 2026-09-01 — B2 R5 product read model
+
+- Moved the active R5 product read-model adapter from the API package into `packages.medical_monitoring.projections.product_adapter`; the old API module is now a temporary public re-export so route behavior stays unchanged until the final cutover.
+- This is a mechanical move only. Existing explicitly selected synthetic-fixture behavior is retained for B5 separation and is not used as a missing-authority fallback.
+- Verification: adapter, subject-flow and R5 product-router behavior pass `49 passed`; both authority and compatibility modules pass `py_compile`.
+- Next slice: migrate the five live R6 report/harness modules, then R7 runtime dependencies, before cutting product routers directly to consolidated imports.

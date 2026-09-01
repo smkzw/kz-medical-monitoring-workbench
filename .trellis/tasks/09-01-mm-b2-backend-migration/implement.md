@@ -26,7 +26,8 @@
   - [x] Canonical contracts, D10 authority adapter and publication bridge.
   - [x] S2 authority packet and renderer-neutral thin-slice projection.
   - [x] S4 Risk Inspector authority builder, projection and validator.
-  - [ ] Product read-model adapter and route cutover.
+  - [x] Product read-model adapter.
+  - [ ] Product route import cutover.
 - [ ] Reports and harness: R6 modules.
 - [ ] Product runtime: R7 modules.
 - [ ] Thin API package and product import cutover.
