@@ -9,6 +9,7 @@
     - [x] Move backup, restore and preflight audience projections.
     - [x] Move public secret-field filtering and generic projection sanitization.
     - [x] Move launch, publication-state and public-result projections.
+    - [x] Move HTTP status mapping and Chinese error envelopes.
 - [ ] Extract project lifecycle, backup and restore capability router.
 - [ ] Extract setup, special-risk rule and profile capability router.
 - [ ] Extract run preparation, execution and progress capability router.
