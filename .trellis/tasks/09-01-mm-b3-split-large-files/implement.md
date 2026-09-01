@@ -22,7 +22,7 @@
 ## Backend decomposition
 
 - [x] Split protocol contracts/applicability/evidence/evaluation/materialization.
-- [ ] Split efficacy validation/resolution/engine/output gates.
+- [x] Split efficacy validation/resolution/engine/output gates.
 - [ ] Split launch registry records, publication store and continuity store.
 - [ ] Split remaining files above the hard limit by cohesive domain.
 

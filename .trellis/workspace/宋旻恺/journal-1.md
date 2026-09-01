@@ -304,3 +304,11 @@
 - Every protocol source file is now below 1,500 lines (largest: `protocol_evidence.py`, 1,369 lines). Candidate/fact separation, applicability gates, cross-domain evidence identity, risk identity, three-part Chinese Query and audience-language contracts remain covered.
 - Verification: original D04 protocol, projection, challenge-matrix and shared-domain suites pass `339 passed`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `py_compile` and diff checks pass.
 - Next slice: split efficacy validation/resolution/engine/output gates, preserving fixture-schema failures and deterministic risk/output contracts.
+
+## 2026-09-02 — B3 efficacy engine decomposition
+
+- Split the 5,634-line D06 evaluator into fixture/contracts, output gates, normalization/resolution and four cohesive engine mixins (pipeline, unit strategies, TTE/query/lifecycle, audience/output) behind the existing `EfficacyEngine` and module entrypoints.
+- The public engine class remains defined in `efficacy_evaluator`; its method behavior is inherited from the extracted mixins. Restored the historically imported private decimal canonicalizer as a facade compatibility seam after the first complete suite identified it.
+- Every D06 evaluator source is below 1,500 lines (largest: `efficacy_unit_mixin.py`, 1,420 lines). No challenge-id branch, drug/disease constant or listing-layout hardcode was added.
+- Verification: original D06 contract, challenge-matrix and mutation suites pass `824 passed`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `py_compile`, whitespace and diff checks pass.
+- Next slice: split launch registry records, publication state and continuity-plan persistence while retaining one SQLite authority and transaction boundary.
