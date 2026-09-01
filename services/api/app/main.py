@@ -437,6 +437,10 @@ from .monitoring_assurance_router import create_monitoring_assurance_router
 from .monitoring_principal_host_adapter import (
     resolve_monitoring_principal_from_request,
 )
+from .synthetic_profile import synthetic_profile_requested
+from packages.medical_monitoring.projections.product_types import (
+    SYNTHETIC_PROJECT_REF,
+)
 from .monitoring_identity_authorization import (
     MonitoringAction,
     authorize_monitoring_action,
@@ -3371,9 +3375,10 @@ app.include_router(
         require_server_principal=True,
     )
 )
-_r5_s7_fixture_mode = os.environ.get(
-    "WORKBENCH_R5_S7_FIXTURE_MODE", ""
-).strip().lower() in {"1", "true", "yes"}
+# B5 synthetic seam: the profile request is recorded by services.api.app.__main__
+# before this module is imported (the R5 router factory binds the fixture mode
+# at import time); there is no environment-variable seam.
+_r5_s7_fixture_mode = synthetic_profile_requested()
 _r5_s7_fixture_principal: MonitoringAuthenticatedPrincipal | None = None
 if _r5_s7_fixture_mode:
     _r5_s7_fixture_now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -3382,8 +3387,10 @@ if _r5_s7_fixture_mode:
             "server_verified": True,
             "principal_id": "s7-browser-medical-monitor",
             "tenant_id": "s7-tenant-001",
-            "roles": ["medical_manager"],
-            "project_scope": ["s7-synthetic-project-001"],
+            # system_admin grants ADMINISTER_RUNTIME so the deterministic R7
+            # run lifecycle (bind/prepare/start) is drivable from the UI.
+            "roles": ["medical_manager", "system_admin"],
+            "project_scope": [SYNTHETIC_PROJECT_REF],
             "issued_at": _r5_s7_fixture_now.isoformat(),
             "expires_at": (_r5_s7_fixture_now + timedelta(hours=12)).isoformat(),
             "authenticated": True,
@@ -3396,15 +3403,24 @@ if _r5_s7_fixture_mode:
     )
 
 
-def _resolve_r5_product_principal(request: Request) -> MonitoringAuthenticatedPrincipal | None:
+def _resolve_synthetic_product_principal(request: Request) -> MonitoringAuthenticatedPrincipal | None:
     if _r5_s7_fixture_principal is not None:
         return _r5_s7_fixture_principal
     return resolve_monitoring_principal_from_request(request)
 
 
+def _resolve_r7_product_project(project_id: str) -> str:
+    if _r5_s7_fixture_mode and project_id == SYNTHETIC_PROJECT_REF:
+        return project_id
+    return _canonical_module_project_id(
+        project_id,
+        "medical_monitoring",
+    )
+
+
 app.include_router(
     create_medical_monitoring_r5_product_router(
-        principal_resolver=_resolve_r5_product_principal,
+        principal_resolver=_resolve_synthetic_product_principal,
         require_server_principal=True,
         synthetic_fixture_mode=_r5_s7_fixture_mode,
     )
@@ -3412,11 +3428,8 @@ app.include_router(
 app.include_router(
     create_medical_monitoring_r7_product_router(
         runtime_dir=RUNTIME_DIR,
-        project_resolver=lambda project_id: _canonical_module_project_id(
-            project_id,
-            "medical_monitoring",
-        ),
-        principal_resolver=resolve_monitoring_principal_from_request,
+        project_resolver=_resolve_r7_product_project,
+        principal_resolver=_resolve_synthetic_product_principal,
         require_server_principal=True,
     )
 )

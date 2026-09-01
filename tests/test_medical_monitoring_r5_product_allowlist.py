@@ -59,7 +59,13 @@ def test_read_action_contract_exposes_three_r5_surface_names_without_legacy_iter
 def test_main_has_only_one_r5_router_import_and_include_seam() -> None:
     source = (ROOT / "services/api/app/main.py").read_text()
     assert source.count("create_medical_monitoring_r5_product_router") == 2
-    assert "WORKBENCH_R5_S7_FIXTURE_MODE" in source
-    assert "principal_resolver=_resolve_r5_product_principal" in source
-    assert '"project_scope": ["s7-synthetic-project-001"]' in source
-    assert "request.headers" not in source[source.index("_r5_s7_fixture_mode") : source.index("create_monitoring_daily_run_router")]
+    # B5: the env-var seam is gone; the profile request is recorded by
+    # services.api.app.__main__ before main is imported.
+    assert "WORKBENCH_R5_S7_FIXTURE_MODE" not in source
+    assert "synthetic_profile_requested()" in source
+    assert "principal_resolver=_resolve_synthetic_product_principal" in source
+    assert '"roles": ["medical_manager", "system_admin"]' in source
+    assert '"project_scope": [SYNTHETIC_PROJECT_REF]' in source
+    assert "request.headers" not in source[
+        source.index("_r5_s7_fixture_mode") : source.index("create_monitoring_daily_run_router")
+    ]
