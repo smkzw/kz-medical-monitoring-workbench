@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { MedicalMonitoringApiError } from "../medicalMonitoringApi.mjs";
+import { MedicalMonitoringApiError } from "./medicalMonitoringApi.mjs";
 import {
   MEDICAL_MONITORING_R7_PROGRESS_PATHS,
   createMedicalMonitoringR7ProgressApi,

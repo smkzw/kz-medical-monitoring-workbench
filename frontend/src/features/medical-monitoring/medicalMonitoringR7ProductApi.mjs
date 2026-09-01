@@ -1,4 +1,4 @@
-import { MedicalMonitoringApiError } from "../medicalMonitoringApi.mjs";
+import { MedicalMonitoringApiError } from "./medicalMonitoringApi.mjs";
 
 const API_PREFIX = "/api/projects";
 export const R7_PRODUCT_DEFAULT_HISTORY_LIMIT = 50;

@@ -282,7 +282,7 @@ passed += 4;
 
 // --- integration source contract: keyboard navigation + continuity row switch ---
 {
-  const pageSource = fs.readFileSync(path.join(here, "../r5/MedicalMonitoringR5Page.jsx"), "utf8");
+  const pageSource = fs.readFileSync(path.join(here, "r5/MedicalMonitoringR5Page.jsx"), "utf8");
   const productSource = fs.readFileSync(path.join(here, "MedicalMonitoringR7ProductLoop.jsx"), "utf8");
   check(pageSource.includes('keyboardEvent.key !== "ArrowLeft" && keyboardEvent.key !== "ArrowRight"'), "timeline event buttons support left/right arrow navigation");
   check(productSource.includes('onJourneyRowSelect={selectResultContinuityRow}'), "R7 product route supplies the row-switch callback");
