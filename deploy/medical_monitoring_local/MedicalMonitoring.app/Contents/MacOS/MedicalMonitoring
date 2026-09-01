@@ -1,9 +1,0 @@
-#!/bin/zsh
-set -euo pipefail
-
-HERE="$(cd -- "$(dirname -- "$0")" && pwd)"
-ROOT="$(cd -- "$HERE/../../../" && pwd)"
-
-# This bundle is the user entry.  The manager CLI is deliberately not used as
-# an entry alias; the app owns validation, readiness, and lifecycle cleanup.
-exec env -u PYTHONPATH python3 "$ROOT/actual_app.py" --launch "$@"
