@@ -133,12 +133,10 @@ import {
   normalizeMedicalMonitoringProductRouteState,
 } from "./features/medical-monitoring/medicalMonitoringProductRouteState.mjs";
 import {
-  clearMedicalMonitoringProductRouteState,
-} from "./features/medical-monitoring/medicalMonitoringBrowserRoute.mjs";
-import {
   useMedicalMonitoringBrowserState,
   useMedicalMonitoringBrowserSync,
 } from "./features/medical-monitoring/useMedicalMonitoringBrowserState.js";
+import { useMedicalMonitoringProjectIsolation } from "./features/medical-monitoring/useMedicalMonitoringProjectIsolation.js";
 import { WritingReferencePanel } from "./features/writing-reference/WritingReferencePanel";
 import { StructuredTableDesigner } from "./features/medical-writing/StructuredTableDesigner";
 import { MedicalWritingAuthoringJourneySetup } from "./features/medical-writing/MedicalWritingAuthoringJourneySetup";
@@ -15103,9 +15101,24 @@ export function App() {
     ],
   );
   const activeProjectIdRef = useRef(activeProjectId);
-  const monitoringResponseProjectIdRef = useRef(activeProjectId);
   activeProjectIdRef.current = activeProjectId;
-  monitoringResponseProjectIdRef.current = activeProjectId;
+  const {
+    responseProjectIdRef: monitoringResponseProjectIdRef,
+    resetProjectState: resetMedicalMonitoringProjectState,
+  } = useMedicalMonitoringProjectIsolation({
+    activeProjectId,
+    setProductRouteState: setMedicalMonitoringProductRouteState,
+    setRouteState: setMonitoringRouteState,
+    setFocusRiskId: setMonitoringFocusRiskId,
+    setSubjectViewFocusRiskId,
+    setSelectedSubject,
+    setWorkbenchInbox: setMonitoringWorkbenchInbox,
+    setDataError: setMonitoringDataError,
+    setSubjectRouteError: setMonitoringSubjectRouteError,
+    setProjectRouteError: setMonitoringProjectRouteError,
+    returnScopeRef: monitoringReturnScopeRef,
+    returnSiteIdRef: monitoringReturnSiteIdRef,
+  });
 
   useMedicalMonitoringBrowserSync({
     activePage,
@@ -15206,30 +15219,6 @@ export function App() {
     setMonitoringFocusRiskId("");
     setActivePage("monitoring");
   }, [activeProjectId]);
-
-  const resetMedicalMonitoringProjectState = useCallback((nextPage) => {
-    setMedicalMonitoringProductRouteState({ isProduct: false, status: "legacy", valid: false, canonical: {} });
-    setMonitoringRouteState({});
-    setMonitoringFocusRiskId("");
-    setSubjectViewFocusRiskId("");
-    setSelectedSubject("");
-    setMonitoringWorkbenchInbox(null);
-    setMonitoringDataError("");
-    setMonitoringSubjectRouteError("");
-    setMonitoringProjectRouteError("");
-    monitoringReturnScopeRef.current = "trial";
-    monitoringReturnSiteIdRef.current = "";
-    if (typeof window === "undefined") return;
-    const preservedSearch = clearMedicalMonitoringProductRouteState(window.location.search);
-    const nextPath = ["monitoring", "subjectTimeline", "patientProfile"].includes(nextPage)
-      ? "/monitoring"
-      : window.location.pathname === "/monitoring" ? "/" : window.location.pathname;
-    window.history.replaceState(
-      window.history.state,
-      "",
-      `${nextPath}${preservedSearch}${window.location.hash}`,
-    );
-  }, []);
 
   const requestProjectChange = useCallback((nextProjectId, nextPage = "overview") => {
     if (!nextProjectId || (nextProjectId === activeProjectId && nextPage === activePage)) return;
