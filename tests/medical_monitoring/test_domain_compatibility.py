@@ -2,9 +2,12 @@
 
 from packages.medical_monitoring.domain import acceptance, entities, execution
 from packages.medical_monitoring.domain import identity, risk, schema_registry, schema_shape
+from packages.medical_monitoring.graph import engine, store
 
 from mm_r1 import domain as legacy_r1_domain
+from mm_r1 import graph as legacy_r1_graph
 from mm_r1 import schema_shape as legacy_r1_schema_shape
+from mm_r1 import store as legacy_r1_store
 from mm_r2 import acceptance as legacy_r2_acceptance
 from mm_r2 import domain as legacy_r2_domain
 from mm_r2 import identity as legacy_r2_identity
@@ -16,6 +19,8 @@ def test_r1_shims_resolve_to_package_authorities() -> None:
     assert legacy_r1_domain.MonitoringRun is execution.MonitoringRun
     assert legacy_r1_domain.RiskCandidate is execution.RiskCandidate
     assert legacy_r1_schema_shape.connection_shape is schema_shape.connection_shape
+    assert legacy_r1_graph.LocalGraphPort is engine.LocalGraphPort
+    assert legacy_r1_store.Store is store.Store
 
 
 def test_r2_shims_resolve_to_package_authorities() -> None:
