@@ -288,3 +288,11 @@
 - Moved the 565-line continuity reconstruction/validation pipeline into `continuity_service`; the facade retains only a root-bound adapter passed to the public-result route context. DTO validation, source-artifact verification, risk lifecycle semantics and 200-row audience cap are unchanged.
 - Verification: both service modules and facade pass `py_compile`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`.
 - Next slice: extract remaining publication overlay/error helpers and then the project-operation/common factory helpers; target is a root router file below the hard limit with only dependency construction and route registration.
+
+## 2026-09-02 — B3 project operations and thin R7 facade
+
+- Moved publication overlay, setup-input, failure-response and result-envelope helpers into `publication_view_helpers`; moved startup recovery, maintenance gating, backup/restore workers, registry/catalog/launch helpers and project compatibility operations into the dependency-injected `project_operations` authority.
+- The process-wide backup worker dictionary and lock remain the same facade-owned injected objects. Startup `RecoveryCoordinator` and the temporary synthetic setup seam remain call-time facade wrappers, preserving the existing monkeypatch and recovery boundaries.
+- Reduced `medical_monitoring_r7_product_router.py` from the original 7,669 lines to 959 lines; both newly extracted authoritative modules remain below the 1,500-line hard limit.
+- Verification: R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; package/facade `py_compile`, whitespace scan and diff checks pass.
+- Next slice: decompose oversized backend authorities for protocol risk evaluation, efficacy evaluation and launch/publication continuity while preserving DTOs, publication semantics and store ownership.

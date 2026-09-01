@@ -17,7 +17,7 @@
 - [x] Extract setup, special-risk rule and profile capability router.
 - [x] Extract run preparation, execution and progress capability router.
 - [x] Extract publication, result and continuity capability router.
-- [ ] Reduce the root R7 product factory to dependency wiring and mounting.
+- [x] Reduce the root R7 product factory to dependency wiring and mounting.
 
 ## Backend decomposition
 
