@@ -3,7 +3,13 @@
 from packages.medical_monitoring.domain import acceptance, entities, execution
 from packages.medical_monitoring.domain import identity, risk, schema_registry, schema_shape
 from packages.medical_monitoring.graph import engine, store
+from packages.medical_monitoring.runtime import adapters, background, capability, controller, progress
 
+from mm_r1 import adapters as legacy_r1_adapters
+from mm_r1 import audience_progress as legacy_r1_progress
+from mm_r1 import background_progress as legacy_r1_background
+from mm_r1 import capability_runtime as legacy_r1_capability
+from mm_r1 import controller as legacy_r1_controller
 from mm_r1 import domain as legacy_r1_domain
 from mm_r1 import graph as legacy_r1_graph
 from mm_r1 import schema_shape as legacy_r1_schema_shape
@@ -21,6 +27,11 @@ def test_r1_shims_resolve_to_package_authorities() -> None:
     assert legacy_r1_schema_shape.connection_shape is schema_shape.connection_shape
     assert legacy_r1_graph.LocalGraphPort is engine.LocalGraphPort
     assert legacy_r1_store.Store is store.Store
+    assert legacy_r1_adapters.ScriptedAdapter is adapters.ScriptedAdapter
+    assert legacy_r1_capability.CapabilityRuntime is capability.CapabilityRuntime
+    assert legacy_r1_controller.CapabilityWorkUnitController is controller.CapabilityWorkUnitController
+    assert legacy_r1_progress.project_audience_progress is progress.project_audience_progress
+    assert legacy_r1_background.BackgroundProgressFacade is background.BackgroundProgressFacade
 
 
 def test_r2_shims_resolve_to_package_authorities() -> None:
