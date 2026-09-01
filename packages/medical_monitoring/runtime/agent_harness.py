@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
+from .agent_harness_progress import PROGRESS_FORBIDDEN
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -598,27 +600,6 @@ def validate_frozen_profile(frozen: FrozenExecutionProfile) -> None:
 # User progress projection (pure; no internal terms)
 # ---------------------------------------------------------------------------
 
-_PROGRESS_FORBIDDEN = frozenset(
-    {
-        "provider",
-        "model",
-        "selector",
-        "effort",
-        "adapter",
-        "attempt",
-        "stdout",
-        "stderr",
-        "hash",
-        "path",
-        "mtplx",
-        "deepseek",
-        "omp",
-        "qwen",
-        "thinking",
-    }
-)
-
-
 def project_user_progress(
     *,
     completed_nodes: int,
@@ -629,7 +610,7 @@ def project_user_progress(
     """Chinese business-facing progress only. Fail if internal terms leak in."""
     current = str(current_work or "")
     lowered = current.lower()
-    for term in _PROGRESS_FORBIDDEN:
+    for term in PROGRESS_FORBIDDEN:
         if term in lowered:
             raise AgentHarnessError("progress_leaks_internal_term:%s" % term)
     if total_nodes < 0 or completed_nodes < 0 or completed_nodes > total_nodes:
