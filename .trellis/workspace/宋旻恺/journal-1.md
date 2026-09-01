@@ -202,3 +202,10 @@
 - The single process-wide backup worker registry and lock remain untouched in the facade; no background worker, persistence, route or recovery behavior moved in this slice.
 - Verification: new module and facade pass `py_compile`; R5/R7 product routes pass `100 passed`.
 - Next slice: move launch/publication and public-result pure projections, keeping facade patch seams and I/O orchestration in place.
+
+## 2026-09-01 — B3 public-text sanitization
+
+- Moved the shared secret-field vocabulary, audience-output denylist, secret-value detector, continuity text sanitizer and generic projection sanitizer into `packages.medical_monitoring.api.r7_product.public_text`.
+- All six symbols remain eager facade re-exports. Secret filtering, internal-term suppression and error class identity are unchanged; no endpoint or route closure moved.
+- Verification: package and facade pass `py_compile`; R5/R7 product routes pass `100 passed`.
+- Next slice: extract launch/publication and public-result pure projections, then rerun the combined product and adjacent medical-writing gate.

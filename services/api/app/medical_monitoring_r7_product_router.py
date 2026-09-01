@@ -199,44 +199,6 @@ _EXECUTION_STATE_CONFLICT = {
     "not_running",
     "prepare_while_running",
 }
-_SECRET_FIELDS = {
-    "credential",
-    "credential_value",
-    "credential_secret",
-    "api_key",
-    "apikey",
-    "password",
-    "secret",
-    "token",
-    "authorization",
-    "bearer",
-    "access_token",
-    "secret_key",
-}
-_FORBIDDEN_PUBLIC = _SECRET_FIELDS | {
-    "modeoutput",
-    "risk_instance",
-    "patientjourney",
-    "query_draft",
-    "timeline",
-    "canonical_fact",
-    "report_claim",
-}
-_SECRET_VALUE = re.compile(r"(?i)(sk-[a-z0-9]{8,}|bearer\s+\S+|api_key=|password=|token=)")
-_RUNTIME_INTERNAL_TOKENS = (
-    "owner",
-    "lease",
-    "generation",
-    "thread",
-    "pid",
-    "token",
-    "sqlite",
-    "provider",
-    "model",
-    "manifest_revision",
-    "run_id",
-    "project_id",
-)
 
 _PRODUCT_BACKUP_WORKERS: dict[tuple[str, str, str, str], threading.Thread] = {}
 _PRODUCT_BACKUP_WORKERS_LOCK = threading.RLock()
@@ -332,6 +294,14 @@ from packages.medical_monitoring.api.r7_product.contracts import (
 )
 
 
+from packages.medical_monitoring.api.r7_product.public_text import (
+    _SECRET_FIELDS,
+    _FORBIDDEN_PUBLIC,
+    _SECRET_VALUE,
+    _RUNTIME_INTERNAL_TOKENS,
+    _public_continuity_text,
+    _projection,
+)
 from packages.medical_monitoring.api.r7_product.continuity_contracts import (
     _normalize_severity_zh,
     _validate_continuity_risk_semantics,
@@ -354,29 +324,6 @@ from packages.medical_monitoring.api.r7_product.continuity_contracts import (
 
 
 
-def _public_continuity_text(value: Any) -> str:
-    text = str(value or "").strip()
-    lowered = text.casefold()
-    if _SECRET_VALUE.search(text) or any(
-        marker in lowered
-        for marker in (
-            "run_id",
-            "run_ref",
-            "snapshot_ref",
-            "cutoff_ref",
-            "packet_digest",
-            "authority_hash",
-            "artifact_member",
-            "source_snapshot_sha256",
-            "file://",
-            "/users/",
-            "traceback",
-            "stdout",
-            "stderr",
-        )
-    ):
-        raise ProductPublicationError("continuity_unavailable")
-    return text
 
 
 
@@ -704,25 +651,6 @@ def _validation_error_response(exc: ValidationError) -> JSONResponse:
     return _error_response(422, code, chinese_message_for(code))
 
 
-def _projection(result: Any, *, replayed: bool = False) -> dict[str, Any]:
-    if isinstance(result, Mapping):
-        body = dict(result)
-    else:
-        value = getattr(result, "profile", None)
-        if not isinstance(value, Mapping):
-            value = getattr(result, "binding", None)
-        if not isinstance(value, Mapping):
-            raise RunEntryError("internal_error")
-        body = dict(value)
-        if replayed:
-            body["replayed"] = bool(getattr(result, "replayed"))
-    lowered_keys = {str(key).lower() for key in body}
-    if lowered_keys & _FORBIDDEN_PUBLIC:
-        raise RunEntryError("internal_error")
-    blob = json.dumps(body, ensure_ascii=False)
-    if _SECRET_VALUE.search(blob) or "credential_value" in blob.lower():
-        raise RunEntryError("internal_error")
-    return body
  
 def _legacy_profile_projection(row: Mapping[str, Any]) -> dict[str, Any]:
     """Rebuild the existing public profile shape without opening a store."""
