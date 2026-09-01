@@ -536,3 +536,40 @@
 - Pre-migration JavaScript behavior baseline: `61` medical-monitoring test files pass; only the two G6 tests fail on the already-stale frozen bundle digest/render expectation that B4/B5 remove rather than refresh. Vite production build passes with 1,986 modules and the existing large-chunk advisory.
 - Python frontend contracts pass `248 passed`; two source-text assertions are already stale before B4 (`clearMedicalMonitoringRouteState(window.location.search)` literal and an old RUX subject-switcher literal). They are behavior-migration debt and will be replaced by feature-boundary assertions rather than preserved as App source pins.
 - B4 route: make the current R5+R7 product surface generation-neutral first, then extract App route/state ownership, and only then remove G6 and superseded root paths. Medical-writing code remains outside the edit boundary.
+
+
+## Session 1: B4 canonical monitoring frontend entry
+
+**Date**: 2026-09-02
+**Task**: B4 canonical monitoring frontend entry
+**Branch**: `main`
+
+### Summary
+
+Introduced generation-neutral application and route entry points without changing the current product behavior; removed tracked npm debug-log noise.
+
+### Main Changes
+
+- App now mounts MedicalMonitoringPage through monitoringProduct state and product route facades.
+- Added focused canonical route and product-entry contract coverage; medical-writing paths remained untouched.
+- Ignored frontend/.npm-cache and removed two previously tracked debug logs.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `031f1d9` | (see git log) |
+| `d6c8575` | (see git log) |
+
+### Testing
+
+- [OK] Four focused medical-monitoring Node contract suites passed.
+- [OK] Vite production build passed with 1988 transformed modules; only the pre-existing large-chunk warning remains.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Move the R5/R7 implementation into generation-neutral feature-root modules, update imports/tests, and then remove empty generation directories.
