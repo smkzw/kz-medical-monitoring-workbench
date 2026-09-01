@@ -281,3 +281,10 @@
 - The first full product run failed broadly from one removed import pair (`PROFILE_DB_NAME`/`RUN_BINDING_DB_NAME`) still used by facade compatibility checks. Restoring that import pair recovered three representative tests and the complete product gate.
 - Verification: new modules and facade pass `py_compile`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`.
 - Next slice: split the remaining factory-local project-operation/common-context helper clusters, keeping startup recovery and the single backup worker registry/lock facade-owned until their explicit state object is introduced.
+
+## 2026-09-02 — B3 result-context and continuity services
+
+- Moved accepted R5 publication-context reconstruction into `result_context_service` with explicit dependencies and call-time wrappers for the two facade publication seams.
+- Moved the 565-line continuity reconstruction/validation pipeline into `continuity_service`; the facade retains only a root-bound adapter passed to the public-result route context. DTO validation, source-artifact verification, risk lifecycle semantics and 200-row audience cap are unchanged.
+- Verification: both service modules and facade pass `py_compile`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`.
+- Next slice: extract remaining publication overlay/error helpers and then the project-operation/common factory helpers; target is a root router file below the hard limit with only dependency construction and route registration.
