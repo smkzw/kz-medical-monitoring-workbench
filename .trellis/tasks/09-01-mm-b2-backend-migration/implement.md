@@ -29,8 +29,10 @@
   - [x] Product read-model adapter.
   - [ ] Product route import cutover.
 - [x] Reports and harness: R6 modules.
-- [ ] Product runtime: R7 modules.
+- [x] Product runtime: R7 modules.
 - [ ] Thin API package and product import cutover.
+  - [x] Thin run-entry API authority.
+  - [ ] Product router imports and single-package cutover.
 
 ## Per-slice checks
 

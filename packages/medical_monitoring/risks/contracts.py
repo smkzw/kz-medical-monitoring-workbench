@@ -33,8 +33,8 @@ from typing import (Any, Dict, List, Optional, Protocol, Sequence,
                     Set, Tuple, runtime_checkable)
 from collections.abc import Mapping
 
-from mm_r1.domain import CoverageUnitStatus as _R1CoverageUnitStatus
-from mm_r2.risk import (RiskCandidate as _R2RiskCandidate,
+from ..domain.execution import CoverageUnitStatus as _R1CoverageUnitStatus
+from ..domain.risk import (RiskCandidate as _R2RiskCandidate,
                         RiskLifecycleState as _R2RiskLifecycleState)
 
 

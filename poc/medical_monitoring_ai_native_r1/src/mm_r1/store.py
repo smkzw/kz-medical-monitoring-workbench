@@ -1,3 +1,7 @@
-"""Compatibility import for the consolidated authoritative store."""
+"""Compatibility alias for the consolidated authoritative store."""
 
-from packages.medical_monitoring.graph.store import *  # noqa: F401,F403
+import sys as _sys
+
+from packages.medical_monitoring.graph import store as _authority
+
+_sys.modules[__name__] = _authority

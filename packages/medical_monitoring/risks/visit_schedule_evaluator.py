@@ -56,8 +56,8 @@ import re
 from dataclasses import dataclass, replace
 from typing import (Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple)
 
-from mm_r2.identity import make_risk_identity
-from mm_r2.risk import RiskCandidate
+from ..domain.identity import make_risk_identity
+from ..domain.risk import RiskCandidate
 
 from .contracts import (
     CrossDomainEvidenceRef,

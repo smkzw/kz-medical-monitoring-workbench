@@ -34,7 +34,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Tuple
 
-from mm_r2.risk import AdjudicationOutcome
+from ..domain.risk import AdjudicationOutcome
 
 from .contracts import (
     MONITORING_PRIORITY_HIGH,

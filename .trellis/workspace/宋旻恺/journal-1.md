@@ -162,3 +162,11 @@
 - Updated the contract artifact root for the consolidated file location and kept old R6 imports as temporary compatibility entries. No model binding, medical rule, report wording or mode behavior changed.
 - Verification: authorities and compatibility entries pass `py_compile`; focused R6 behavior produced `477 passed`. The seven failures are exclusively abolished whole-file SHA pins, old POC create-only allowlists, and a fixed medical-writing file-count pin; no report/mode/harness behavior test failed, and no medical-writing file changed.
 - Next slice: migrate the R7 runtime/lifecycle/persistence modules in dependency order, beginning with schema/ledger and project lifecycle primitives before run execution and continuity.
+
+## 2026-09-01 — B2 R7 runtime and thin API
+
+- Moved all 21 executable R7 modules into `packages.medical_monitoring.runtime` and the thin run-entry FastAPI surface into `packages.medical_monitoring.api`; the legacy `mm_r7` package now resolves them through temporary compatibility entries.
+- Removed R7's dynamic POC `sys.path` injection and repaired all consolidated risk modules that still imported `mm_r1`/`mm_r2`/`mm_r3`, so the new package resolves its own domain, intelligence, risk, projection, report and runtime chain.
+- Downstream compatibility exposed the old R1 Store star export omitting `_runtime_schema_shape`; the legacy Store path now aliases the authoritative module object, preserving both the private migration probe and monkeypatch semantics.
+- Verification: dependency/runtime/API focused suite `143 passed`; profile/run binding/entry after standalone-package import repair `65 passed`. The complete original R7 suite produced `492 passed`, `1 skipped`, `19 failed`: 15 explicitly abolished optimizer/hash-seed matrix cells, one R6 whole-file SHA pin, one POC allowlist, and two old-source AST/text location assertions. No runtime behavior failure remained outside those Phase B7 removals.
+- Next slice: cut the product routers from POC imports and dynamic path insertion to `packages.medical_monitoring`, then run product-route and adjacent medical-writing route checks before closing B2.

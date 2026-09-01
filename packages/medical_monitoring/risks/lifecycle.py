@@ -71,12 +71,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from mm_r2.acceptance import (
+from ..domain.acceptance import (
     AcceptanceService,
     SnapshotAcceptanceState,
 )
-from mm_r2.identity import make_risk_identity
-from mm_r2.risk import (
+from ..domain.identity import make_risk_identity
+from ..domain.risk import (
     AdjudicationEvidenceBinding,
     AdjudicationOutcome,
     RiskCandidate,
