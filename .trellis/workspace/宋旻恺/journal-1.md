@@ -416,3 +416,11 @@
 - The first focused runs exposed two extraction-boundary omissions: the `SemanticRecord` dataclass decorator and the shared normalized-concept helper import. Both were restored without changing evaluation behavior. Every AE/MH source is below the 1,500-line hard limit (largest: `aemh_types.py`, 804 lines).
 - Verification: the original AE/MH slice passes `84 passed`; AE/MH plus lifecycle, protocol projection, shared-domain and CM cross-domain suites pass `372 passed`; R5/R7 product, mapping semantic-quality and protected medical-writing adjacent suites pass `440 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `runtime/background_recovery.py`, preserving one recovery ledger, worker ownership, resume/retry semantics and crash-consistent project state.
+
+## 2026-09-02 — B3 background execution and recovery decomposition
+
+- Split the 2,381-line background-recovery authority into a 1,106-line durable control/lease/progress support layer and a 1,349-line run-level adapter/worker layer. The existing `runtime.background_recovery` module remains the public adapter surface.
+- Preserved the single SQLite control row, manifest-revision and generation CAS, lease/heartbeat recovery, at-least-once synthetic execution boundary, R1 idempotent callback authority, AI capability-attempt continuation/retry rules, maintenance gate and process-local thread registry. No second progress denominator, recovery ledger or worker authority was introduced.
+- Verification: background recovery and harness integration pass `53 passed`; project lifecycle behavior passes `29 passed, 1 deselected`; R5/R7 product routes plus protected medical-writing adjacent checks pass `297 passed`; `py_compile` and `git diff --check` pass.
+- A deliberately broader legacy scan reported only already-classified v2.0-obsolete optimizer/hash-seed subprocess probes, pinned-source/create-only checks and source-text facade inspection; they were not refreshed or restored.
+- Next slice: split `projections/product_adapter.py`, preserving the single renderer-neutral product projection and all audience-language, source-jump and risk-count contracts.
