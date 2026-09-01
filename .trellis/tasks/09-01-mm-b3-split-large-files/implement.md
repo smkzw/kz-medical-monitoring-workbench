@@ -8,6 +8,7 @@
   - [ ] Move shared public-text sanitization and remaining pure projections.
     - [x] Move backup, restore and preflight audience projections.
     - [x] Move public secret-field filtering and generic projection sanitization.
+    - [x] Move launch, publication-state and public-result projections.
 - [ ] Extract project lifecycle, backup and restore capability router.
 - [ ] Extract setup, special-risk rule and profile capability router.
 - [ ] Extract run preparation, execution and progress capability router.
