@@ -247,6 +247,16 @@
 - Two medical-writing contract failures and one medical-writing collection error were independently reproduced as pre-existing and remain untouched under the subsystem protection boundary. They do not arise from B5.
 - Next safe action: close and archive B5, then start B6 to remove remaining POC compatibility shims and the temporary R6 import bridge without changing routes, payloads or medical semantics.
 
+## 2026-09-02 — B6 POC authority closure
+
+- Closed the last executable `mm_r4`/`mm_r6`/`mm_r7` imports in the product package. R7 continuity and R6 harness now resolve package-native authorities; the synthetic D10 path uses a pure structural mapping converter without importing frozen catalog/SHA/oracle machinery; the `--synthetic` startup no longer inserts a POC path.
+- Moved the deterministic R7 fake harness and S4 runtime fixture into `tests/medical_monitoring`, rewired the product router suite to package-native imports, and removed the compatibility-identity-only test.
+- Deleted all eight versioned POC work trees (R1–R7 plus R3 rule-ai): 392 tracked files and 188,278 lines. Commit history is the recovery path; no executable POC import remains in `packages/`, `services/`, `frontend/src/` or current tests.
+- Verification: governed execution audit passed for three `zcode/GLM-5.3-Flash:max` workers without fallback; package-native focused regression `157 passed`; wider medical-monitoring selection `311 passed`; all 62 frontend medical-monitoring node suites and Vite build passed. Codex independently reran the product-native synthetic startup gate and residual import scan successfully.
+- The only remaining POC-path references are 30 uncalled frozen slice-era generator/verifier scripts assigned to B7. Historical docstrings and the `mm_r7:project_audit:genesis:v1` digest-domain constant remain intentionally unchanged.
+- Medical-writing remained untouched. Its two stale translation source-contract assertions and one pre-existing collection import error were reproduced but not repaired across the subsystem boundary.
+- Next safe action: enter B7, remove obsolete frozen-SHA/optimizer/hash-seed/generator gates and stale uncalled POC scripts while retaining behavioral digest and shape assertions.
+
 ## 2026-09-02 — B4 frontend single-generation closure
 
 - Lifted the medical-monitoring product, progress, continuity, Journey, browser-route, project-isolation and data-read ownership into generation-neutral feature modules; `App.jsx` now delegates rendering through one `MedicalMonitoringRouteOutlet` and one `MedicalMonitoringPage` mount.
