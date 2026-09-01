@@ -473,3 +473,11 @@
 - No synthetic case identifier, study/drug/disease feature, filename convention or listing-layout branch was added. The invariant layer consumes the same typed packet and canonical helpers rather than creating a parallel authority.
 - Verification: all 59 public exports resolve; S2 exact-contract and adversarial invariant behavior passes `75 passed`; the adjacent thin-slice suite is blocked only by its pre-existing obsolete frozen-source fixture (`37` setup errors) and was not repinned; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `projections/d09.py`, preserving risk lifecycle/publication-state separation, accepted-current-state authority and renderer-neutral audience projections.
+
+## 2026-09-02 — B3 D09 audience-projection decomposition
+
+- Split the 1,829-line D09 renderer-neutral projection into a 392-line Chinese audience-vocabulary/visibility core and a 1,460-line projection surface for counts, center-pattern risk markers, hotspots, source jumps, Query drafts and R2 handoff.
+- Preserved evaluation-versus-projectable member separation, hidden-member suppression, non-summed count planes, high-priority hotspot visibility, verified one-hop source positioning, draft-only three-sentence Query, stable public risk identity and no-auto-close R2 handoff semantics. Risk lifecycle state, publication state and audience presentation state remain distinct.
+- Audience language remains native Chinese and rejects internal/backend vocabulary; no project, study, disease, drug, threshold, case identifier or listing-layout branch was introduced.
+- Verification: the complete D09 adapter, mutation, projection, replay, runtime-closure, runtime-contract and verifier-probe suites pass `243 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
+- Next slice: split `runtime/project_audit.py`, preserving one append-only project audit chain, verification evidence and fail-closed continuity semantics.
