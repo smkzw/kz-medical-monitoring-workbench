@@ -22,15 +22,15 @@
 
 ## 4. Remove superseded frontend paths
 
-- [ ] Remove the G6 parallel page after confirming its retained flow/Journey behavior exists in the canonical feature.
-- [ ] Remove root-level monitoring components and state modules that are superseded by the canonical feature.
-- [ ] Confirm no user-facing generation labels or runtime imports mention r5/r7/g6.
+- [x] Remove the G6 parallel page after confirming its retained flow/Journey behavior exists in the canonical feature.
+- [x] Remove root-level monitoring components and state modules that are superseded by the canonical feature.
+- [x] Confirm no user-facing generation labels or runtime imports mention r5/r7/g6.
 
 ## 5. Acceptance
 
-- [ ] All medical-monitoring frontend behavior and render tests pass.
-- [ ] Protected medical-writing frontend contract tests pass and its files remain untouched.
-- [ ] Vite production build passes.
-- [ ] One medical-monitoring frontend generation remains and `App.jsx` delegates through one feature entry.
-- [ ] Wide-screen Journey remains a chronological visit axis with typed markers, details and source drill-down.
-- [ ] Trellis journal and git commits contain slice evidence and rollback points.
+- [x] All medical-monitoring frontend behavior and render tests pass.
+- [x] Protected medical-writing frontend contract tests pass and its files remain untouched.
+- [x] Vite production build passes.
+- [x] One medical-monitoring frontend generation remains and `App.jsx` delegates through one feature entry.
+- [x] Wide-screen Journey remains a chronological visit axis with typed markers, details and source drill-down.
+- [x] Trellis journal and git commits contain slice evidence and rollback points.
