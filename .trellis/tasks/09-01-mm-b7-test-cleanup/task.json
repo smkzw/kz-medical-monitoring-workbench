@@ -3,7 +3,7 @@
   "name": "mm-b7-test-cleanup",
   "title": "B7 测试归一与清理",
   "description": "迁移行为测试，删除冻结哈希 pinning、optimizer/hash-seed 门与平行应用测试。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
