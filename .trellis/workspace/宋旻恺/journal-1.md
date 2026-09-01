@@ -376,3 +376,11 @@
 - Every project-backup source is below the 1,500-line hard limit (largest: `project_backup_base.py`, 927 lines). Public aliases, helper entrypoints and historically visible module constants remain available from the facade.
 - Verification: backup and adversarial archive/restore suites pass `80 passed`; project audit, schema migration, independent verifier, R5/R7 product routes and the protected medical-writing adjacent gate pass `344 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `projections/d10.py`, preserving D10 gate/result identity and user-facing projection semantics without adding study-specific rules.
+
+## 2026-09-02 — B3 D10 renderer-neutral projection decomposition
+
+- Split the 3,057-line D10 projection authority into audience/count core, projection identity and source-jump surfaces, native-Chinese Query drafting, change/center/trend/warning surfaces, and R2 handoff/project orchestration behind the existing `projections.d10` facade.
+- Preserved the single authoritative D10 result binding, hidden-member/site suppression, separated count planes, high-risk hotspot visibility, one-hop source positioning, draft-only three-sentence Query, replay-stable R2 handoff, and renderer-neutral project projection. No study, drug, indication, threshold or listing-layout rule was added.
+- The first complete run exposed four original forward lookups that crossed the new module boundaries; the facade now performs the same explicit late binding for risk markers, hotspots, deep links and Query drafts, while the shared measure-ledger identity helper lives with projection identity. Every D10 projection source is below the 1,500-line hard limit (largest: `d10_core.py`, 1,193 lines).
+- Verification: original D10 adapter, mutation, projection, replay, runtime-closure, runtime-contract, verifier-probe and ensemble suites pass `245 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
+- Next slice: split `runtime/migration.py`, retaining one migration ledger, resume/rollback semantics and schema-verification boundary.
