@@ -400,3 +400,11 @@
 - The first complete run exposed the original forward lookup from `R5S4ModelEvidenceRef` to the later `S4SourceRevisionPair`; the facade now binds that exact type after module loading. Every S4 contract source is below the 1,500-line hard limit (largest: `s4_packet_contracts.py`, 1,186 lines).
 - Verification: S4 contracts, authority builder, projection, validator, challenge matrix and publication authority pass `477 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `risks/cm.py`, preserving medication-episode identity, temporal overlap, protocol prohibition and suspected-PD Query semantics without medication-specific hardcoding.
+
+## 2026-09-02 — B3 D02 concomitant-medication decomposition
+
+- Split the 2,648-line D02 CM authority into medication/rule/episode contracts and stable identity, expected-set/interval/rule matching, result/Query/evidence/Journey helpers, unit/rule evaluation, and slice aggregation modules behind the existing `risks.cm` facade.
+- Preserved compound ingredient-resolution units, versioned dictionary and protocol-rule inputs, exact/category/product-type rule granularity, temporal-window uncertainty, treatment-indication and AE/MH linkage checks, suspected-PD three-part Query wording, cross-domain evidence and episode rollups. No medication, disease, protocol or listing-layout rule was hardcoded.
+- The first focused run exposed the original forward lookup from Query construction to record-field labels/value extraction; those presentation helpers now live with the Query builder. Every CM source is below the 1,500-line hard limit (largest: `cm_evaluation.py`, 1,027 lines).
+- Verification: original CM slice, projection and challenge-matrix suites pass `194 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
+- Next slice: split `risks/aemh.py`, preserving AE/MH candidate-versus-recorded separation, cross-domain evidence, temporal logic and Journey/Query contracts.
