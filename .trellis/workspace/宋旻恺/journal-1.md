@@ -140,3 +140,11 @@
 - No fixture, hardcoded study/drug/disease rule, listing layout or challenge-path dependency was promoted into product authority.
 - Verification: the complete original R4 suite passes `4396 passed` in 196.54 seconds; consolidated package compatibility adds `4 passed`. This closes the R4 behavioral boundary at `4400 passed` across the two declared commands.
 - Next slice: inspect R5's live import closure, migrate renderer-neutral projections and the product adapter without pulling fixtures or presentation-specific constants into backend authority.
+
+## 2026-09-01 — B2 R5 publication authority
+
+- Moved the 12 R5 modules reachable from the live product graph into `packages.medical_monitoring.projections.publication`: canonical contracts, D10 authority receipt, S2 packet/thin slice, S4 Risk Inspector builder/projection/validator, publication bridge and package surface.
+- Repaired R4 dependencies to the consolidated risk/projection authorities. Synthetic fixture builders remain explicit test-only paths; no challenge catalog, disease/drug rule or listing layout was promoted.
+- Compatibility review found `mm_r4.ensemble` must alias the authoritative module object so downstream monkeypatch verification remains real; its old star export also omitted imported public contracts. The alias fixes both without runtime path mutation.
+- Verification: foundation behavior `230 passed` with one obsolete old-module-name assertion deselected; S2 contracts/builders/challenges `136 passed`; S4 complete focused runtime `472 passed`; publication bridge `5 passed`. The separate S2 thin-slice file is blocked only by its abolished whole-file SHA autouse gate, which Phase B7 removes; its thin-slice challenge suite is included in the 136 passes.
+- Next slice: move the live R5 product read-model adapter into the consolidated projection package, keep the API module as a temporary compatibility entry, and run product adapter/router behavior before product-wide import cutover.

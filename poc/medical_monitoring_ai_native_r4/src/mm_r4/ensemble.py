@@ -1,3 +1,2 @@
-"""Compatibility import for consolidated ensemble evaluation."""
-
-from packages.medical_monitoring.risks.ensemble import *  # noqa: F401,F403
+from mm_r4.compat import alias
+alias(__name__, "packages.medical_monitoring.risks.ensemble")
