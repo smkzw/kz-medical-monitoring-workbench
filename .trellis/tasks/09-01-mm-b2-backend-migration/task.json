@@ -3,7 +3,7 @@
   "name": "mm-b2-backend-migration",
   "title": "B2 后端分层迁移",
   "description": "按 domain→graph→intelligence→risks→projections→reports→runtime→api 搬迁，行为变更与搬迁分离。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
