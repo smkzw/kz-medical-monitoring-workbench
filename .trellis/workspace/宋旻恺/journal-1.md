@@ -296,3 +296,11 @@
 - Reduced `medical_monitoring_r7_product_router.py` from the original 7,669 lines to 959 lines; both newly extracted authoritative modules remain below the 1,500-line hard limit.
 - Verification: R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; package/facade `py_compile`, whitespace scan and diff checks pass.
 - Next slice: decompose oversized backend authorities for protocol risk evaluation, efficacy evaluation and launch/publication continuity while preserving DTOs, publication semantics and store ownership.
+
+## 2026-09-02 — B3 protocol risk-domain decomposition
+
+- Split the 5,816-line D04 authority into contracts, applicability/routing, evidence/expected-set expansion, component evaluation, risk/query projection and materialization modules behind the existing `risks.protocol` facade.
+- Kept the original public exports and the one historically tested private evaluation-window helper. The first injected-authority run exposed three slice-boundary decorators and one forward class dependency; both were restored before acceptance without changing evaluation logic.
+- Every protocol source file is now below 1,500 lines (largest: `protocol_evidence.py`, 1,369 lines). Candidate/fact separation, applicability gates, cross-domain evidence identity, risk identity, three-part Chinese Query and audience-language contracts remain covered.
+- Verification: original D04 protocol, projection, challenge-matrix and shared-domain suites pass `339 passed`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `py_compile` and diff checks pass.
+- Next slice: split efficacy validation/resolution/engine/output gates, preserving fixture-schema failures and deterministic risk/output contracts.
