@@ -7,6 +7,7 @@
   - [x] Move continuity response contracts and semantic projection helpers.
   - [ ] Move shared public-text sanitization and remaining pure projections.
     - [x] Move backup, restore and preflight audience projections.
+    - [x] Move public secret-field filtering and generic projection sanitization.
 - [ ] Extract project lifecycle, backup and restore capability router.
 - [ ] Extract setup, special-risk rule and profile capability router.
 - [ ] Extract run preparation, execution and progress capability router.
