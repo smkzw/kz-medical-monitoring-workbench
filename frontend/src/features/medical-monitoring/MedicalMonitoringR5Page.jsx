@@ -10,15 +10,15 @@ import {
 } from "./medicalMonitoringR5RouteState.mjs";
 import { layoutJourneyTimeline, parseTimelineDate, visitAxisDate } from "./medicalMonitoringR5Timeline.mjs";
 import { DomainIcon } from "./DomainIcon.jsx";
-import { MedicalMonitoringR7ProgressPanel } from "../MedicalMonitoringR7ProgressPanel.jsx";
-import { MedicalMonitoringR7ProductLoop } from "../MedicalMonitoringR7ProductLoop.jsx";
+import { MedicalMonitoringR7ProgressPanel } from "./MedicalMonitoringR7ProgressPanel.jsx";
+import { MedicalMonitoringR7ProductLoop } from "./MedicalMonitoringR7ProductLoop.jsx";
 import {
   MedicalMonitoringR7JourneyDrawer,
   R7_JOURNEY_AXIS_TITLE_ID,
   R7JourneyChangeMarker,
   r7JourneyDrawerLayoutMode,
   r7JourneyDrawerSections,
-} from "../MedicalMonitoringR7JourneyDrawer.jsx";
+} from "./MedicalMonitoringR7JourneyDrawer.jsx";
 import {
   bindR7ContinuityRowsToJourney,
   r7EventChangeMarker,
@@ -26,7 +26,7 @@ import {
   r7JourneyDrawerClosePatch,
   r7JourneyDrawerCurrentRow,
   r7JourneyTruncationText,
-} from "../medicalMonitoringR7JourneyChanges.mjs";
+} from "./medicalMonitoringR7JourneyChanges.mjs";
 import "./medicalMonitoringR5.css";
 
 const VIEW_LABELS = Object.freeze({

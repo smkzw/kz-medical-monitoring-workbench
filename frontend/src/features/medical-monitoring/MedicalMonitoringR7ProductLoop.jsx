@@ -36,7 +36,7 @@ import {
 } from "./medicalMonitoringR7ProductState.mjs";
 import { r7RefreshBackoffMs } from "./medicalMonitoringR7ProgressProjection.mjs";
 import { R7ProgressPanelView } from "./MedicalMonitoringR7ProgressPanel.jsx";
-import { routeStateForMedicalMonitoringR5View } from "./r5/medicalMonitoringR5RouteState.mjs";
+import { routeStateForMedicalMonitoringR5View } from "./medicalMonitoringR5RouteState.mjs";
 import "./medicalMonitoringR7ProductLoop.css";
 
 const PRODUCT_RESULT_SUBJECT_VIEWS = new Set(["journey", "profile", "timeline"]);
