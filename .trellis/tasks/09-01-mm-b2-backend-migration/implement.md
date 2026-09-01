@@ -22,17 +22,17 @@
     - [x] D05 visit-schedule contracts, evaluator and projection.
     - [x] D06 efficacy contracts, evaluator and projection.
   - [x] Fixture externalization and compatibility cleanup.
-- [ ] Projection authority: R5 modules and product adapter.
+- [x] Projection authority: R5 modules and product adapter.
   - [x] Canonical contracts, D10 authority adapter and publication bridge.
   - [x] S2 authority packet and renderer-neutral thin-slice projection.
   - [x] S4 Risk Inspector authority builder, projection and validator.
   - [x] Product read-model adapter.
-  - [ ] Product route import cutover.
+  - [x] Product route import cutover.
 - [x] Reports and harness: R6 modules.
 - [x] Product runtime: R7 modules.
-- [ ] Thin API package and product import cutover.
+- [x] Thin API package and product import cutover.
   - [x] Thin run-entry API authority.
-  - [ ] Product router imports and single-package cutover.
+  - [x] Product router imports and single-package cutover.
 
 ## Per-slice checks
 

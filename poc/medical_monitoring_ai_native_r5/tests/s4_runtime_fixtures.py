@@ -50,14 +50,14 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import mm_r4.d10_contracts as d10c
-import mm_r4.ensemble as en
-import mm_r4.ensemble_contracts as ec
-from mm_r4.d10_projection import D10AudiencePart, D10QueryDraft
+from packages.medical_monitoring.risks import d10_contracts as d10c
+from packages.medical_monitoring.risks import ensemble as en
+from packages.medical_monitoring.risks import ensemble_contracts as ec
+from packages.medical_monitoring.projections.d10 import D10AudiencePart, D10QueryDraft
 
-import mm_r5.contracts as c5
-import mm_r5.s2_thin_slice as s2t
-from mm_r5 import s4_contracts as s4
+from packages.medical_monitoring.projections.publication import contracts as c5
+from packages.medical_monitoring.projections.publication import s2_thin_slice as s2t
+from packages.medical_monitoring.projections.publication import s4_contracts as s4
 
 __all__ = [
     "INPUT_HASH", "CONTEXT_A1", "CONTEXT_A2", "ADJUDICATOR_CONTEXT",

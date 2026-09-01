@@ -2882,11 +2882,11 @@ def test_slice07c3_product_route_uses_actual_typed_r5_bridge_and_refetches(
     )
     from s4_runtime_fixtures import build_runtime_input
     from test_r5_publication_authority import _members
-    from mm_r5.r5_publication_authority import (
+    from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
-    import mm_r5.s4_projection as s4_projection
-    import mm_r5.s4_validator as s4_validator
+    from packages.medical_monitoring.projections.publication import s4_projection
+    from packages.medical_monitoring.projections.publication import s4_validator
 
     fixture_runtime = build_runtime_input("single_analysis")
     project_id = fixture_runtime.anchor.project_ref
@@ -3504,7 +3504,7 @@ def _make_slice08b_mode_outputs(
     mode: str,
     **overrides: Any,
 ) -> tuple[dict[str, Any], ...]:
-    from mm_r6 import mode_output as mo
+    from packages.medical_monitoring.reports import mode_output as mo
     from poc.medical_monitoring_ai_native_r7.src.mm_r7 import continuity_bridge as cb
 
     binding = dict(run_binding)
@@ -3740,10 +3740,10 @@ def test_slice08b_product_router_three_modes_synthetic_provider_happy_path(
     )
     from s4_runtime_fixtures import build_runtime_input
     from test_r5_publication_authority import _members
-    from mm_r5.r5_publication_authority import (
+    from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
-    from mm_r1.store import Store
+    from packages.medical_monitoring.graph.store import Store
     from poc.medical_monitoring_ai_native_r7.src.mm_r7 import continuity_bridge as cb
 
     fixture_runtime = build_runtime_input("single_analysis")
@@ -3977,7 +3977,7 @@ def test_slice08b_product_router_missing_or_extra_outputs_fails_closed(
     )
     from s4_runtime_fixtures import build_runtime_input
     from test_r5_publication_authority import _members
-    from mm_r5.r5_publication_authority import (
+    from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
 
@@ -4121,7 +4121,7 @@ def test_slice08b_product_router_r1_artifact_byte_tamper_blocks_result_entry(
     )
     from s4_runtime_fixtures import build_runtime_input
     from test_r5_publication_authority import _members
-    from mm_r5.r5_publication_authority import (
+    from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
 
@@ -4273,7 +4273,7 @@ def test_slice08b_product_router_closure_violation_and_draft_pollution_blocked(
     )
     from s4_runtime_fixtures import build_runtime_input
     from test_r5_publication_authority import _members
-    from mm_r5.r5_publication_authority import (
+    from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
 
@@ -4405,7 +4405,7 @@ def test_slice08b_product_router_query_draft_status_pollution_blocked(
     )
     from s4_runtime_fixtures import build_runtime_input
     from test_r5_publication_authority import _members
-    from mm_r5.r5_publication_authority import (
+    from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
 
@@ -4551,10 +4551,10 @@ def test_slice08b_product_router_cross_layer_identity_verification(
     )
     from s4_runtime_fixtures import build_runtime_input
     from test_r5_publication_authority import _members
-    from mm_r5.r5_publication_authority import (
+    from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
-    from mm_r1.store import Store
+    from packages.medical_monitoring.graph.store import Store
     from poc.medical_monitoring_ai_native_r7.src.mm_r7 import continuity_bridge as cb
     from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity import CarryForwardPlan, DecisionBaseline
 
@@ -4729,7 +4729,7 @@ def test_slice08b_product_router_conflicting_replay_and_cas_conflict(
     )
     from s4_runtime_fixtures import build_runtime_input
     from test_r5_publication_authority import _members
-    from mm_r5.r5_publication_authority import (
+    from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
 
@@ -4894,7 +4894,7 @@ def _make_slice08c_setup_and_publication(
     )
     from s4_runtime_fixtures import build_runtime_input
     from test_r5_publication_authority import _members
-    from mm_r5.r5_publication_authority import (
+    from packages.medical_monitoring.projections.publication.r5_publication_authority import (
         R5PublicationAuthorityInputAssembler,
     )
     from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity import (
@@ -5630,7 +5630,7 @@ def _make_slice08c_setup_and_publication(
             publication = registry.get_publication(project_id=project_id, run_id=run_id)
             result_context_token = publication.result_context_token
 
-        from mm_r1.store import Store
+        from packages.medical_monitoring.graph.store import Store
         from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity_bridge import (
             extract_atomic_items,
         )

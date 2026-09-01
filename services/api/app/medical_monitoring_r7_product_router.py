@@ -21,7 +21,6 @@ import inspect
 import json
 import re
 import shutil
-import sys
 import threading
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Optional, Sequence, Union
@@ -31,18 +30,18 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from fastapi.responses import JSONResponse
 
-from poc.medical_monitoring_ai_native_r7.src.mm_r7 import profile_store as ps
-from poc.medical_monitoring_ai_native_r7.src.mm_r7.api import (
+from packages.medical_monitoring.runtime import profile_store as ps
+from packages.medical_monitoring.api.run_entry import (
     ProfileFieldsRequest,
     chinese_message_for,
 )
-from poc.medical_monitoring_ai_native_r7.src.mm_r7.run_entry import (
+from packages.medical_monitoring.runtime.run_entry import (
     PROFILE_DB_NAME,
     RUN_BINDING_DB_NAME,
     MonitoringRunEntry,
     RunEntryError,
 )
-from poc.medical_monitoring_ai_native_r7.src.mm_r7.runtime_progress import (
+from packages.medical_monitoring.runtime.runtime_progress import (
     ARTIFACT_DIR_NAME,
     RUNTIME_DB_NAME,
     RUNTIME_DIR_NAME,
@@ -51,35 +50,35 @@ from poc.medical_monitoring_ai_native_r7.src.mm_r7.runtime_progress import (
     validate_public_data_cutoff,
 )
 
-from poc.medical_monitoring_ai_native_r7.src.mm_r7.background_recovery import (
+from packages.medical_monitoring.runtime.background_recovery import (
     list_bound_capability_attempts,
 )
-from mm_r1.capability_runtime import (
+from packages.medical_monitoring.runtime.capability import (
     CapabilityRequest,
     InvocationVersions,
 )
-from mm_r1.domain import (
+from packages.medical_monitoring.domain.execution import (
     NodeStatus,
     NodeType,
     content_hash,
     to_jsonable,
 )
-from mm_r1.store import Store
-from poc.medical_monitoring_ai_native_r7.src.mm_r7 import run_setup as rs
-from poc.medical_monitoring_ai_native_r7.src.mm_r7 import project_backup as pb
-from poc.medical_monitoring_ai_native_r7.src.mm_r7.maintenance_gate import (
+from packages.medical_monitoring.graph.store import Store
+from packages.medical_monitoring.runtime import run_setup as rs
+from packages.medical_monitoring.runtime import project_backup as pb
+from packages.medical_monitoring.runtime.maintenance_gate import (
     DEFAULT_WAIT_SECONDS,
     MaintenanceGateError,
     ProjectMaintenanceGate,
 )
-from poc.medical_monitoring_ai_native_r7.src.mm_r7 import launch_registry as lr
-from poc.medical_monitoring_ai_native_r7.src.mm_r7.migration import (
+from packages.medical_monitoring.runtime import launch_registry as lr
+from packages.medical_monitoring.runtime.migration import (
     MigrationError,
     MigrationOperationLedger,
     MigrationRunner,
     TERMINAL_STATES,
 )
-from poc.medical_monitoring_ai_native_r7.src.mm_r7.project_lifecycle import (
+from packages.medical_monitoring.runtime.project_lifecycle import (
     DATA_COVERAGE_COMPLETE,
     DATA_COVERAGE_INCOMPLETE,
     OPEN_MODE_BLOCKED,
@@ -97,11 +96,11 @@ from poc.medical_monitoring_ai_native_r7.src.mm_r7.project_lifecycle import (
     upgrade_progress_from_operation,
     upgrade_result_from_state,
 )
-from poc.medical_monitoring_ai_native_r7.src.mm_r7.schema_manifest import (
+from packages.medical_monitoring.runtime.schema_manifest import (
     SchemaClassification,
     inspect_member,
 )
-from poc.medical_monitoring_ai_native_r7.src.mm_r7.project_verifier import (
+from packages.medical_monitoring.runtime.project_verifier import (
     ProjectVerificationDTO,
     ProjectVerificationError,
     RecoveryCoordinationError,
@@ -110,7 +109,7 @@ from poc.medical_monitoring_ai_native_r7.src.mm_r7.project_verifier import (
     RESULT_RECORD_COMPLETE,
     RESULT_RECOVERY_REQUIRED,
 )
-from .medical_monitoring_r5_product_adapter import (
+from packages.medical_monitoring.projections.product_adapter import (
     R5ProductAdapter,
     R5ProductAdapterError,
 )
@@ -757,7 +756,7 @@ def _public_continuity_text(value: Any) -> str:
 
 
 def _validate_continuity_risk_semantics(item: Any, change_kind: str) -> None:
-    from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity import (
+    from packages.medical_monitoring.runtime.continuity import (
         RiskProjectionError,
         project_risk_change_kind,
     )
@@ -1819,16 +1818,8 @@ def _runtime_audit_chain_is_invalid(
 def _r5_publication_types() -> tuple[Any, Any, Any, Any, Any]:
     """Load R5 publication types lazily at the synthetic integration seam."""
 
-    root = Path(__file__).resolve().parents[3]
-    r2_source = root / "poc" / "medical_monitoring_ai_native_r2" / "src"
-    r3_source = root / "poc" / "medical_monitoring_ai_native_r3" / "src"
-    r4_source = root / "poc" / "medical_monitoring_ai_native_r4" / "src"
-    r5_source = root / "poc" / "medical_monitoring_ai_native_r5" / "src"
-    for source in (r2_source, r3_source, r4_source, r5_source):
-        if source.is_dir() and str(source) not in sys.path:
-            sys.path.insert(0, str(source))
     try:
-        from mm_r5.r5_publication_authority import (
+        from packages.medical_monitoring.projections.publication.r5_publication_authority import (
             R5AuthorityPacket,
             R5PublicationAuthorityBridge,
             R5PublicationAuthorityError,
@@ -2010,15 +2001,9 @@ def _publication_product_factory(
 
 def _r6_publication_types() -> tuple[Any, Any]:
     """Load R6 publication types lazily at the synthetic integration seam."""
-    root = Path(__file__).resolve().parents[3]
-    r6_source = root / "poc" / "medical_monitoring_ai_native_r6" / "src"
-    r7_source = root / "poc" / "medical_monitoring_ai_native_r7" / "src"
-    for source in (r6_source, r7_source):
-        if source.is_dir() and str(source) not in sys.path:
-            sys.path.insert(0, str(source))
     try:
-        from mm_r6 import mode_output as mo
-        from mm_r7 import continuity_bridge as cb
+        from packages.medical_monitoring.reports import mode_output as mo
+        from packages.medical_monitoring.runtime import continuity_bridge as cb
     except Exception as exc:
         raise ProductPublicationError(
             "receipt_gate_blocked", recoverable=False
@@ -2428,7 +2413,7 @@ def _read_publication_gate(
         profile_bridge = None
         if ai_units:
             try:
-                from poc.medical_monitoring_ai_native_r7.src.mm_r7.harness_runtime import (
+                from packages.medical_monitoring.runtime.harness_runtime import (
                     bridge_from_run_binding,
                     build_r6_prompt,
                     classify_r6_receipt,
@@ -4583,7 +4568,7 @@ def create_medical_monitoring_r7_product_router(
                 if not r1_store.verify_artifact(member_id):
                     raise ProductPublicationError("continuity_unavailable")
                 artifact_envelopes[member_id] = envelope
-                from poc.medical_monitoring_ai_native_r7.src.mm_r7.continuity_bridge import (
+                from packages.medical_monitoring.runtime.continuity_bridge import (
                     extract_atomic_items,
                 )
 
