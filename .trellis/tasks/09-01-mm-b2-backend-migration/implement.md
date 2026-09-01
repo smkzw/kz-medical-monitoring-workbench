@@ -23,6 +23,10 @@
     - [x] D06 efficacy contracts, evaluator and projection.
   - [x] Fixture externalization and compatibility cleanup.
 - [ ] Projection authority: R5 modules and product adapter.
+  - [x] Canonical contracts, D10 authority adapter and publication bridge.
+  - [x] S2 authority packet and renderer-neutral thin-slice projection.
+  - [x] S4 Risk Inspector authority builder, projection and validator.
+  - [ ] Product read-model adapter and route cutover.
 - [ ] Reports and harness: R6 modules.
 - [ ] Product runtime: R7 modules.
 - [ ] Thin API package and product import cutover.
