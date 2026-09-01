@@ -223,21 +223,15 @@ class SyntheticRuntimeStore:
         return canonical_json(fields)
 
     @classmethod
-    def _load_store(self, path: Path, schema: str) -> Dict[str, Any]:
+    def _load_store(cls, path: Path, schema: str) -> Dict[str, Any]:
         value = _read_json(path)
         if value is None:
-            return self._new_store(schema)
+            return cls._new_store(schema)
         if value.get("schema") != schema or value.get("version") != RUN_STORE_VERSION:
             raise RuntimeStoreError(f"store_schema_mismatch:{path.name}")
         if not isinstance(value.get("records"), dict) or not isinstance(value.get("events"), list):
             raise RuntimeStoreError(f"store_shape_mismatch:{path.name}")
         _require_persisted_digest(value, "store_digest", f"store_digest_mismatch:{path.name}")
-        return value
-            return self._new_store(schema)
-        if value.get("schema") != schema or value.get("version") != RUN_STORE_VERSION:
-            raise RuntimeStoreError(f"store_schema_mismatch:{path.name}")
-        if not isinstance(value.get("records"), dict) or not isinstance(value.get("events"), list):
-            raise RuntimeStoreError(f"store_shape_mismatch:{path.name}")
         return value
 
     def _load_runs(self) -> Dict[str, Any]:
