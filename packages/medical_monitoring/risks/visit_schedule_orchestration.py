@@ -489,4 +489,3 @@ def evaluate_visit_schedule_run(
         future_obligation_keys=expansion.future_obligation_keys,
         excluded_obligation_keys=expansion.excluded_obligation_keys,
         enrollment_context=enrollment_context)
-

@@ -503,4 +503,3 @@ def _resolve_scope_decisions(
             clinical_event_cutoff=clinical_event_cutoff,
             source_locators=(locator,)))
     return tuple(decisions)
-
