@@ -408,3 +408,11 @@
 - The first focused run exposed the original forward lookup from Query construction to record-field labels/value extraction; those presentation helpers now live with the Query builder. Every CM source is below the 1,500-line hard limit (largest: `cm_evaluation.py`, 1,027 lines).
 - Verification: original CM slice, projection and challenge-matrix suites pass `194 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `risks/aemh.py`, preserving AE/MH candidate-versus-recorded separation, cross-domain evidence, temporal logic and Journey/Query contracts.
+
+## 2026-09-02 — B3 D01 AE/MH risk-domain decomposition
+
+- Split the 2,429-line D01 authority into semantic/protocol/medical types, protocol-boundary and partial-date evaluation, result/risk-identity construction, reported-event matching/Journey/Query helpers, and unit/slice orchestration behind the existing `risks.aemh` facade.
+- Preserved the separation between recorded AE/MH source facts, evidence assertions and risk candidates; versioned concept-equivalence and temporal-tolerance inputs; source-stable R2 identity; NCS/alternative-diagnosis counterevidence; draft-only three-part Query wording; and distinct AE/MH/CM/IP/examination/hospitalization/procedure/symptom Journey categories. No study, drug, disease, threshold or listing-layout rule was added.
+- The first focused runs exposed two extraction-boundary omissions: the `SemanticRecord` dataclass decorator and the shared normalized-concept helper import. Both were restored without changing evaluation behavior. Every AE/MH source is below the 1,500-line hard limit (largest: `aemh_types.py`, 804 lines).
+- Verification: the original AE/MH slice passes `84 passed`; AE/MH plus lifecycle, protocol projection, shared-domain and CM cross-domain suites pass `372 passed`; R5/R7 product, mapping semantic-quality and protected medical-writing adjacent suites pass `440 passed`; `py_compile` and `git diff --check` pass.
+- Next slice: split `runtime/background_recovery.py`, preserving one recovery ledger, worker ownership, resume/retry semantics and crash-consistent project state.
