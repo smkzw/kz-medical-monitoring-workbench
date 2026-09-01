@@ -16,6 +16,7 @@
     - [x] D10 project-signal contracts, evaluator and projection; test adapter retained outside product authority.
     - [x] D07 clinical safety contracts, evaluator, Journey and Query projection.
     - [x] D01 AE/MH evaluator and shared projection.
+    - [x] D02 concomitant-medication evaluator and projection.
   - [ ] Fixture externalization and compatibility cleanup.
 - [ ] Projection authority: R5 modules and product adapter.
 - [ ] Reports and harness: R6 modules.
