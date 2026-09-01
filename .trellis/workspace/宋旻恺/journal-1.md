@@ -320,3 +320,11 @@
 - Initial focused runs exposed three omitted `@staticmethod` decorators at mechanical slice boundaries; restored them before acceptance. Every registry source is below 1,500 lines (largest: `launch_registry_contracts.py`, 1,166 lines after the shared helper).
 - Verification: authoritative launch/continuity tests pass `53 passed, 1 skipped`; the single excluded POC-only case is the implementation-plan-obsolete optimizer/hash-seed subprocess matrix. R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `py_compile`, whitespace and diff checks pass.
 - Next slice: inventory and split the remaining authoritative files above the hard limit by cohesive domain, starting with visit-schedule and safety/risk evaluators before projection/runtime support files.
+
+## 2026-09-02 — B3 D07 safety evaluator decomposition
+
+- Split the 4,551-line D07 evaluator into typed contracts plus mixins for integrity/admission, observation and trend evaluation, follow-up obligations, organ-pattern/priority/lifecycle resolution, output assembly and risk/source jumps behind the existing `D07SafetyEvaluator` class.
+- Preserved the class-owned frozen trace orders and the public `evaluate_safety` entrypoint. The focused suite exposed one self-recursive class-name reference and one omitted helper at a slice boundary; both were restored without changing safety-domain rules.
+- Every D07 evaluator source remains below 1,500 lines (largest extracted evaluator mixin: 1,180 lines; existing `d07_safety.py`: 1,330 lines).
+- Verification: original D07 runtime, challenge, mutation, Query/Journey and replay suites pass `1418 passed`; R5/R7 product routes pass `100 passed`; adjacent medical-writing checks pass `127 passed`; `py_compile` and diff checks pass.
+- Next slice: decompose visit-schedule evaluation while explicitly resolving its orchestration/evaluation/output helper cycle.
