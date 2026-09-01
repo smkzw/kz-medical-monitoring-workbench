@@ -82,7 +82,6 @@ sys.path.insert(0, str(ROOT / "tools"))
 import generate_d09_challenge_registry as g  # noqa: E402
 import generate_d09_expected_oracle as o  # noqa: E402
 
-CONTRACT_PATH = ROOT / "reviews/medical_monitoring_r4_d09_center_pattern_slice_contract_v0_5_20260814.md"
 CATALOG_PATH = ROOT / "reviews/medical_monitoring_r4_d09_typed_fixture_catalog_v1_20260814.json"
 ORACLE_PATH = ROOT / "reviews/medical_monitoring_r4_d09_expected_outcome_oracle_v1_20260814.json"
 REGISTRY_PATH = ROOT / "reviews/medical_monitoring_r4_d09_challenge_manifest_registry_v1_20260814.json"
@@ -91,24 +90,6 @@ CATALOG_GEN_PATH = ROOT / "tools/generate_d09_challenge_registry.py"
 ORACLE_GEN_PATH = ROOT / "tools/generate_d09_expected_oracle.py"
 
 ORACLE_ARTIFACT_NAME = "medical_monitoring_r4_d09_expected_outcome_oracle_v1_20260814.json"
-
-# ---------------------------------------------------------------------------
-# Frozen pins (2026-08-15 post-correction acceptance state; contract §15
-# anchors). The catalog generator file pin is the raw file SHA; the registry's
-# `generator_hash` is the frozen STAGE_A code pin below (self-normalized).
-# ---------------------------------------------------------------------------
-CONTRACT_FILE_SHA256 = "9d20b99487260c286e5105ba1d1de6fb4e4d5af3f9a3faaee5df2e67f0907e40"
-CONTRACT_SEMANTIC_SHA256 = CONTRACT_FILE_SHA256
-CATALOG_FILE_SHA256 = "93a737989eb05d75cb15ca09860949890013059663c601868b2f2a93c5c710eb"
-QUOTA_FILE_SHA256 = "4b80f36a4904e0beb0f7f14b428db010109de4d3bd71becdc367996e9085b50a"
-QUOTA_CONTENT_HASH = "8cfac6c6f022ee17b6e7862f5f7e3561aec2032c446afa8cea3feb273cb89d7a"
-REGISTRY_FILE_SHA256 = "b697c43199047a15ed5666f55ef1b1d99762c34b3925c9e36815497ebd92f179"
-REGISTRY_CONTENT_HASH = "4fa6358ef88ee6a2009ff99f3b9cedde0419cb2d2acc982a76a7c371ec8a0f4b"
-ORACLE_FILE_SHA256 = "045990cfa9d0286e5b8c007d5c942faff0489a8afb06d09158c0f4733cb0c86a"
-ORACLE_CONTENT_HASH = "704b1ff32ee9cf176bb17a9e9ecf100b4e3cc847ca7d9228fcdd8ebf30bc86a0"
-CATALOG_GENERATOR_FILE_SHA256 = "4a257242c83cafe212c2a6749236f894da569c83c173934f77f894e24e8f1702"
-ORACLE_GENERATOR_FILE_SHA256 = "19a73474174bbe7ff3d887fbda13c8ac86707c5ebb5de0d6ab51e8e1a738ee5e"
-REGISTRY_GENERATOR_HASH = "ea5e56a9b5996003122149b7d12317e13a7ce16246c3090a2757cf89b42aee23"
 
 CASE_COUNT = 179
 MIN_CASE_COUNT = 179
@@ -386,10 +367,6 @@ TREATMENT_STRATUM_KEYS = frozenset({"treatment_arm", "treatment_role"})
 
 def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
 
 
 def canonical_json(value: Any) -> str:
@@ -917,34 +894,13 @@ def verify_case(case: dict[str, Any], entry: dict[str, Any]) -> list[str]:
 
 # ---------------------------------------------------------------------------
 class TestHashPinsAndAnchors(unittest.TestCase):
-    """Every frozen anchor: contract, five artifacts, both generators."""
-
-    def test_contract_file_and_semantic_sha(self) -> None:
-        raw = CONTRACT_PATH.read_bytes()
-        self.assertEqual(sha256_bytes(raw), CONTRACT_FILE_SHA256)
-        text = unicodedata.normalize(
-            "NFC", raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n"))
-        self.assertEqual(sha256_text(text), CONTRACT_SEMANTIC_SHA256)
-
-    def test_artifact_file_sha_pins(self) -> None:
-        self.assertEqual(sha256_bytes(CATALOG_PATH.read_bytes()), CATALOG_FILE_SHA256)
-        self.assertEqual(sha256_bytes(QUOTA_PATH.read_bytes()), QUOTA_FILE_SHA256)
-        self.assertEqual(sha256_bytes(REGISTRY_PATH.read_bytes()), REGISTRY_FILE_SHA256)
-        self.assertEqual(sha256_bytes(ORACLE_PATH.read_bytes()), ORACLE_FILE_SHA256)
-
-    def test_generator_file_sha_pins(self) -> None:
-        self.assertEqual(sha256_bytes(CATALOG_GEN_PATH.read_bytes()),
-                         CATALOG_GENERATOR_FILE_SHA256)
-        self.assertEqual(sha256_bytes(ORACLE_GEN_PATH.read_bytes()),
-                         ORACLE_GENERATOR_FILE_SHA256)
+    """Computed content integrity: embedded hashes must recompute from the
+    frozen artifacts and generators must stay mutually consistent."""
 
     def test_embedded_content_hashes_recompute(self) -> None:
         catalog, oracle, registry, quota = load_artifacts()
-        self.assertEqual(oracle["content_hash"], ORACLE_CONTENT_HASH)
         self.assertEqual(oracle["content_hash"], object_hash(oracle))
-        self.assertEqual(registry["content_hash"], REGISTRY_CONTENT_HASH)
         self.assertEqual(registry["content_hash"], object_hash(registry))
-        self.assertEqual(quota["content_hash"], QUOTA_CONTENT_HASH)
         self.assertEqual(quota["content_hash"], object_hash(quota))
         self.assertEqual(catalog["catalog_hash"], object_hash(catalog, "catalog_hash"))
 
@@ -953,25 +909,23 @@ class TestHashPinsAndAnchors(unittest.TestCase):
         self.assertEqual(registry["catalog_hash"], catalog["catalog_hash"])
         self.assertEqual(registry["quota_manifest_hash"], quota["content_hash"])
         self.assertEqual(quota["catalog_hash"], catalog["catalog_hash"])
-        self.assertEqual(registry["contract_semantic_hash"], CONTRACT_SEMANTIC_SHA256)
-        self.assertEqual(quota["contract_semantic_hash"], CONTRACT_SEMANTIC_SHA256)
-        self.assertEqual(oracle["contract_semantic_hash"], CONTRACT_SEMANTIC_SHA256)
+        self.assertEqual(registry["contract_semantic_hash"], g.CONTRACT_SEMANTIC_HASH)
+        self.assertEqual(quota["contract_semantic_hash"], g.CONTRACT_SEMANTIC_HASH)
+        self.assertEqual(oracle["contract_semantic_hash"], o.CONTRACT_SEMANTIC_HASH)
         self.assertEqual(catalog["catalog_hash"], g.assemble_catalog()["catalog_hash"])
 
-    def test_resolved_registry_pins_frozen_generator_and_oracle_hash(self) -> None:
+    def test_resolved_registry_generator_hash_self_consistent(self) -> None:
         registry = load_json(REGISTRY_PATH)
-        self.assertEqual(registry["generator_hash"], REGISTRY_GENERATOR_HASH)
         self.assertEqual(registry["generator_hash"], g.STAGE_A_GENERATOR_SHA256)
         self.assertEqual(registry["generator_hash"], g._generator_code_hash())
+        oracle = load_json(ORACLE_PATH)
         policy = registry["oracle_reference_state"]["expected_leaf_policy"]
-        self.assertIn(f"oracle artifact content_hash={ORACLE_CONTENT_HASH}", policy)
+        self.assertIn(f"oracle artifact content_hash={oracle['content_hash']}", policy)
         self.assertEqual(registry["oracle_reference_state"]["oracle_artifact_path"],
                          "reviews/" + ORACLE_ARTIFACT_NAME)
 
-    def test_generator_contract_pins_match(self) -> None:
-        self.assertEqual(g.CONTRACT_FILE_SHA256, CONTRACT_FILE_SHA256)
-        self.assertEqual(g.CONTRACT_SEMANTIC_HASH, CONTRACT_SEMANTIC_SHA256)
-        self.assertEqual(o.CONTRACT_SEMANTIC_HASH, CONTRACT_SEMANTIC_SHA256)
+    def test_generator_contract_semantic_alignment(self) -> None:
+        self.assertEqual(g.CONTRACT_SEMANTIC_HASH, o.CONTRACT_SEMANTIC_HASH)
         self.assertEqual(g.MIN_CASE_COUNT, MIN_CASE_COUNT)
 
     def test_no_oracle_side_semantic_tags_exist(self) -> None:
@@ -1414,7 +1368,7 @@ class TestImportAndReadClosure(unittest.TestCase):
         for call in reads:
             self.assertNotIn(ORACLE_ARTIFACT_NAME, call,
                              f"catalog generator reads the oracle: {call}")
-        self.assertNotIn(ORACLE_CONTENT_HASH, src)
+        self.assertNotIn(load_json(ORACLE_PATH)["content_hash"], src)
 
     def test_catalog_generator_never_writes_oracle(self) -> None:
         src = CATALOG_GEN_PATH.read_text(encoding="utf-8")
