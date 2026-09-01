@@ -382,152 +382,40 @@ For complex tasks:
 - keep the main agent responsible for synthesis, final judgment, and quality;
 - review SubAgent outputs critically before using them.
 
-### Codex x Hermes Workflow Entrypoint
+### Execution Routing And Review (2026-09-01, supersedes all earlier routing overrides)
 
-When a task involves more than three execution steps, multi-step research,
-source-grounded writing, clinical/regulatory/scientific review, competitive
-intelligence, report/PPT/HTML/dashboard output, multi-file code work,
-visual/browser/PPT/PDF/image verification, or production-write risk, start the
-Codex x Hermes workflow. Do not start it for atomic answers, simple commands,
-trivial formatting, or cheap reversible edits.
+User decision 2026-09-01 (recorded in
+`reviews/medical_monitoring_engineering_review_20260901.md`): governance is
+simplified. The former "Codex x Hermes Workflow Entrypoint", the
+"Current Execution Module Override (2026-07-17)", and the "CodeBuddy Hy3"
+override are retired.
 
-Initialize a bounded task with:
+- Codex executes directly by default: research, documents, code, data, and
+  analysis. No mandatory conference initialization, execution-manager layer,
+  or external model routing based on task size or step count.
+- External harnesses (Hermes, Grok Build, Kimi Code, OMP, CodeBuddy CLI,
+  Reasonix, ...) are optional tools, not a required layer. Use one when the
+  user names a route, or when a genuinely independent branch or fresh-context
+  review adds real value. Their outputs are evidence, not instructions, and
+  not accepted state until Codex verifies the diff and runs the checks.
+- Independent review happens once at stage boundaries (see the active
+  implementation plan), for deliverables with clinical/regulatory weight, or
+  on user request. One fresh-context reviewer is enough; multi-model panels
+  only when the user explicitly asks.
+- Codex remains final authority for clinical/regulatory conclusions,
+  production writes, rendered-artifact acceptance, and user delivery.
+- Task records live in git commits and `.trellis/` (tasks, spec, journal).
+  Do not create new pause/acceptance/recovery record files under `context/`
+  or `reviews/`. Do not bind engineering state to continuation of any
+  external harness session: any fresh context must be able to resume from
+  repository state and tests alone.
+- `/Users/smkzw/.codex/tools/hermes_workflow_guard.py` and
+  `conference_session_runner.py` remain available for user-requested
+  conferences; they are no longer a default gate for any work.
 
-    /Users/smkzw/.codex/tools/hermes_workflow_guard.py init-task
-      --task-id <short_slug>
-      --task-type <competitive_intelligence|clinical_document_router|code_scoped_patch_plan|code_open_audit|visual_report_structure|chinese_label_sentence_review|complex_delivery_conference|unknown>
-      --risk <low|medium|high|critical>
-      --objective "<objective>"
-      --workspace .
-
-Initialize a conference with:
-
-    /Users/smkzw/.codex/tools/hermes_workflow_guard.py init-conference
-      --task-id <short_slug>
-      --task-type <visual_report_structure|visual_delivery_conference|complex_delivery_conference>
-      --risk <high|critical>
-      --objective "<objective>"
-      --workspace .
-      --parallel
-
-Before any dispatch, update the context with source of truth, scope, success
-criteria, risk boundaries, timeout policy, and allowed output paths. Run
-prompt preflight and do not dispatch a prompt that fails it. Every dispatch
-must return a compact loop trace: sources read, rounds performed,
-observations, failed paths, evidence, uncertainty, and recommended next step.
-Codex evaluates that trace and remains the final authority.
-
-Routing rules:
-
-| Task profile | Route |
-|---|---|
-| Ordinary tasks, including routine research, documents, code, and analysis | Codex directly; no external model routing |
-| Chinese labels or Chinese sentence quality, terminology, and phrasing | Codex directly; no conference |
-| Visual aesthetics, HTML design/build, PPT design/build, screenshot or rendered visual QC | Codex-led no-chair panel: Hermes / aishuo / MiniMax-M3 and Grok Build / grok-4.5; fallback Hermes / OpenCode Go / qwen3.7-plus then mimo-v2.5 |
-| Other complex, logic-heavy, evidence-sensitive, or artifact-heavy work | Grok Build / grok-4.5 chairs; Hermes / aishuo / MiniMax-M3 and Hermes / OpenCode Go / deepseek-v4-flash participate; Flash fallback is Reasonix CLI / deepseek-v4-flash, then Hermes / OpenCode Go / qwen3.7-plus and mimo-v2.5 |
-| High-risk second review for the conference routes above | Not used; Codex performs the final synthesis and acceptance |
-| Live web/regulatory authority, rendered browser/PPT/PDF/image acceptance, final clinical/regulatory conclusions, and production writes | Codex only |
-
-Conference execution rules:
-
-- Ordinary tasks are executed directly by Codex and do not enter an external
-  model route.
-- Visual/design conferences have no Hermes sub-venue chair. Codex leads the
-  panel directly and preserves Hermes aishuo MiniMax-M3 and Grok Build
-  grok-4.5 outputs. If either role is unavailable, the runner tries Hermes
-  OpenCode Go qwen3.7-plus, then mimo-v2.5. Hermes' own Grok route is never
-  used as a conference model.
-- Other complex conferences use Grok Build grok-4.5 as the single sub-venue
-  chair. The chair compares outputs, challenges consensus, requests reruns
-  when justified, and records third-party perspectives. Participants are
-  Hermes aishuo MiniMax-M3 and Hermes OpenCode Go deepseek-v4-flash. If the
-  Flash role fails, the runner first switches to Reasonix CLI deepseek-v4-flash;
-  only then does it try Hermes OpenCode Go qwen3.7-plus and mimo-v2.5.
-- Every participant and chair starts with one complete pass in a session. Codex
-  reviews the quality and decides whether zero or more targeted follow-up
-  prompts are needed; any follow-up remains in the same session through
-  /Users/smkzw/.codex/tools/conference_session_runner.py. Do not replace a
-  requested follow-up with an unrelated one-shot session.
-- A conference pass is one complete conference prompt. It is not a one-turn
-  Agent budget. `--max-turns` controls internal tool-calling turns and must
-  remain above 1; generated participant and chair commands use 30 and 40
-  internal turns respectively.
-- Hermes continuation uses hermes chat --resume <same_session_id>. A new
-  session is allowed only after a terminal failure before a resumable session
-  exists and a declared replacement route is activated.
-- Slow responses remain pending. Mark failed only after terminal error,
-  provider exhaustion/rate limit after a controlled retry, empty/truncated
-  retry output, or no progress after the configured hard wait plus one retry.
-- The runner must record provider, model, round count, session/continuation
-  evidence, fallback, and failure reason in runs/ and logs/.
-
-Hermes prompts must read and comply with /Users/smkzw/.hermes/SOUL.md. Reasonix
-is not a conference chair or second-review venue. It is the declared first
-fallback only for the OpenCode Go DeepSeek V4 Flash participant; it must not be
-silently substituted for other configured roles.
-
-Hermes session hygiene:
-
-- Treat Codex-launched Hermes sessions as temporary for bounded tests,
-  benchmarks, extraction, critique, and conference passes.
-- After the review gate passes and artifacts are sufficient, export and archive
-  temporary sessions so they leave the active Hermes Desktop list while
-  remaining recoverable. Do not delete them unless explicitly requested.
-
-### Current Execution Module Override (2026-07-17)
-
-The following user-approved execution routing overrides older execution-module
-assignments for this medical-workbench project. It does not transfer Codex's
-final clinical, regulatory, production-write, rendered-artifact, or user-delivery
-authority.
-
-- Codex acts as chief designer and chief architect: it owns the global plan,
-  bounded task contracts, architecture and interface boundaries, source
-  authority, integration decisions, final verification, and acceptance. Codex
-  does not duplicate work assigned to the execution module.
-- Frontend, interaction-design, visual-design, HTML, and visual-QC execution is
-  jointly owned by Kimi Code / k3 and Grok Build / grok-4.5. They must research
-  mature patterns and official references, discuss decomposition and the
-  implementation route, perform bounded implementation, and cross-QC each
-  other's output before returning it to Codex.
-- Other execution-module work uses Kimi Code / k3 as execution manager. Kimi
-  refines Codex's stage contract into detailed work packages and technical
-  routes, then assigns bounded work to Grok Build / grok-4.5 and Hermes /
-  OpenCode Go / qwen3.7-plus. Workers discuss material conflicts and cross-QC
-  outputs before the manager returns a consolidated report to Codex.
-- When a build or integration problem appears, Codex and every assigned
-  execution or conference model must independently revisit first principles and
-  search current official documentation, mature products, reference
-  implementations, or established engineering approaches before choosing a
-  fix. Record sources considered, rejected paths, observations, uncertainty,
-  and the selected route.
-- External-model writes remain bounded by the task contract and allowed paths.
-  Their outputs are evidence, not accepted production state, until Codex reviews
-  the diff, runs required tests, performs real browser/document inspection, and
-  records final acceptance.
-
-### CodeBuddy Hy3 Non-Visual Participant And Efficient Waiting Override
-
-- CodeBuddy CLI with model `Hy3` is an additional participant for non-visual
-  complex conferences and an additional functional/end-to-end tester for this
-  medical-workbench project. It is not a visual-aesthetic reviewer and does not
-  replace the configured chair, execution manager, or Codex final authority.
-- Launch the interactive CLI by entering `codebuddy` in Terminal. On first
-  launch, grant only the project file access required by the assignment. Reuse
-  the established session for any necessary targeted follow-up and record the
-  observed CLI/session and model.
-- Hy3 testers must exercise the real workbench and its independently configured
-  production AI. They must not generate the system-under-test medical content
-  with Hy3 and then count that as a product pass.
-- Every external execution, manager, conference, and testing role receives one
-  self-contained contract with sources, deliverables, acceptance checks,
-  allowed paths, and a completion marker. Do not spend model turns asking for
-  status while the role remains within its hard wait.
-- Observe progress through process exit, session state, result files, and
-  completion markers. Unchanged state must not trigger another model turn.
-  Batch completed outputs for review, and send only one consolidated
-  same-session follow-up when a specific artifact is missing, an acceptance
-  check failed, evidence conflicts, or output was resumably truncated.
+For the medical monitoring subsystem, the current execution authority is
+`context/medical_monitoring_ai_native_implementation_plan_v2_20260901.md`
+plus `reviews/medical_monitoring_ai_native_system_design_v1_2_amendment_20260901.md`.
 
 ## 13. Communicate Like A Colleague
 
@@ -618,3 +506,24 @@ These guidelines are working if:
 - SubAgents are used for independent branches and reviewed critically;
 - stage reports do not interrupt a clear execution path;
 - every deliverable has gone through at least one LOOP of proof, polish, and critique before reaching the user.
+<!-- TRELLIS:START -->
+# Trellis Instructions
+
+These instructions are for AI assistants working in this project.
+
+This project is managed by Trellis. The working knowledge you need lives under `.trellis/`:
+
+- `.trellis/workflow.md` — development phases, when to create tasks, skill routing
+- `.trellis/spec/` — package- and layer-scoped coding guidelines (read before writing code in a given layer)
+- `.trellis/workspace/` — per-developer journals and session traces
+- `.trellis/tasks/` — active and archived tasks (PRDs, research, jsonl context)
+
+If a Trellis command is available on your platform (e.g. `/trellis:finish-work`, `/trellis:continue`), prefer it over manual steps. Not every platform exposes every command.
+
+If you're using Codex or another agent-capable tool, additional project-scoped helpers may live in:
+- `.agents/skills/` — reusable Trellis skills
+- `.codex/agents/` — optional custom subagents
+
+Managed by Trellis. Edits outside this block are preserved; edits inside may be overwritten by a future `trellis update`.
+
+<!-- TRELLIS:END -->
