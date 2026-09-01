@@ -481,3 +481,11 @@
 - Audience language remains native Chinese and rejects internal/backend vocabulary; no project, study, disease, drug, threshold, case identifier or listing-layout branch was introduced.
 - Verification: the complete D09 adapter, mutation, projection, replay, runtime-closure, runtime-contract and verifier-probe suites pass `243 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
 - Next slice: split `runtime/project_audit.py`, preserving one append-only project audit chain, verification evidence and fail-closed continuity semantics.
+
+## 2026-09-02 — B3 project-audit ledger decomposition
+
+- Split the 1,625-line project audit runtime into a 600-line schema/vocabulary/canonical-validation support module and a 1,046-line single-ledger append/read/verify authority module.
+- Preserved one root SQLite store, one CAS hash chain per canonical project, immutable event identity, replay-safe boundary events, principal/authorization hashes, atomic operation projection updates, append-only verification and fail-closed chain inspection. The concrete `ProjectAuditLedger` remains the only writer and owns its transaction boundary.
+- Payload allowlists and forbidden nested content remain closed; the ledger stores opaque lifecycle references and digests rather than medical payloads, project files or user-facing report text.
+- Verification: project-audit behavior passes `8 passed`; project verifier, assurance-principal route and SQLite runtime-store adjacency pass `82 passed`; R5/R7 product routes plus the protected medical-writing adjacent gate pass `297 passed`; `py_compile` and `git diff --check` pass.
+- Next slice: split `runtime/capability.py`, retaining one capability attempt/state authority, provider-neutral contracts and exact retry/terminal semantics.
