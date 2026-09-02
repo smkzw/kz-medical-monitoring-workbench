@@ -291,6 +291,26 @@ const emptyProfile = projectAdmissionProfile({ summary: { files: 0, tables: 0, r
 check(emptyProfile.summaryText === "0 个文件 · 0 张数据表 · 0 行数据", "empty profile renders zeroed summary");
 check(emptyProfile.technical === null, "missing technical stays null");
 
+const localSelection = admissionWizardReducer(
+  createAdmissionWizardState({ projectId: "p" }),
+  { type: "source-dir-change", value: "/new/local/selection" },
+);
+check(
+  admissionWizardReducer(localSelection, {
+    type: "resume-created",
+    payload: { attempt_id: "older-attempt" },
+  }) === localSelection,
+  "late resume never replaces a new local selection",
+);
+const resumed = admissionWizardReducer(
+  createAdmissionWizardState({ projectId: "p" }),
+  { type: "resume-created", payload: { attempt_id: "older-attempt" } },
+);
+check(
+  resumed.phase === "reading" && resumed.attemptId === "older-attempt",
+  "resume continues the latest untouched admission",
+);
+
 // ---------------------------------------------------------------------------
 // Technical rows stay inside the collapsed region contract.
 

@@ -1309,7 +1309,7 @@ export function MedicalMonitoringProductLoop({
         <>
           <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError.text : startSurfaceCopy}</span></section>
           <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />
-          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} /> : null}
+          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={retryPage} /> : null}
         </>
       ) : null}
       {historyOpen ? <MonitoringHistoryDrawer history={history} selectedPublicRunToken={productState.selectedPublicRunToken} onSelect={selectHistoryRow} onClose={() => setHistoryOpen(false)} /> : null}

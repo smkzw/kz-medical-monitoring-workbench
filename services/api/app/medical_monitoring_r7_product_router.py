@@ -297,6 +297,10 @@ from packages.medical_monitoring.api.r7_product.mapping_candidate_routes import 
     MappingCandidateRouteContext,
     register_mapping_candidate_routes,
 )
+from packages.medical_monitoring.api.r7_product.fact_routes import (
+    FactRouteContext,
+    register_fact_routes,
+)
 from packages.medical_monitoring.api.r7_product.publication_routes import (
     PublicationRouteContext,
     register_publication_routes,
@@ -412,6 +416,7 @@ def create_medical_monitoring_r7_product_router(
     admission_pipeline: Any = None,
     admission_mapping_pipeline: Any = None,
     admission_mapping_confirmation: Any = None,
+    admission_fact_materializer: Any = None,
     audit_ledger_factory: Optional[Callable[..., Any]] = None,
 ) -> APIRouter:
     """Create the project-scoped R7 product router; no workspace I/O here."""
@@ -963,6 +968,18 @@ def create_medical_monitoring_r7_product_router(
             monitoring_action=MonitoringAction,
             admission_mapping_pipeline=admission_mapping_pipeline,
             admission_mapping_confirmation=admission_mapping_confirmation,
+        ),
+    )
+    register_fact_routes(
+        router,
+        FactRouteContext(
+            root=root,
+            resolve_project=resolve_project,
+            authorize=authorize,
+            acquire_product_write_gate=acquire_product_write_gate,
+            workspace_dir=_workspace_dir,
+            monitoring_action=MonitoringAction,
+            fact_materializer=admission_fact_materializer,
         ),
     )
 

@@ -101,11 +101,12 @@ function mappingFrom(transitions) {
   return mapping;
 }
 
-function render(state, mappingState) {
+function render(state, mappingState, factState) {
   return renderToStaticMarkup(
     <MedicalMonitoringAdmissionWizardView
       state={state}
       mappingState={mappingState || createAdmissionMappingConfirmState()}
+      factState={factState || { phase: "idle", payload: null, error: null }}
       onSourceDirChange={() => {}}
       onSourceFilesChange={() => {}}
       onPrimaryAction={() => {}}
@@ -246,7 +247,17 @@ export const renders = {
     { type: "finish" },
   ]), mappingFrom([
     { type: "confirm-ready", payload: { mapping_revision: "rev-1", facts_generated: false } },
-  ])),
+  ]), { phase: "generating", payload: null, error: null }),
+  doneReady: render(wizardState([
+    { type: "source-dir-change", value: "/data/listings/2026-08" },
+    { type: "import-start" },
+    { type: "import-created", payload: profilePayload },
+    { type: "profile-loaded", payload: profilePayload },
+    { type: "advance" },
+    { type: "finish" },
+  ]), mappingFrom([
+    { type: "confirm-ready", payload: { mapping_revision: "rev-1", facts_generated: false } },
+  ]), { phase: "ready", payload: { facts_generated: true }, error: null }),
   failedRetry: render(wizardState([
     {
       type: "error",
