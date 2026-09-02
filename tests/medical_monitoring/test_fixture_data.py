@@ -49,7 +49,11 @@ def test_load_r7_setup_fixture_roundtrip() -> None:
     data = load_r7_setup_fixture()
     assert len(data["snapshots"]) == 2
     assert len(data["baselines"]) == 4
-    assert data["snapshots"][0]["snapshot_ref"] == "{project_id}:synthetic:daily-prior"
+    assert data["snapshots"][0]["snapshot_ref"] == "s7-snapshot-comparable-001"
+    assert data["snapshots"][1]["snapshot_ref"] == "s7-snapshot-current-001"
+    assert {
+        row["site_ref"] for row in data["snapshots"][1]["rows"]
+    } == {"s7-site-006", "s7-site-010"}
     assert data["snapshots"][1]["data_cutoff"] == "2026-08-28"
 
 

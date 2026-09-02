@@ -3,19 +3,19 @@
   "fixture_version": "1",
   "snapshots": [
     {
-      "snapshot_ref": "{project_id}:synthetic:daily-prior",
+      "snapshot_ref": "s7-snapshot-comparable-001",
       "data_cutoff": "2026-08-27",
       "rows": [
         {
-          "canonical_key": "site-01/S-001/lab-alt",
-          "site_ref": "site-01",
-          "subject_ref": "S-001",
+          "canonical_key": "s7-site-006/s7-subject-06021/lab-alt",
+          "site_ref": "s7-site-006",
+          "subject_ref": "s7-subject-06021",
           "value": 42
         },
         {
-          "canonical_key": "site-01/S-002/lab-alt",
-          "site_ref": "site-01",
-          "subject_ref": "S-002",
+          "canonical_key": "s7-site-010/s7-subject-10008/lab-alt",
+          "site_ref": "s7-site-010",
+          "subject_ref": "s7-subject-10008",
           "value": 35
         }
       ],
@@ -25,25 +25,25 @@
       "source_revision_id": "synthetic-source-prior"
     },
     {
-      "snapshot_ref": "{project_id}:synthetic:current",
+      "snapshot_ref": "s7-snapshot-current-001",
       "data_cutoff": "2026-08-28",
       "rows": [
         {
-          "canonical_key": "site-01/S-001/lab-alt",
-          "site_ref": "site-01",
-          "subject_ref": "S-001",
+          "canonical_key": "s7-site-006/s7-subject-06021/lab-alt",
+          "site_ref": "s7-site-006",
+          "subject_ref": "s7-subject-06021",
           "value": 47
         },
         {
-          "canonical_key": "site-01/S-002/lab-alt",
-          "site_ref": "site-01",
-          "subject_ref": "S-002",
+          "canonical_key": "s7-site-010/s7-subject-10008/lab-alt",
+          "site_ref": "s7-site-010",
+          "subject_ref": "s7-subject-10008",
           "value": 35
         },
         {
-          "canonical_key": "site-02/S-003/lab-alt",
-          "site_ref": "site-02",
-          "subject_ref": "S-003",
+          "canonical_key": "s7-site-010/s7-subject-date-001/lab-alt",
+          "site_ref": "s7-site-010",
+          "subject_ref": "s7-subject-date-001",
           "value": 29
         }
       ],
@@ -56,7 +56,7 @@
   "baselines": [
     {
       "mode": "daily",
-      "snapshot_ref": "{project_id}:synthetic:daily-prior",
+      "snapshot_ref": "s7-snapshot-comparable-001",
       "data_cutoff": "2026-08-27",
       "run_id": "{project_id}:synthetic:daily-run",
       "published": true,
@@ -65,15 +65,15 @@
       "fixed_total": false,
       "rows": [
         {
-          "canonical_key": "site-01/S-001/lab-alt",
-          "site_ref": "site-01",
-          "subject_ref": "S-001",
+          "canonical_key": "s7-site-006/s7-subject-06021/lab-alt",
+          "site_ref": "s7-site-006",
+          "subject_ref": "s7-subject-06021",
           "value": 42
         },
         {
-          "canonical_key": "site-01/S-002/lab-alt",
-          "site_ref": "site-01",
-          "subject_ref": "S-002",
+          "canonical_key": "s7-site-010/s7-subject-10008/lab-alt",
+          "site_ref": "s7-site-010",
+          "subject_ref": "s7-subject-10008",
           "value": 35
         }
       ],
@@ -90,15 +90,15 @@
       "fixed_total": false,
       "rows": [
         {
-          "canonical_key": "site-01/S-001/lab-alt",
-          "site_ref": "site-01",
-          "subject_ref": "S-001",
+          "canonical_key": "s7-site-006/s7-subject-06021/lab-alt",
+          "site_ref": "s7-site-006",
+          "subject_ref": "s7-subject-06021",
           "value": 42
         },
         {
-          "canonical_key": "site-01/S-002/lab-alt",
-          "site_ref": "site-01",
-          "subject_ref": "S-002",
+          "canonical_key": "s7-site-010/s7-subject-10008/lab-alt",
+          "site_ref": "s7-site-010",
+          "subject_ref": "s7-subject-10008",
           "value": 35
         }
       ],
@@ -115,15 +115,15 @@
       "fixed_total": false,
       "rows": [
         {
-          "canonical_key": "site-01/S-001/lab-alt",
-          "site_ref": "site-01",
-          "subject_ref": "S-001",
+          "canonical_key": "s7-site-006/s7-subject-06021/lab-alt",
+          "site_ref": "s7-site-006",
+          "subject_ref": "s7-subject-06021",
           "value": 42
         },
         {
-          "canonical_key": "site-01/S-002/lab-alt",
-          "site_ref": "site-01",
-          "subject_ref": "S-002",
+          "canonical_key": "s7-site-010/s7-subject-10008/lab-alt",
+          "site_ref": "s7-site-010",
+          "subject_ref": "s7-subject-10008",
           "value": 35
         }
       ],
@@ -140,15 +140,15 @@
       "fixed_total": true,
       "rows": [
         {
-          "canonical_key": "site-01/S-001/lab-alt",
-          "site_ref": "site-01",
-          "subject_ref": "S-001",
+          "canonical_key": "s7-site-006/s7-subject-06021/lab-alt",
+          "site_ref": "s7-site-006",
+          "subject_ref": "s7-subject-06021",
           "value": 42
         },
         {
-          "canonical_key": "site-01/S-002/lab-alt",
-          "site_ref": "site-01",
-          "subject_ref": "S-002",
+          "canonical_key": "s7-site-010/s7-subject-10008/lab-alt",
+          "site_ref": "s7-site-010",
+          "subject_ref": "s7-subject-10008",
           "value": 35
         }
       ],

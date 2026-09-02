@@ -232,7 +232,15 @@ class R5AuthorityPacket:
             )
         object.__setattr__(self, "site_refs", tuple(sorted(site_refs)))
         packets = tuple(self.s4_packets)
-        if not packets or any(type(item) is not s4.R5S4AuthorityPacket for item in packets):
+        synthetic_product = (
+            self.product_packet is not None
+            and getattr(self.product_packet, "synthetic", False) is True
+            and self.project_ref.startswith("s7-synthetic-")
+        )
+        if (
+            (not packets and not synthetic_product)
+            or any(type(item) is not s4.R5S4AuthorityPacket for item in packets)
+        ):
             raise R5PublicationAuthorityError(
                 "S4_PACKET_INVALID", "s4_packets must contain typed packets"
             )

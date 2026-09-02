@@ -92,6 +92,15 @@ function clean(value, fallback = "") {
   return String(value).trim() || fallback;
 }
 
+function publicCenterLabel(siteRef, fallback = "中心待确认") {
+  const value = clean(siteRef);
+  const synthetic = /^s7-site-(?:small-)?0*(\d+)$/i.exec(value);
+  if (synthetic) return `中心 ${synthetic[1]}`;
+  const canonical = /^site-(.+)$/i.exec(value);
+  if (canonical) return `中心 ${canonical[1].toUpperCase()}`;
+  return fallback;
+}
+
 function publicErrorText(error, fallback) {
   const detail = error && typeof error === "object" ? error.detail : null;
   const code = clean(detail?.code || error?.code);
@@ -165,7 +174,7 @@ function normalizeRisk(value = {}, domains) {
     severityLabel: SEVERITY_LABELS[severity] || "风险等级待确认",
     riskType: clean(source.risk_type_zh || source.risk_type || source.title, "风险提示"),
     subjectLabel: clean(source.subject_label || source.subject_name),
-    siteLabel: clean(source.site_label || source.site_name),
+    siteLabel: clean(source.site_label || source.site_name, publicCenterLabel(source.site_ref || source.site_id)),
     dateState,
     dateLabel: DATE_LABELS[dateState] || "日期待确认",
     changeKind,
@@ -254,7 +263,7 @@ function normalizePublicProductPayload(resultContext) {
     const existing = centersBySite.get(siteRef) || {
       ...source,
       siteRef,
-      siteLabel: clean(source.site_label || source.site_name, `中心 ${siteRef}`),
+      siteLabel: clean(source.site_label || source.site_name, publicCenterLabel(siteRef)),
       measures: [],
       risks: [],
     };
@@ -268,7 +277,10 @@ function normalizePublicProductPayload(resultContext) {
       : (Array.isArray(source.individual_risk_refs) ? source.individual_risk_refs.map((ref) => risksByRef.get(clean(ref))).filter(Boolean) : []);
     existing.measures.push(...cellMeasures);
     existing.risks.push(...cellRisks);
-    existing.coverageState = clean(source.coverage_state || source.coverageState, existing.coverageState || "unknown");
+    existing.coverageState = clean(
+      source.coverage_state || source.coverageState || cellMeasures[0]?.coverageState,
+      existing.coverageState || "unknown",
+    );
     existing.coverageLabel = COVERAGE_LABELS[existing.coverageState] || "覆盖待确认";
     centersBySite.set(siteRef, existing);
   }
@@ -582,6 +594,7 @@ export function MedicalMonitoringProductLoop({
   const [continuityResult, setContinuityResult] = useState(null);
   const [continuityLoading, setContinuityLoading] = useState(false);
   const idempotencyRef = useRef(null);
+  const publicationAttemptRef = useRef("");
   const previousProgressAvailableRef = useRef(false);
   const normalizedProjectId = clean(projectId);
   const resultToken = clean(route.result_context_token);
@@ -775,6 +788,7 @@ export function MedicalMonitoringProductLoop({
       setProgressLoading(false);
       setProgressError(null);
       previousProgressAvailableRef.current = false;
+      publicationAttemptRef.current = "";
       return undefined;
     }
     let disposed = false;
@@ -797,6 +811,18 @@ export function MedicalMonitoringProductLoop({
         setProgressError(null);
         setProgressLoading(false);
         failures = 0;
+        if (
+          projected.runState === "completed"
+          && projected.publicationState === "not_started"
+          && publicationAttemptRef.current !== publicRunToken
+        ) {
+          publicationAttemptRef.current = publicRunToken;
+          await api.publishResult(normalizedProjectId, publicRunToken, {
+            idempotency_key: `result-publication:${publicRunToken}`,
+          }, { signal: inFlightController.signal });
+          if (!disposed) timer = setTimeout(() => readProgress(false), 0);
+          return;
+        }
         if (projected.resultAvailable && !wasAvailable) setRefreshEpoch((value) => value + 1);
         if (projected.poll.active) timer = setTimeout(() => readProgress(false), projected.poll.intervalMs);
       } catch (error) {

@@ -273,6 +273,13 @@ export function projectMonitoringWorkbar(selectionOrInput = {}) {
       workbar.secondaryTarget = "wizard";
       workbar.showNewRun = true;
     }
+  } else if (selectedRun.runState === "completed") {
+    // A completed analysis whose result could not be organised must not trap
+    // the user on a dead-end progress page. Keep the evidence available in
+    // history and allow a genuinely new run with a new server identity.
+    workbar.secondaryAction = MONITORING_NEW_RUN_ACTION_TEXT;
+    workbar.secondaryTarget = "wizard";
+    workbar.showNewRun = true;
   }
   return freeze(workbar);
 }

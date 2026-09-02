@@ -122,6 +122,9 @@ export const MEDICAL_MONITORING_PRODUCT_PATHS = Object.freeze({
   publicProgress: (projectId, publicRunToken) => (
     `${projectPath(projectId)}/runs/${encodeSegment(publicRunToken, "publicRunToken")}/progress`
   ),
+  publication: (projectId, publicRunToken) => (
+    `${projectPath(projectId)}/runs/${encodeSegment(publicRunToken, "publicRunToken")}/publication`
+  ),
   resultEntry: (projectId, publicRunToken) => (
     `${projectPath(projectId)}/runs/${encodeSegment(publicRunToken, "publicRunToken")}/result-entry`
   ),
@@ -376,6 +379,13 @@ export function createMedicalMonitoringProductApi({
     // medicalMonitoringProgressApi remains the shared progress transport
     // compatibility surface and is not used by result pages.
     getProgress: getPublicProgress,
+
+    publishResult(projectId, publicRunToken, payload, { signal } = {}) {
+      return post(MEDICAL_MONITORING_PRODUCT_PATHS.publication(
+        requireId(projectId, "projectId"),
+        requireId(publicRunToken, "publicRunToken"),
+      ), payload, { signal });
+    },
 
     getResultEntry(projectId, publicRunToken, { signal } = {}) {
       return get(MEDICAL_MONITORING_PRODUCT_PATHS.resultEntry(
