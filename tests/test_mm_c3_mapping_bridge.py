@@ -76,6 +76,17 @@ def _xlsx_bytes() -> bytes:
     return output.getvalue()
 
 
+def _empty_table_xlsx_bytes() -> bytes:
+    openpyxl = pytest.importorskip("openpyxl")
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "未采集检查"
+    sheet.append(["受试者编号(SUBJID)", "检查结果(LBORRES)"])
+    output = io.BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
 def _workspace(tmp_path: Path) -> Path:
     return tmp_path / "runtime" / PROJECT_ID
 
@@ -190,6 +201,35 @@ def test_bridge_exposes_value_distribution_and_table_structure(
             "field_order": ["SUBJID", "VISIT", "LBDAT", "LBORRES"],
         },
     ]
+
+
+def test_bridge_keeps_header_only_table_as_evidence_without_guessing(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "empty-table.xlsx").write_bytes(_empty_table_xlsx_bytes())
+    workspace = _workspace(tmp_path)
+    result = DataAdmissionPipeline(parse_listing_file).create_attempt(
+        project_id=PROJECT_ID,
+        source_dir=source,
+        workspace_dir=workspace,
+    )
+
+    bridged = admission_record_to_harness_input(
+        project_id=PROJECT_ID,
+        attempt_id=str(result["attempt_id"]),
+        record=_record(workspace, str(result["attempt_id"])),
+    )
+
+    assert len(bridged.field_profile["table_bindings"]) == 1
+    assert all(
+        field["total_rows"] == 0
+        and field["non_empty_count"] == 0
+        and field["null_rate"] == 1.0
+        and field["representative_values"] == []
+        for field in bridged.field_profile["fields"]
+    )
 
 
 def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path) -> None:
