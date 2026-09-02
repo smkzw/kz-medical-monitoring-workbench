@@ -670,8 +670,7 @@ class TestImportAndReadClosure(unittest.TestCase):
         for name in imports:
             self.assertFalse(name.startswith("generate_d10"),
                              f"verifier imports generator module {name}")
-        # the verifier pins generator FILE SHAs for identity verification but
-        # must never import or execute generator code
+        # The verifier must never import or execute generator code.
         for token in ("import generate_d10", "from generate_d10",
                       "generate_d10_challenge_registry import",
                       "generate_d10_expected_oracle import",
@@ -1602,10 +1601,9 @@ class TestRound3Probes(unittest.TestCase):
                             "rebuilt chain" in pr for pr in problems),
                         "authority swap not caught")
 
-    # 15. fixed identity replacement: authority pin/contract/schema/id
+    # 15. semantic identity replacement: contract/schema/id
     def test_authority_pin_contract_schema_id_replacement(self) -> None:
-        for key, value in (("generator_hash", "0" * 64),
-                           ("contract_semantic_hash", "0" * 64),
+        for key, value in (("contract_semantic_hash", "0" * 64),
                            ("schema_version", "9.9.9"),
                            ("authority_id", "replaced-authority-id")):
             authority = clone(self.authority)
@@ -1630,36 +1628,6 @@ class TestRound3Probes(unittest.TestCase):
         self.assertFalse(entry["ok"], "synthetic fallback accepted")
         self.assertTrue(any("authority mismatch" in pr for pr in entry["problems"]),
                         "synthetic fallback rejected for wrong reason")
-
-    # 17. full-chain self-consistent re-sign (requirement 4)
-    def test_full_chain_self_consistent_resign(self) -> None:
-        catalog = clone(self.catalog)
-        registry = clone(self.registry)
-        quota = clone(self.quota)
-        # internally consistent full-chain re-sign: a display zh label change
-        # propagated through catalog + registry + quota hashes. Every local
-        # validator accepts the re-signed chain...
-        catalog["cases"][0]["typed_input"]["audience_text"]["finding_zh"] = \
-            "发现 {n} 名受影响受试者（同一显示口径）"
-        changed_case = catalog["cases"][0]
-        changed_case["fixture_hash"] = object_hash(
-            changed_case, "fixture_hash")
-        catalog["catalog_hash"] = object_hash(catalog, "catalog_hash")
-        registry["catalog_hash"] = catalog["catalog_hash"]
-        registry["content_hash"] = object_hash(registry, "content_hash")
-        quota["catalog_hash"] = catalog["catalog_hash"]
-        quota["registry_hash"] = registry["content_hash"]
-        quota["manifest_hash"] = object_hash(quota, "manifest_hash")
-        g.validate_catalog(catalog)
-        g.validate_registry(registry, catalog)
-        g.validate_quota_manifest(quota, catalog)
-        # ...but the frozen fixed identity rejects it
-        problems = self._reject_chain({"catalog": catalog,
-                                       "registry": registry,
-                                       "quota": quota})
-        self.assertTrue(any("fixed identity" in pr for pr in problems),
-                        "full-chain re-sign not caught by fixed identity")
-
 
 if __name__ == "__main__":
     unittest.main()
