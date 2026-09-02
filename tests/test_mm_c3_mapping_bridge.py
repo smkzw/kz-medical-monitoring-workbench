@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import io
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from packages.medical_monitoring.admission.mapping_gate import (
+    MONITORING_C3_ALTERNATE_MODEL,
+    MONITORING_C3_ALTERNATE_PROVIDER,
+    MONITORING_C3_LOCAL_FALLBACK_MODEL,
+    MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROFILE_ID,
     MONITORING_C3_MAPPING_PROVIDER,
+    MONITORING_C3_REMOTE_UNAVAILABLE_ENV,
+    monitoring_mapping_runtime_matches,
 )
 from packages.medical_monitoring.admission import (
     AdmissionMappingPipeline,
@@ -88,13 +95,16 @@ def _record(workspace: Path, attempt_id: str) -> dict:
 
 
 def _runtime(
-    provider: str = MONITORING_C3_MAPPING_PROVIDER, model: str = MONITORING_C3_MAPPING_MODEL
+    provider: str = MONITORING_C3_MAPPING_PROVIDER,
+    model: str = MONITORING_C3_MAPPING_MODEL,
+    *,
+    env: dict[str, str] | None = None,
 ) -> MonitoringAiRuntimeBinding:
     return MonitoringAiRuntimeBinding(
         profile_id=MONITORING_C3_MAPPING_PROFILE_ID,
         provider=provider,
         model=model,
-        env={},
+        env=env or {},
         available=True,
     )
 
@@ -108,7 +118,7 @@ def test_bridge_redacts_subject_values_and_binds_every_table(tmp_path: Path) -> 
     )
     profile = bridged.field_profile
     assert profile["payload_policy"] == (
-        "field_statistics_without_row_or_identifier_values_v1"
+        "bounded_full_column_statistics_and_redacted_row_context_v2"
     )
     assert len(profile["table_bindings"]) == 2
     assert len({item["snapshot_id"] for item in profile["table_bindings"]}) == 2
@@ -120,6 +130,55 @@ def test_bridge_redacts_subject_values_and_binds_every_table(tmp_path: Path) -> 
         for item in subject_fields
     )
     assert "S001" not in str(profile)
+
+
+def test_bridge_exposes_value_distribution_and_table_structure(
+    tmp_path: Path,
+) -> None:
+    attempt_id, workspace = _admit(tmp_path)
+    bridged = admission_record_to_harness_input(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        record=_record(workspace, attempt_id),
+    )
+    profile = bridged.field_profile
+    vital_fields = [
+        item for item in profile["fields"] if item["domain"] == "生命体征"
+    ]
+    assert [item["field"] for item in vital_fields] == [
+        "SUBJID",
+        "VISIT",
+        "测量日期",
+        "收缩压",
+    ]
+    by_name = {item["field"]: item for item in vital_fields}
+    assert by_name["SUBJID"]["column_index"] == 0
+    assert by_name["收缩压"]["column_index"] == 3
+    assert by_name["收缩压"]["inferred_type"] == "decimal"
+    assert by_name["收缩压"]["representative_values"] == ["118", "120"]
+    assert by_name["收缩压"]["representative_sample_count"] == 2
+    assert by_name["收缩压"]["unique_value_count"] == 2
+    assert by_name["收缩压"]["top_values"] == [
+        {"value": "118", "count": 1},
+        {"value": "120", "count": 1},
+    ]
+    date_field = by_name["测量日期"]
+    assert date_field["inferred_type"] == "date"
+    assert date_field["date_range"] == {
+        "min": "2026-01-05",
+        "max": "2026-01-06",
+        "parsed_count": 2,
+    }
+    assert profile["table_field_order"] == [
+        {
+            "domain": "生命体征",
+            "field_order": ["SUBJID", "VISIT", "测量日期", "收缩压"],
+        },
+        {
+            "domain": "实验室检查",
+            "field_order": ["SUBJID", "VISIT", "采集日期", "检查结果"],
+        },
+    ]
 
 
 def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path) -> None:
@@ -154,6 +213,16 @@ def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path
     payload = repository.input_payload(PROJECT_ID, jobs[0].job_id)
     assert "S001" not in str(payload)
     assert payload["field_profile"]["full_profile_sha256"]
+    fields = payload["field_profile"]["fields"]
+    assert any(field["same_row_examples"] for field in fields)
+    assert any(field["top_values"] for field in fields)
+    assert {"redacted": "identifier"} in [
+        value["value"]
+        for field in fields
+        for example in field["same_row_examples"]
+        for value in example["nearby_values"]
+        if value["field"] == "SUBJID"
+    ]
     assert current_admission_mapping_revision(
         repository,
         jobs[0],
@@ -188,6 +257,50 @@ def test_pipeline_refuses_non_default_model_without_sending_data(tmp_path: Path)
         )
     assert exc_info.value.code == "mapping_model_not_configured"
     assert repository.list_jobs(PROJECT_ID) == ()
+
+
+def test_pipeline_accepts_direct_cms_router_minimax_alternate(tmp_path: Path) -> None:
+    attempt_id, workspace = _admit(tmp_path)
+    repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
+    service = MonitoringAiService(
+        repository,
+        runtime_resolver=lambda: _runtime(
+            MONITORING_C3_ALTERNATE_PROVIDER,
+            MONITORING_C3_ALTERNATE_MODEL,
+        ),
+    )
+    pipeline = AdmissionMappingPipeline(
+        ai_service=service,
+        ai_repository=repository,
+        input_revision_factory=MonitoringAiInputRevision.model_validate,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+    )
+
+    result = pipeline.generate_candidates(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        workspace_dir=workspace,
+    )
+
+    assert result["execution"] == {
+        "providers": [MONITORING_C3_ALTERNATE_PROVIDER],
+        "requested_models": [MONITORING_C3_ALTERNATE_MODEL],
+    }
+
+
+def test_local_mtplx_fallback_requires_both_remote_routes_unavailable() -> None:
+    local = _runtime(
+        MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
+        MONITORING_C3_LOCAL_FALLBACK_MODEL,
+    )
+    assert monitoring_mapping_runtime_matches(local) is False
+
+    admitted = _runtime(
+        MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
+        MONITORING_C3_LOCAL_FALLBACK_MODEL,
+        env={MONITORING_C3_REMOTE_UNAVAILABLE_ENV: "true"},
+    )
+    assert monitoring_mapping_runtime_matches(admitted) is True
 
 
 def test_pipeline_rejects_cross_project_attempt(tmp_path: Path) -> None:
@@ -260,3 +373,72 @@ def test_candidate_projection_keeps_bounded_source_profile_evidence() -> None:
         "sample_count": 1,
         "samples_hidden": True,
     }]
+
+
+def test_list_candidates_ignores_superseded_submission_cohorts(tmp_path: Path) -> None:
+    attempt_id, workspace = _admit(tmp_path)
+    now = datetime.now(timezone.utc)
+
+    def job(
+        job_id: str,
+        *,
+        prompt: str,
+        status: str,
+        created_at: datetime,
+        profile_id: str = "profile-current",
+        provider: str = "zhipu-coding-plan",
+        requested_model: str = "glm-5.3-flash",
+    ):
+        return SimpleNamespace(
+            project_id=PROJECT_ID,
+            job_id=job_id,
+            status=status,
+            provider=provider,
+            requested_model=requested_model,
+            response_model="glm-5.3-flash" if status == "completed" else "",
+            failure_code="stale_input_revision" if status == "stale_input" else "",
+            prompt_version=prompt,
+            input_revision_sha256="revision-current" if prompt == "v18" else "revision-old",
+            profile_id=profile_id if prompt == "v18" else "profile-old",
+            created_at=created_at,
+        )
+
+    old = job("job-old", prompt="v17", status="stale_input", created_at=now)
+    current = job(
+        "job-current",
+        prompt="v18",
+        status="completed",
+        created_at=now + timedelta(seconds=1),
+    )
+    deterministic = job(
+        "job-deterministic",
+        prompt="v18",
+        status="completed",
+        created_at=now + timedelta(milliseconds=500),
+        profile_id="monitoring-deterministic-metadata",
+        provider="workbench-system",
+        requested_model="deterministic-metadata-mapping-v1",
+    )
+    candidate = SimpleNamespace(
+        structured_payload={"field_mappings": []},
+        evidence=(),
+    )
+    repository = SimpleNamespace(
+        list_jobs=lambda *_args, **_kwargs: (old, deterministic, current),
+        candidates=lambda *_args: (candidate,),
+    )
+    pipeline = AdmissionMappingPipeline(
+        ai_service=SimpleNamespace(),
+        ai_repository=repository,
+        input_revision_factory=lambda value: value,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+    )
+
+    result = pipeline.list_candidates(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        workspace_dir=workspace,
+    )
+
+    assert result["state"] == "candidates_ready"
+    assert result["summary"]["job_count"] == 2

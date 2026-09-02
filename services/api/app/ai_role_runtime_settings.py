@@ -140,7 +140,10 @@ ROLE_DEFINITIONS: tuple[AiRoleDefinition, ...] = (
         role_id=MEDICAL_MONITORING_AI_ROLE,
         label="医学监查AI",
         description="字段对应建议、医学风险候选、受试者历程与医学解释。",
-        recommendation="默认使用智谱 GLM-5.3 Flash（高推理）；DeepSeek V4 Flash 可作为显式选择。",
+        recommendation=(
+            "默认使用智谱 GLM-5.3 Flash（高推理），MiniMax M3 为直连备选；"
+            "仅在两条远程路线均不可用时使用本地 MTPLX Qwen3.8 Flash Next。"
+        ),
         default_model=MONITORING_C3_MAPPING_MODEL,
     ),
     AiRoleDefinition(

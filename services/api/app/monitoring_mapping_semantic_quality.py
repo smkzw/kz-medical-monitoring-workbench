@@ -12,7 +12,7 @@ from .monitoring_mapping_contract import MonitoringFieldKind
 
 
 SEMANTIC_QUALITY_SCHEMA_VERSION = "monitoring_mapping_semantic_quality_v2"
-ROLE_CATALOG_VERSION = "monitoring_role_catalog_v2"
+ROLE_CATALOG_VERSION = "monitoring_role_catalog_v3"
 RULE_CATALOG_VERSION = "monitoring_semantic_rules_v3"
 CAPABILITY_MANIFEST_VERSION = "monitoring_capability_manifest_v1"
 
@@ -188,6 +188,17 @@ ROLE_CATALOG_V2: tuple[RoleConcept, ...] = (
         "subject_initials",
     ),
     _concept(
+        "metadata.subject_status",
+        "metadata",
+        "category",
+        "subject_status",
+        "subject_status_code",
+        "subject_status_flag",
+        "subject_status_identifier",
+        "subject_status_key",
+        "subject_status_metadata",
+    ),
+    _concept(
         "metadata.visit_id",
         "metadata",
         "identifier",
@@ -359,6 +370,13 @@ ROLE_CATALOG_V2: tuple[RoleConcept, ...] = (
         "metadata",
         "identifier",
         "record_repeat_key",
+    ),
+    _concept(
+        "metadata.cross_record_link",
+        "metadata",
+        "identifier",
+        "cross_form_link_annotation",
+        "dynamic_link_reference_to_related_record",
     ),
     _concept(
         "metadata.edc_object_id",

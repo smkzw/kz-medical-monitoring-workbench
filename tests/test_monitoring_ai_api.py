@@ -336,6 +336,7 @@ class FakeProvider:
                     "confidence": 0.8,
                     "uncertainty": "需结合项目数据字典确认。",
                     "user_action": "确认字段角色。",
+                    "user_decision_required": False,
                     "related_fields": [],
                     "evidence_ids": [evidence_id],
                 }

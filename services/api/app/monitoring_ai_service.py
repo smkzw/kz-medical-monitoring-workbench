@@ -12,6 +12,7 @@ from typing import (
     Dict,
     List,
     Literal,
+    Mapping,
     Optional,
     Sequence,
     Tuple,
@@ -23,6 +24,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
     StrictFloat,
     ValidationError,
     model_validator,
@@ -104,7 +106,7 @@ from .monitoring_rule_templates import (
 
 
 PROMPT_VERSION_BY_TASK: Dict[MonitoringAiTaskType, str] = {
-    MonitoringAiTaskType.LISTING_FIELD_MAPPING: ("monitoring-listing-field-mapping-v16"),
+    MonitoringAiTaskType.LISTING_FIELD_MAPPING: ("monitoring-listing-field-mapping-v18"),
     MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING: (
         "monitoring-protocol-clause-structuring-v12"
     ),
@@ -145,7 +147,9 @@ AI_TASK_TYPE_BY_MONITORING_TASK: Dict[MonitoringAiTaskType, AiTaskType] = {
 
 TASK_CONTRACTS: Dict[MonitoringAiTaskType, str] = {
     MonitoringAiTaskType.LISTING_FIELD_MAPPING: (
-        "基于完整冻结批次的字段画像提出字段语义、域、角色和关联字段候选。"
+        "基于完整冻结批次的字段画像提出字段语义、域、角色和关联字段候选，"
+        "并结合同表脱敏值分布与结构上下文逐项判断是否真正需要用户决定；"
+        "仅把会改变医学分析结果的实质歧义交给用户。"
         "不得只查看或概括前五行，不得把样例值当作完整数据，也不得据此生成风险结论。"
     ),
     MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING: (
@@ -785,6 +789,50 @@ def _read_only_context_field(
     }
 
 
+def _read_only_table_context_field(
+    field: Dict[str, Any],
+    *,
+    profile_sha256: str,
+) -> Dict[str, Any]:
+    """Bounded same-table context view of one non-chunk business field."""
+
+    date_range = field.get("date_range")
+    representative_values = (
+        field.get("representative_values")
+        if isinstance(field.get("representative_values"), list)
+        else []
+    )
+    return {
+        "source_profile_identity": {
+            "profile_sha256": profile_sha256,
+            "domain": str(field.get("domain", "")).strip(),
+            "field": str(field.get("field", "")).strip(),
+        },
+        "column_index": field.get("column_index"),
+        "total_rows": int(field.get("total_rows", 0) or 0),
+        "non_empty_count": int(field.get("non_empty_count", 0) or 0),
+        "null_rate": field.get("null_rate"),
+        "inferred_type": str(field.get("inferred_type", "")).strip(),
+        "unique_value_count": int(field.get("unique_value_count", 0) or 0),
+        "values_redacted": _strict_bool(
+            field.get("values_redacted"),
+            "field.values_redacted",
+        ),
+        "top_values": _bounded_context_value(field.get("top_values", [])),
+        "representative_values": _bounded_context_value(representative_values),
+        "representative_sample_count": int(
+            field.get("representative_sample_count", len(representative_values))
+            or 0
+        ),
+        "date_range": _bounded_context_value(date_range)
+        if isinstance(date_range, dict)
+        else None,
+        "same_row_examples": _bounded_context_value(
+            field.get("same_row_examples", [])
+        ),
+    }
+
+
 def _mapping_is_dose_like(mapping: Dict[str, Any]) -> bool:
     role = re.sub(
         r"[\s_:/\\-]+",
@@ -1003,6 +1051,7 @@ class _FieldMappingItem(BaseModel):
     confidence: StrictFloat = Field(ge=0.0, le=1.0)
     uncertainty: str = Field(min_length=1, max_length=4_000)
     user_action: str = Field(min_length=1, max_length=2_000)
+    user_decision_required: StrictBool
     related_fields: List[str] = Field(default_factory=list, max_length=100)
     evidence_ids: List[str] = Field(default_factory=list, max_length=50)
     standards_reference: Optional[_StandardsReference] = None
@@ -1052,6 +1101,13 @@ class _FieldMappingItem(BaseModel):
             set(self.quality_gate_actions)
         ):
             raise ValueError("quality_gate_actions must be unique")
+        if self.user_decision_required and not (
+            "？" in self.user_action or "?" in self.user_action
+        ):
+            raise ValueError(
+                "user_decision_required mappings must phrase user_action as "
+                "a concrete question for the user"
+            )
         validate_monitoring_mapping_semantics(
             domain=self.domain,
             source_field=self.source_field,
@@ -1065,6 +1121,31 @@ class _FieldMappingItem(BaseModel):
             derivation_lineage=self.derivation_lineage,
         )
         return self
+
+
+def _normalize_provider_field_mapping_triage(
+    payload: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Keep malformed provider triage out of the user confirmation queue."""
+
+    normalized = dict(payload)
+    mappings = normalized.get("field_mappings")
+    if not isinstance(mappings, list):
+        return normalized
+    normalized_mappings: List[Any] = []
+    for item in mappings:
+        if not isinstance(item, Mapping):
+            normalized_mappings.append(item)
+            continue
+        mapping = dict(item)
+        action = mapping.get("user_action")
+        if mapping.get("user_decision_required") is True and not (
+            isinstance(action, str) and ("？" in action or "?" in action)
+        ):
+            mapping["user_decision_required"] = False
+        normalized_mappings.append(mapping)
+    normalized["field_mappings"] = normalized_mappings
+    return normalized
 
 
 class _FieldMappingOrigin(BaseModel):
@@ -1539,6 +1620,13 @@ class MonitoringAiService:
             "field_profile.input_sha256",
         )
         full_field_count = len(field_profile["fields"])
+        table_field_order_by_domain = {
+            str(entry.get("domain", "")).strip(): [
+                str(name).strip() for name in entry.get("field_order", [])
+            ]
+            for entry in field_profile.get("table_field_order", [])
+            if isinstance(entry, dict)
+        }
         jobs: List[MonitoringAiJob] = []
         for domain in sorted(
             fields_by_domain,
@@ -1546,6 +1634,10 @@ class MonitoringAiService:
         ):
             domain_fields = fields_by_domain[domain]
             chunk_total = (len(domain_fields) + chunk_size - 1) // chunk_size
+            deterministic_names = {
+                str(field["field"]).strip()
+                for field, _ in partition_metadata_fields(domain_fields)[0]
+            }
             for zero_based_index in range(chunk_total):
                 chunk_index = zero_based_index + 1
                 start = zero_based_index * chunk_size
@@ -1559,6 +1651,7 @@ class MonitoringAiService:
                         "relationships",
                         "table_bindings",
                         "treatment_identity_bindings",
+                        "table_field_order",
                     }
                 }
                 chunk_field_names = {
@@ -1575,6 +1668,17 @@ class MonitoringAiService:
                         }.intersection(chunk_field_names)
                     )
                 ]
+                domain_table_order = table_field_order_by_domain.get(domain, [])
+                chunk_table_field_order = (
+                    domain_table_order
+                    if domain_table_order
+                    and set(domain_table_order)
+                    == {
+                        str(item["field"]).strip()
+                        for item in domain_fields
+                    }
+                    else []
+                )
                 chunk_profile.update(
                     {
                         "scope": "complete_profile_chunk",
@@ -1589,6 +1693,9 @@ class MonitoringAiService:
                             str(item["field"]).strip()
                             for item in domain_fields
                         ],
+                        # Original column order of the same table, when the
+                        # frozen profile carries it; read-only structural context.
+                        "table_field_order": chunk_table_field_order,
                         "chunk_index": chunk_index,
                         "chunk_total": chunk_total,
                         "chunk_size_limit": chunk_size,
@@ -1604,6 +1711,30 @@ class MonitoringAiService:
                             for field, _ in partition_metadata_fields(
                                 domain_fields
                             )[0]
+                        ],
+                        # Full same-table desensitized value distributions for
+                        # the business fields outside this chunk; read-only
+                        # context the model must never emit mappings for.
+                        "read_only_table_context_profiles": [
+                            deepcopy(field)
+                            for field in domain_fields
+                            if (
+                                str(field["field"]).strip()
+                                not in chunk_field_names
+                                and str(field["field"]).strip()
+                                not in deterministic_names
+                            )
+                        ],
+                        # Same-named columns in other tables let the model
+                        # distinguish reusable export metadata from genuinely
+                        # table-specific medical ambiguity. They are read-only
+                        # and may never be emitted for this chunk.
+                        "read_only_cross_table_context_profiles": [
+                            deepcopy(field)
+                            for other_domain, other_fields in fields_by_domain.items()
+                            if other_domain != domain
+                            for field in other_fields
+                            if str(field["field"]).strip() in chunk_field_names
                         ],
                         "treatment_identity_bindings": [
                             deepcopy(binding)
@@ -2165,12 +2296,18 @@ class MonitoringAiService:
                 outcome="identity_error",
             )
         except AiProviderRuntimeError as exc:
-            identity_error = "identity" in str(exc).casefold()
+            diagnostics = getattr(exc, "diagnostics", {})
+            provider_failure_code = str(
+                diagnostics.get("failure_code", "")
+            ).strip()
+            identity_error = (
+                provider_failure_code == "provider_response_model_mismatch"
+            )
             return self._fail_claimed_job(
                 job,
                 owner=owner,
                 request_payload={"job_id": job.job_id},
-                response_payload=None,
+                response_payload={"provider_diagnostics": diagnostics},
                 failure_code=(
                     "response_model_identity"
                     if identity_error
@@ -2382,6 +2519,65 @@ class MonitoringAiService:
             ],
         }
         profile.pop("read_only_domain_context_profiles", None)
+        table_context_profiles = [
+            deepcopy(field)
+            for field in profile.get(
+                "read_only_table_context_profiles",
+                [],
+            )
+            if isinstance(field, dict)
+        ]
+        profile["read_only_table_context"] = {
+            "policy": (
+                "These are the remaining business fields of the same table "
+                "outside this chunk, with bounded desensitized value "
+                "distributions, bounded same-row neighbouring values and "
+                "original column positions. Use them to understand the full "
+                "same-table context (sibling dose columns, "
+                "term/code pairs, unit columns, scale items). Never emit field "
+                "mappings for these fields; they belong to other chunks."
+            ),
+            "fields": [
+                _read_only_table_context_field(
+                    field,
+                    profile_sha256=_require_service_sha256(
+                        profile.get("profile_sha256"),
+                        "field_profile.profile_sha256",
+                    ),
+                )
+                for field in table_context_profiles
+            ],
+        }
+        profile.pop("read_only_table_context_profiles", None)
+        cross_table_context_profiles = [
+            deepcopy(field)
+            for field in profile.get(
+                "read_only_cross_table_context_profiles",
+                [],
+            )
+            if isinstance(field, dict)
+        ]
+        profile["read_only_cross_table_context"] = {
+            "policy": (
+                "These are same-named columns from other tables in the same "
+                "frozen listing. Compare their desensitized distributions and "
+                "table roles to avoid asking the user the same question many "
+                "times. A stable cross-table role may be adopted with explicit "
+                "uncertainty; a genuinely table-specific medical difference "
+                "must remain separate. Never emit mappings for these fields."
+            ),
+            "fields": [
+                _read_only_table_context_field(
+                    field,
+                    profile_sha256=_require_service_sha256(
+                        profile.get("profile_sha256"),
+                        "field_profile.profile_sha256",
+                    ),
+                )
+                for field in cross_table_context_profiles
+            ],
+        }
+        profile.pop("read_only_cross_table_context_profiles", None)
         chunk_domain = str(profile.get("domain", "")).strip()
         domain_field_names = profile.get("domain_field_names")
         if chunk_domain and isinstance(domain_field_names, list):
@@ -2477,16 +2673,7 @@ class MonitoringAiService:
             "text": "string",
             "structured_payload": self._structured_payload_schema(job.task_type),
         }
-        if job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING:
-            candidate_schema["system_generated_evidence"] = (
-                "Do not output claims or evidence. The system binds each mapping "
-                "to the exact frozen field-profile evidence after validation."
-            )
-            candidate_schema["system_generated_mapping_provenance"] = (
-                "Do not output mapping_provenance. The workbench injects exact "
-                "per-field deterministic-rule or independent-AI origin metadata."
-            )
-        else:
+        if job.task_type != MonitoringAiTaskType.LISTING_FIELD_MAPPING:
             candidate_schema["claims"] = [
                 {
                     "claim_id": "unique string",
@@ -2528,7 +2715,11 @@ class MonitoringAiService:
                 "必须恰好输出1个listing_field_mapping_set候选，"
                 "其中field_mappings必须且仅可完整覆盖input_payload.field_profile."
                 "fields中的每个(domain,field)一次；不得输出任何未在该列表"
-                "中出现的字段。本次唯一允许且必须输出的字段清单为："
+                "中出现的字段。每项field_mapping必须逐项给出布尔"
+                "user_decision_required：仅当存在会改变医学分析结果的实质歧义、"
+                "且输入证据不足以由系统自行裁决时才为true，并把user_action写成"
+                "一个具体的中文问题；其余情况一律为false。"
+                "本次唯一允许且必须输出的字段清单为："
                 + "、".join(required_output_pairs)
                 + "。"
             )
@@ -2635,6 +2826,30 @@ class MonitoringAiService:
                 " 当listing缺少独立识别剂量调整、暂停、恢复、永久停药及其他"
                 "试验药物变更的字段族时，不得以缺少字段为依据声称未发生变更。"
                 "应标明该能力不可用，而非推定无变更事件。"
+                " read_only_table_context提供本次分块之外同表其余业务字段的"
+                "脱敏值分布（非空计数、唯一值数、有界代表值、日期范围）和"
+                "原始列位置，table_field_order给出同表原始列顺序；"
+                "结合fields自身的分布、read_only_domain_context和这些同表"
+                "证据判断字段语义（例如区分并列的计划/实际剂量列、数值与"
+                "单位列、量表条目与总分列、术语与编码列）。它们只用于判断，"
+                "绝不能作为field_mappings输出，也不得加入"
+                "required_output_field_names；列位置只说明表结构，"
+                "不构成医学语义证据。"
+                " 每项映射的user_decision_required是系统是否把该字段交给"
+                "用户决定的最终判断：只有当歧义真实存在、会改变医学分析"
+                "结果、且同表分布与结构证据不足以自行裁决时才为true，"
+                "此时user_action必须是一个面向医学经理的具体中文问题"
+                "（例如两个剂量列无法区分计划/实际时问“A列与B列哪一个是"
+                "实际给药剂量？”）；证据充分时必须为false，系统将直接"
+                "采用该候选，user_action应简要记录系统判断依据。"
+                "不得把全部字段都标为需要用户决定，也不得为省事把实质"
+                "歧义标为false。"
+                " read_only_cross_table_context提供同一冻结listing内其他表中"
+                "同名字段的脱敏分布。若同名字段跨表呈现一致分布且角色家族"
+                "一致，应由系统形成一个稳定判断并保留不确定性，不得在每张"
+                "表重复向用户提问。仅缺少枚举值释义、字典版本或CRF标签，"
+                "不足以单独构成用户决定；只有该缺口确实导致下游医学分类"
+                "无法确定并会改变分析结果时，才可标为true。"
             )
         elif (
             job.task_type
@@ -3011,7 +3226,18 @@ class MonitoringAiService:
                         ),
                         "confidence": "number from 0 to 1",
                         "uncertainty": "missing information and uncertainty",
-                        "user_action": "what the user should confirm",
+                        "user_action": (
+                            "what the user should confirm; when "
+                            "user_decision_required is true this must be one "
+                            "concrete intuitive Chinese question"
+                        ),
+                        "user_decision_required": (
+                            "true only when an unresolved medically substantive "
+                            "ambiguity would change medical analysis results "
+                            "and only the user can resolve it; false when the "
+                            "input evidence is sufficient for the system to "
+                            "adopt the candidate without a user decision"
+                        ),
                         "related_fields": ["related source field"],
                         "object_identity": (
                             "not_applicable | unresolved | "
@@ -3260,9 +3486,27 @@ class MonitoringAiService:
                     blocked=True,
                 )
             if not candidate_state["blocked"]:
+                structured_payload = candidate.structured_payload
+                if job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING:
+                    # Some providers echo explanatory, explicitly
+                    # system-owned helper keys next to field_mappings. They do
+                    # not carry a mapping decision and are discarded before
+                    # strict schema validation; actual mapping provenance and
+                    # quality-gate fields remain forbidden below.
+                    structured_payload = dict(structured_payload)
+                    structured_payload.pop("system_generated_evidence", None)
+                    structured_payload.pop(
+                        "system_generated_mapping_provenance",
+                        None,
+                    )
+                    structured_payload = (
+                        _normalize_provider_field_mapping_triage(
+                            structured_payload
+                        )
+                    )
                 try:
                     structured = model_type.model_validate(
-                        candidate.structured_payload
+                        structured_payload
                     )
                 except ValidationError as exc:
                     _candidate_error(
@@ -5479,10 +5723,20 @@ class MonitoringAiService:
         ]
         context_profile_fields = [
             item
-            for item in profile.get(
-                "read_only_domain_context_profiles",
-                [],
-            )
+            for item in [
+                *profile.get(
+                    "read_only_domain_context_profiles",
+                    [],
+                ),
+                *profile.get(
+                    "read_only_table_context_profiles",
+                    [],
+                ),
+                *profile.get(
+                    "read_only_cross_table_context_profiles",
+                    [],
+                ),
+            ]
             if isinstance(item, dict)
         ]
         profile_pairs = {
@@ -5715,6 +5969,8 @@ class MonitoringAiService:
             for item in [
                 *profile.get("fields", []),
                 *profile.get("read_only_domain_context_profiles", []),
+                *profile.get("read_only_table_context_profiles", []),
+                *profile.get("read_only_cross_table_context_profiles", []),
             ]
             if isinstance(item, dict) and str(item.get("field", "")).strip()
         )
@@ -6196,6 +6452,31 @@ class MonitoringAiService:
         output: Any,
         input_payload: Dict[str, Any],
     ) -> Tuple[MonitoringAiCandidate, ...]:
+        if (
+            job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
+            and isinstance(output, Mapping)
+            and isinstance(output.get("candidates"), list)
+        ):
+            output = dict(output)
+            for helper_key in (
+                "validation_errors",
+                "invalid_output",
+                "original_task",
+                "authorized_source_pairs",
+                "repair_contract",
+                "deterministic_field_constraints",
+            ):
+                output.pop(helper_key, None)
+            candidates: List[Any] = []
+            for item in output["candidates"]:
+                if not isinstance(item, Mapping):
+                    candidates.append(item)
+                    continue
+                candidate = dict(item)
+                candidate.pop("system_generated_evidence", None)
+                candidate.pop("system_generated_mapping_provenance", None)
+                candidates.append(candidate)
+            output["candidates"] = candidates
         try:
             parsed = _ProviderOutput.model_validate(output)
         except ValidationError as exc:
@@ -6992,6 +7273,89 @@ class MonitoringAiService:
             (chunk_domain, field_name)
             for field_name in normalized_domain_names
         }
+        table_field_order = field_profile.get("table_field_order", [])
+        if not isinstance(table_field_order, list) or any(
+            not str(name).strip() for name in table_field_order
+        ):
+            raise ValueError(
+                "listing field profile table_field_order must be a list of "
+                "field names"
+            )
+        if table_field_order:
+            normalized_order = [str(name).strip() for name in table_field_order]
+            if len(normalized_order) != len(set(normalized_order)) or set(
+                normalized_order
+            ) != set(normalized_domain_names):
+                raise ValueError(
+                    "listing field profile table_field_order must be a "
+                    "permutation of domain_field_names"
+                )
+        table_context_profiles = field_profile.get(
+            "read_only_table_context_profiles",
+            [],
+        )
+        if not isinstance(table_context_profiles, list):
+            raise ValueError(
+                "listing field profile read_only_table_context_profiles must "
+                "be a list"
+            )
+        table_context_pairs = []
+        for context_field in table_context_profiles:
+            if (
+                not isinstance(context_field, dict)
+                or not str(context_field.get("field", "")).strip()
+            ):
+                raise ValueError(
+                    "listing field profile table context entry is malformed"
+                )
+            table_context_pairs.append(
+                (chunk_domain, str(context_field["field"]).strip())
+            )
+        if len(table_context_pairs) != len(set(table_context_pairs)):
+            raise ValueError(
+                "listing field profile table context entries must be unique"
+            )
+        if not set(table_context_pairs).issubset(domain_name_pairs):
+            raise ValueError(
+                "listing field profile table context must stay within "
+                "domain_field_names"
+            )
+        if set(table_context_pairs).intersection(field_pairs):
+            raise ValueError(
+                "listing field profile table context must not duplicate the "
+                "chunk output fields"
+            )
+        cross_table_context_profiles = field_profile.get(
+            "read_only_cross_table_context_profiles",
+            [],
+        )
+        if not isinstance(cross_table_context_profiles, list):
+            raise ValueError(
+                "listing field profile cross-table context must be a list"
+            )
+        cross_table_pairs = []
+        output_field_names = {field_name for _, field_name in field_pairs}
+        for context_field in cross_table_context_profiles:
+            if not isinstance(context_field, dict):
+                raise ValueError(
+                    "listing field profile cross-table context entry is malformed"
+                )
+            context_domain = str(context_field.get("domain", "")).strip()
+            context_name = str(context_field.get("field", "")).strip()
+            if (
+                not context_domain
+                or context_domain == chunk_domain
+                or context_name not in output_field_names
+            ):
+                raise ValueError(
+                    "listing field profile cross-table context must be an "
+                    "other-domain same-named field"
+                )
+            cross_table_pairs.append((context_domain, context_name))
+        if len(cross_table_pairs) != len(set(cross_table_pairs)):
+            raise ValueError(
+                "listing field profile cross-table context entries must be unique"
+            )
         for relationship in relationships:
             relation_pairs = {
                 (

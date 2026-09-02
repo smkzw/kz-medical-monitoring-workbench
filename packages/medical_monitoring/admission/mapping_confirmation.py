@@ -1,52 +1,178 @@
-"""Durable draft adopt/edit/confirm over C3 admission mapping candidates.
+"""Medical-question triage over C3 admission mapping candidates.
 
 Candidate generation stays in ``AdmissionMappingPipeline``. This module only
-bridges completed candidates into the existing mapping-draft authority and
-never materializes canonical facts.
+projects completed candidates for review and gates durable confirmation. The
+system adopts every basically-sound candidate on its own; only medically
+substantive ambiguities — the ones that would change monitoring analysis
+results — become visible Chinese questions for the user. Nothing here ever
+materializes canonical facts.
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Optional
 
-from .mapping_pipeline import AdmissionMappingPipelineError, current_admission_mapping_revision
+from .mapping_pipeline import (
+    AdmissionMappingPipelineError,
+    _latest_job_cohort,
+    current_admission_mapping_revision,
+)
 
 
 LOW_CONFIDENCE_THRESHOLD = 0.85
 _FOCUS_CRITICAL = "critical"
 _FOCUS_ALL = "all"
 _ALLOWED_FOCUS = frozenset({_FOCUS_CRITICAL, _FOCUS_ALL})
-_MEDICATION_ROLE = re.compile(
-    r"(^|[._-])(ip|cm|dose|dosing|adherence|compliance)([._-]|$)"
+
+USER_QUESTION_UNMAPPED = "unmapped_field"
+USER_QUESTION_MODEL_FLAGGED = "model_flagged"
+USER_QUESTION_LOW_CONFIDENCE = "low_confidence"
+USER_QUESTION_MISSING_ADVICE = "missing_advice"
+
+_QUESTION_LABELS = {
+    USER_QUESTION_UNMAPPED: "暂未映射",
+    USER_QUESTION_MODEL_FLAGGED: "需医学确认",
+    USER_QUESTION_LOW_CONFIDENCE: "低置信度",
+    USER_QUESTION_MISSING_ADVICE: "建议缺失",
+}
+
+# A human decision marker inside ``user_action`` records the medical manager's
+# answer to a question card. The marker survives into the confirmed revision,
+# so an answered question is auditable without a separate answer store.
+_DECISION_PREFIXES = (
+    "用户已确认：",
+    "用户已核对：",
 )
 
+_TRIAGE_QUESTION = "user_question"
+_TRIAGE_ADOPTED = "system_adopted"
 
-def _value(value: Any) -> Any:
-    return getattr(value, "value", value)
+
+def _confidence(item: Mapping[str, Any]) -> float:
+    try:
+        return float(item.get("confidence"))
+    except (TypeError, ValueError):
+        # An unreadable confidence must never count as "basically sound".
+        return 0.0
+
+
+def _model_flag(item: Mapping[str, Any]) -> bool:
+    flag = item.get("user_decision_required")
+    if isinstance(flag, str):
+        return flag.strip().casefold() in {"true", "1", "yes", "是"}
+    return bool(flag)
+
+
+def _decision_recorded(item: Mapping[str, Any]) -> bool:
+    action = str(item.get("user_action") or "").strip()
+    return action.startswith(_DECISION_PREFIXES)
+
+
+def _question_label(domain: Any, source_field: Any) -> str:
+    cleaned_domain = str(domain or "").strip()
+    cleaned_field = str(source_field or "").strip()
+    if cleaned_domain and cleaned_field:
+        return f"「{cleaned_domain}·{cleaned_field}」"
+    return f"「{cleaned_field or cleaned_domain}」"
+
+
+def _question_text(code: str, item: Mapping[str, Any]) -> str:
+    label = _question_label(item.get("domain"), item.get("source_field"))
+    role = str(item.get("recommended_role") or "").strip()
+    if code == USER_QUESTION_UNMAPPED:
+        return (
+            f"{label}还没有识别出对应的医学含义，它是否需要参与监查分析？"
+            "如需要，请修订该字段的对应角色；如不需要，"
+            "请在核对结论中注明「不纳入」。"
+        )
+    if code == USER_QUESTION_MODEL_FLAGGED:
+        # The mapping contract requires a flagged candidate to phrase its
+        # user_action as a concrete question, so it leads the card directly.
+        flagged = str(item.get("user_action") or "").strip()
+        uncertainty = str(item.get("uncertainty") or "").strip()
+        detail = flagged or uncertainty[:200]
+        if detail:
+            return detail
+        return f"请确认{label}记录的实际含义。"
+    if code == USER_QUESTION_LOW_CONFIDENCE:
+        return (
+            f"{label}的识别把握不足，系统倾向于把它对应到「{role}」。"
+            "请核对原始数据：如正确，请在核对结论中注明「已核对」；"
+            "如不正确，请修订对应关系。"
+        )
+    return f"{label}缺少核对结论，请补充后再整体确认。"
+
+
+def classify_user_question(
+    item: Mapping[str, Any],
+) -> Optional[dict[str, Any]]:
+    """Return the one medical question a field still owes the user.
+
+    ``None`` means the system adopts the candidate by itself: the mapping is
+    basically sound and answering it would not change monitoring analysis.
+    """
+
+    # Confidence, an unmapped field, or incomplete advice is a system-quality
+    # concern, not work to hand to a non-technical medical user. The provider
+    # owns the sole escalation decision after considering full same-table
+    # context; server validation requires a concrete Chinese question whenever
+    # that flag is true.
+    if not _model_flag(item) or _decision_recorded(item):
+        return None
+    code = USER_QUESTION_MODEL_FLAGGED
+    return {
+        "reason_code": code,
+        "attention_reason": _QUESTION_LABELS[code],
+        "question_text": _question_text(code, item),
+    }
 
 
 def attention_reason(item: Mapping[str, Any]) -> str:
-    role = str(item.get("recommended_role") or "").lower()
-    kind = str(item.get("field_kind") or "").strip()
-    if not str(item.get("user_action") or "").strip():
-        return "建议不完整"
-    try:
-        confidence = float(item.get("confidence"))
-    except (TypeError, ValueError):
-        confidence = 1.0
-    if kind == "unmapped":
-        return "暂未映射"
-    if confidence < LOW_CONFIDENCE_THRESHOLD:
-        return "低置信度"
-    if _MEDICATION_ROLE.search(role):
-        return "用药边界"
-    if kind == "standardized_coded":
-        return "编码依据"
-    if kind == "deterministic_derived":
-        return "派生依据"
-    return ""
+    """Backward-compatible short label; empty when the system adopts."""
+
+    question = classify_user_question(item)
+    if question is None:
+        return ""
+    return str(question["attention_reason"])
+
+
+def _question_card(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "domain": row.get("domain"),
+        "source_field": row.get("source_field"),
+        "recommended_role": row.get("recommended_role"),
+        "field_kind": row.get("field_kind"),
+        "confidence": row.get("confidence"),
+        "reason_code": row.get("question_reason"),
+        "attention_reason": row.get("attention_reason"),
+        "question_text": row.get("question_text"),
+        "evidence_summary": row.get("evidence_summary") or [],
+    }
+
+
+def _annotate(row: Mapping[str, Any]) -> tuple[dict[str, Any], Optional[dict[str, Any]]]:
+    annotated = dict(row)
+    question = classify_user_question(row)
+    if question is None:
+        annotated.update({
+            "triage": _TRIAGE_ADOPTED,
+            "system_adopted": True,
+            "needs_attention": False,
+            "attention_reason": "",
+            "question_reason": "",
+            "question_text": "",
+        })
+        return annotated, None
+    annotated.update({
+        "triage": _TRIAGE_QUESTION,
+        "system_adopted": False,
+        "needs_attention": True,
+        "attention_reason": question["attention_reason"],
+        "question_reason": question["reason_code"],
+        "question_text": question["question_text"],
+    })
+    return annotated, _question_card(annotated)
 
 
 def enrich_candidates(
@@ -58,25 +184,32 @@ def enrich_candidates(
     if focus_key not in _ALLOWED_FOCUS:
         raise AdmissionMappingPipelineError("mapping_focus_invalid")
     candidates = []
-    critical_count = 0
+    questions = []
+    question_count = 0
+    total_count = 0
     for raw in list(payload.get("candidates") or []):
         if not isinstance(raw, Mapping):
             continue
-        reason = attention_reason(raw)
-        row = dict(raw)
-        row["attention_reason"] = reason
-        row["needs_attention"] = bool(reason)
-        if reason:
-            critical_count += 1
-        if focus_key == _FOCUS_ALL or reason:
+        total_count += 1
+        row, question = _annotate(raw)
+        if question is not None:
+            question_count += 1
+            questions.append(question)
+        if focus_key == _FOCUS_ALL or question is not None:
             candidates.append(row)
     summary = dict(payload.get("summary") or {})
-    summary["critical_count"] = critical_count
+    summary["field_count"] = total_count
+    summary["user_question_count"] = question_count
+    summary["system_adopted_count"] = total_count - question_count
+    # Backward-compatible aliases for surfaces not yet migrated to the
+    # medical-question vocabulary.
+    summary["critical_count"] = question_count
     summary["displayed_count"] = len(candidates)
     summary["focus"] = focus_key
     return {
         **dict(payload),
         "summary": summary,
+        "user_questions": questions,
         "candidates": candidates,
         "facts_generated": False,
         "candidate_fact_boundary": "candidates_only",
@@ -139,11 +272,22 @@ class AdmissionMappingConfirmationService:
         )
         if not jobs:
             raise AdmissionMappingPipelineError("mapping_candidates_not_found")
+        jobs = _latest_job_cohort(jobs)
         profile_sha = ""
+        profile_shas: dict[str, str] = {}
+        current_revisions: dict[str, str] = {}
         for job in jobs:
-            input_payload = self.ai_repository.input_payload(project_id, job.job_id)
-            profile = input_payload.get("field_profile") or {}
-            digest = str(profile.get("full_profile_sha256") or "").strip()
+            revision_key = str(job.input_revision_sha256)
+            digest = profile_shas.get(revision_key, "")
+            if not digest:
+                input_payload = self.ai_repository.input_payload(
+                    project_id,
+                    job.job_id,
+                )
+                profile = input_payload.get("field_profile") or {}
+                digest = str(profile.get("full_profile_sha256") or "").strip()
+                if digest:
+                    profile_shas[revision_key] = digest
             if not digest:
                 raise AdmissionMappingPipelineError("mapping_bridge_failed")
             if profile_sha and profile_sha != digest:
@@ -159,7 +303,13 @@ class AdmissionMappingConfirmationService:
             candidate = candidates[0]
             status = _value(candidate.status)
             if status == _value(self.proposed_status):
-                revision = self._revision_for_job(job, workspace_dir=workspace_dir)
+                revision = current_revisions.get(revision_key)
+                if revision is None:
+                    revision = self._revision_for_job(
+                        job,
+                        workspace_dir=workspace_dir,
+                    )
+                    current_revisions[revision_key] = revision
                 self.ai_repository.decide_candidate(
                     project_id,
                     candidate.candidate_id,
@@ -221,11 +371,10 @@ class AdmissionMappingConfirmationService:
             raise AdmissionMappingPipelineError("mapping_draft_unconfigured")
         draft = self._require_attempt_draft(project_id, attempt_id, draft_id)
         payload = draft.model_dump(mode="json") if hasattr(draft, "model_dump") else dict(draft)
-        if any(
-            not str(field.get("user_action") or "").strip()
-            for field in payload.get("fields") or []
-        ):
-            raise AdmissionMappingPipelineError("mapping_advice_incomplete")
+        if _unresolved_question_count(payload.get("fields") or []):
+            # Only medically substantive ambiguities block durable
+            # confirmation; system-adopted candidates never do.
+            raise AdmissionMappingPipelineError("mapping_questions_unresolved")
         revision = self.mapping_repository.confirm(
             project_id,
             draft_id,
@@ -278,25 +427,49 @@ class AdmissionMappingConfirmationService:
             payload["project_id"],
             payload["draft_id"],
         )
-        critical_count = 0
-        for field in payload.get("fields") or []:
-            reason = attention_reason(field)
-            field["attention_reason"] = reason
-            field["needs_attention"] = bool(reason)
-            critical_count += bool(reason)
+        fields = payload.get("fields") or []
+        question_count = 0
+        questions = []
+        for index, field in enumerate(fields):
+            annotated, question = _annotate(field)
+            fields[index] = annotated
+            if question is not None:
+                question_count += 1
+                questions.append(question)
         payload["semantic_quality"] = quality.as_payload()
+        payload["user_questions"] = questions
         payload["review_summary"] = {
-            "field_count": len(payload.get("fields") or []),
-            "critical_count": critical_count,
+            "field_count": len(fields),
+            "user_question_count": question_count,
+            "system_adopted_count": len(fields) - question_count,
+            # Backward-compatible alias for pre-triage surfaces.
+            "critical_count": question_count,
         }
         payload["facts_generated"] = False
         payload["candidate_fact_boundary"] = "draft_only"
         return payload
 
 
+def _unresolved_question_count(fields: Any) -> int:
+    count = 0
+    for field in fields:
+        if classify_user_question(field) is not None:
+            count += 1
+    return count
+
+
+def _value(value: Any) -> Any:
+    return getattr(value, "value", value)
+
+
 __all__ = [
     "AdmissionMappingConfirmationService",
     "LOW_CONFIDENCE_THRESHOLD",
+    "USER_QUESTION_LOW_CONFIDENCE",
+    "USER_QUESTION_MISSING_ADVICE",
+    "USER_QUESTION_MODEL_FLAGGED",
+    "USER_QUESTION_UNMAPPED",
     "attention_reason",
+    "classify_user_question",
     "enrich_candidates",
 ]

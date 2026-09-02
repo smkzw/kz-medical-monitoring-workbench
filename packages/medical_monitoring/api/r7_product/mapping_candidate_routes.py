@@ -32,8 +32,9 @@ _MAPPING_STATUS_CODES = {
     "mapping_run_incomplete": 409,
     "mapping_candidate_not_adoptable": 409,
     "mapping_draft_conflict": 409,
+    "mapping_quality_blocked": 409,
     "mapping_draft_invalid": 422,
-    "mapping_advice_incomplete": 422,
+    "mapping_questions_unresolved": 422,
 }
 
 _MAPPING_MESSAGES = {
@@ -49,8 +50,15 @@ _MAPPING_MESSAGES = {
     "mapping_run_incomplete": "字段对应建议尚未完整完成，暂时不能进入确认。请等待生成完成或只重试失败部分。",
     "mapping_candidate_not_adoptable": "部分字段建议已不可采用。请重新生成建议后再确认。",
     "mapping_draft_conflict": "字段对应草稿发生冲突，本次未保存。请刷新后重试。",
+    "mapping_quality_blocked": (
+        "系统核对发现部分字段对应关系仍存在问题，暂时不能整体确认。"
+        "请按系统提示修订对应字段后再确认。"
+    ),
     "mapping_draft_invalid": "字段修订内容无效。请检查填写内容后重试。",
-    "mapping_advice_incomplete": "还有字段缺少具体的中文核对建议。请补充后再整体确认。",
+    "mapping_questions_unresolved": (
+        "还有需要您确认的医学问题。请先逐条回答问题卡片"
+        "（或在修订中给出对应关系和核对结论），再进行整体确认。"
+    ),
 }
 
 
@@ -95,6 +103,7 @@ class MappingDraftConfirmRequest(BaseModel):
     )
     confirmation_reason: str = Field(min_length=10, max_length=2_000)
     idempotency_key: str = Field(min_length=2, max_length=240)
+    automatic: bool = False
 
 
 @dataclass(frozen=True)
@@ -138,6 +147,9 @@ def _repo_error_code(exc: Exception) -> Optional[str]:
     name = type(exc).__name__
     if "NotFound" in name:
         return "mapping_candidates_not_found"
+    message = str(exc)
+    if "mapping semantic quality gate is blocked" in message:
+        return "mapping_quality_blocked"
     if "Conflict" in name or "StateConflict" in name:
         return "mapping_draft_conflict"
     if "DraftError" in name or isinstance(exc, ValueError):
@@ -396,7 +408,11 @@ def register_mapping_candidate_routes(
         )
         if isinstance(auth, JSONResponse):
             return auth
-        actor = getattr(auth, "principal_id", None) or body.confirmed_by
+        actor = (
+            "system_harness"
+            if body.automatic
+            else getattr(auth, "principal_id", None) or body.confirmed_by
+        )
         confirmation = _confirmation_or_error()
         if isinstance(confirmation, JSONResponse):
             return confirmation

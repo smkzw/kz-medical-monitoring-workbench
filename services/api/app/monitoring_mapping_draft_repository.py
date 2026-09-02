@@ -40,6 +40,7 @@ _EDITABLE_FIELD_KEYS = frozenset(
         "confidence",
         "uncertainty",
         "user_action",
+        "user_decision_required",
         "related_fields",
         "standards_reference",
         "derivation_lineage",
@@ -130,6 +131,9 @@ class MonitoringMappingField(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     uncertainty: str = Field(min_length=1, max_length=4_000)
     user_action: str = Field(min_length=1, max_length=2_000)
+    # Default False only covers legacy candidates recorded before the v17
+    # mapping contract; every new AI output must carry the explicit flag.
+    user_decision_required: bool = False
     related_fields: tuple[str, ...] = Field(default_factory=tuple, max_length=100)
     evidence_ids: tuple[str, ...] = Field(min_length=1, max_length=50)
     standards_reference: Optional[dict[str, Any]] = None
@@ -565,6 +569,18 @@ def _normalize_known_export_context(
             "laboratory_configuration_name",
             "项目实验室检查配置或面板显示名称",
         )
+    elif source_field == "SUBJSTA":
+        normalized = (
+            "metadata.subject_status",
+            "EDC 导出中随记录携带的受试者状态上下文",
+        )
+    elif field.recommended_role.strip().casefold() == "edc_form_identifier":
+        normalized = ("form_identifier", "EDC 导出表单编号")
+    elif field.recommended_role.strip().casefold() in {
+        "cross_form_link_annotation",
+        "dynamic_link_reference_to_related_record",
+    }:
+        normalized = ("metadata.cross_record_link", "EDC 跨表记录链接上下文")
     if normalized is None:
         return field
 
@@ -583,6 +599,7 @@ def _normalize_known_export_context(
                 "若项目数据字典将该字段定义为受试者级临床采集值，"
                 "请在正式确认前修订。"
             ),
+            "user_decision_required": False,
         }
     )
 
@@ -1178,6 +1195,10 @@ class MonitoringMappingDraftRepository:
         if not patch or unsupported:
             raise ValueError(
                 "field edit must contain only editable mapping attributes"
+            )
+        if "user_decision_required" in patch and actor != "system_harness":
+            raise ValueError(
+                "only the system harness may revise the decision requirement"
             )
         request_payload = {
             "project_id": project_id,

@@ -82,6 +82,25 @@ function wizardState(transitions) {
   return state;
 }
 
+function readyWizardState() {
+  const payload = generatedAdmissionFixture();
+  return wizardState([
+    { type: "source-dir-change", value: "/data/listings/2026-08" },
+    { type: "import-start" },
+    { type: "import-created", payload },
+    { type: "profile-loaded", payload },
+    { type: "advance" },
+  ]);
+}
+
+function mappingFrom(transitions) {
+  let mapping = createAdmissionMappingConfirmState();
+  for (const transition of transitions) {
+    mapping = admissionMappingConfirmReducer(mapping, transition);
+  }
+  return mapping;
+}
+
 function render(state, mappingState) {
   return renderToStaticMarkup(
     <MedicalMonitoringAdmissionWizardView
@@ -91,17 +110,93 @@ function render(state, mappingState) {
       onSourceFilesChange={() => {}}
       onPrimaryAction={() => {}}
       onSecondaryAction={() => {}}
-      onMappingFocusChange={() => {}}
-      onSelectMappingField={() => {}}
-      onMappingFieldFormChange={() => {}}
-      onSaveMappingField={() => {}}
-      onMappingReasonChange={() => {}}
+      onAnswerCard={() => {}}
     />,
   );
 }
 
 const profilePayload = generatedAdmissionFixture();
 const noRolePayload = generatedAdmissionFixture({ withRoles: false });
+
+// C3 candidates payload: the system auto-adopts the clear recognitions and
+// only the substantive ambiguities become question cards.
+function candidatesPayload({ withQuestions = true } = {}) {
+  return {
+    state: "candidates_ready",
+    confirmation_status: "pending_confirmation",
+    facts_generated: false,
+    summary: {
+      candidate_count: 2,
+      critical_count: withQuestions ? 1 : 0,
+      displayed_count: 2,
+    },
+    candidates: [
+      {
+        domain: "访视列表",
+        source_field: "访视日期",
+        recommended_role: "visit_date",
+        field_kind: "source_collected",
+        confidence: 0.7,
+        uncertainty: "需确认实际日期语义。",
+        user_action: "请确认这一列是否为实际访视日期。",
+        attention_reason: "低置信度",
+        needs_attention: withQuestions,
+        evidence_summary: [{
+          inferred_type: "date",
+          total_rows: 128,
+          non_empty_count: 126,
+          sample_count: 2,
+          samples_hidden: true,
+        }],
+      },
+      {
+        domain: "访视列表",
+        source_field: "受试者编号",
+        recommended_role: "subject_id",
+        field_kind: "source_collected",
+        confidence: 0.99,
+        uncertainty: "",
+        user_action: "系统已自动对应。",
+        attention_reason: "",
+        needs_attention: false,
+        evidence_summary: [{
+          inferred_type: "text",
+          total_rows: 128,
+          non_empty_count: 128,
+          sample_count: 1,
+          samples_hidden: true,
+        }],
+      },
+    ],
+  };
+}
+
+const draftPayload = {
+  draft_id: "draft-1",
+  version: 1,
+  fields: [
+    {
+      domain: "访视列表",
+      source_field: "访视日期",
+      recommended_role: "visit_date",
+      field_kind: "source_collected",
+      confidence: 0.7,
+      attention_reason: "低置信度",
+      uncertainty: "需确认实际日期语义。",
+      user_action: "请确认这一列是否为实际访视日期。",
+    },
+    {
+      domain: "访视列表",
+      source_field: "受试者编号",
+      recommended_role: "subject_id",
+      field_kind: "source_collected",
+      confidence: 0.99,
+      attention_reason: "",
+      uncertainty: "",
+      user_action: "系统已自动对应。",
+    },
+  ],
+};
 
 export const renders = {
   input: render(wizardState([])),
@@ -122,142 +217,26 @@ export const renders = {
     { type: "import-created", payload: profilePayload },
     { type: "profile-loaded", payload: profilePayload },
   ])),
-  confirm: render(wizardState([
-    { type: "source-dir-change", value: "/data/listings/2026-08" },
-    { type: "import-start" },
-    { type: "import-created", payload: profilePayload },
-    { type: "profile-loaded", payload: profilePayload },
-    { type: "advance" },
-  ]), (() => {
-    let mapping = createAdmissionMappingConfirmState();
-    mapping = admissionMappingConfirmReducer(mapping, {
-      type: "load-ready",
-      payload: {
-        state: "candidates_ready",
-        confirmation_status: "pending_confirmation",
-        facts_generated: false,
-        summary: { candidate_count: 2, critical_count: 1, displayed_count: 1 },
-        candidates: [
-          {
-            domain: "访视列表",
-            source_field: "受试者编号",
-            recommended_role: "subject_id",
-            confidence: 0.5,
-            attention_reason: "低置信度",
-            needs_attention: true,
-            evidence_summary: [{
-              inferred_type: "text",
-              total_rows: 128,
-              non_empty_count: 126,
-              sample_count: 1,
-              samples_hidden: true,
-            }],
-          },
-        ],
-      },
-    });
-    return mapping;
-  })()),
-  confirmNoPending: render(wizardState([
-    { type: "source-dir-change", value: "/data/listings/2026-08" },
-    { type: "import-start" },
-    { type: "import-created", payload: noRolePayload },
-    { type: "profile-loaded", payload: noRolePayload },
-    { type: "advance" },
-  ]), (() => {
-    let mapping = createAdmissionMappingConfirmState();
-    mapping = admissionMappingConfirmReducer(mapping, {
-      type: "load-ready",
-      payload: {
-        state: "candidates_ready",
-        confirmation_status: "pending_confirmation",
-        facts_generated: false,
-        summary: { candidate_count: 0, critical_count: 0, displayed_count: 0 },
-        candidates: [],
-      },
-    });
-    return mapping;
-  })()),
-  confirmDraftCritical: render(wizardState([
-    { type: "source-dir-change", value: "/data/listings/2026-08" },
-    { type: "import-start" },
-    { type: "import-created", payload: profilePayload },
-    { type: "profile-loaded", payload: profilePayload },
-    { type: "advance" },
-  ]), (() => {
-    let mapping = createAdmissionMappingConfirmState();
-    mapping = admissionMappingConfirmReducer(mapping, {
-      type: "load-ready",
-      payload: {
-        state: "candidates_ready",
-        summary: { candidate_count: 2, critical_count: 1, displayed_count: 1 },
-        candidates: [],
-      },
-    });
-    return admissionMappingConfirmReducer(mapping, {
-      type: "adopt-ready",
-      candidatePayload: {
-        state: "candidates_ready",
-        summary: { candidate_count: 2, critical_count: 1, displayed_count: 2 },
-        candidates: [
-          {
-            domain: "访视列表",
-            source_field: "访视日期",
-            recommended_role: "visit_date",
-            field_kind: "source_collected",
-            confidence: 0.7,
-            uncertainty: "需确认实际日期语义。",
-            user_action: "请确认该列是否为实际访视日期。",
-            attention_reason: "低置信度",
-            evidence_summary: [{
-              inferred_type: "date",
-              total_rows: 128,
-              non_empty_count: 126,
-              sample_count: 2,
-              samples_hidden: true,
-            }],
-          },
-          {
-            domain: "访视列表",
-            source_field: "记录序号",
-            recommended_role: "record_sequence",
-            field_kind: "source_metadata",
-            confidence: 0.99,
-            uncertainty: "无。",
-            user_action: "无需重点处理。",
-            attention_reason: "",
-            evidence_summary: [],
-          },
-        ],
-      },
-      payload: {
-        draft_id: "draft-1",
-        version: 1,
-        fields: [
-          {
-            domain: "访视列表",
-            source_field: "访视日期",
-            recommended_role: "visit_date",
-            field_kind: "source_collected",
-            confidence: 0.7,
-            attention_reason: "低置信度",
-            uncertainty: "需确认实际日期语义。",
-            user_action: "请确认该列是否为实际访视日期。",
-          },
-          {
-            domain: "访视列表",
-            source_field: "记录序号",
-            recommended_role: "record_sequence",
-            field_kind: "source_metadata",
-            confidence: 0.99,
-            attention_reason: "",
-            uncertainty: "无。",
-            user_action: "无需重点处理。",
-          },
-        ],
-      },
-    });
-  })()),
+  confirm: render(readyWizardState(), mappingFrom([
+    { type: "load-ready", payload: candidatesPayload() },
+  ])),
+  confirmDrafting: render(readyWizardState(), mappingFrom([
+    { type: "load-ready", payload: candidatesPayload() },
+    { type: "adopt-ready", payload: draftPayload },
+  ])),
+  confirmDraftingAnswered: render(readyWizardState(), mappingFrom([
+    { type: "load-ready", payload: candidatesPayload() },
+    { type: "adopt-ready", payload: draftPayload },
+    {
+      type: "answer-ready",
+      key: "访视列表::访视日期",
+      payload: { ...draftPayload, version: 2 },
+    },
+  ])),
+  confirmNoQuestions: render(readyWizardState(), mappingFrom([
+    { type: "load-ready", payload: candidatesPayload({ withQuestions: false }) },
+    { type: "adopt-ready", payload: draftPayload },
+  ])),
   done: render(wizardState([
     { type: "source-dir-change", value: "/data/listings/2026-08" },
     { type: "import-start" },
@@ -265,14 +244,9 @@ export const renders = {
     { type: "profile-loaded", payload: profilePayload },
     { type: "advance" },
     { type: "finish" },
-  ]), (() => {
-    let mapping = createAdmissionMappingConfirmState();
-    mapping = admissionMappingConfirmReducer(mapping, {
-      type: "confirm-ready",
-      payload: { mapping_revision: "rev-1", facts_generated: false },
-    });
-    return mapping;
-  })()),
+  ]), mappingFrom([
+    { type: "confirm-ready", payload: { mapping_revision: "rev-1", facts_generated: false } },
+  ])),
   failedRetry: render(wizardState([
     {
       type: "error",

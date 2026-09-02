@@ -434,100 +434,129 @@
   }
 }
 
-.monitoring-admission-mapping-filters {
+.monitoring-admission-mapping .monitoring-admission-summary {
+  margin: 12px 0 8px;
+}
+
+.monitoring-admission-table-summary {
+  list-style: none;
   display: flex;
-  gap: 8px;
-  margin: 12px 0;
   flex-wrap: wrap;
-}
-.monitoring-admission-mapping-filters button,
-.monitoring-admission-mapping-filters select,
-.monitoring-admission-mapping-filters input {
-  border: 1px solid #c9d4e5;
-  background: #fff;
-  border-radius: 999px;
-  padding: 6px 12px;
-  min-height: 34px;
-}
-.monitoring-admission-mapping-filters button {
-  cursor: pointer;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 0;
 }
 
-.monitoring-admission-mapping-filters input {
-  min-width: 240px;
+.monitoring-admission-table-details > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  min-height: 2.75rem;
 }
-.monitoring-admission-mapping-filters button.is-active {
-  background: #fff4ed;
-  border-color: var(--monitoring-orange, #e96828);
-  color: var(--monitoring-orange, #e96828);
+
+.monitoring-admission-table-details > summary span {
+  color: var(--monitoring-primary, #176b87);
+  font-size: 0.86rem;
+  margin-left: auto;
 }
-.monitoring-admission-mapping-row {
-  width: 100%;
-  text-align: left;
+
+.monitoring-admission-table-summary li {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: 16px;
-  border: 0;
-  background: transparent;
-  padding: 8px;
+  gap: 1px;
+  border: 1px solid var(--monitoring-line, #dce3e9);
   border-radius: 7px;
-  cursor: pointer;
+  padding: 5px 10px;
+  background: var(--monitoring-soft, #f6f8fa);
+  font-size: 12px;
 }
 
-.monitoring-admission-mapping-row:hover:not(:disabled),
-.monitoring-admission-mapping-row.is-selected {
-  background: #fff4ed;
+.monitoring-admission-table-summary span {
+  color: var(--monitoring-muted, #64727d);
+  font-variant-numeric: tabular-nums;
 }
 
-.monitoring-admission-mapping-row:disabled {
-  color: inherit;
-  cursor: default;
+.monitoring-admission-questions {
+  margin-top: 12px;
 }
 
-.monitoring-admission-mapping-row:focus-visible {
-  outline: 2px solid var(--monitoring-orange, #e96828);
-  outline-offset: 2px;
+.monitoring-admission-questions-head {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
-.monitoring-admission-mapping-source,
-.monitoring-admission-mapping-advice {
+.monitoring-admission-question-list {
+  list-style: none;
   display: grid;
-  gap: 4px;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+.monitoring-admission-question {
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  border-left: 3px solid var(--monitoring-orange, #e96828);
+  border-radius: 8px;
+  background: #fffaf6;
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.monitoring-admission-question.is-answered {
+  border-left-color: #a8c9b8;
+  background: #fbfdfc;
+}
+
+.monitoring-admission-question-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   min-width: 0;
 }
 
-.monitoring-admission-mapping-source small,
-.monitoring-admission-mapping-advice small,
-.monitoring-admission-mapping-source span,
-.monitoring-admission-mapping-advice span {
-  color: var(--monitoring-muted, #64727d);
+.monitoring-admission-question-head strong {
+  font-size: 13px;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.monitoring-admission-mapping .monitoring-admission-pending {
-  max-height: min(52vh, 520px);
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+.monitoring-admission-question-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--monitoring-ink, #24313a);
 }
 
-.monitoring-admission-mapping-workspace {
+.monitoring-admission-question-evidence,
+.monitoring-admission-question-done {
+  margin: 0;
+  font-size: 12px;
+  color: var(--monitoring-muted, #64727d);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.monitoring-admission-question-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.monitoring-admission-question-note {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-}
-
-.monitoring-admission-mapping-workspace.has-editor {
-  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
-}
-
-.monitoring-admission-mapping-list {
+  gap: 6px;
+  flex: 1 1 260px;
   min-width: 0;
 }
 
-.monitoring-admission-confirmation-note {
-  margin: 10px 0 12px;
+.monitoring-admission-question-note textarea {
+  width: 100%;
+  min-height: 36px;
 }
 
 .monitoring-admission-attention-chip {
@@ -537,6 +566,7 @@
   background: #fff4ed;
   color: var(--monitoring-orange, #e96828);
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .monitoring-admission-mapping-message {
@@ -546,24 +576,26 @@
   background: #fff8f3;
   color: var(--monitoring-ink, #24313a);
 }
-.monitoring-admission-field-editor {
-  display: grid;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px solid #d7deea;
-  border-radius: 8px;
-  background: #fffaf6;
-}
-.monitoring-admission-field-editor label {
+
+.monitoring-admission-field-digest {
+  list-style: none;
   display: grid;
   gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  font-size: 12px;
 }
-.monitoring-admission-field-editor input,
-.monitoring-admission-field-editor textarea,
-.monitoring-admission-mapping textarea {
-  width: 100%;
-  min-height: 36px;
+
+.monitoring-admission-field-digest li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.monitoring-admission-field-digest .monitoring-admission-column-meta {
+  color: var(--monitoring-muted, #64727d);
+  font-variant-numeric: tabular-nums;
 }
 
 .monitoring-admission-quality {
@@ -602,11 +634,8 @@
 }
 
 @media (max-width: 900px) {
-  .monitoring-admission-mapping-row {
-    grid-template-columns: 1fr;
-  }
-
-  .monitoring-admission-mapping-workspace.has-editor {
-    grid-template-columns: 1fr;
+  .monitoring-admission-question-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
