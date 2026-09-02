@@ -101,6 +101,24 @@ function publicCenterLabel(siteRef, fallback = "中心待确认") {
   return fallback;
 }
 
+function publicResultSiteScopeText(resultPayload, route = {}) {
+  const siteRef = clean(route.site_ref);
+  if (siteRef) {
+    return clean(
+      resultPayload?.projection?.centers?.find((center) => clean(center.siteRef || center.site_ref) === siteRef)?.siteLabel
+        || resultPayload?.projection?.raw?.subject?.site_label
+        || resultPayload?.projection?.raw?.subject?.site_name,
+      publicCenterLabel(siteRef),
+    );
+  }
+  return (resultPayload?.projection?.centers || [])
+    .map((center) => clean(center.siteLabel || center.site_label))
+    .filter(Boolean)
+    .join("、");
+}
+
+export { publicResultSiteScopeText };
+
 function publicErrorText(error, fallback) {
   const detail = error && typeof error === "object" ? error.detail : null;
   const code = clean(detail?.code || error?.code);
@@ -1175,13 +1193,7 @@ export function MedicalMonitoringProductLoop({
   const unavailableText = resultError?.text || setupHistoryError?.text || "本次结果暂不可查看，请返回进度页";
   const effectiveHeading = routeView === "site_overview" ? "中心风险图谱" : PRODUCT_RESULT_SUBJECT_VIEWS.has(routeView) ? "受试者医学旅程" : routeView === "evidence" ? "风险证据" : "项目风险概览";
   const resultLoaded = Boolean(resultPayload && resultContext);
-  const resultSiteScopeText = route.site_ref
-    ? clean(
-      resultPayload?.projection?.centers?.find((center) => clean(center.siteRef || center.site_ref) === clean(route.site_ref))?.siteLabel
-        || resultPayload?.projection?.raw?.subject?.site_label
-        || resultPayload?.projection?.raw?.subject?.site_name,
-    )
-    : "";
+  const resultSiteScopeText = publicResultSiteScopeText(resultPayload, route);
   const workbar = { ...(productState?.workbar || {}) };
   if (routeView === "site_overview") {
     if (workbar.mainTarget === "wizard") {

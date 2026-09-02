@@ -3962,7 +3962,34 @@ def writing_reference_translation_ai_status():
 
 @app.get("/api/projects")
 def list_projects():
-    return project_source_manifest_service.list_public_projects()
+    projects = project_source_manifest_service.list_public_projects()
+    if not _r5_s7_fixture_mode:
+        return projects
+    return [
+        *projects,
+        {
+            "project_id": SYNTHETIC_PROJECT_REF,
+            "project_code": "医学监查示范",
+            "project_name": "医学监查合成示范项目",
+            "indication": "通用医学监查演示",
+            "product_name": "合成示范数据",
+            "study_phase": "演示",
+            "protocol_id": "SYNTHETIC-MONITORING",
+            "protocol_version": "当前版本",
+            "protocol_date": "2026-08-28",
+            "status": "active",
+            "aliases": [SYNTHETIC_PROJECT_REF],
+            "source_mode": "synthetic",
+            "modules": [
+                {
+                    "module": "medical_monitoring",
+                    "label": "医学监查",
+                    "route_project_id": SYNTHETIC_PROJECT_REF,
+                    "implementation_status": "synthetic_product_profile",
+                }
+            ],
+        },
+    ]
 
 
 @app.post("/api/projects", status_code=201)

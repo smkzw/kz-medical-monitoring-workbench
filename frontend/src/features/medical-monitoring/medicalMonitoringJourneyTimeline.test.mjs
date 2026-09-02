@@ -29,6 +29,9 @@ const scale = buildTimelineScale({
   zoomLevel: 0,
 });
 assert.ok(scale.width >= 640);
+assert.ok(scale.pad >= 66, "visit labels retain half-width clearance at both timeline endpoints");
+assert.ok(scale.xFor("2026-01-01") >= scale.pad);
+assert.ok(scale.width - scale.xFor("2026-08-20") >= scale.pad);
 assert.ok(scale.xFor("2026-01-01") < scale.xFor("2026-04-11"));
 assert.ok(scale.xFor("2026-04-11") < scale.xFor("2026-08-20"));
 

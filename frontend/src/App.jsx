@@ -96,7 +96,7 @@ import {
 } from "./features/medical-monitoring/useMedicalMonitoringBrowserState.js";
 import { useMedicalMonitoringProjectIsolation } from "./features/medical-monitoring/useMedicalMonitoringProjectIsolation.js";
 import MedicalMonitoringRouteOutlet from "./features/medical-monitoring/MedicalMonitoringRouteOutlet.jsx";
-import { isMedicalMonitoringPage } from "./features/medical-monitoring/medicalMonitoringRouteOutletState.mjs";
+import { isMedicalMonitoringPage, monitoringRouteProjectIdFrom } from "./features/medical-monitoring/medicalMonitoringRouteOutletState.mjs";
 import { WritingReferencePanel } from "./features/writing-reference/WritingReferencePanel";
 import { StructuredTableDesigner } from "./features/medical-writing/StructuredTableDesigner";
 import { MedicalWritingAuthoringJourneySetup } from "./features/medical-writing/MedicalWritingAuthoringJourneySetup";
@@ -12973,7 +12973,8 @@ export function App() {
     ? sourceManifestReadErrors[activeProjectId] || null
     : null;
   const eligibilityRouteProjectId = activeManifest?.route_bindings?.eligibility_review?.route_project_id || "";
-  const monitoringRouteProjectId = activeManifest?.route_bindings?.medical_monitoring?.route_project_id || "";
+  const activeProject = projects.find((project) => project.project_id === activeProjectId) || null;
+  const monitoringRouteProjectId = monitoringRouteProjectIdFrom(activeManifest, activeProject);
   const activeProjectIdRef = useRef(activeProjectId);
   activeProjectIdRef.current = activeProjectId;
   const {
