@@ -1557,6 +1557,7 @@ class MonitoringAiService:
                     not in {
                         "fields",
                         "relationships",
+                        "table_bindings",
                         "treatment_identity_bindings",
                     }
                 }
@@ -1593,6 +1594,11 @@ class MonitoringAiService:
                         "chunk_size_limit": chunk_size,
                         "fields": chunk_fields,
                         "relationships": chunk_relationships,
+                        "table_bindings": [
+                            deepcopy(binding)
+                            for binding in field_profile.get("table_bindings", [])
+                            if str(binding.get("domain", "")).strip() == domain
+                        ],
                         "read_only_domain_context_profiles": [
                             deepcopy(field)
                             for field, _ in partition_metadata_fields(
@@ -5276,6 +5282,11 @@ class MonitoringAiService:
             ): item
             for item in profile["fields"]
         }
+        table_binding_by_domain = {
+            str(item.get("domain", "")).strip(): deepcopy(item)
+            for item in profile.get("table_bindings", [])
+            if isinstance(item, dict)
+        }
         evidence: List[_ProviderEvidence] = []
         all_evidence_ids: List[str] = []
         profile_source = monitoring_field_profile_source_binding(
@@ -5343,6 +5354,7 @@ class MonitoringAiService:
                         "profile_sha256": profile["profile_sha256"],
                         "payload_policy": profile.get("payload_policy", ""),
                         "source_lineage": profile["source_bindings"],
+                        "table_binding": table_binding_by_domain.get(pair[0]),
                         "mapping_origin": mapping_origin["origin"],
                         "deterministic_rule_id": mapping_origin.get("rule_id", ""),
                         "deterministic_rule_version": mapping_origin.get(
@@ -6651,6 +6663,30 @@ class MonitoringAiService:
             ) from exc
         if len(profile_source_pairs) != len(source_bindings):
             raise ValueError("listing field profile source_bindings must be unique")
+        table_bindings = field_profile.get("table_bindings", [])
+        if not isinstance(table_bindings, list):
+            raise ValueError("listing field profile table_bindings must be a list")
+        table_domains: list[str] = []
+        for binding in table_bindings:
+            if not isinstance(binding, dict):
+                raise ValueError("listing field profile table binding is malformed")
+            domain = str(binding.get("domain", "")).strip()
+            source_revision_id = str(
+                binding.get("source_revision_id", "")
+            ).strip()
+            source_file = str(binding.get("source_file", "")).strip()
+            snapshot_id = str(binding.get("snapshot_id", "")).strip()
+            if (
+                not domain
+                or not source_file
+                or not snapshot_id
+                or source_revision_id
+                not in {entry_id for entry_id, _ in profile_source_pairs}
+            ):
+                raise ValueError("listing field profile table binding is incomplete")
+            table_domains.append(domain)
+        if len(table_domains) != len(set(table_domains)):
+            raise ValueError("listing field profile table bindings must be unique")
         _require_service_sha256(
             field_profile["input_sha256"],
             "listing field profile input_sha256",
