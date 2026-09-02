@@ -122,7 +122,10 @@ def register_publication_routes(router: APIRouter, context: PublicationRouteCont
         auth = authorize(
             request,
             project_id=canonical,
-            action=MonitoringAction.ADMINISTER_RUNTIME,
+            # Result publication is the product-owned closure of a run the
+            # medical monitor was already allowed to start. Low-level runtime
+            # controls remain administrator-only.
+            action=MonitoringAction.READ_AI_RUN,
         )
         if isinstance(auth, JSONResponse):
             return auth

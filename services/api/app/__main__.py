@@ -135,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"医学监查合成 profile 已启用（{state}运行 {seeded['run_id']}）\n"
             f"  后端：http://{BACKEND_HOST}:{BACKEND_PORT}\n"
-            f"  前端：{FRONTEND_URL}\n"
+            f"  前端：cd frontend && npm run dev:monitoring-synthetic（{FRONTEND_URL}）\n"
             f"  合成项目：{SYNTHETIC_PROJECT_REF}"
         )
     uvicorn.run(app, host=BACKEND_HOST, port=BACKEND_PORT)

@@ -354,7 +354,13 @@ def _validate_r5_publication_packet(
         or not isinstance(packet.packet_digest, str)
         or packet.packet_identity != "r5-publication-authority:" + packet.packet_digest
         or packet.authority_hash != packet.packet_digest
-        or not packet.s4_packets
+        or (
+            not packet.s4_packets
+            and not (
+                getattr(packet.product_packet, "synthetic", False) is True
+                and identity.project_ref.startswith("s7-synthetic-")
+            )
+        )
     ):
         raise ProductPublicationError("authority_provider_invalid")
     coverage = set(identity.site_refs)
@@ -447,4 +453,3 @@ __all__ = [
     "_obtain_r6_mode_outputs",
     "_validate_r5_publication_packet",
 ]
-

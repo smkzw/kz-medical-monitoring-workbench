@@ -1411,6 +1411,8 @@ function OverviewView({
     || (compared && !changes.every((item) => item.change_kind === "not_comparable"));
   const scopedCenter = payload.identity?.site_ref ? projection.centers.find((center) => center.siteRef === payload.identity.site_ref) : null;
   const scopedMeasure = scopedCenter?.measures?.[0] || null;
+  const scopedAffectedSubjects = new Set((scopedCenter?.risks || []).map((risk) => risk.subjectRef).filter(Boolean)).size;
+  const scopedEventCount = (scopedCenter?.risks || []).length;
   const showContinuityKpis = liveContinuity && !suppressVersionClaim;
   return (
     <div className="monitoring-view-stack">
@@ -1519,8 +1521,8 @@ function OverviewView({
           <div className="monitoring-section-heading"><span className="monitoring-eyebrow">中心风险图谱</span><h2>{text(scopedCenter.siteLabel, centerLabel(scopedCenter.siteRef, "当前中心"))}</h2></div>
           <div className="monitoring-center-summary-grid">
             <div><span>重复模式</span><strong>{scopedMeasure?.denominator ? `${DOMAIN_LABELS[scopedCenter.domain] || "相关"}记录需关注` : "样本量不足，暂无法评价重复模式"}</strong></div>
-            <div><span>受影响受试者</span><strong>{numberText(payload.counts?.affected_subject, "0")}</strong></div>
-            <div><span>事件数</span><strong>{numberText(payload.counts?.event, "0")}</strong></div>
+            <div><span>受影响受试者</span><strong>{numberText(scopedAffectedSubjects, "0")}</strong></div>
+            <div><span>风险提示数</span><strong>{numberText(scopedEventCount, "0")}</strong></div>
             <div><span>分子</span><strong>{scopedMeasure?.denominator ? numberText(scopedMeasure.numerator) : "暂无法计算"}</strong></div>
             <div><span>分母</span><strong>{scopedMeasure?.denominator ? numberText(scopedMeasure.denominator) : "暂无法计算"}</strong></div>
             <div><span>覆盖情况</span><strong>{text(scopedCenter.coverageLabel, "覆盖待确认")}</strong></div>

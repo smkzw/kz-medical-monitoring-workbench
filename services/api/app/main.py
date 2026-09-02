@@ -3380,7 +3380,16 @@ app.include_router(
 # at import time); there is no environment-variable seam.
 _r5_s7_fixture_mode = synthetic_profile_requested()
 _r5_s7_fixture_principal: MonitoringAuthenticatedPrincipal | None = None
+_r7_synthetic_publication_provider = None
+_r7_synthetic_mode_output_provider = None
 if _r5_s7_fixture_mode:
+    from packages.medical_monitoring.api.r7_product.synthetic_publication import (
+        SyntheticModeOutputProvider,
+        SyntheticPublicationAuthorityProvider,
+    )
+
+    _r7_synthetic_publication_provider = SyntheticPublicationAuthorityProvider()
+    _r7_synthetic_mode_output_provider = SyntheticModeOutputProvider()
     _r5_s7_fixture_now = datetime.now(timezone.utc).replace(microsecond=0)
     _r5_s7_fixture_principal = MonitoringAuthenticatedPrincipal.from_server_verified_claims(
         {
@@ -3431,6 +3440,8 @@ app.include_router(
         project_resolver=_resolve_r7_product_project,
         principal_resolver=_resolve_synthetic_product_principal,
         require_server_principal=True,
+        publication_authority_provider=_r7_synthetic_publication_provider,
+        r6_output_provider=_r7_synthetic_mode_output_provider,
     )
 )
 app.include_router(

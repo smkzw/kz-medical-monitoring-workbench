@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "dev:monitoring-synthetic": "VITE_API_PROXY_TARGET=http://127.0.0.1:8911 vite --host 127.0.0.1 --port 5174",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "qc:ego:readonly": "bash tests/ego_browser_readonly_smoke.sh"

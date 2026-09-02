@@ -187,6 +187,24 @@ check(!identityHtml.includes("result-context:") && !identityHtml.includes("snaps
 const centerIdentityHtml = render(element("MonitoringPublicResultIdentityStrip", { identity: { mode_text: "日常监查", data_cutoff_text: "2026-08-28", site_scope_text: "中心 006、中心 010" }, siteScopeText: "中心 006" }));
 check(centerIdentityHtml.includes("中心 006") && !centerIdentityHtml.includes("中心 006、中心 010"), "center result identity strip renders the active center label instead of the project scope");
 
+const normalizedPublicResult = bundled.normalizePublicProductPayload({
+  identity: { project_ref: "synthetic-project", site_ref: "site-006" },
+  resultContextToken: "result-context:test",
+  projection: {
+    measures: [{ measure_ref: "measure-006", site_ref: "site-006", numerator: 2, denominator: 12, coverage_state: "complete" }],
+    current_risks: [
+      { risk_ref: "risk-1", risk_instance_ref: "risk-instance-1", site_ref: "site-006", subject_ref: "subject-1", severity: "high", domain: "ae" },
+      { risk_ref: "risk-2", risk_instance_ref: "risk-instance-2", site_ref: "site-006", subject_ref: "subject-1", severity: "medium", domain: "ae" },
+    ],
+    center_map: { cells: [{ site_ref: "site-006", measure_refs: ["measure-006"], individual_risk_refs: ["risk-1", "risk-2"] }] },
+  },
+});
+check(normalizedPublicResult.projection.centers[0].coverageState === "complete", "center inherits verified coverage from its referenced measure");
+check(normalizedPublicResult.projection.centers[0].coverageLabel === "完整", "center renders the verified coverage as native Chinese");
+check(normalizedPublicResult.projection.centers[0].risks.length === 2, "center keeps its referenced risk prompts for center summary counts");
+check(normalizedPublicResult.projection.centers[0].siteLabel === "中心 006", "center hides the synthetic internal site token behind a user label");
+check(normalizedPublicResult.projection.currentRisks.every((risk) => risk.siteLabel === "中心 006"), "risk rows keep the user-facing center label");
+
 const publicProgressHtml = render(element("MonitoringPublicProgressSurface", {
   progress: {
     runState: "completed",
