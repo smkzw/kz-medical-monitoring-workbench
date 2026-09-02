@@ -236,6 +236,7 @@ def test_role_catalog_blocks_unknown_metadata_but_groups_non_core_source_roles()
         "visit_sequence_number",
         "visit_repeat_key",
         "form_identifier",
+        "form_identifier_metadata",
         "form_repeat_key",
         "item_group_identifier",
         "record_group_identifier",

@@ -13,7 +13,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence
 from ..intelligence.primitives import content_hash
 
 
-MAPPING_BRIDGE_SCHEMA_VERSION = "mm-c3-mapping-profile-bridge-v3"
+MAPPING_BRIDGE_SCHEMA_VERSION = "mm-c3-mapping-profile-bridge-v4"
 PROFILE_SCHEMA_VERSION = "monitoring_ai_field_profile_v3"
 _SUBJECT_ROLE = "受试者标识"
 _TYPE_MAP = {
@@ -161,6 +161,7 @@ def _field_payload(
     return {
         "domain": domain,
         "field": field,
+        "source_label": str(column.get("source_label") or field).strip(),
         "column_index": column_index,
         "total_rows": row_count,
         "non_empty_count": row_count - missing_count,
@@ -309,7 +310,7 @@ def admission_record_to_harness_input(
             {"domain": domain, "field_order": order}
             for domain, order in table_field_order.items()
         ],
-        "payload_policy": "bounded_full_column_statistics_and_redacted_row_context_v2",
+        "payload_policy": "bounded_full_column_statistics_source_labels_and_redacted_row_context_v3",
     }
     profile["profile_sha256"] = content_hash(profile)
     revision = {

@@ -131,7 +131,9 @@ def _looks_like_header(values: Any) -> bool:
     return any(header in markers or HEADER_CODE_PATTERN.search(header) for header in headers)
 
 
-def _header_and_data_rows(raw_rows: List[List[Any]]) -> tuple[List[str], List[List[Any]], int]:
+def _header_and_data_rows(
+    raw_rows: List[List[Any]],
+) -> tuple[List[str], List[str], List[List[Any]], int]:
     header_index = None
     scan_limit = min(25, len(raw_rows))
     for index in range(scan_limit):
@@ -141,7 +143,8 @@ def _header_and_data_rows(raw_rows: List[List[Any]]) -> tuple[List[str], List[Li
     if header_index is None:
         header_index = 0
 
-    header_values = raw_rows[header_index]
+    source_header_values = raw_rows[header_index]
+    header_values = source_header_values
     data_start = header_index + 1
     if data_start < len(raw_rows) and _looks_like_variable_header(raw_rows[data_start]):
         header_values = [
@@ -151,7 +154,16 @@ def _header_and_data_rows(raw_rows: List[List[Any]]) -> tuple[List[str], List[Li
         data_start += 1
 
     headers = _dedupe_headers([_clean_header(value, index) for index, value in enumerate(header_values)])
-    return headers, raw_rows[data_start:], data_start
+    source_headers = [
+        _cell_text(
+            source_header_values[index]
+            if index < len(source_header_values)
+            else None
+        )
+        or header
+        for index, header in enumerate(headers)
+    ]
+    return headers, source_headers, raw_rows[data_start:], data_start
 
 
 def _build_rows(
@@ -193,12 +205,13 @@ def _parse_csv_listing(filename: str, content: bytes) -> ListingSheetPayload:
     raw_rows = [list(row) for row in reader]
     if not raw_rows:
         raise ValueError("csv listing has no header row")
-    headers, data_rows, data_start = _header_and_data_rows(raw_rows)
+    headers, source_headers, data_rows, data_start = _header_and_data_rows(raw_rows)
     rows, row_numbers = _build_rows(headers, data_rows, data_start)
     sheet_name = Path(filename or "CSV").stem or "CSV"
     return ListingSheetPayload(
         sheet_name=sheet_name,
         headers=headers,
+        source_headers=source_headers,
         rows=rows,
         row_numbers=row_numbers,
     )
@@ -228,13 +241,14 @@ def _parse_xlsx_listing(content: bytes) -> List[ListingSheetPayload]:
             raw_rows = [list(row) for row in worksheet.iter_rows(values_only=True)]
             if not raw_rows:
                 continue
-            headers, data_rows, data_start = _header_and_data_rows(raw_rows)
+            headers, source_headers, data_rows, data_start = _header_and_data_rows(raw_rows)
             rows, row_numbers = _build_rows(headers, data_rows, data_start)
             if rows or _has_usable_headers(headers):
                 sheets.append(
                     ListingSheetPayload(
                         sheet_name=worksheet.title,
                         headers=headers,
+                        source_headers=source_headers,
                         rows=rows,
                         row_numbers=row_numbers,
                         parser_warnings=parser_warnings,
@@ -293,13 +307,14 @@ def _parse_xls_listing(content: bytes) -> List[ListingSheetPayload]:
             ]
             if not raw_rows:
                 continue
-            headers, data_rows, data_start = _header_and_data_rows(raw_rows)
+            headers, source_headers, data_rows, data_start = _header_and_data_rows(raw_rows)
             rows, row_numbers = _build_rows(headers, data_rows, data_start)
             if rows or _has_usable_headers(headers):
                 sheets.append(
                     ListingSheetPayload(
                         sheet_name=sheet_name,
                         headers=headers,
+                        source_headers=source_headers,
                         rows=rows,
                         row_numbers=row_numbers,
                     )

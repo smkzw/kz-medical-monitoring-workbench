@@ -10403,6 +10403,7 @@ class SubjectMonitoringDrilldown(WorkbenchModel):
 class ListingSheetPayload(WorkbenchModel):
     sheet_name: str
     headers: List[str] = Field(default_factory=list)
+    source_headers: List[str] = Field(default_factory=list)
     rows: List[Dict[str, Any]] = Field(default_factory=list)
     row_numbers: List[int] = Field(default_factory=list)
     parser_warnings: List[str] = Field(default_factory=list)

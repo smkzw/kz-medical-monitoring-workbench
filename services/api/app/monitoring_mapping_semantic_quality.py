@@ -12,7 +12,7 @@ from .monitoring_mapping_contract import MonitoringFieldKind
 
 
 SEMANTIC_QUALITY_SCHEMA_VERSION = "monitoring_mapping_semantic_quality_v2"
-ROLE_CATALOG_VERSION = "monitoring_role_catalog_v3"
+ROLE_CATALOG_VERSION = "monitoring_role_catalog_v4"
 RULE_CATALOG_VERSION = "monitoring_semantic_rules_v3"
 CAPABILITY_MANIFEST_VERSION = "monitoring_capability_manifest_v1"
 
@@ -383,6 +383,7 @@ ROLE_CATALOG_V2: tuple[RoleConcept, ...] = (
         "metadata",
         "identifier",
         "edc_object_identifier",
+        "form_identifier_metadata",
     ),
     _concept(
         "metadata.edc_repeat_key",

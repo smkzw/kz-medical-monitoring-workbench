@@ -188,6 +188,49 @@ def test_enrich_candidates_rejects_invalid_focus() -> None:
     assert exc.value.code == "mapping_focus_invalid"
 
 
+def test_list_for_review_resumes_a_confirmed_system_draft() -> None:
+    draft = SimpleNamespace(
+        draft_id="draft-1",
+        version=2,
+        status=SimpleNamespace(value="confirmed"),
+    )
+    pipeline = SimpleNamespace(
+        list_candidates=lambda **_kwargs: {
+            "state": "candidates_ready",
+            "confirmation_status": "pending_confirmation",
+            "summary": {"candidate_count": 1},
+            "candidates": [{
+                "domain": "AE",
+                "source_field": "AETERM",
+                "user_decision_required": False,
+            }],
+        }
+    )
+    repo = SimpleNamespace(find_draft_for_batch=lambda *_args: draft)
+    service = AdmissionMappingConfirmationService(
+        mapping_pipeline=pipeline,
+        mapping_repository=repo,
+        ai_repository=SimpleNamespace(),
+        prompt_version="prompt",
+        accepted_status="accepted",
+        proposed_status="proposed",
+    )
+
+    payload = service.list_for_review(
+        project_id="p1",
+        attempt_id="attempt-1",
+        workspace_dir=None,
+        focus="all",
+    )
+
+    assert payload["confirmation_status"] == "confirmed"
+    assert payload["draft"] == {
+        "draft_id": "draft-1",
+        "version": 2,
+        "status": "confirmed",
+    }
+
+
 def _confirmation_service(repo):
     return AdmissionMappingConfirmationService(
         mapping_pipeline=SimpleNamespace(),

@@ -54,11 +54,21 @@ def _xlsx_bytes() -> bytes:
     workbook = openpyxl.Workbook()
     first = workbook.active
     first.title = "生命体征"
-    first.append(["SUBJID", "VISIT", "测量日期", "收缩压"])
+    first.append([
+        "受试者编号(SUBJID)",
+        "访视(VISIT)",
+        "测量日期(VSDAT)",
+        "收缩压(SYSBP)",
+    ])
     first.append(["S001", "筛选期", "2026-01-05", 120])
     first.append(["S002", "筛选期", "2026-01-06", 118])
     second = workbook.create_sheet("实验室检查")
-    second.append(["SUBJID", "VISIT", "采集日期", "检查结果"])
+    second.append([
+        "受试者编号(SUBJID)",
+        "访视(VISIT)",
+        "采集日期(LBDAT)",
+        "检查结果(LBORRES)",
+    ])
     second.append(["S001", "第1天", "2026-01-07", "正常"])
     second.append(["S002", "第1天", "2026-01-08", "异常"])
     output = io.BytesIO()
@@ -118,7 +128,7 @@ def test_bridge_redacts_subject_values_and_binds_every_table(tmp_path: Path) -> 
     )
     profile = bridged.field_profile
     assert profile["payload_policy"] == (
-        "bounded_full_column_statistics_and_redacted_row_context_v2"
+        "bounded_full_column_statistics_source_labels_and_redacted_row_context_v3"
     )
     assert len(profile["table_bindings"]) == 2
     assert len({item["snapshot_id"] for item in profile["table_bindings"]}) == 2
@@ -148,21 +158,22 @@ def test_bridge_exposes_value_distribution_and_table_structure(
     assert [item["field"] for item in vital_fields] == [
         "SUBJID",
         "VISIT",
-        "测量日期",
-        "收缩压",
+        "VSDAT",
+        "SYSBP",
     ]
     by_name = {item["field"]: item for item in vital_fields}
     assert by_name["SUBJID"]["column_index"] == 0
-    assert by_name["收缩压"]["column_index"] == 3
-    assert by_name["收缩压"]["inferred_type"] == "decimal"
-    assert by_name["收缩压"]["representative_values"] == ["118", "120"]
-    assert by_name["收缩压"]["representative_sample_count"] == 2
-    assert by_name["收缩压"]["unique_value_count"] == 2
-    assert by_name["收缩压"]["top_values"] == [
+    assert by_name["SYSBP"]["column_index"] == 3
+    assert by_name["SYSBP"]["source_label"] == "收缩压(SYSBP)"
+    assert by_name["SYSBP"]["inferred_type"] == "decimal"
+    assert by_name["SYSBP"]["representative_values"] == ["118", "120"]
+    assert by_name["SYSBP"]["representative_sample_count"] == 2
+    assert by_name["SYSBP"]["unique_value_count"] == 2
+    assert by_name["SYSBP"]["top_values"] == [
         {"value": "118", "count": 1},
         {"value": "120", "count": 1},
     ]
-    date_field = by_name["测量日期"]
+    date_field = by_name["VSDAT"]
     assert date_field["inferred_type"] == "date"
     assert date_field["date_range"] == {
         "min": "2026-01-05",
@@ -172,11 +183,11 @@ def test_bridge_exposes_value_distribution_and_table_structure(
     assert profile["table_field_order"] == [
         {
             "domain": "生命体征",
-            "field_order": ["SUBJID", "VISIT", "测量日期", "收缩压"],
+            "field_order": ["SUBJID", "VISIT", "VSDAT", "SYSBP"],
         },
         {
             "domain": "实验室检查",
-            "field_order": ["SUBJID", "VISIT", "采集日期", "检查结果"],
+            "field_order": ["SUBJID", "VISIT", "LBDAT", "LBORRES"],
         },
     ]
 
@@ -255,7 +266,7 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
         draft_id="draft-generated-1",
         draft_fields=[{
             "domain": "生命体征",
-            "source_field": "收缩压",
+            "source_field": "SYSBP",
             "recommended_role": "vital_sign_systolic_blood_pressure",
             "field_kind": "source_collected",
             "uncertainty": "需结合同表字段复核。",
@@ -277,14 +288,15 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
     assert len(jobs) == 1
     payload = repository.input_payload(PROJECT_ID, jobs[0].job_id)
     profile = payload["field_profile"]
-    assert [field["field"] for field in profile["fields"]] == ["收缩压"]
+    assert [field["field"] for field in profile["fields"]] == ["SYSBP"]
+    assert profile["fields"][0]["source_label"] == "收缩压(SYSBP)"
     assert profile["adjudication_contract"]["question_count"] == 1
     assert {
         field["field"]
         for field in profile["read_only_adjudication_context_profiles"]
-    } >= {"SUBJID", "VISIT", "测量日期"}
+    } >= {"SUBJID", "VISIT", "VSDAT"}
     assert jobs[0].prompt_version == (
-        "monitoring-listing-field-mapping-adjudication-v1"
+        "monitoring-listing-field-mapping-adjudication-v2"
     )
 
 
