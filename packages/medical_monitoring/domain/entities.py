@@ -391,8 +391,8 @@ class StudyProject:
     """Research project identity and isolation boundary (Design 5).
 
     Different studies must never reuse business primary keys or silently
-    cross-talk.  ``is_synthetic`` is a POC guard: only synthetic fixtures are
-    allowed in R2.
+    cross-talk. ``is_synthetic`` records source provenance; both real projects
+    and explicit test fixtures use the same identity contract.
     """
 
     schema_name: str = "study_project"
@@ -409,11 +409,8 @@ class StudyProject:
             raise DomainValidationError("StudyProject.project_id is required")
         if not self.name:
             raise DomainValidationError("StudyProject.name is required")
-        if not self.is_synthetic:
-            raise DomainValidationError(
-                "R2 POC permits only synthetic fixtures; non-synthetic "
-                "StudyProject is out of scope"
-            )
+        if not isinstance(self.is_synthetic, bool):
+            raise DomainValidationError("StudyProject.is_synthetic must be bool")
         # VETO2: deep-freeze the JSON-like config so a nested value reachable
         # from the frozen project cannot be mutated after construction and
         # change serialized/hash-relevant state.
@@ -574,8 +571,8 @@ class ListingSnapshot:
             raise DomainValidationError("ListingSnapshot.revision_id is required")
         if not self.snapshot_version:
             raise DomainValidationError("ListingSnapshot.snapshot_version is required")
-        if not self.is_synthetic:
-            raise DomainValidationError("R2 POC permits only synthetic listings")
+        if not isinstance(self.is_synthetic, bool):
+            raise DomainValidationError("ListingSnapshot.is_synthetic must be bool")
         if self.row_count < 0:
             raise DomainValidationError("ListingSnapshot.row_count must be >= 0")
         validate_sha256_hex(self.content_digest, "ListingSnapshot.content_digest")
@@ -614,8 +611,8 @@ class ListingSnapshot:
         internally and verifies row/shape metadata where feasible.
         Digest-only construction is unavailable to public callers.
         """
-        if not is_synthetic:
-            raise DomainValidationError("R2 POC permits only synthetic listings")
+        if not isinstance(is_synthetic, bool):
+            raise DomainValidationError("ListingSnapshot.is_synthetic must be bool")
         # Canonicalize + validate the full content up front (rejects
         # non-finite numbers and unsupported leaf types).
         frozen_rows = deep_freeze_json(rows)
