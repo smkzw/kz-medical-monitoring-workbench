@@ -117,7 +117,7 @@ def _field_payload(
     field = str(column.get("name") or "").strip()
     row_count = int(table.get("row_count") or 0)
     missing_count = int(column.get("missing_count") or 0)
-    if not domain or not field or row_count <= 0 or not 0 <= missing_count <= row_count:
+    if not domain or not field or row_count < 0 or not 0 <= missing_count <= row_count:
         raise MappingBridgeError("admission field statistics are invalid")
     if not _is_non_bool_int(column_index) or column_index < 0:
         raise MappingBridgeError("admission field position is invalid")
@@ -165,7 +165,9 @@ def _field_payload(
         "column_index": column_index,
         "total_rows": row_count,
         "non_empty_count": row_count - missing_count,
-        "null_rate": round(missing_count / row_count, 6),
+        "null_rate": (
+            round(missing_count / row_count, 6) if row_count else 1.0
+        ),
         "inferred_type": _TYPE_MAP.get(
             str(column.get("inferred_type") or "").strip(), "string"
         ),
