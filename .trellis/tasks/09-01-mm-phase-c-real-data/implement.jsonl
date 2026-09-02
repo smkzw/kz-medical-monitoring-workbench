@@ -1,2 +1,3 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
 {"file": ".trellis/spec/medical-monitoring-engineering.md", "reason": "Medical monitoring engineering, semantic, and boundary contract"}
+{"file": "reviews/medical_monitoring_ai_native_system_design_v1_2_amendment_20260901.md", "reason": "Reuse the existing authority model and user-facing product structure"}
+{"file": "context/medical_monitoring_ai_native_implementation_plan_v2_20260901.md", "reason": "Implement only the approved Phase C slices and acceptance criteria"}
