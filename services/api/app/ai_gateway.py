@@ -1207,6 +1207,14 @@ class OpenAICompatibleAiProvider:
         # model so a failed run remains auditable instead of recording an empty
         # actual_response_model.
         self.response_model = verified_response_model
+        if self.expected_response_model and not verified_response_model:
+            raise AiProviderRuntimeError(
+                "AI provider response did not include the configured model name",
+                diagnostics={
+                    **self.response_diagnostics,
+                    "failure_code": "provider_response_model_missing",
+                },
+            )
         if (
             self.expected_response_model
             and verified_response_model != self.expected_response_model

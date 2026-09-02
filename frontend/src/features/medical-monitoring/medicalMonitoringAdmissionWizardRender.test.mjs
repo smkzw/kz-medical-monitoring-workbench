@@ -118,27 +118,67 @@ check(renders.review.includes("来源版本标识") && renders.review.includes("
 check(renders.review.includes(">下一步：核对系统识别</button>"), "review primary advances");
 check(!renders.review.includes('role="alert"'), "clean review raises no alert");
 
-// Confirm step: critical mapping candidates, back navigation, facts boundary.
-check(renders.confirm.includes("字段对应建议"), "mapping candidate summary rendered");
-check(renders.confirm.includes("重点优先"), "critical focus control rendered");
-check(renders.confirm.includes("访视列表 · 受试者编号"), "critical field naming");
-check(renders.confirm.includes("126/128 条非空"), "source profile evidence rendered");
-check(renders.confirm.includes("1 个样例默认隐藏"), "sample values stay hidden by default");
-check(renders.confirm.includes("建议核对"), "Chinese review guidance leads the mapping row");
-check(!renders.confirm.includes("subject_id"), "technical role stays out of the default mapping view");
-check(renders.confirm.includes('aria-pressed="false"'), "mapping rows expose selection state");
-check(renders.confirm.includes('disabled=""'), "pre-adopt mapping rows are not fake edit controls");
-check(renders.confirm.includes(">返回上一步</button>"), "back action rendered");
-check(renders.confirm.includes("确认前不会生成可用于监查的数据"), "candidate/fact boundary stated");
+// Confirm step: plain summary leads, engineering field list stays collapsed.
 check(
-  renders.confirmNoPending.includes("当前筛选下没有需要展示的字段对应建议"),
-  "empty-focus copy rendered",
+  renders.confirm.includes("系统已自动识别 2 个字段，其中 1 个需要您确认"),
+  "plain recognition headline rendered",
 );
-check(renders.confirmDraftCritical.includes("访视日期"), "critical draft field remains visible");
-check(renders.confirmDraftCritical.includes("2 个样例默认隐藏"), "draft retains all-candidate evidence after adoption");
-check(!renders.confirmDraftCritical.includes("记录序号"), "noncritical draft field stays out of critical focus");
-check(renders.confirmDraftCritical.includes("请简要说明已核对的重点内容（至少 10 个字）"), "confirmation asks for an explicit review note");
-check(renders.confirmDraftCritical.includes('aria-disabled="true"'), "confirmation remains disabled before the review note");
+check(
+  renders.confirm.indexOf("系统已自动识别") < renders.confirm.indexOf("monitoring-admission-question"),
+  "headline precedes the question cards",
+);
+check(renders.confirm.includes('aria-label="数据表识别摘要"'), "table summary region labelled");
+check(renders.confirm.includes("2 个字段 · 1 个待确认"), "per-table summary counts rendered");
+check(renders.confirm.includes("确认前不会生成可用于监查的数据"), "candidate/fact boundary stated");
+check(renders.confirm.includes(">返回上一步</button>"), "back action rendered");
+check(renders.confirm.includes(">采用系统识别结果</button>"), "system adopts the recognition draft itself");
+check(renders.confirm.includes("查看全部字段的识别结果"), "collapsed full-recognition digest exists");
+check(
+  renders.confirm.indexOf("<details") < renders.confirm.indexOf("查看全部字段的识别结果"),
+  "full digest stays inside a collapsed region",
+);
+for (const engineering of ["重点优先", "全部建议", 'aria-label="搜索字段"', "建议核对", "字段对应技术值"]) {
+  check(!renders.confirm.includes(engineering), `engineering control hidden from default view: ${engineering}`);
+}
+
+// Question guide: only the current substantive ambiguity is prominent.
+check(!renders.confirm.includes("低置信度"), "internal attention label stays hidden");
+check(renders.confirm.includes("访视列表 · 访视日期"), "question names the table and column");
+check(renders.confirm.includes("请确认这一列是否为实际访视日期。"), "harness question copy rendered");
+check(renders.confirm.includes("126/128 条非空"), "value-profile evidence rendered");
+check(renders.confirm.includes("2 个样例默认隐藏"), "sample values stay hidden by default");
+check(renders.confirm.includes("查看系统判断依据"), "technical evidence is collapsed by default");
+check(!renders.confirm.includes("确认无误"), "answer controls wait for the adopted draft");
+check(!renders.confirm.includes("subject_id"), "technical role stays out of the question surface");
+
+// Drafting: answer controls appear and confirmation waits for every answer.
+check(renders.confirmDrafting.includes("已完成 0/1"), "answer progress rendered");
+check(renders.confirmDrafting.includes(">系统判断正确</button>"), "one-tap confirmation offered");
+check(renders.confirmDrafting.includes(">实际情况不同</button>"), "free-text alternative offered");
+check(
+  renders.confirmDrafting.includes('aria-label="补充说明：访视日期"') === false,
+  "note field appears only after choosing 另有情况",
+);
+check(
+  renders.confirmDrafting.includes('aria-disabled="true"'),
+  "confirmation stays disabled while a question is unanswered",
+);
+check(renders.confirmDraftingAnswered.includes("已完成 1/1"), "answered progress rendered");
+check(!renders.confirmDraftingAnswered.includes("请确认这一项"), "answered card leaves the active view");
+check(
+  renders.confirmDraftingAnswered.includes("系统正在完成字段识别"),
+  "system completes automatically after every question is answered",
+);
+
+// No-questions draft: system adopted everything, direct confirmation.
+check(
+  renders.confirmNoQuestions.includes("全部对应关系清晰，无需您补充判断"),
+  "zero-question headline rendered",
+);
+check(
+  renders.confirmNoQuestions.includes("正在自动保存字段对应关系，无需您逐项核对"),
+  "zero-question draft completes without user confirmation",
+);
 
 // Done: outcome, no exposed record identity, mapping confirmed guidance, restart primary.
 check(renders.done.includes("字段对应已确认"), "done outcome names mapping confirmation");
@@ -157,8 +197,9 @@ check(renders.failedBlocked.includes(">重新开始</button>") && !renders.faile
   "non-retryable failure swaps primary to restart");
 check(renders.failedBlocked.includes("请返回实际研究项目"), "blocked failure gives a user-owned next action");
 
-// User-visible text excludes engineering terms; technical region is exempt
-// because paths, hashes and internal identities are contracted to live there.
+// User-visible text excludes engineering terms; collapsed technical regions
+// are exempt because digests and internal identities are contracted to live
+// there.
 for (const [name, html] of Object.entries(renders)) {
   const hits = findMonitoringForbiddenTerms([stripTags(withoutTechnical(html))]);
   check(hits.length === 0, `render ${name} excludes forbidden terms${hits.length ? `: ${JSON.stringify(hits)}` : ""}`);
@@ -181,7 +222,8 @@ check(css.includes("overflow-wrap: anywhere"), "long technical values wrap inter
 check(css.includes(".monitoring-admission-technical summary"), "collapsed region styled");
 check(/\.monitoring-admission-primary:disabled\s*\{[^}]*background: #eef1f4/.test(css), "disabled import is visually quiet");
 check(css.includes("@media (max-width: 900px)"), "narrow-width adjustment present");
-check(css.includes("monitoring-admission-mapping-workspace.has-editor"), "wide mapping review uses a side-by-side editor");
+check(css.includes(".monitoring-admission-question"), "medical question cards styled");
+check(css.includes(".monitoring-admission-table-summary"), "recognition summary styled");
 check(css.includes("position: sticky"), "ready-step actions remain visible while reviewing long lists");
 
 console.log(`medicalMonitoringAdmissionWizardRender: ${passed} passed`);

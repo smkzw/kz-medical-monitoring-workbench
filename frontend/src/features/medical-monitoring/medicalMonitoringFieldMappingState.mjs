@@ -125,8 +125,8 @@ export function semanticQualityPresentation(report) {
   if (shapeError) {
     return {
       level: "blocked",
-      title: "语义质量报告字段形状异常，当前不能确认",
-      detail: shapeError,
+      title: "系统未能完成字段核对，暂时不能继续",
+      detail: "请重新加载；若仍未恢复，再重新运行字段识别。",
       blocksConfirmation: true,
     };
   }
@@ -136,13 +136,12 @@ export function semanticQualityPresentation(report) {
 
   if (status === "blocked" || disposition === "reject") {
     const blockerCount = report.global_blocker_count || 0;
-    const details = findingTitles(report, "global_blocker");
     return {
       level: "blocked",
       title: blockerCount > 0
-        ? `存在 ${blockerCount} 个全局阻断，当前不能确认`
-        : "存在全局阻断，当前不能确认",
-      detail: details.length ? details.join(" · ") : "请先修订阻断字段",
+        ? `还有 ${blockerCount} 组字段关系需要处理`
+        : "还有字段关系需要处理",
+      detail: "请按页面提示补充必要信息，处理完成后即可继续。",
       blocksConfirmation: true,
     };
   }

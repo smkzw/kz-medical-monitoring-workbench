@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
@@ -275,6 +276,7 @@ def _valid_output(
                     "confidence": 0.82,
                     "uncertainty": "仍需核对单位和参考范围字段。",
                     "user_action": "请医学经理确认字段角色。",
+                    "user_decision_required": False,
                     "related_fields": [],
                     "evidence_ids": [evidence_id],
                 }
@@ -480,11 +482,18 @@ def test_normal_output_preserves_all_field_profiles_and_response_identity(
     assert prompt.payload["scientific_boundary"]["source_record"].endswith(
         "FIELD_MAPPING_SCIENTIFIC_BOUNDARY.md"
     )
-    assert prompt.prompt_version == "monitoring-listing-field-mapping-v16"
+    assert prompt.prompt_version == "monitoring-listing-field-mapping-v18"
     assert "CM只表示非试验用药" in prompt.system_prompt
     assert "relationships只提供同域同行的聚合统计" in prompt.system_prompt
     assert "则不得标为普通source_collected" in prompt.system_prompt
     assert "required_output_field_names" in prompt.system_prompt
+    assert "read_only_table_context" in prompt.system_prompt
+    assert "user_decision_required" in prompt.system_prompt
+    assert "user_decision_required" in prompt.payload["candidate_count_contract"]
+    mapping_schema = prompt.payload["output_schema"]["candidates"][0][
+        "structured_payload"
+    ]["field_mappings"][0]
+    assert "user_decision_required" in mapping_schema
     assert sent_fields[-1]["field"] in prompt.payload["candidate_count_contract"]
     assert prompt.payload["input_payload"]["field_profile"][
         "required_output_field_names"
@@ -544,10 +553,84 @@ def test_provider_confidences_reject_boolean_values() -> None:
                 "confidence": True,
                 "uncertainty": "仍需核对单位和参考范围字段。",
                 "user_action": "请医学经理确认字段角色。",
+                "user_decision_required": False,
                 "related_fields": [],
                 "evidence_ids": [],
             }
         )
+
+    with pytest.raises(ValidationError):
+        monitoring_ai_service_module._FieldMappingItem.model_validate(
+            {
+                "domain": "LB",
+                "source_field": "LBORRES",
+                "recommended_role": "lab_result_candidate",
+                "field_kind": "source_collected",
+                "confidence": 0.8,
+                "uncertainty": "仍需核对单位和参考范围字段。",
+                "user_action": "请医学经理确认字段角色。",
+                "user_decision_required": True,
+                "related_fields": [],
+                "evidence_ids": [],
+            }
+        )
+
+
+def test_malformed_provider_user_triage_stays_system_owned() -> None:
+    normalized = (
+        monitoring_ai_service_module._normalize_provider_field_mapping_triage(
+            {
+                "field_mappings": [
+                    {
+                        "source_field": "AETERM",
+                        "user_action": "建议结合整表上下文继续核对。",
+                        "user_decision_required": True,
+                    },
+                    {
+                        "source_field": "TRT01A",
+                        "user_action": "该列表示实际治疗组还是计划治疗组？",
+                        "user_decision_required": True,
+                    },
+                ]
+            }
+        )
+    )
+
+    assert normalized["field_mappings"][0]["user_decision_required"] is False
+    assert normalized["field_mappings"][1]["user_decision_required"] is True
+
+
+def test_listing_provider_helper_echoes_do_not_consume_repair(
+    tmp_path: Path,
+) -> None:
+    def helper_echo(envelope: AiPromptEnvelope) -> Dict[str, Any]:
+        output = _valid_output(envelope)
+        output.update({
+            "validation_errors": ["previous repair context"],
+            "invalid_output": {"echo": True},
+            "original_task": {"task_id": envelope.task_id},
+            "authorized_source_pairs": [],
+            "repair_contract": {"mode": "controlled"},
+            "deterministic_field_constraints": {},
+        })
+        candidate = output["candidates"][0]
+        candidate["system_generated_evidence"] = "由系统校验后绑定。"
+        candidate["system_generated_mapping_provenance"] = "由系统注入。"
+        return output
+
+    provider = FakeProvider([helper_echo])
+    service = _service(tmp_path, provider)
+    service.submit_listing_field_mapping(
+        project_id="project-alpha",
+        input_revision=_revision(),
+        field_profile=_field_profile(field_count=2),
+    )
+
+    result = service.run_next("worker-a")
+
+    assert result.job is not None
+    assert result.job.status == MonitoringAiJobStatus.COMPLETED
+    assert len(provider.envelopes) == 1
 
 
 @pytest.mark.parametrize(
@@ -739,6 +822,209 @@ def test_listing_field_mapping_rejects_incomplete_chunk_contract(
             input_revision=_revision(),
             field_profile=invalid_chunk,
         )
+
+
+def _same_table_profile() -> Dict[str, Any]:
+    profile = _field_profile(field_count=4)
+    profile["fields"][0]["field"] = "DOMAIN"
+    profile["fields"][1]["field"] = "AETERM"
+    profile["fields"][2]["field"] = "AEDECOD"
+    profile["fields"][3]["field"] = "MDRAVER"
+    profile["table_field_order"] = [
+        {
+            "domain": "LB",
+            "field_order": ["DOMAIN", "AETERM", "AEDECOD", "MDRAVER"],
+        }
+    ]
+    return profile
+
+
+def test_chunk_context_exposes_full_same_table_distributions(
+    tmp_path: Path,
+) -> None:
+    provider = FakeProvider([_valid_output, _valid_output])
+    service = _service(tmp_path, provider)
+    full_profile = _same_table_profile()
+
+    jobs = service.submit_listing_field_mapping_chunks(
+        project_id="project-alpha",
+        input_revision=_revision(),
+        field_profile=full_profile,
+        chunk_size=2,
+    )
+
+    assert len(jobs) == 2
+    business_fields = ["AETERM", "AEDECOD", "MDRAVER"]
+    for job in jobs:
+        chunk = service.repository.input_payload(
+            job.project_id,
+            job.job_id,
+        )["field_profile"]
+        chunk_names = [field["field"] for field in chunk["fields"]]
+        assert chunk["table_field_order"] == [
+            "DOMAIN",
+            "AETERM",
+            "AEDECOD",
+            "MDRAVER",
+        ]
+        context_names = [
+            field["field"]
+            for field in chunk["read_only_table_context_profiles"]
+        ]
+        # Every business field outside the chunk keeps its full desensitized
+        # distribution visible; deterministic metadata stays in its own block.
+        assert sorted(context_names) == sorted(
+            name for name in business_fields if name not in chunk_names
+        )
+        assert set(context_names).isdisjoint(chunk_names)
+
+    while service.run_next("worker-a").processed:
+        pass
+    assert len(provider.envelopes) == 2
+    for envelope in provider.envelopes:
+        profile = envelope.payload["input_payload"]["field_profile"]
+        context = profile["read_only_table_context"]
+        required = set(profile["required_output_field_names"])
+        context_names = {
+            field["source_profile_identity"]["field"]
+            for field in context["fields"]
+        }
+        assert context_names.isdisjoint(required)
+        assert context_names == {
+            name for name in business_fields if name not in required
+        }
+        context_field = context["fields"][0]
+        assert context_field["total_rows"] == 147
+        assert context_field["non_empty_count"] == 140
+        assert context_field["inferred_type"] == "string"
+        assert context_field["representative_sample_count"] >= 1
+    assert (
+        "read_only_table_context" in provider.envelopes[0].system_prompt
+    )
+
+
+def test_chunk_context_exposes_same_named_fields_from_other_tables(
+    tmp_path: Path,
+) -> None:
+    provider = FakeProvider([_valid_output, _valid_output])
+    service = _service(tmp_path, provider)
+    profile = _field_profile(field_count=4)
+    identities = (
+        ("LB", "SUBJSTA"),
+        ("LB", "LBORRES"),
+        ("AE", "SUBJSTA"),
+        ("AE", "AETERM"),
+    )
+    for field, (domain, name) in zip(profile["fields"], identities):
+        field["domain"] = domain
+        field["field"] = name
+    profile["table_field_order"] = [
+        {"domain": "LB", "field_order": ["SUBJSTA", "LBORRES"]},
+        {"domain": "AE", "field_order": ["SUBJSTA", "AETERM"]},
+    ]
+
+    jobs = service.submit_listing_field_mapping_chunks(
+        project_id="project-alpha",
+        input_revision=_revision(),
+        field_profile=profile,
+        chunk_size=12,
+    )
+
+    assert len(jobs) == 2
+    for job in jobs:
+        chunk = service.repository.input_payload(
+            job.project_id,
+            job.job_id,
+        )["field_profile"]
+        context = chunk["read_only_cross_table_context_profiles"]
+        assert len(context) == 1
+        assert context[0]["field"] == "SUBJSTA"
+        assert context[0]["domain"] != chunk["domain"]
+
+    while service.run_next("worker-a").processed:
+        pass
+    assert len(provider.envelopes) == 2
+    for envelope in provider.envelopes:
+        context = envelope.payload["input_payload"]["field_profile"][
+            "read_only_cross_table_context"
+        ]
+        assert len(context["fields"]) == 1
+        assert context["fields"][0]["source_profile_identity"][
+            "field"
+        ] == "SUBJSTA"
+    assert "read_only_cross_table_context" in provider.envelopes[0].system_prompt
+
+
+def test_chunk_rejects_foreign_table_context_and_bad_field_order(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path, FakeProvider([_valid_output]))
+    chunk = _field_profile(field_count=2)
+    chunk.update(
+        {
+            "scope": "complete_profile_chunk",
+            "full_profile_sha256": PROFILE_HASH,
+            "full_input_sha256": INPUT_HASH,
+            "full_field_count": 8,
+            "domain": "LB",
+            "domain_field_count": 2,
+            "domain_field_names": ["LB_FIELD_00", "LB_FIELD_01"],
+            "chunk_index": 1,
+            "chunk_total": 1,
+            "chunk_size_limit": 2,
+            "table_field_order": ["LB_FIELD_00", "LB_FIELD_02"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="permutation of domain_field_names"):
+        service.submit_listing_field_mapping(
+            project_id="project-alpha",
+            input_revision=_revision(),
+            field_profile=chunk,
+        )
+
+    chunk["table_field_order"] = ["LB_FIELD_00", "LB_FIELD_01"]
+    chunk["read_only_table_context_profiles"] = [
+        deepcopy(chunk["fields"][0])
+    ]
+    with pytest.raises(
+        ValueError,
+        match="table context must not duplicate the chunk output fields",
+    ):
+        service.submit_listing_field_mapping(
+            project_id="project-alpha",
+            input_revision=_revision(),
+            field_profile=chunk,
+        )
+
+
+def test_field_mapping_output_requires_user_decision_flag(
+    tmp_path: Path,
+) -> None:
+    def omits_user_decision(envelope: AiPromptEnvelope) -> Dict[str, Any]:
+        output = _valid_output(envelope)
+        for mapping in output["candidates"][0]["structured_payload"][
+            "field_mappings"
+        ]:
+            mapping.pop("user_decision_required", None)
+        return output
+
+    provider = FakeProvider([omits_user_decision, omits_user_decision])
+    service = _service(tmp_path, provider)
+    service.submit_listing_field_mapping(
+        project_id="project-alpha",
+        input_revision=_revision(),
+        field_profile=_field_profile(field_count=2),
+    )
+
+    result = service.run_next("worker-a")
+
+    assert result.job is not None
+    assert result.job.status == MonitoringAiJobStatus.FAILED
+    assert result.job.failure_code == "invalid_ai_output"
+    assert "user_decision_required" in result.job.failure_message
+    # The controlled repair was attempted before the final failure.
+    assert len(provider.envelopes) == 2
 
 
 def test_listing_field_profile_rejects_boolean_numeric_fields(

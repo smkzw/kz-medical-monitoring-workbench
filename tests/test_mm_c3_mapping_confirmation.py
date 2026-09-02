@@ -1,4 +1,4 @@
-"""Focused tests for C3 admission mapping confirmation helpers."""
+"""Focused tests for C3 admission mapping medical-question triage."""
 
 from __future__ import annotations
 
@@ -8,7 +8,11 @@ import pytest
 
 from packages.medical_monitoring.admission.mapping_confirmation import (
     AdmissionMappingConfirmationService,
+    USER_QUESTION_LOW_CONFIDENCE,
+    USER_QUESTION_MODEL_FLAGGED,
+    USER_QUESTION_UNMAPPED,
     attention_reason,
+    classify_user_question,
     enrich_candidates,
 )
 from packages.medical_monitoring.admission.mapping_pipeline import (
@@ -19,38 +23,101 @@ from packages.medical_monitoring.api.r7_product.mapping_candidate_routes import 
 )
 
 
-def test_attention_reason_marks_low_confidence_and_medication_roles() -> None:
+def test_attention_reason_adopts_sound_candidates_and_questions_substantive_ones() -> None:
+    # Low confidence remains system-owned re-analysis work.
     assert attention_reason({
-        "confidence": 0.4,
+        "confidence": 0.99,
         "recommended_role": "visit_date",
+        "field_kind": "source_collected",
         "user_action": "请核对访视日期对应关系。",
-    }) == "低置信度"
+    }) == ""
+    # Coding, derived and investigational-product roles no longer force a
+    # user question when the system itself is confident.
+    assert attention_reason({
+        "confidence": 0.99,
+        "recommended_role": "ae_term_term",
+        "field_kind": "standardized_coded",
+        "user_action": "请核对编码依据。",
+    }) == ""
+    assert attention_reason({
+        "confidence": 0.99,
+        "recommended_role": "record_line_number",
+        "field_kind": "deterministic_derived",
+        "user_action": "请核对派生依据。",
+    }) == ""
     assert attention_reason({
         "confidence": 0.99,
         "recommended_role": "ip.dose",
         "field_kind": "source_collected",
         "user_action": "请核对研究用药剂量。",
-    }) == "用药边界"
+    }) == ""
+    assert attention_reason({
+        "confidence": 0.4,
+        "recommended_role": "visit_date",
+        "field_kind": "source_collected",
+        "user_action": "请核对访视日期对应关系。",
+    }) == ""
     assert attention_reason({
         "confidence": 0.99,
-        "recommended_role": "subject_id",
-        "field_kind": "source_collected",
-        "user_action": "请核对受试者编号。",
+        "recommended_role": "unmapped",
+        "field_kind": "unmapped",
+        "user_action": "请确认字段用途。",
     }) == ""
+    assert attention_reason({
+        "confidence": 0.99,
+        "recommended_role": "ip.dose",
+        "field_kind": "source_collected",
+        "user_action": "该字段是研究用药剂量还是非研究用药剂量？",
+        "user_decision_required": True,
+    }) == "需医学确认"
     assert attention_reason({
         "confidence": 0.99,
         "recommended_role": "visit_date",
         "field_kind": "source_collected",
         "user_action": " ",
-    }) == "建议不完整"
+    }) == ""
 
 
-def test_enrich_candidates_defaults_to_critical_focus_and_blocks_facts() -> None:
+def test_unreadable_confidence_is_not_transferred_to_the_user() -> None:
+    question = classify_user_question({
+        "confidence": None,
+        "recommended_role": "visit_date",
+        "field_kind": "source_collected",
+        "user_action": "请核对访视日期对应关系。",
+    })
+    assert question is None
+
+
+def test_decision_marker_resolves_a_question() -> None:
+    assert classify_user_question({
+        "confidence": 0.4,
+        "recommended_role": "visit_date",
+        "field_kind": "source_collected",
+        "user_action": "用户已核对：确认为访视日期。",
+        "user_decision_required": True,
+    }) is None
+    assert classify_user_question({
+        "confidence": 0.99,
+        "recommended_role": "unmapped",
+        "field_kind": "unmapped",
+        "user_action": "用户已确认：导出系统编号，不纳入监查分析。",
+        "user_decision_required": True,
+    }) is None
+    assert classify_user_question({
+        "confidence": 0.7,
+        "recommended_role": "unmapped",
+        "field_kind": "unmapped",
+        "user_action": "该字段是否不纳入监查分析？",
+        "user_decision_required": True,
+    }) is not None
+
+
+def test_enrich_candidates_projects_medical_questions_and_blocks_facts() -> None:
     payload = {
         "attempt_id": "attempt-1",
         "state": "candidates_ready",
         "confirmation_status": "pending_confirmation",
-        "summary": {"candidate_count": 2},
+        "summary": {"candidate_count": 3},
         "candidates": [
             {
                 "domain": "AE",
@@ -68,54 +135,166 @@ def test_enrich_candidates_defaults_to_critical_focus_and_blocks_facts() -> None
                 "field_kind": "source_collected",
                 "user_action": "请核对严重性标志。",
             },
+            {
+                "domain": "EX",
+                "source_field": "EXDOSE",
+                "recommended_role": "ip.dose",
+                "confidence": 0.99,
+                "field_kind": "source_collected",
+                "user_action": "该字段是研究用药剂量还是非研究用药剂量？",
+                "user_decision_required": True,
+            },
         ],
     }
     critical = enrich_candidates(payload, focus="critical")
     assert critical["facts_generated"] is False
     assert critical["candidate_fact_boundary"] == "candidates_only"
-    assert critical["summary"]["critical_count"] == 1
-    assert critical["summary"]["displayed_count"] == 1
-    assert critical["candidates"][0]["source_field"] == "AETERM"
-    assert critical["candidates"][0]["attention_reason"] == "低置信度"
+    summary = critical["summary"]
+    assert summary["field_count"] == 3
+    assert summary["user_question_count"] == 1
+    assert summary["system_adopted_count"] == 2
+    assert summary["critical_count"] == 1
+    assert summary["displayed_count"] == 1
+    assert [row["source_field"] for row in critical["candidates"]] == [
+        "EXDOSE",
+    ]
+    assert critical["candidates"][0]["triage"] == "user_question"
+    assert critical["candidates"][0]["question_reason"] == USER_QUESTION_MODEL_FLAGGED
+    assert critical["candidates"][0]["system_adopted"] is False
+    assert "研究用药剂量还是非研究用药剂量" in (
+        critical["candidates"][0]["question_text"]
+    )
+    assert [card["source_field"] for card in critical["user_questions"]] == [
+        "EXDOSE",
+    ]
+    assert all(card["question_text"] for card in critical["user_questions"])
 
     all_rows = enrich_candidates(payload, focus="all")
-    assert all_rows["summary"]["displayed_count"] == 2
+    assert all_rows["summary"]["displayed_count"] == 3
+    adopted = next(
+        row
+        for row in all_rows["candidates"]
+        if row["source_field"] == "AESER"
+    )
+    assert adopted["triage"] == "system_adopted"
+    assert adopted["system_adopted"] is True
+    assert adopted["attention_reason"] == ""
+    assert adopted["question_text"] == ""
 
 
-def test_confirm_draft_never_claims_facts_generated() -> None:
-    class FakeRepo:
-        def get_draft(self, *args, **kwargs):
-            return SimpleNamespace(
-                batch_id="attempt-1",
-                model_dump=lambda mode="json": {
-                    "fields": [{"user_action": "已核对字段对应关系。"}],
-                },
-            )
+def test_enrich_candidates_rejects_invalid_focus() -> None:
+    with pytest.raises(AdmissionMappingPipelineError) as exc:
+        enrich_candidates({"candidates": []}, focus="mystery")
+    assert exc.value.code == "mapping_focus_invalid"
 
-        def confirm(self, *args, **kwargs):
-            return SimpleNamespace(
-                model_dump=lambda mode="json": {
-                    "mapping_revision": "rev-1",
-                    "draft_id": "draft-1",
-                    "status": "confirmed",
-                }
-            )
 
-    service = AdmissionMappingConfirmationService(
+def _confirmation_service(repo):
+    return AdmissionMappingConfirmationService(
         mapping_pipeline=SimpleNamespace(),
-        mapping_repository=FakeRepo(),
+        mapping_repository=repo,
         ai_repository=SimpleNamespace(),
         prompt_version="prompt",
         accepted_status="accepted",
         proposed_status="proposed",
     )
-    payload = service.confirm_draft(
+
+
+def test_confirm_draft_blocked_while_medical_questions_unresolved() -> None:
+    draft = SimpleNamespace(
+        batch_id="attempt-1",
+        model_dump=lambda mode="json": {
+            "fields": [
+                {
+                    "domain": "SV",
+                    "source_field": "VISIT",
+                    "recommended_role": "visit_name",
+                    "field_kind": "source_collected",
+                    "confidence": 0.4,
+                    "user_action": "请核对访视名称对应关系。",
+                    "user_decision_required": True,
+                },
+            ],
+        },
+    )
+
+    def _must_not_confirm(*_args, **_kwargs):
+        raise AssertionError("confirmation must not persist unresolved questions")
+
+    repo = SimpleNamespace(
+        get_draft=lambda *_args, **_kwargs: draft,
+        confirm=_must_not_confirm,
+    )
+    service = _confirmation_service(repo)
+
+    with pytest.raises(AdmissionMappingPipelineError) as exc:
+        service.confirm_draft(
+            project_id="p1",
+            attempt_id="attempt-1",
+            draft_id="draft-1",
+            expected_version=1,
+            confirmed_by="tester",
+            confirmation_reason="已完成全部重点字段核对。",
+            idempotency_key="idem-1",
+        )
+    assert exc.value.code == "mapping_questions_unresolved"
+
+
+def test_confirm_draft_adopts_sound_fields_and_records_decisions() -> None:
+    def _confirm(*_args, **_kwargs):
+        return SimpleNamespace(
+            model_dump=lambda mode="json": {
+                "mapping_revision": "rev-1",
+                "draft_id": "draft-1",
+                "status": "confirmed",
+            }
+        )
+
+    # A low-confidence field with a recorded human decision no longer blocks;
+    # an unmapped field the manager marked 不纳入 is equally resolved.
+    draft = SimpleNamespace(
+        batch_id="attempt-1",
+        model_dump=lambda mode="json": {
+            "fields": [
+                {
+                    "domain": "SV",
+                    "source_field": "VISIT",
+                    "recommended_role": "visit_name",
+                    "field_kind": "source_collected",
+                    "confidence": 0.4,
+                    "user_action": "用户已核对：确认为访视名称。",
+                    "user_decision_required": True,
+                },
+                {
+                    "domain": "DM",
+                    "source_field": "EXPORTNO",
+                    "recommended_role": "unmapped",
+                    "field_kind": "unmapped",
+                    "confidence": 0.99,
+                    "user_action": "用户已确认：导出系统编号，不纳入监查分析。",
+                    "user_decision_required": True,
+                },
+                {
+                    "domain": "AE",
+                    "source_field": "AETERM",
+                    "recommended_role": "ae_term",
+                    "field_kind": "source_collected",
+                    "confidence": 0.99,
+                    "user_action": "系统已按建议采用，无需额外操作。",
+                },
+            ],
+        },
+    )
+    repo = SimpleNamespace(
+        get_draft=lambda *_args, **_kwargs: draft,
+        confirm=_confirm,
+    )
+    payload = _confirmation_service(repo).confirm_draft(
         project_id="p1",
         attempt_id="attempt-1",
         draft_id="draft-1",
         expected_version=1,
         confirmed_by="tester",
-        confirmation_reason="核对完成",
+        confirmation_reason="医学问题已逐条回答完成。",
         idempotency_key="idem-1",
     )
     assert payload["facts_generated"] is False
@@ -127,14 +306,7 @@ def test_confirm_draft_rejects_another_attempt() -> None:
     repo = SimpleNamespace(
         get_draft=lambda *_args, **_kwargs: SimpleNamespace(batch_id="attempt-2")
     )
-    service = AdmissionMappingConfirmationService(
-        mapping_pipeline=SimpleNamespace(),
-        mapping_repository=repo,
-        ai_repository=SimpleNamespace(),
-        prompt_version="prompt",
-        accepted_status="accepted",
-        proposed_status="proposed",
-    )
+    service = _confirmation_service(repo)
     with pytest.raises(AdmissionMappingPipelineError) as exc:
         service.confirm_draft(
             project_id="p1",
@@ -148,45 +320,23 @@ def test_confirm_draft_rejects_another_attempt() -> None:
     assert exc.value.code == "mapping_draft_conflict"
 
 
-def test_confirm_draft_rejects_incomplete_chinese_advice() -> None:
-    draft = SimpleNamespace(
-        batch_id="attempt-1",
-        model_dump=lambda mode="json": {
-            "fields": [{"domain": "SV", "source_field": "VISIT", "user_action": ""}],
-        },
-    )
-    repo = SimpleNamespace(get_draft=lambda *_args, **_kwargs: draft)
-    service = AdmissionMappingConfirmationService(
-        mapping_pipeline=SimpleNamespace(),
-        mapping_repository=repo,
-        ai_repository=SimpleNamespace(),
-        prompt_version="prompt",
-        accepted_status="accepted",
-        proposed_status="proposed",
-    )
-
-    with pytest.raises(AdmissionMappingPipelineError) as exc:
-        service.confirm_draft(
-            project_id="p1",
-            attempt_id="attempt-1",
-            draft_id="draft-1",
-            expected_version=1,
-            confirmed_by="tester",
-            confirmation_reason="已完成全部重点字段核对。",
-            idempotency_key="idem-1",
-        )
-
-    assert exc.value.code == "mapping_advice_incomplete"
-
-
-def test_incomplete_advice_has_actionable_product_error() -> None:
-    response = _mapping_error("mapping_advice_incomplete")
+def test_unresolved_question_error_is_actionable_for_users() -> None:
+    response = _mapping_error("mapping_questions_unresolved")
 
     assert response.status_code == 422
-    assert "缺少具体的中文核对建议" in response.body.decode("utf-8")
+    body = response.body.decode("utf-8")
+    assert "医学问题" in body
+    assert "整体确认" in body
 
 
-def test_draft_payload_keeps_critical_focus_metadata_after_adoption() -> None:
+def test_quality_blocked_error_is_distinguishable_from_conflict() -> None:
+    response = _mapping_error("mapping_quality_blocked")
+
+    assert response.status_code == 409
+    assert "修订对应字段" in response.body.decode("utf-8")
+
+
+def test_draft_payload_keeps_medical_question_projection_after_adoption() -> None:
     class FakeDraft:
         def model_dump(self, mode="json"):
             return {
@@ -200,6 +350,7 @@ def test_draft_payload_keeps_critical_focus_metadata_after_adoption() -> None:
                         "field_kind": "source_collected",
                         "confidence": 0.4,
                         "user_action": "请核对不良事件术语。",
+                        "user_decision_required": True,
                     },
                     {
                         "domain": "AE",
@@ -214,23 +365,20 @@ def test_draft_payload_keeps_critical_focus_metadata_after_adoption() -> None:
 
     quality = SimpleNamespace(as_payload=lambda: {"confirmable": True})
     repo = SimpleNamespace(semantic_quality=lambda *_args: quality)
-    service = AdmissionMappingConfirmationService(
-        mapping_pipeline=SimpleNamespace(),
-        mapping_repository=repo,
-        ai_repository=SimpleNamespace(),
-        prompt_version="prompt",
-        accepted_status="accepted",
-        proposed_status="proposed",
-    )
+    payload = _confirmation_service(repo)._draft_payload(FakeDraft())
 
-    payload = service._draft_payload(FakeDraft())
-
-    assert payload["review_summary"] == {"field_count": 2, "critical_count": 1}
-    assert payload["fields"][0]["attention_reason"] == "低置信度"
-    assert payload["fields"][1]["needs_attention"] is False
-
-
-def test_enrich_candidates_rejects_invalid_focus() -> None:
-    with pytest.raises(AdmissionMappingPipelineError) as exc:
-        enrich_candidates({"candidates": []}, focus="mystery")
-    assert exc.value.code == "mapping_focus_invalid"
+    assert payload["review_summary"] == {
+        "field_count": 2,
+        "user_question_count": 1,
+        "system_adopted_count": 1,
+        "critical_count": 1,
+    }
+    assert payload["user_questions"][0]["source_field"] == "AETERM"
+    question_field = payload["fields"][0]
+    assert question_field["triage"] == "user_question"
+    assert question_field["attention_reason"] == "需医学确认"
+    adopted_field = payload["fields"][1]
+    assert adopted_field["triage"] == "system_adopted"
+    assert adopted_field["needs_attention"] is False
+    assert payload["facts_generated"] is False
+    assert payload["candidate_fact_boundary"] == "draft_only"

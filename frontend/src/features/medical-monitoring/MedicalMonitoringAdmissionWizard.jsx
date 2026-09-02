@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createMedicalMonitoringProductApi } from "./medicalMonitoringProductApi.mjs";
 import {
   ADMISSION_SUPPORTED_SUFFIX_TEXT,
@@ -13,13 +13,13 @@ import {
 } from "./medicalMonitoringAdmissionWizardState.mjs";
 import {
   MAPPING_FOCUS_ALL,
-  MAPPING_FOCUS_CRITICAL,
   admissionMappingConfirmReducer,
   admissionMappingPrimaryAction,
-  confidencePercent,
   createAdmissionMappingConfirmState,
   mappingCandidateKey,
-  mappingDraftMissingAdviceCount,
+  mappingConfirmationReason,
+  mappingQuestionCards,
+  mappingUnansweredCount,
 } from "./medicalMonitoringAdmissionMappingConfirmState.mjs";
 import { semanticQualityPresentation } from "./medicalMonitoringFieldMappingState.mjs";
 import "./medicalMonitoringAdmissionWizard.css";
@@ -70,105 +70,54 @@ function TechnicalRows({ rows }) {
   );
 }
 
-function MappingConfirmPanel({
-  mappingState,
-  onFocusChange,
-  onSelectField,
-  onFieldFormChange,
-  onSaveField,
-  onReasonChange,
-}) {
-  const [activeDomain, setActiveDomain] = useState("all");
-  const [search, setSearch] = useState("");
+// Step three: a plain summary of what the system recognized plus one card per
+// medically substantive ambiguity. The per-field engineering list stays
+// collapsed; the user only meets the questions that change medical analysis.
+function MappingConfirmPanel({ mappingState, onAnswerCard }) {
+  const [noteKey, setNoteKey] = useState("");
+  const [noteText, setNoteText] = useState("");
   const candidates = mappingState.payload?.candidates || [];
-  const candidateByKey = new Map(candidates.map((item) => [
-    mappingCandidateKey({ domain: item.domain, source_field: item.sourceField }),
-    item,
-  ]));
-  const draftFields = Array.isArray(mappingState.draft?.fields)
-    ? mappingState.draft.fields
-    : [];
-  const rows = draftFields.length
-    ? draftFields.map((field) => {
-      const candidate = candidateByKey.get(mappingCandidateKey(field)) || {};
-      return {
-        domain: String(field.domain || ""),
-        sourceField: String(field.source_field || ""),
-        recommendedRole: String(field.recommended_role || ""),
-        fieldKind: String(field.field_kind || ""),
-        confidence: field.confidence,
-        uncertainty: String(field.uncertainty || ""),
-        userAction: String(field.user_action || ""),
-        attentionReason: String(field.attention_reason || ""),
-        evidenceSummary: candidate.evidenceSummary || [],
-      };
-    }).filter((field) => (
-      mappingState.focus === MAPPING_FOCUS_ALL || field.attentionReason
-    ))
-    : candidates;
-  const quality = semanticQualityPresentation(mappingState.draft?.semantic_quality);
-  const missingAdviceCount = mappingDraftMissingAdviceCount(mappingState.draft);
-  const domains = [...new Set(rows.map((item) => item.domain))].sort();
-  const needle = search.trim().toLocaleLowerCase("zh-CN");
-  const displayedRows = rows.filter((item) => (
-    (activeDomain === "all" || item.domain === activeDomain)
-    && (
-      !needle
-      || item.domain.toLocaleLowerCase("zh-CN").includes(needle)
-      || item.sourceField.toLocaleLowerCase("zh-CN").includes(needle)
-      || item.userAction.toLocaleLowerCase("zh-CN").includes(needle)
-      || item.uncertainty.toLocaleLowerCase("zh-CN").includes(needle)
-    )
-  ));
-  const draftSummary = mappingState.draft
-    ? `共 ${draftFields.length} 条字段对应建议 · 重点关注 ${rows.length} 条 · 当前显示 ${displayedRows.length} 条`
-    : "";
+  const questions = mappingQuestionCards(mappingState);
+  const answeredKeys = mappingState.answeredKeys || {};
+  const answeredCount = questions.length - mappingUnansweredCount(mappingState);
+  const currentQuestion = questions.find((card) => !answeredKeys[card.key]);
+  const drafting = mappingState.phase === "drafting";
+  const quality = drafting ? semanticQualityPresentation(mappingState.draft?.semantic_quality) : null;
+  const payload = mappingState.payload;
+  const headline = payload?.headline || "正在读取系统识别结果…";
+  const tables = payload?.tableSummaries || [];
+  const questionTableCount = tables.filter((table) => table.questionCount > 0).length;
 
   return (
     <div className="monitoring-admission-confirm monitoring-admission-mapping">
-      <p className="monitoring-admission-pending-note">
-        {draftSummary || mappingState.payload?.summaryText
-          || "加载字段对应建议后，可按重点优先核对并整体确认。"}
-      </p>
+      <p className="monitoring-admission-big monitoring-admission-summary">{headline}</p>
+      {tables.length ? (
+        <details className="monitoring-admission-table-details">
+          <summary>
+            已识别 {tables.length} 张数据表
+            {questionTableCount ? `，其中 ${questionTableCount} 张有待确认信息` : ""}
+            <span>查看各表概况</span>
+          </summary>
+          <ul className="monitoring-admission-table-summary" aria-label="数据表识别摘要">
+            {tables.map((table) => (
+              <li key={table.name}>
+                <strong>{table.name}</strong>
+                <span>
+                  {table.fieldCount} 个字段
+                  {table.questionCount ? ` · ${table.questionCount} 个待确认` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       <p className="monitoring-admission-minor">
         确认前不会生成可用于监查的数据；确认后也只保存字段对应关系。
       </p>
-      <div className="monitoring-admission-mapping-filters" role="group" aria-label="建议筛选">
-        <button
-          type="button"
-          className={mappingState.focus === MAPPING_FOCUS_CRITICAL ? "is-active" : ""}
-          aria-pressed={mappingState.focus === MAPPING_FOCUS_CRITICAL}
-          onClick={() => onFocusChange?.(MAPPING_FOCUS_CRITICAL)}
-        >
-          重点优先
-        </button>
-        <button
-          type="button"
-          className={mappingState.focus === MAPPING_FOCUS_ALL ? "is-active" : ""}
-          aria-pressed={mappingState.focus === MAPPING_FOCUS_ALL}
-          onClick={() => onFocusChange?.(MAPPING_FOCUS_ALL)}
-        >
-          全部建议
-        </button>
-        <select
-          aria-label="按数据表筛选"
-          value={activeDomain}
-          onChange={(event) => setActiveDomain(event.target.value)}
-        >
-          <option value="all">全部数据表</option>
-          {domains.map((domain) => <option key={domain} value={domain}>{domain}</option>)}
-        </select>
-        <input
-          aria-label="搜索字段"
-          value={search}
-          placeholder="搜索原始字段或核对事项"
-          onChange={(event) => setSearch(event.target.value)}
-        />
-      </div>
       {mappingState.message ? (
         <p className="monitoring-admission-mapping-message" role="status">{mappingState.message}</p>
       ) : null}
-      {mappingState.phase === "drafting" && quality.title ? (
+      {drafting && quality?.title ? (
         <div
           className={`monitoring-admission-quality is-${quality.level}`}
           role={quality.blocksConfirmation ? "alert" : "status"}
@@ -177,116 +126,100 @@ function MappingConfirmPanel({
           {quality.detail ? <span>{quality.detail}</span> : null}
         </div>
       ) : null}
-      {mappingState.phase === "drafting" && missingAdviceCount ? (
-        <div className="monitoring-admission-quality is-blocked" role="alert">
-          <strong>还有 {missingAdviceCount} 条建议需要补充</strong>
-          <span>请打开标记为“建议不完整”的字段，填写具体的中文核对事项后再整体确认。</span>
-        </div>
-      ) : null}
-      {mappingState.phase === "drafting" ? (
-        <label className="monitoring-admission-field monitoring-admission-confirmation-note">
-          <span className="monitoring-admission-field-label">整体确认说明</span>
-          <textarea
-            value={mappingState.confirmationReason}
-            placeholder="请简要说明已核对的重点内容（至少 10 个字）"
-            onChange={(event) => onReasonChange?.(event.target.value)}
-          />
-        </label>
-      ) : null}
-      <div className={`monitoring-admission-mapping-workspace ${mappingState.fieldForm ? "has-editor" : ""}`}>
-        <div className="monitoring-admission-mapping-list">
-          <ul className="monitoring-admission-pending">
-        {displayedRows.map((item) => {
-          const key = mappingCandidateKey({
-            domain: item.domain,
-            source_field: item.sourceField,
-          });
-          return (
-            <li key={key}>
-              <button
-                type="button"
-                className={`monitoring-admission-mapping-row ${mappingState.selectedKey === key ? "is-selected" : ""}`}
-                aria-pressed={mappingState.selectedKey === key}
-                disabled={mappingState.phase !== "drafting"}
-                onClick={() => onSelectField?.(item)}
-              >
-                <span className="monitoring-admission-mapping-source">
-                  <small>原始字段</small>
-                  <strong>{item.domain} · {item.sourceField}</strong>
-                  {(item.evidenceSummary || []).slice(0, 1).map((evidence) => (
-                    <span key={`${key}-evidence`}>
-                      {evidence.non_empty_count}/{evidence.total_rows} 条非空
-                      {` · ${mappingTypeText(evidence.inferred_type)}`}
-                      {evidence.sample_count
-                        ? ` · ${evidence.sample_count} 个样例默认隐藏`
-                        : ""}
-                    </span>
-                  ))}
-                </span>
-                <span className="monitoring-admission-mapping-advice">
-                  <small>建议核对</small>
-                  <strong>{item.userAction || "尚未形成具体核对建议，请先补充。"}</strong>
-                  {item.uncertainty ? <span>{item.uncertainty}</span> : null}
-                  <span>
-                    <b className="monitoring-admission-attention-chip">
-                      {item.attentionReason || "常规核对"}
-                    </b>
-                    {` · 置信度 ${confidencePercent(item.confidence)}`}
-                  </span>
-                </span>
-              </button>
-            </li>
-          );
-        })}
-          </ul>
-          {!displayedRows.length ? (
-            <p className="monitoring-admission-pending-note">
-              当前筛选下没有需要展示的字段对应建议。
-            </p>
-          ) : null}
-        </div>
-        {mappingState.fieldForm ? (
-          <aside className="monitoring-admission-field-editor">
-          <p className="monitoring-admission-field-label">
-            修订 {mappingState.fieldForm.domain} · {mappingState.fieldForm.source_field}
+      {questions.length ? (
+        <div className="monitoring-admission-questions">
+          <p className="monitoring-admission-questions-head">
+            只需确认会改变医学分析的疑点（已完成 {answeredCount}/{questions.length}）
           </p>
-          <label>
-            不确定说明
-            <textarea
-              value={mappingState.fieldForm.uncertainty || ""}
-              onChange={(event) => onFieldFormChange?.({
-                uncertainty: event.target.value,
-              })}
-            />
-          </label>
-          <label>
-            建议操作
-            <textarea
-              value={mappingState.fieldForm.user_action || ""}
-              onChange={(event) => onFieldFormChange?.({
-                user_action: event.target.value,
-              })}
-            />
-          </label>
-          <details className="monitoring-admission-technical">
-            <summary>字段对应技术值</summary>
-            <label>
-              字段对应值
-              <input
-                type="text"
-                value={mappingState.fieldForm.recommended_role || ""}
-                onChange={(event) => onFieldFormChange?.({
-                  recommended_role: event.target.value,
-                })}
-              />
-            </label>
-          </details>
-          <button type="button" className="monitoring-admission-secondary" onClick={onSaveField}>
-            保存本字段修订
-          </button>
-          </aside>
-        ) : null}
-      </div>
+          <ul className="monitoring-admission-question-list">
+            {(currentQuestion ? [currentQuestion] : []).map((card) => (
+              <li
+                key={card.key}
+                className={`monitoring-admission-question${answeredKeys[card.key] ? " is-answered" : ""}`}
+              >
+                <div className="monitoring-admission-question-head">
+                  <strong>请确认这一项</strong>
+                  <span>{card.domain} · {card.sourceField}</span>
+                </div>
+                <p className="monitoring-admission-question-text">{card.question}</p>
+                {card.evidenceText ? (
+                  <details className="monitoring-admission-question-evidence">
+                    <summary>查看系统判断依据</summary>
+                    <p>{card.evidenceText}</p>
+                  </details>
+                ) : null}
+                {answeredKeys[card.key] ? (
+                  <p className="monitoring-admission-question-done" role="status">已完成确认</p>
+                ) : drafting ? (
+                  <div className="monitoring-admission-question-actions">
+                    <button
+                      type="button"
+                      className="monitoring-admission-secondary"
+                      onClick={() => onAnswerCard?.(card, null)}
+                    >
+                      系统判断正确
+                    </button>
+                    {noteKey === card.key ? (
+                      <span className="monitoring-admission-question-note">
+                        <textarea
+                          aria-label={`补充说明：${card.sourceField}`}
+                          value={noteText}
+                          placeholder="请用一句话说明实际情况"
+                          onChange={(event) => setNoteText(event.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="monitoring-admission-secondary"
+                          disabled={noteText.trim().length < 2}
+                          onClick={() => onAnswerCard?.(card, noteText.trim())}
+                        >
+                          保存说明
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="monitoring-admission-secondary"
+                        onClick={() => {
+                          setNoteKey(card.key);
+                          setNoteText("");
+                        }}
+                      >
+                        实际情况不同
+                      </button>
+                    )}
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {drafting && !questions.length ? (
+        <p className="monitoring-admission-pending-note" role="status">
+          系统已完成判断，正在自动保存字段对应关系，无需您逐项核对。
+        </p>
+      ) : null}
+      <details className="monitoring-admission-technical">
+        <summary>查看全部字段的识别结果</summary>
+        <ul className="monitoring-admission-field-digest">
+          {candidates.map((item) => {
+            const evidence = (item.evidenceSummary || [])[0];
+            return (
+              <li
+                key={mappingCandidateKey({ domain: item.domain, source_field: item.sourceField })}
+              >
+                <span className="monitoring-admission-column-name">
+                  {item.domain} · {item.sourceField}
+                </span>
+                <span className="monitoring-admission-column-meta">
+                  {evidence ? mappingTypeText(evidence.inferred_type) : "系统已识别"}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </details>
     </div>
   );
 }
@@ -298,11 +231,7 @@ export function MedicalMonitoringAdmissionWizardView({
   onSourceFilesChange,
   onPrimaryAction,
   onSecondaryAction,
-  onMappingFocusChange,
-  onSelectMappingField,
-  onMappingFieldFormChange,
-  onSaveMappingField,
-  onMappingReasonChange,
+  onAnswerCard,
 }) {
   const phase = state?.phase || "input";
   const stepIndex = state?.stepIndex || 0;
@@ -446,11 +375,7 @@ export function MedicalMonitoringAdmissionWizardView({
         ) : profile && stepIndex === 2 ? (
           <MappingConfirmPanel
             mappingState={resolvedMappingState}
-            onFocusChange={onMappingFocusChange}
-            onSelectField={onSelectMappingField}
-            onFieldFormChange={onMappingFieldFormChange}
-            onSaveField={onSaveMappingField}
-            onReasonChange={onMappingReasonChange}
+            onAnswerCard={onAnswerCard}
           />
         ) : null}
       </div>
@@ -508,6 +433,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     undefined,
     createAdmissionMappingConfirmState,
   );
+  const adoptInFlight = useRef(false);
+  const confirmInFlight = useRef(false);
 
   useEffect(() => {
     if (!state.projectId || state.attemptId || state.phase !== "input") return undefined;
@@ -538,31 +465,32 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         : await api.createDataAdmission(state.projectId, { source_dir: state.sourceDir });
       dispatch({ type: "import-created", payload });
       mappingDispatch({ type: "reset" });
+      adoptInFlight.current = false;
     } catch (error) {
       dispatch({ type: "error", error });
     }
   }, [api, state.projectId, state.selectedFiles, state.sourceDir]);
 
-  const loadMappingCandidates = useCallback(async (focus = mappingState.focus) => {
+  const loadMappingCandidates = useCallback(async () => {
     if (!state.projectId || !state.attemptId) return;
     mappingDispatch({ type: "load-start" });
     try {
       const payload = await api.listDataAdmissionMappingCandidates(
         state.projectId,
         state.attemptId,
-        { focus },
+        { focus: MAPPING_FOCUS_ALL },
       );
       mappingDispatch({ type: "load-ready", payload });
     } catch (error) {
       mappingDispatch({
         type: "error",
         error: {
-          serverText: error?.detail?.message || error?.message || "字段对应建议加载失败。",
-          guidance: ["请稍后重试；若持续失败，请确认字段对应建议已生成完成。"],
+          serverText: error?.detail?.message || error?.message || "系统识别结果加载失败。",
+          guidance: ["请稍后重试；若持续失败，请确认字段识别已生成完成。"],
         },
       });
     }
-  }, [api, mappingState.focus, state.attemptId, state.projectId]);
+  }, [api, state.attemptId, state.projectId]);
 
   useEffect(() => {
     if (state.phase !== "reading" || !state.attemptId) return undefined;
@@ -587,10 +515,84 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
 
   useEffect(() => {
     if (state.phase !== "ready" || state.stepIndex !== 2) return undefined;
-    if (mappingState.phase !== "idle") return undefined;
-    loadMappingCandidates(mappingState.focus);
+    if (mappingState.phase === "idle") loadMappingCandidates();
     return undefined;
-  }, [loadMappingCandidates, mappingState.focus, mappingState.phase, state.phase, state.stepIndex]);
+  }, [loadMappingCandidates, mappingState.phase, state.phase, state.stepIndex]);
+
+  // The system adopts the basically-correct recognition draft by itself; the
+  // user only answers the genuinely material medical questions.
+  const adoptDraft = useCallback(async () => {
+    if (adoptInFlight.current) return;
+    adoptInFlight.current = true;
+    mappingDispatch({ type: "adopt-start" });
+    try {
+      const draft = await api.adoptDataAdmissionMappingDraft(
+        state.projectId,
+        state.attemptId,
+        { reason: "采用系统字段识别结果，进入医学确认。" },
+      );
+      mappingDispatch({ type: "adopt-ready", payload: draft });
+    } catch (error) {
+      adoptInFlight.current = false;
+      mappingDispatch({
+        type: "error",
+        error: {
+          serverText: error?.detail?.message || error?.message || "采用系统识别结果失败。",
+          guidance: ["请稍后重试；若持续失败，请确认字段识别已生成完成。"],
+        },
+      });
+    }
+  }, [api, state.attemptId, state.projectId]);
+
+  useEffect(() => {
+    if (mappingState.phase !== "ready") return undefined;
+    if (mappingState.payload?.state !== "candidates_ready" || !mappingState.payload.fieldCount) {
+      return undefined;
+    }
+    adoptDraft();
+    return undefined;
+  }, [adoptDraft, mappingState.phase, mappingState.payload]);
+
+  const confirmDraft = useCallback(async () => {
+    if (!mappingState.draft?.draft_id || confirmInFlight.current) return;
+    confirmInFlight.current = true;
+    mappingDispatch({ type: "confirm-start" });
+    try {
+      const questionCount = mappingState.payload?.questionCount || 0;
+      const revision = await api.confirmDataAdmissionMappingDraft(
+        state.projectId,
+        state.attemptId,
+        {
+          draft_id: mappingState.draft.draft_id,
+          expected_version: mappingState.draft.version,
+          confirmation_reason: mappingConfirmationReason(mappingState),
+          idempotency_key: requestKey("admission-mapping-confirm"),
+          automatic: questionCount === 0,
+        },
+      );
+      mappingDispatch({ type: "confirm-ready", payload: revision });
+      dispatch({ type: "finish" });
+    } catch (error) {
+      confirmInFlight.current = false;
+      mappingDispatch({
+        type: "draft-error",
+        error: {
+          serverText: error?.detail?.message || error?.message || "字段识别结果保存失败。",
+          guidance: ["请点击重试；系统不会要求您重新逐项核对。"],
+        },
+      });
+    }
+  }, [api, mappingState, state.attemptId, state.projectId]);
+
+  useEffect(() => {
+    if (mappingState.phase !== "drafting" || mappingState.error) return undefined;
+    const quality = semanticQualityPresentation(mappingState.draft?.semantic_quality);
+    if (!mappingState.draft || quality.blocksConfirmation || mappingUnansweredCount(mappingState)) {
+      return undefined;
+    }
+    confirmDraft();
+    return undefined;
+  }, [confirmDraft, mappingState]);
 
   const onPrimaryAction = useCallback(async (key) => {
     if (key === "import") {
@@ -606,75 +608,24 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       return;
     }
     if (key === "reload") {
-      await loadMappingCandidates(mappingState.focus);
-      return;
-    }
-    if (key === "show-all") {
-      mappingDispatch({ type: "focus-change", focus: MAPPING_FOCUS_ALL });
-      await loadMappingCandidates(MAPPING_FOCUS_ALL);
+      await loadMappingCandidates();
       return;
     }
     if (key === "adopt") {
-      mappingDispatch({ type: "adopt-start" });
-      try {
-        const candidatePayload = mappingState.focus === MAPPING_FOCUS_ALL
-          ? mappingState.payload?.raw
-          : await api.listDataAdmissionMappingCandidates(
-            state.projectId,
-            state.attemptId,
-            { focus: MAPPING_FOCUS_ALL },
-          );
-        const draft = await api.adoptDataAdmissionMappingDraft(
-          state.projectId,
-          state.attemptId,
-          { reason: "采用本次完整字段对应建议进入重点修订。" },
-        );
-        mappingDispatch({ type: "adopt-ready", payload: draft, candidatePayload });
-      } catch (error) {
-        mappingDispatch({
-          type: "error",
-          error: {
-            serverText: error?.detail?.message || error?.message || "采用字段建议失败。",
-            guidance: ["请确认全部建议已生成完成后再试。"],
-          },
-        });
-      }
+      await adoptDraft();
       return;
     }
     if (key === "confirm") {
-      if (!mappingState.draft?.draft_id) return;
-      mappingDispatch({ type: "confirm-start" });
-      try {
-        const revision = await api.confirmDataAdmissionMappingDraft(
-          state.projectId,
-          state.attemptId,
-          {
-            draft_id: mappingState.draft.draft_id,
-            expected_version: mappingState.draft.version,
-            confirmation_reason: mappingState.confirmationReason,
-            idempotency_key: requestKey("admission-mapping-confirm"),
-          },
-        );
-        mappingDispatch({ type: "confirm-ready", payload: revision });
-        dispatch({ type: "finish" });
-      } catch (error) {
-        mappingDispatch({
-          type: "draft-error",
-          error: {
-            serverText: error?.detail?.message || error?.message || "整体确认失败。",
-            guidance: ["请刷新后重试；确认前不会生成可用于监查的数据。"],
-          },
-        });
-      }
+      await confirmDraft();
       return;
     }
     dispatch({ type: key });
   }, [
+    adoptDraft,
     api,
+    confirmDraft,
     loadMappingCandidates,
-    mappingState.confirmationReason,
-    mappingState.draft,
-    mappingState.focus,
+    mappingState,
     state.attemptId,
     state.projectId,
     state.retryTarget,
@@ -685,56 +636,38 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     dispatch({ type: key });
   }, []);
 
-  const onSelectMappingField = useCallback((item) => {
-    if (mappingState.phase !== "drafting") return;
-    mappingDispatch({
-      type: "select-field",
-      key: mappingCandidateKey({
-        domain: item.domain,
-        source_field: item.sourceField,
-      }),
-      form: {
-        domain: item.domain,
-        source_field: item.sourceField,
-        recommended_role: item.recommendedRole || "",
-        uncertainty: item.uncertainty || "",
-        user_action: item.userAction || "",
-        field_kind: item.fieldKind || "source_collected",
-      },
-    });
-  }, [mappingState.phase]);
-
-  const onSaveMappingField = useCallback(async () => {
-    if (!mappingState.draft || !mappingState.fieldForm) return;
+  const onAnswerCard = useCallback(async (card, note) => {
+    if (!mappingState.draft || mappingState.phase !== "drafting") return;
     try {
       const draft = await api.editDataAdmissionMappingDraftField(
         state.projectId,
         state.attemptId,
         {
           draft_id: mappingState.draft.draft_id,
-          domain: mappingState.fieldForm.domain,
-          source_field: mappingState.fieldForm.source_field,
+          domain: card.domain,
+          source_field: card.sourceField,
           patch: {
-            recommended_role: String(mappingState.fieldForm.recommended_role || "").trim(),
-            uncertainty: String(mappingState.fieldForm.uncertainty || "").trim(),
-            user_action: String(mappingState.fieldForm.user_action || "").trim(),
-            field_kind: mappingState.fieldForm.field_kind || "source_collected",
+            // The server gate resolves a question only when user_action
+            // carries the explicit user-decision prefix written here.
+            user_action: note === null
+              ? "用户已确认：采用系统判断，无需修改。"
+              : `用户已核对：${note}`,
           },
           expected_version: mappingState.draft.version,
-          idempotency_key: requestKey("admission-mapping-field"),
+          idempotency_key: requestKey("admission-mapping-answer"),
         },
       );
-      mappingDispatch({ type: "save-field-ready", payload: draft });
+      mappingDispatch({ type: "answer-ready", key: card.key, payload: draft });
     } catch (error) {
       mappingDispatch({
         type: "draft-error",
         error: {
-          serverText: error?.detail?.message || error?.message || "字段修订保存失败。",
-          guidance: ["请检查填写内容后重试。"],
+          serverText: error?.detail?.message || error?.message || "确认结果保存失败。",
+          guidance: ["请稍后重试；确认前不会生成可用于监查的数据。"],
         },
       });
     }
-  }, [api, mappingState.draft, mappingState.fieldForm, state.attemptId, state.projectId]);
+  }, [api, mappingState.draft, mappingState.phase, state.attemptId, state.projectId]);
 
   return (
     <MedicalMonitoringAdmissionWizardView
@@ -744,14 +677,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onSourceFilesChange={(files) => dispatch({ type: "source-files-change", files })}
       onPrimaryAction={onPrimaryAction}
       onSecondaryAction={onSecondaryAction}
-      onMappingFocusChange={(focus) => {
-        mappingDispatch({ type: "focus-change", focus });
-        if (!mappingState.draft) loadMappingCandidates(focus);
-      }}
-      onSelectMappingField={onSelectMappingField}
-      onMappingFieldFormChange={(patch) => mappingDispatch({ type: "field-form-change", patch })}
-      onSaveMappingField={onSaveMappingField}
-      onMappingReasonChange={(value) => mappingDispatch({ type: "reason-change", value })}
+      onAnswerCard={onAnswerCard}
     />
   );
 }

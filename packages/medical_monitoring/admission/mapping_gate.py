@@ -1,4 +1,4 @@
-"""C3 listing field-mapping model gate for zhipu-coding-plan direct routing.
+"""C3 listing field-mapping gate for approved direct harness routes.
 
 The gate is the single source of truth for the provider/model identity that
 AdmissionMappingPipeline accepts before submitting candidate jobs. Product
@@ -10,10 +10,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-MONITORING_C3_MAPPING_GATE_SCHEMA_VERSION = "mm-c3-mapping-gate-v1"
+MONITORING_C3_MAPPING_GATE_SCHEMA_VERSION = "mm-c3-mapping-gate-v3"
 MONITORING_C3_MAPPING_PROVIDER = "zhipu-coding-plan"
 MONITORING_C3_MAPPING_MODEL = "glm-5.3-flash"
 MONITORING_C3_MAPPING_PROFILE_ID = "independent_ai__zhipu_coding_plan_glm_flash"
+MONITORING_C3_ALTERNATE_PROVIDER = "cms-router"
+MONITORING_C3_ALTERNATE_MODEL = "minimax-m3"
+MONITORING_C3_LOCAL_FALLBACK_PROVIDER = "mtplx"
+MONITORING_C3_LOCAL_FALLBACK_MODEL = "mtplx-flash-next-optimized-speed"
+MONITORING_C3_REMOTE_UNAVAILABLE_ENV = (
+    "MONITORING_C3_REMOTE_ROUTES_UNAVAILABLE"
+)
+MONITORING_C3_SUPPORTED_RUNTIMES = frozenset({
+    (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
+    (MONITORING_C3_ALTERNATE_PROVIDER, MONITORING_C3_ALTERNATE_MODEL),
+    (
+        MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
+        MONITORING_C3_LOCAL_FALLBACK_MODEL,
+    ),
+})
 ZHIPU_CODING_PLAN_PRESET_ID = "zhipu_coding_plan"
 ZHIPU_CODING_PLAN_BASE_URL = "https://open.bigmodel.cn/api/coding/paas/v4"
 ZHIPU_CODING_PLAN_API_KEY_ENV = "ZAI_CODING_CN_API_KEY"
@@ -52,11 +67,31 @@ def monitoring_mapping_runtime_matches(
     provider = str(_runtime_field(runtime, "provider", "")).strip()
     model = normalize_monitoring_mapping_model(str(_runtime_field(runtime, "model", "")))
     required_model = normalize_monitoring_mapping_model(required_model)
-    return (
-        available
-        and provider == required_provider
-        and model.casefold() == required_model.casefold()
-    )
+    requested = (required_provider, required_model.casefold())
+    actual = (provider, model.casefold())
+    if requested == (
+        MONITORING_C3_MAPPING_PROVIDER,
+        MONITORING_C3_MAPPING_MODEL.casefold(),
+    ):
+        if actual == (
+            MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
+            MONITORING_C3_LOCAL_FALLBACK_MODEL.casefold(),
+        ):
+            env = _runtime_field(runtime, "env", {})
+            fallback_admitted = (
+                isinstance(env, Mapping)
+                and str(
+                    env.get(MONITORING_C3_REMOTE_UNAVAILABLE_ENV, "")
+                ).strip().casefold()
+                in {"1", "true", "yes"}
+            )
+            return available and fallback_admitted
+        supported = {
+            (item_provider, item_model.casefold())
+            for item_provider, item_model in MONITORING_C3_SUPPORTED_RUNTIMES
+        }
+        return available and actual in supported
+    return available and actual == requested
 
 
 @dataclass(frozen=True)
@@ -84,9 +119,15 @@ class MonitoringC3MappingGateContract:
 
 __all__ = [
     "MONITORING_C3_MAPPING_GATE_SCHEMA_VERSION",
+    "MONITORING_C3_ALTERNATE_MODEL",
+    "MONITORING_C3_ALTERNATE_PROVIDER",
     "MONITORING_C3_MAPPING_MODEL",
     "MONITORING_C3_MAPPING_PROFILE_ID",
     "MONITORING_C3_MAPPING_PROVIDER",
+    "MONITORING_C3_LOCAL_FALLBACK_MODEL",
+    "MONITORING_C3_LOCAL_FALLBACK_PROVIDER",
+    "MONITORING_C3_REMOTE_UNAVAILABLE_ENV",
+    "MONITORING_C3_SUPPORTED_RUNTIMES",
     "MonitoringC3MappingGateContract",
     "ZHIPU_CODING_PLAN_API_KEY_ENV",
     "ZHIPU_CODING_PLAN_API_KEY_ENV_ALIASES",

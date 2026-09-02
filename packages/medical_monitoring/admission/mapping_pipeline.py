@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, Sequence
 
+from ..domain.execution import StoreError
 from ..graph.store import Store
 from ..runtime.runtime_progress import ARTIFACT_DIR_NAME, RUNTIME_DB_NAME, RUNTIME_DIR_NAME
 from .mapping_bridge import (
@@ -57,6 +58,24 @@ def _evidence_summary(candidate: Any, evidence_ids: list[str]) -> list[dict[str,
     return rows
 
 
+def _latest_job_cohort(jobs: Sequence[Any]) -> tuple[Any, ...]:
+    """Keep only the newest submission contract for an admission attempt."""
+
+    if not jobs:
+        return ()
+    latest = max(jobs, key=lambda item: (item.created_at, item.job_id))
+    identity = (str(latest.prompt_version), str(latest.input_revision_sha256))
+    return tuple(
+        job
+        for job in jobs
+        if (
+            str(job.prompt_version),
+            str(job.input_revision_sha256),
+        )
+        == identity
+    )
+
+
 class AdmissionMappingPipeline:
     """Submit admitted profiles to the established candidate repository.
 
@@ -102,6 +121,24 @@ class AdmissionMappingPipeline:
             raise AdmissionMappingPipelineError("mapping_admission_not_found")
         return record
 
+    def _load_table_rows(
+        self, *, record: Mapping[str, Any], workspace_dir: Path
+    ) -> dict[str, Mapping[str, Sequence[Mapping[str, Any]]]]:
+        technical = record.get("technical_details") or {}
+        snapshot_ids = technical.get("snapshot_ids") or []
+        if not isinstance(snapshot_ids, list):
+            raise AdmissionMappingPipelineError("mapping_bridge_failed")
+        store = _store(workspace_dir)
+        try:
+            return {
+                str(snapshot_id): store.load_listing_content(str(snapshot_id))
+                for snapshot_id in snapshot_ids
+            }
+        except (OSError, StoreError, ValueError) as exc:
+            raise AdmissionMappingPipelineError("mapping_bridge_failed") from exc
+        finally:
+            store.close()
+
     def _configured(self) -> bool:
         return all((
             self._service is not None,
@@ -129,7 +166,13 @@ class AdmissionMappingPipeline:
             raise AdmissionMappingPipelineError("mapping_model_not_configured")
         try:
             harness_input = admission_record_to_harness_input(
-                project_id=project_id, attempt_id=attempt_id, record=record
+                project_id=project_id,
+                attempt_id=attempt_id,
+                record=record,
+                table_rows_by_snapshot=self._load_table_rows(
+                    record=record,
+                    workspace_dir=workspace_dir,
+                ),
             )
             revision = self._revision_factory(harness_input.input_revision)
             jobs = self._service.submit_listing_field_mapping_chunks(
@@ -158,7 +201,7 @@ class AdmissionMappingPipeline:
         )
         if not jobs:
             raise AdmissionMappingPipelineError("mapping_candidates_not_found")
-        return self._project(jobs, attempt_id=attempt_id)
+        return self._project(_latest_job_cohort(jobs), attempt_id=attempt_id)
 
     def _project(self, jobs: Any, *, attempt_id: str) -> dict[str, Any]:
         job_rows = []
@@ -185,6 +228,9 @@ class AdmissionMappingPipeline:
                         "confidence": item.get("confidence"),
                         "uncertainty": item.get("uncertainty"),
                         "user_action": item.get("user_action"),
+                        "user_decision_required": bool(
+                            item.get("user_decision_required", False)
+                        ),
                         "evidence_ids": evidence_ids,
                         "evidence_summary": _evidence_summary(
                             candidate,
@@ -247,7 +293,8 @@ def current_admission_mapping_revision(
         attempt_id = str(field_profile.get("batch_id") or "").strip()
         if not attempt_id:
             return ""
-        record = AdmissionMappingPipeline()._load_record(
+        pipeline = AdmissionMappingPipeline()
+        record = pipeline._load_record(
             project_id=job.project_id,
             attempt_id=attempt_id,
             workspace_dir=workspace_dir,
@@ -258,6 +305,10 @@ def current_admission_mapping_revision(
             project_id=job.project_id,
             attempt_id=attempt_id,
             record=record,
+            table_rows_by_snapshot=pipeline._load_table_rows(
+                record=record,
+                workspace_dir=workspace_dir,
+            ),
         ).field_profile
         expected = {
             "project_id": job.project_id,

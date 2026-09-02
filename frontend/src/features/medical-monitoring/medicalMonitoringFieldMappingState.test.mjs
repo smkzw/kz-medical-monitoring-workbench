@@ -15,8 +15,8 @@ const blocked = semanticQualityPresentation({
 });
 assert.deepEqual(blocked, {
   level: "blocked",
-  title: "存在 2 个全局阻断，当前不能确认",
-  detail: "字段映射覆盖不完整 · 用药角色边界冲突",
+  title: "还有 2 组字段关系需要处理",
+  detail: "请按页面提示补充必要信息，处理完成后即可继续。",
   blocksConfirmation: true,
 });
 
@@ -105,7 +105,7 @@ const malformedCount = semanticQualityPresentation({
 });
 assert.equal(malformedCount.level, "blocked");
 assert.equal(malformedCount.blocksConfirmation, true);
-assert.match(malformedCount.title, /形状异常/);
+assert.match(malformedCount.title, /未能完成字段核对/);
 
 const malformedGroups = semanticQualityPresentation({
   status: "pass_with_warnings",

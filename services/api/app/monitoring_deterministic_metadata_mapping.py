@@ -49,6 +49,7 @@ class DeterministicMetadataDecision:
                 "如项目数据字典将该字段定义为业务采集值，"
                 "请在映射草稿中修订。"
             ),
+            "user_decision_required": False,
             "related_fields": [],
             "evidence_ids": [],
         }

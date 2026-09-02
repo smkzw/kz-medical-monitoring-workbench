@@ -48,8 +48,13 @@ from .mapping_pipeline import (
     current_admission_mapping_revision,
 )
 from .mapping_confirmation import (
+    USER_QUESTION_LOW_CONFIDENCE,
+    USER_QUESTION_MISSING_ADVICE,
+    USER_QUESTION_MODEL_FLAGGED,
+    USER_QUESTION_UNMAPPED,
     AdmissionMappingConfirmationService,
     attention_reason,
+    classify_user_question,
     enrich_candidates,
 )
 
@@ -79,7 +84,12 @@ __all__ = [
     "AdmissionMappingPipeline",
     "AdmissionMappingPipelineError",
     "AdmissionMappingConfirmationService",
+    "USER_QUESTION_LOW_CONFIDENCE",
+    "USER_QUESTION_MISSING_ADVICE",
+    "USER_QUESTION_MODEL_FLAGGED",
+    "USER_QUESTION_UNMAPPED",
     "attention_reason",
+    "classify_user_question",
     "enrich_candidates",
     "current_admission_mapping_revision",
 ]

@@ -988,6 +988,48 @@ def test_edit_is_field_scoped_idempotent_and_cas_protected(
         )
 
 
+def test_only_system_harness_can_revise_user_decision_requirement(
+    repositories,
+) -> None:
+    _, ai_repository, mapping_repository = repositories
+    _seed_complete_source(ai_repository)
+    draft = mapping_repository.assemble(
+        "project-alpha",
+        "batch-001",
+        PROFILE_HASH,
+    )
+
+    with pytest.raises(ValueError, match="only the system harness"):
+        mapping_repository.edit_field(
+            "project-alpha",
+            draft.draft_id,
+            domain="AE",
+            source_field="AETERM",
+            patch={"user_decision_required": True},
+            expected_version=1,
+            actor="medical-manager",
+            idempotency_key="user-decision-edit-001",
+        )
+
+    edited = mapping_repository.edit_field(
+        "project-alpha",
+        draft.draft_id,
+        domain="AE",
+        source_field="AETERM",
+        patch={"user_decision_required": True},
+        expected_version=1,
+        actor="system_harness",
+        idempotency_key="system-decision-edit-001",
+    )
+    edited_field = next(
+        item
+        for item in edited.fields
+        if (item.domain, item.source_field) == ("AE", "AETERM")
+    )
+    assert edited.version == 2
+    assert edited_field.user_decision_required is True
+
+
 def test_field_edits_cannot_bypass_monitoring_semantic_boundaries(
     repositories,
 ) -> None:
@@ -1637,9 +1679,9 @@ def test_assemble_normalizes_known_export_context_without_changing_candidate(
         domain="LBCHEM",
         chunk_index=1,
         chunk_total=1,
-        fields=("FORM", "PAGE", "LINE", "LBNAM"),
-        domain_field_count=4,
-        full_field_count=4,
+        fields=("FORM", "PAGE", "LINE", "LBNAM", "SUBJSTA", "FORMOID", "动态链接"),
+        domain_field_count=7,
+        full_field_count=7,
         expected_domains=("LBCHEM",),
         mapping_overrides={
             "FORM": {
@@ -1659,6 +1701,19 @@ def test_assemble_normalizes_known_export_context_without_changing_candidate(
                 "field_kind": "source_collected",
                 "confidence": 0.68,
             },
+            "SUBJSTA": {
+                "recommended_role": "subject_status_flag",
+                "field_kind": "source_collected",
+                "user_decision_required": True,
+            },
+            "FORMOID": {
+                "recommended_role": "edc_form_identifier",
+                "field_kind": "source_metadata",
+            },
+            "动态链接": {
+                "recommended_role": "dynamic_link_reference_to_related_record",
+                "field_kind": "source_collected",
+            },
         },
     )
 
@@ -1677,7 +1732,11 @@ def test_assemble_normalizes_known_export_context_without_changing_candidate(
         "PAGE": ("page_name", "source_metadata"),
         "LINE": ("record_line_number", "source_metadata"),
         "LBNAM": ("laboratory_configuration_name", "source_metadata"),
+        "SUBJSTA": ("metadata.subject_status", "source_metadata"),
+        "FORMOID": ("form_identifier", "source_metadata"),
+        "动态链接": ("metadata.cross_record_link", "source_metadata"),
     }
+    assert mapped["SUBJSTA"].user_decision_required is False
     assert all(
         "原独立 AI 判断保留在候选审计记录中" in item.uncertainty
         for item in mapped.values()

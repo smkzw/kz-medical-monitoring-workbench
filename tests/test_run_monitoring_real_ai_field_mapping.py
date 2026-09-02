@@ -46,6 +46,7 @@ class _FakeFieldMappingProvider:
                 "confidence": 0.76,
                 "uncertainty": "仍需结合项目数据字典确认字段语义。",
                 "user_action": "请确认或修订字段角色。",
+                "user_decision_required": False,
                 "related_fields": [],
                 "evidence_ids": [],
                 "standards_reference": None,
