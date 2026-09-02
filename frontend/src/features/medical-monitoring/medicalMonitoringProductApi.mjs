@@ -50,6 +50,21 @@ function publicPreparePayload(payload) {
   return { ...payload };
 }
 
+// Phase C C1 admission create accepts only the read-only source directory;
+// the backend rejects any extra field, so the client fails fast on them too.
+const PUBLIC_ADMISSION_CREATE_FIELDS = new Set(["source_dir"]);
+
+function publicAdmissionCreatePayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new TypeError("admission create payload must be an object");
+  }
+  const unknown = Object.keys(payload).filter((key) => !PUBLIC_ADMISSION_CREATE_FIELDS.has(key));
+  if (unknown.length) {
+    throw new TypeError("admission create payload contains a non-public field");
+  }
+  return { ...payload };
+}
+
 
 function queryValues(values) {
   const source = values && typeof values === "object" && !Array.isArray(values)
@@ -171,6 +186,18 @@ export const MEDICAL_MONITORING_PRODUCT_PATHS = Object.freeze({
     `${projectPath(projectId)}/results/${encodeSegment(resultContextToken, "resultContextToken")}/continuity`,
     { site_ref: options?.siteRef || options?.site_ref },
   ),
+  // Phase C C1 data admission: create posts only `source_dir`; status and
+  // profile are read-only GETs on the attempt id. Paths, hashes and internal
+  // object ids stay inside the server-side `technical_details` projection and
+  // are never constructed here.
+  dataAdmissionCreate: (projectId) => `${projectPath(projectId)}/data-admissions`,
+  dataAdmissionUpload: (projectId) => `${projectPath(projectId)}/data-admissions/upload`,
+  dataAdmissionStatus: (projectId, attemptId) => (
+    `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}`
+  ),
+  dataAdmissionProfile: (projectId, attemptId) => (
+    `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/profile`
+  ),
   // Names used by the product layer; each delegates to the same path shape.
   runSetupOptions: (projectId, selector = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.setupOptions(projectId, selector),
   history: (projectId, options = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.runs(projectId, options),
@@ -199,17 +226,18 @@ export function createMedicalMonitoringProductApi({
     throw new TypeError("fetchImpl must be a function");
   }
 
-  async function request(method, path, { signal, body, headers = {} } = {}) {
+  async function request(method, path, { signal, body, formBody, headers = {} } = {}) {
     const url = joinBaseUrl(baseUrl, path);
     const hasBody = body !== undefined;
+    const hasFormBody = formBody !== undefined;
     const response = await fetchImpl(url, {
       method,
       headers: {
         Accept: "application/json",
-        ...(hasBody ? { "Content-Type": "application/json" } : {}),
+        ...(hasBody && !hasFormBody ? { "Content-Type": "application/json" } : {}),
         ...headers,
       },
-      ...(hasBody ? { body: JSON.stringify(body) } : {}),
+      ...(hasFormBody ? { body: formBody } : hasBody ? { body: JSON.stringify(body) } : {}),
       signal,
     });
     const payload = await responsePayload(response);
@@ -225,6 +253,7 @@ export function createMedicalMonitoringProductApi({
 
   const get = (path, options = {}) => request("GET", path, options);
   const post = (path, body, options = {}) => request("POST", path, { ...options, body });
+  const postForm = (path, formBody, options = {}) => request("POST", path, { ...options, formBody });
   const listRuns = (projectId, { limit = MONITORING_PRODUCT_DEFAULT_HISTORY_LIMIT, signal } = {}) => get(
     MEDICAL_MONITORING_PRODUCT_PATHS.runs(
       requireId(projectId, "projectId"),
@@ -326,6 +355,43 @@ export function createMedicalMonitoringProductApi({
       return post(MEDICAL_MONITORING_PRODUCT_PATHS.workspaceBootstrap(
         requireId(projectId, "projectId"),
       ), undefined, { signal });
+    },
+
+    // Phase C C1 data admission transport. The create payload is scoped to
+    // `source_dir` only; status and profile carry no request body.
+    createDataAdmission(projectId, payload, { signal } = {}) {
+      return post(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionCreate(
+        requireId(projectId, "projectId"),
+      ), publicAdmissionCreatePayload(payload), { signal });
+    },
+
+    createDataAdmissionUpload(projectId, files, { signal } = {}) {
+      const selected = Array.from(files || []);
+      if (!selected.length || selected.some((file) => !file || !file.name)) {
+        throw new TypeError("admission upload requires selected files");
+      }
+      const form = new FormData();
+      for (const file of selected) {
+        form.append("files", file, file.name);
+        form.append("relative_paths", file.webkitRelativePath || file.name);
+      }
+      return postForm(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionUpload(
+        requireId(projectId, "projectId"),
+      ), form, { signal });
+    },
+
+    getDataAdmissionStatus(projectId, attemptId, { signal } = {}) {
+      return get(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStatus(
+        requireId(projectId, "projectId"),
+        requireId(attemptId, "attemptId"),
+      ), { signal });
+    },
+
+    getDataAdmissionProfile(projectId, attemptId, { signal } = {}) {
+      return get(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionProfile(
+        requireId(projectId, "projectId"),
+        requireId(attemptId, "attemptId"),
+      ), { signal });
     },
 
     getSetupOptions(projectId, options = {}) {

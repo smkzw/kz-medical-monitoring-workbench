@@ -208,4 +208,161 @@ check(
   "public result path alias covers continuity",
 );
 
+// --- Phase C C1 data-admission client contract ---
+const admissionCalls = [];
+const admissionApi = createMedicalMonitoringProductApi({
+  baseUrl: "http://127.0.0.1:8911/",
+  fetchImpl: async (url, options) => {
+    admissionCalls.push({ url, options });
+    return jsonResponse({ ok: true });
+  },
+});
+
+const admissionSignal = Symbol("admission-signal");
+await admissionApi.createDataAdmission("proj/01", { source_dir: "/generated/non-real/source" });
+await admissionApi.createDataAdmission("proj/01", { source_dir: "/generated/non-real/source" }, { signal: admissionSignal });
+await admissionApi.getDataAdmissionStatus("proj/01", "attempt-0001");
+await admissionApi.getDataAdmissionProfile("proj/01", "attempt:0002", { signal: admissionSignal });
+
+check(
+  admissionCalls[0].url.endsWith("/modules/medical-monitoring/r7/data-admissions"),
+  "admission create stays on the R7 project route",
+);
+check(admissionCalls[0].options.method === "POST", "admission create is a POST");
+check(
+  admissionCalls[0].options.headers["Content-Type"] === "application/json",
+  "admission create serializes JSON",
+);
+check(
+  JSON.parse(admissionCalls[0].options.body).source_dir === "/generated/non-real/source",
+  "admission create forwards the read-only source directory",
+);
+check(
+  Object.keys(JSON.parse(admissionCalls[0].options.body)).length === 1,
+  "admission create sends no field beyond source_dir",
+);
+check(
+  admissionCalls[2].url.endsWith("/data-admissions/attempt-0001"),
+  "admission status reads the attempt route",
+);
+check(admissionCalls[2].options.method === "GET", "admission status is a GET");
+check(admissionCalls[2].options.body === undefined, "admission status sends no request body");
+check(
+  admissionCalls[3].url.endsWith("/data-admissions/attempt%3A0002/profile"),
+  "admission profile reads the attempt profile route with an encoded attempt id",
+);
+check(admissionCalls[3].options.method === "GET", "admission profile is a GET");
+check(
+  admissionCalls[1].options.signal === admissionSignal
+    && admissionCalls[3].options.signal === admissionSignal,
+  "admission calls forward the caller abort signal",
+);
+check(
+  admissionCalls.every((call) => call.options.headers.Accept === "application/json"),
+  "admission requests JSON",
+);
+
+for (const invalid of [
+  () => admissionApi.createDataAdmission("proj", null),
+  () => admissionApi.createDataAdmission("proj", ["/generated/non-real/source"]),
+  () => admissionApi.createDataAdmission("proj", { source_dir: "/generated", run_id: "internal" }),
+  () => admissionApi.createDataAdmission("", { source_dir: "/generated" }),
+  () => admissionApi.getDataAdmissionStatus("proj", ""),
+  () => admissionApi.getDataAdmissionProfile("  ", "attempt-0001"),
+]) {
+  assert.throws(invalid, TypeError);
+  passed += 1;
+}
+check(admissionCalls.length === 4, "invalid admission identifiers and payloads never reach fetch");
+
+const uploadCalls = [];
+const admissionUploadApi = createMedicalMonitoringProductApi({
+  fetchImpl: async (url, options) => {
+    uploadCalls.push({ url, options });
+    return jsonResponse({ attempt_id: "attempt-upload-1", state: "profile_ready" });
+  },
+});
+const uploadFile = new File(["subject_id,visit\nS001,V1\n"], "listing.csv", { type: "text/csv" });
+Object.defineProperty(uploadFile, "webkitRelativePath", { value: "本期数据/listing.csv" });
+await admissionUploadApi.createDataAdmissionUpload("proj/01", [uploadFile], { signal: admissionSignal });
+check(uploadCalls.length === 1, "browser upload reaches fetch once");
+check(uploadCalls[0].url.endsWith("/data-admissions/upload"), "browser upload stays on the R7 project route");
+check(uploadCalls[0].options.method === "POST", "browser upload is a POST");
+check(uploadCalls[0].options.body instanceof FormData, "browser upload sends multipart form data");
+check(!("Content-Type" in uploadCalls[0].options.headers), "browser supplies the multipart boundary");
+check(uploadCalls[0].options.body.get("relative_paths") === "本期数据/listing.csv",
+  "browser upload preserves the folder-relative path");
+check(uploadCalls[0].options.body.get("files")?.name === "listing.csv", "browser upload includes the selected file");
+check(uploadCalls[0].options.signal === admissionSignal, "browser upload forwards the caller abort signal");
+for (const invalid of [
+  () => admissionUploadApi.createDataAdmissionUpload("proj", []),
+  () => admissionUploadApi.createDataAdmissionUpload("proj", [null]),
+  () => admissionUploadApi.createDataAdmissionUpload("", [uploadFile]),
+]) {
+  assert.throws(invalid, TypeError);
+  passed += 1;
+}
+check(uploadCalls.length === 1, "invalid browser uploads never reach fetch");
+
+const admissionErrorApi = createMedicalMonitoringProductApi({
+  fetchImpl: async () => jsonResponse(
+    {
+      code: "admission_source_invalid",
+      message: "未找到可导入的数据目录。请确认所选数据位置存在且包含数据文件后重试。",
+    },
+    422,
+  ),
+});
+let admissionError = null;
+try {
+  await admissionErrorApi.createDataAdmission("proj", { source_dir: "/generated/missing" });
+} catch (caught) {
+  admissionError = caught;
+}
+check(admissionError instanceof MedicalMonitoringApiError, "admission errors raise the shared API error");
+check(admissionError.status === 422, "admission error preserves HTTP status");
+check(admissionError.detail?.code === "admission_source_invalid", "admission error preserves machine code");
+check(
+  admissionError.message === "未找到可导入的数据目录。请确认所选数据位置存在且包含数据文件后重试。",
+  "admission error keeps server Chinese copy",
+);
+
+const admissionNotFoundErrorApi = createMedicalMonitoringProductApi({
+  fetchImpl: async () => jsonResponse(
+    {
+      code: "admission_attempt_not_found",
+      message: "未找到对应的数据导入记录。请返回上一步重新选择，或重新发起导入。",
+    },
+    404,
+  ),
+});
+let admissionNotFoundError = null;
+try {
+  await admissionNotFoundErrorApi.getDataAdmissionStatus("proj", "attempt-missing");
+} catch (caught) {
+  admissionNotFoundError = caught;
+}
+check(admissionNotFoundError instanceof MedicalMonitoringApiError, "admission reads raise the shared API error");
+check(admissionNotFoundError.status === 404, "admission read error preserves HTTP status");
+check(
+  admissionNotFoundError.detail?.code === "admission_attempt_not_found",
+  "admission read error preserves machine code",
+);
+
+check(
+  MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionUpload("p")
+    === "/api/projects/p/modules/medical-monitoring/r7/data-admissions/upload",
+  "admission upload path helper remains deterministic",
+);
+check(
+  MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStatus("p", "a")
+    === "/api/projects/p/modules/medical-monitoring/r7/data-admissions/a",
+  "admission status path helper remains deterministic",
+);
+check(
+  MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionProfile("p", "a")
+    === "/api/projects/p/modules/medical-monitoring/r7/data-admissions/a/profile",
+  "admission profile path helper remains deterministic",
+);
+
 console.log(`medicalMonitoringProductApi: ${passed} passed`);

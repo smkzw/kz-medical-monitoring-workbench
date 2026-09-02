@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Optional, Protocol, Union
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -80,7 +80,7 @@ _ADMISSION_MESSAGES = {
     "admission_source_invalid": "未找到可导入的数据目录。请确认所选数据位置存在且包含数据文件后重试。",
     "admission_copy_rejected": "数据复制校验未通过，系统已拒绝本次导入，原始数据未受影响。请重新发起导入；如再次失败，请检查数据来源是否完整。",
     "admission_profile_unavailable": "系统暂时无法识别这批数据的结构，本次导入未完成。请确认文件格式受支持后重新导入。",
-    "admission_project_identity_conflict": "当前项目已有测试数据身份，不能直接接入真实数据。请先完成项目数据区转换后再试。",
+    "admission_project_identity_conflict": "当前为演示项目，不能接入本机数据。请在实际研究项目中使用数据接入。",
     "admission_attempt_not_found": "未找到对应的数据导入记录。请返回上一步重新选择，或重新发起导入。",
     "admission_pipeline_unconfigured": "数据接入服务尚未配置，暂时无法导入新的数据版本。请联系管理员完成配置后再试。",
     "admission_pipeline_failed": "数据导入过程中出现问题，本次操作未生效，原始数据未受影响。请重试；如再次失败请联系管理员。",
@@ -109,6 +109,14 @@ class AdmissionPipeline(Protocol):
 
     def create_attempt(
         self, *, project_id: str, source_dir: Path, workspace_dir: Path
+    ) -> Mapping[str, Any]: ...
+
+    def create_uploaded_attempt(
+        self,
+        *,
+        project_id: str,
+        uploads: list[tuple[str, Any]],
+        workspace_dir: Path,
     ) -> Mapping[str, Any]: ...
 
     def attempt_status(
@@ -241,6 +249,58 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
                 workspace_dir=_workspace_dir(context.root, canonical),
             )
             public = _public_admission_projection(result, required_keys=("attempt_id", "state"))
+            if isinstance(public, JSONResponse):
+                return public
+            return {
+                "schema_version": ADMISSION_SCHEMA_VERSION,
+                "project_id": canonical,
+                **public,
+            }
+        except AdmissionPipelineError as exc:
+            return _admission_error(exc.code)
+        except Exception:
+            return _admission_error("admission_pipeline_failed")
+        finally:
+            write_permit.release()
+
+    @router.post("/data-admissions/upload")
+    async def upload_data_admission(
+        project_id: str,
+        request: Request,
+        files: list[UploadFile] = File(...),
+        relative_paths: list[str] = Form(...),
+    ) -> Any:
+        canonical = resolve_project(project_id)
+        if isinstance(canonical, JSONResponse):
+            return canonical
+        auth = authorize(
+            request,
+            project_id=canonical,
+            action=MonitoringAction.INTAKE_BATCH,
+        )
+        if isinstance(auth, JSONResponse):
+            return auth
+        pipeline = _pipeline_or_error()
+        if isinstance(pipeline, JSONResponse):
+            return pipeline
+        if not files or len(files) != len(relative_paths):
+            return _admission_error("admission_source_invalid")
+        try:
+            write_permit = acquire_product_write_gate(canonical)
+        except pb.ProjectBackupError as exc:
+            return _run_entry_error_response(exc)
+        try:
+            result = pipeline.create_uploaded_attempt(
+                project_id=canonical,
+                uploads=[
+                    (relative_path, upload.file)
+                    for relative_path, upload in zip(relative_paths, files)
+                ],
+                workspace_dir=_workspace_dir(context.root, canonical),
+            )
+            public = _public_admission_projection(
+                result, required_keys=("attempt_id", "state")
+            )
             if isinstance(public, JSONResponse):
                 return public
             return {

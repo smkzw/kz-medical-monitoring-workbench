@@ -144,6 +144,14 @@ class FakeAdmissionPipeline:
         self._record("create_attempt", kwargs)
         return self.create_result
 
+    def create_uploaded_attempt(self, **kwargs: Any) -> Mapping[str, Any]:
+        captured = []
+        for relative_path, stream in kwargs.pop("uploads"):
+            stream.seek(0)
+            captured.append((relative_path, stream.read()))
+        self._record("create_uploaded_attempt", {**kwargs, "uploads": captured})
+        return self.create_result
+
     def attempt_status(self, **kwargs: Any) -> Mapping[str, Any]:
         self._record("attempt_status", kwargs)
         return self.status_result
@@ -251,6 +259,7 @@ def test_admission_registration_is_additive_and_r7_scoped(tmp_path: Path) -> Non
     admission_paths = {path for path in r7_paths if "data-admissions" in path}
     assert admission_paths == {
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions",
+        "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/upload",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/profile",
     }
@@ -308,6 +317,60 @@ def test_create_status_and_profile_happy_path_boundary(tmp_path: Path) -> None:
     ]
 
     assert _snapshot_tree(source) == before
+
+
+def test_browser_upload_create_uses_relative_names_and_bytes(tmp_path: Path) -> None:
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    pipeline = FakeAdmissionPipeline()
+    client = _client(runtime_dir, admission_pipeline=pipeline)
+    content = b"subject,visit,date\nS001,V1,2026-01-01\n"
+
+    response = client.post(
+        f"{_base()}/data-admissions/upload",
+        files=[("files", ("table.csv", content, "text/csv"))],
+        data={"relative_paths": "listing_a/table.csv"},
+    )
+
+    assert response.status_code == 200, response.text
+    (name, kwargs), = pipeline.calls
+    assert name == "create_uploaded_attempt"
+    assert kwargs["project_id"] == PROJECT_A
+    assert kwargs["uploads"] == [("listing_a/table.csv", content)]
+    assert kwargs["workspace_dir"] == runtime_dir / "medical_monitoring_r7" / PROJECT_A
+
+
+def test_real_pipeline_closes_generated_browser_upload_loop(tmp_path: Path) -> None:
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    client = _client(
+        runtime_dir,
+        admission_pipeline=DataAdmissionPipeline(parse_listing_file),
+    )
+    content = b"subject,visit,date\nS001,V1,2026-01-01\nS002,V2,2026-01-02\n"
+
+    created = client.post(
+        f"{_base()}/data-admissions/upload",
+        files=[("files", ("table.csv", content, "text/csv"))],
+        data={"relative_paths": "selected_folder/table.csv"},
+    )
+
+    assert created.status_code == 200, created.text
+    body = created.json()
+    assert body["state"] == "profile_ready"
+    assert body["summary"] == {"files": 1, "tables": 1, "rows": 2}
+    attempt_id = body["attempt_id"]
+    profile = client.get(f"{_base()}/data-admissions/{attempt_id}/profile")
+    assert profile.status_code == 200
+    assert profile.json()["tables"][0]["row_count"] == 2
+    intake_parent = (
+        runtime_dir
+        / "medical_monitoring_r7"
+        / PROJECT_A
+        / "admissions"
+        / "upload-intake"
+    )
+    assert not intake_parent.exists()
 
 
 def test_real_pipeline_closes_generated_file_product_loop(tmp_path: Path) -> None:

@@ -225,6 +225,33 @@
   margin-top: 5px;
 }
 
+.monitoring-admission-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--monitoring-product-line);
+  border-left: 3px solid var(--monitoring-product-orange);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.monitoring-admission-card-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.monitoring-admission-card-copy strong {
+  font-size: 14px;
+}
+
+.monitoring-admission-card-copy span {
+  color: var(--monitoring-product-muted);
+  font-size: 12px;
+}
+
 .monitoring-product-overlay {
   position: fixed;
   z-index: 40;

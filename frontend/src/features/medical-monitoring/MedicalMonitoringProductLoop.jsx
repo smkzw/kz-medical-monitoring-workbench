@@ -23,6 +23,7 @@ import {
 } from "./medicalMonitoringContinuityFilter.mjs";
 import { monitoringJourneyDrawerClosePatch } from "./medicalMonitoringJourneyChanges.mjs";
 import { MedicalMonitoringContinuityPanel } from "./MedicalMonitoringContinuityPanel.jsx";
+import { MedicalMonitoringAdmissionWizard } from "./MedicalMonitoringAdmissionWizard.jsx";
 import {
   MONITORING_RESULT_ACTION_TEXT,
   MONITORING_WIZARD_STEPS,
@@ -561,6 +562,32 @@ export function MonitoringPublicProgressSurface({ progress, error, loading = fal
   );
 }
 
+// Phase C C2 data admission: one entry card on the project start surface.
+// The button toggles the inline admission wizard below the card; once open
+// the wizard owns the primary action, so the card control demotes to a
+// non-primary toggle and never competes with it.
+function MonitoringAdmissionCard({ open = false, onToggle }) {
+  return (
+    <section className="monitoring-admission-card" data-monitoring-admission-card aria-label="数据接入">
+      <div className="monitoring-admission-card-copy">
+        <strong>数据接入</strong>
+        <span>把本地数据文件接入当前项目并识别数据结构，原始文件保持不变。</span>
+      </div>
+      <button
+        type="button"
+        className={`monitoring-product-button${open ? "" : " is-primary"}`}
+        aria-expanded={open}
+        data-monitoring-admission-toggle
+        onClick={onToggle}
+      >
+        {open ? "收起数据接入" : "开始数据接入"}
+      </button>
+    </section>
+  );
+}
+
+export { MonitoringAdmissionCard };
+
 function ProductRouteTabs({ route, resultLoaded, onOverview }) {
   const resultToken = clean(route?.result_context_token);
   // URL may keep view=overview with site_ref; treat that as site_overview for chrome.
@@ -592,6 +619,7 @@ export function MedicalMonitoringProductLoop({
   const [refreshEpoch, setRefreshEpoch] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [admissionOpen, setAdmissionOpen] = useState(false);
   const [wizard, setWizard] = useState(null);
   const [wizardError, setWizardError] = useState("");
   const [previewText, setPreviewText] = useState("");
@@ -1275,7 +1303,13 @@ export function MedicalMonitoringProductLoop({
           ) : null}
         </div>
       ) : null}
-      {!loadingBody && !resultError && !setupHistoryError && !resultLoaded && !publicRunToken ? <section className="monitoring-product-start-surface"><strong>{startSurfaceTitle}</strong><span>{startSurfaceCopy}</span></section> : null}
+      {!loadingBody && !resultError && !setupHistoryError && !resultLoaded && !publicRunToken ? (
+        <>
+          <section className="monitoring-product-start-surface"><strong>{startSurfaceTitle}</strong><span>{startSurfaceCopy}</span></section>
+          <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />
+          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} /> : null}
+        </>
+      ) : null}
       {historyOpen ? <MonitoringHistoryDrawer history={history} selectedPublicRunToken={productState.selectedPublicRunToken} onSelect={selectHistoryRow} onClose={() => setHistoryOpen(false)} /> : null}
       {ruleConfirmOpen ? <div className="monitoring-product-overlay" role="presentation"><section className="monitoring-rule-confirm-dialog" role="dialog" aria-modal="true" aria-label="确认保存特殊关注"><span className="monitoring-eyebrow">再次确认</span><h2>确认后将保存为本项目规则</h2><p>即使关闭本次向导，该规则也会保留。确认后返回第 3 步并默认勾选。</p><div className="monitoring-dialog-foot"><button type="button" className="monitoring-product-button is-quiet" disabled={ruleConfirmBusy} onClick={() => setRuleConfirmOpen(false)}>取消</button><button type="button" className="monitoring-product-button is-primary" disabled={ruleConfirmBusy} onClick={confirmRule}>{ruleConfirmBusy ? "保存中" : "再次确认并保存"}</button></div></section></div> : null}
     </main>
