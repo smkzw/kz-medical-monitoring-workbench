@@ -198,6 +198,19 @@ export const MEDICAL_MONITORING_PRODUCT_PATHS = Object.freeze({
   dataAdmissionProfile: (projectId, attemptId) => (
     `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/profile`
   ),
+  dataAdmissionMappingCandidates: (projectId, attemptId, options = {}) => appendQuery(
+    `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/mapping-candidates`,
+    { focus: options?.focus },
+  ),
+  dataAdmissionMappingDraft: (projectId, attemptId) => (
+    `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/mapping-draft`
+  ),
+  dataAdmissionMappingDraftField: (projectId, attemptId) => (
+    `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/mapping-draft/field`
+  ),
+  dataAdmissionMappingDraftConfirm: (projectId, attemptId) => (
+    `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/mapping-draft/confirm`
+  ),
   // Names used by the product layer; each delegates to the same path shape.
   runSetupOptions: (projectId, selector = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.setupOptions(projectId, selector),
   history: (projectId, options = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.runs(projectId, options),
@@ -253,6 +266,7 @@ export function createMedicalMonitoringProductApi({
 
   const get = (path, options = {}) => request("GET", path, options);
   const post = (path, body, options = {}) => request("POST", path, { ...options, body });
+  const patch = (path, body, options = {}) => request("PATCH", path, { ...options, body });
   const postForm = (path, formBody, options = {}) => request("POST", path, { ...options, formBody });
   const listRuns = (projectId, { limit = MONITORING_PRODUCT_DEFAULT_HISTORY_LIMIT, signal } = {}) => get(
     MEDICAL_MONITORING_PRODUCT_PATHS.runs(
@@ -392,6 +406,35 @@ export function createMedicalMonitoringProductApi({
         requireId(projectId, "projectId"),
         requireId(attemptId, "attemptId"),
       ), { signal });
+    },
+
+    listDataAdmissionMappingCandidates(projectId, attemptId, { focus = "critical", signal } = {}) {
+      return get(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionMappingCandidates(
+        requireId(projectId, "projectId"),
+        requireId(attemptId, "attemptId"),
+        { focus },
+      ), { signal });
+    },
+
+    adoptDataAdmissionMappingDraft(projectId, attemptId, payload, { signal } = {}) {
+      return post(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionMappingDraft(
+        requireId(projectId, "projectId"),
+        requireId(attemptId, "attemptId"),
+      ), payload, { signal });
+    },
+
+    editDataAdmissionMappingDraftField(projectId, attemptId, payload, { signal } = {}) {
+      return patch(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionMappingDraftField(
+        requireId(projectId, "projectId"),
+        requireId(attemptId, "attemptId"),
+      ), payload, { signal });
+    },
+
+    confirmDataAdmissionMappingDraft(projectId, attemptId, payload, { signal } = {}) {
+      return post(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionMappingDraftConfirm(
+        requireId(projectId, "projectId"),
+        requireId(attemptId, "attemptId"),
+      ), payload, { signal });
     },
 
     getSetupOptions(projectId, options = {}) {

@@ -118,21 +118,33 @@ check(renders.review.includes("来源版本标识") && renders.review.includes("
 check(renders.review.includes(">下一步：核对系统识别</button>"), "review primary advances");
 check(!renders.review.includes('role="alert"'), "clean review raises no alert");
 
-// Confirm step: pending human-judgement fields, back navigation.
-check(renders.confirm.includes("识别出可能的数据含义"), "pending note rendered");
-check(renders.confirm.includes("访视列表 · 受试者编号"), "pending field naming");
+// Confirm step: critical mapping candidates, back navigation, facts boundary.
+check(renders.confirm.includes("字段对应建议"), "mapping candidate summary rendered");
+check(renders.confirm.includes("重点优先"), "critical focus control rendered");
+check(renders.confirm.includes("访视列表 · 受试者编号"), "critical field naming");
+check(renders.confirm.includes("126/128 条非空"), "source profile evidence rendered");
+check(renders.confirm.includes("1 个样例默认隐藏"), "sample values stay hidden by default");
+check(renders.confirm.includes("建议核对"), "Chinese review guidance leads the mapping row");
+check(!renders.confirm.includes("subject_id"), "technical role stays out of the default mapping view");
+check(renders.confirm.includes('aria-pressed="false"'), "mapping rows expose selection state");
+check(renders.confirm.includes('disabled=""'), "pre-adopt mapping rows are not fake edit controls");
 check(renders.confirm.includes(">返回上一步</button>"), "back action rendered");
-check(renders.confirm.includes("不会用于监查分析"), "candidate boundary stated");
+check(renders.confirm.includes("确认前不会生成可用于监查的数据"), "candidate/fact boundary stated");
 check(
-  renders.confirmNoPending.includes("本批数据没有需要人工判断的字段"),
-  "no-pending copy rendered",
+  renders.confirmNoPending.includes("当前筛选下没有需要展示的字段对应建议"),
+  "empty-focus copy rendered",
 );
+check(renders.confirmDraftCritical.includes("访视日期"), "critical draft field remains visible");
+check(renders.confirmDraftCritical.includes("2 个样例默认隐藏"), "draft retains all-candidate evidence after adoption");
+check(!renders.confirmDraftCritical.includes("记录序号"), "noncritical draft field stays out of critical focus");
+check(renders.confirmDraftCritical.includes("请简要说明已核对的重点内容（至少 10 个字）"), "confirmation asks for an explicit review note");
+check(renders.confirmDraftCritical.includes('aria-disabled="true"'), "confirmation remains disabled before the review note");
 
-// Done: outcome, no exposed record identity, replacement guidance, restart primary.
-check(renders.done.includes("数据已完成接入"), "done outcome rendered");
+// Done: outcome, no exposed record identity, mapping confirmed guidance, restart primary.
+check(renders.done.includes("字段对应已确认"), "done outcome names mapping confirmation");
 check(!renders.done.includes("adm-20260902-0001"), "attempt record identity remains hidden");
-check(renders.done.includes("已接入的数据版本不会被覆盖"), "replacement guidance");
-check(renders.done.includes(">再接入一批数据</button>"), "done primary restarts");
+check(renders.done.includes("可用于监查的数据尚未生成"), "post-confirm facts still blocked");
+check(renders.done.includes("下一步：生成可用于监查的数据"), "done primary names the blocked next stage");
 
 // Failures: alert role, server text, concrete guidance, retry hierarchy.
 check(renders.failedRetry.includes('role="alert"'), "failure uses alert role");
@@ -169,5 +181,7 @@ check(css.includes("overflow-wrap: anywhere"), "long technical values wrap inter
 check(css.includes(".monitoring-admission-technical summary"), "collapsed region styled");
 check(/\.monitoring-admission-primary:disabled\s*\{[^}]*background: #eef1f4/.test(css), "disabled import is visually quiet");
 check(css.includes("@media (max-width: 900px)"), "narrow-width adjustment present");
+check(css.includes("monitoring-admission-mapping-workspace.has-editor"), "wide mapping review uses a side-by-side editor");
+check(css.includes("position: sticky"), "ready-step actions remain visible while reviewing long lists");
 
 console.log(`medicalMonitoringAdmissionWizardRender: ${passed} passed`);

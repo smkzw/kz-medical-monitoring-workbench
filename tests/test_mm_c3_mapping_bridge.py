@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -205,3 +206,57 @@ def test_pipeline_rejects_cross_project_attempt(tmp_path: Path) -> None:
             workspace_dir=workspace,
         )
     assert exc_info.value.code == "mapping_admission_not_found"
+
+
+def test_candidate_projection_keeps_bounded_source_profile_evidence() -> None:
+    candidate = SimpleNamespace(
+        structured_payload={
+            "field_mappings": [{
+                "domain": "生命体征",
+                "source_field": "SUBJID",
+                "recommended_role": "subject_id",
+                "field_kind": "source_metadata",
+                "confidence": 0.7,
+                "uncertainty": "需核对受试者标识。",
+                "user_action": "请确认该列是否为受试者唯一标识。",
+                "evidence_ids": ["e-1"],
+            }],
+        },
+        evidence=(SimpleNamespace(
+            evidence_id="e-1",
+            raw_fields={
+                "inferred_type": "string",
+                "total_rows": 2,
+                "non_empty_count": 2,
+                "representative_values": [{"redacted": "identifier"}],
+            },
+        ),),
+    )
+    repository = SimpleNamespace(
+        candidates=lambda *_args: (candidate,),
+    )
+    pipeline = AdmissionMappingPipeline(
+        ai_service=SimpleNamespace(),
+        ai_repository=repository,
+        input_revision_factory=lambda value: value,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+    )
+    job = SimpleNamespace(
+        project_id=PROJECT_ID,
+        job_id="job-1",
+        status="completed",
+        provider="zhipu-coding-plan",
+        requested_model="glm-5.3-flash",
+        response_model="glm-5.3-flash",
+        failure_code="",
+    )
+
+    projected = pipeline._project((job,), attempt_id="stg-test")
+
+    assert projected["candidates"][0]["evidence_summary"] == [{
+        "inferred_type": "string",
+        "total_rows": 2,
+        "non_empty_count": 2,
+        "sample_count": 1,
+        "samples_hidden": True,
+    }]

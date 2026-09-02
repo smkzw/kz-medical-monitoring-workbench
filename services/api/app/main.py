@@ -204,6 +204,7 @@ from .eligibility_artifact_store import EligibilityArtifactStore
 from .listing_file_parser import parse_listing_file
 from packages.medical_monitoring.admission import (
     AdmissionMappingPipeline,
+    AdmissionMappingConfirmationService,
     current_admission_mapping_revision,
     DataAdmissionPipeline,
 )
@@ -411,6 +412,7 @@ from .monitoring_batch_service import (
 from .monitoring_batch_rule_runner import MonitoringBatchRuleRunner
 from .monitoring_ai_repository import MonitoringAiRepository
 from .monitoring_ai_contracts import (
+    MonitoringAiCandidateStatus,
     MonitoringAiInputRevision,
     MonitoringAiTaskType,
 )
@@ -3451,6 +3453,24 @@ app.include_router(
         synthetic_fixture_mode=_r5_s7_fixture_mode,
     )
 )
+_r7_admission_mapping_pipeline = AdmissionMappingPipeline(
+    ai_service=monitoring_ai_service,
+    ai_repository=monitoring_ai_repository,
+    input_revision_factory=MonitoringAiInputRevision.model_validate,
+    task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+    worker_wake=monitoring_ai_worker.wake,
+)
+_r7_admission_mapping_confirmation = AdmissionMappingConfirmationService(
+    mapping_pipeline=_r7_admission_mapping_pipeline,
+    mapping_repository=monitoring_mapping_draft_repository,
+    ai_repository=monitoring_ai_repository,
+    prompt_version=PROMPT_VERSION_BY_TASK[
+        MonitoringAiTaskType.LISTING_FIELD_MAPPING
+    ],
+    accepted_status=MonitoringAiCandidateStatus.ACCEPTED,
+    proposed_status=MonitoringAiCandidateStatus.PROPOSED,
+    task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+)
 app.include_router(
     create_medical_monitoring_r7_product_router(
         runtime_dir=RUNTIME_DIR,
@@ -3460,13 +3480,8 @@ app.include_router(
         publication_authority_provider=_r7_synthetic_publication_provider,
         r6_output_provider=_r7_synthetic_mode_output_provider,
         admission_pipeline=DataAdmissionPipeline(parse_listing_file),
-        admission_mapping_pipeline=AdmissionMappingPipeline(
-            ai_service=monitoring_ai_service,
-            ai_repository=monitoring_ai_repository,
-            input_revision_factory=MonitoringAiInputRevision.model_validate,
-            task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
-            worker_wake=monitoring_ai_worker.wake,
-        ),
+        admission_mapping_pipeline=_r7_admission_mapping_pipeline,
+        admission_mapping_confirmation=_r7_admission_mapping_confirmation,
     )
 )
 app.include_router(
