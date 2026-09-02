@@ -202,7 +202,10 @@ from .eligibility_protocol_rules import (
 )
 from .eligibility_artifact_store import EligibilityArtifactStore
 from .listing_file_parser import parse_listing_file
-from packages.medical_monitoring.admission import DataAdmissionPipeline
+from packages.medical_monitoring.admission import (
+    AdmissionMappingPipeline,
+    DataAdmissionPipeline,
+)
 from .medical_writing import MedicalWritingRevisionService
 from .medical_writing_durable_jobs import (
     DurableJobNotFound,
@@ -406,7 +409,10 @@ from .monitoring_batch_service import (
 )
 from .monitoring_batch_rule_runner import MonitoringBatchRuleRunner
 from .monitoring_ai_repository import MonitoringAiRepository
-from .monitoring_ai_contracts import MonitoringAiTaskType
+from .monitoring_ai_contracts import (
+    MonitoringAiInputRevision,
+    MonitoringAiTaskType,
+)
 from .monitoring_ai_risk_packet import MonitoringAiRiskPacketResolver
 from .monitoring_ai_router import (
     create_monitoring_ai_router,
@@ -3444,6 +3450,13 @@ app.include_router(
         publication_authority_provider=_r7_synthetic_publication_provider,
         r6_output_provider=_r7_synthetic_mode_output_provider,
         admission_pipeline=DataAdmissionPipeline(parse_listing_file),
+        admission_mapping_pipeline=AdmissionMappingPipeline(
+            ai_service=monitoring_ai_service,
+            ai_repository=monitoring_ai_repository,
+            input_revision_factory=MonitoringAiInputRevision.model_validate,
+            task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+            worker_wake=monitoring_ai_worker.wake,
+        ),
     )
 )
 app.include_router(

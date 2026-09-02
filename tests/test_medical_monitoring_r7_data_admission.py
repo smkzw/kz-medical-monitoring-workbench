@@ -261,6 +261,7 @@ def test_admission_registration_is_additive_and_r7_scoped(tmp_path: Path) -> Non
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/upload",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}",
+        "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-candidates",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/profile",
     }
     assert all(

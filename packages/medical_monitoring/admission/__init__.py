@@ -26,6 +26,16 @@ from .pipeline import (
     AdmissionPipelineError,
     DataAdmissionPipeline,
 )
+from .mapping_bridge import (
+    MAPPING_BRIDGE_SCHEMA_VERSION,
+    MappingBridgeError,
+    MappingHarnessInput,
+    admission_record_to_harness_input,
+)
+from .mapping_pipeline import (
+    AdmissionMappingPipeline,
+    AdmissionMappingPipelineError,
+)
 
 __all__ = [
     "MANIFEST_NAME",
@@ -46,4 +56,10 @@ __all__ = [
     "LOCATOR_INDEX_KIND",
     "AdmissionPipelineError",
     "DataAdmissionPipeline",
+    "MAPPING_BRIDGE_SCHEMA_VERSION",
+    "MappingBridgeError",
+    "MappingHarnessInput",
+    "admission_record_to_harness_input",
+    "AdmissionMappingPipeline",
+    "AdmissionMappingPipelineError",
 ]
