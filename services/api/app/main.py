@@ -204,6 +204,7 @@ from .eligibility_artifact_store import EligibilityArtifactStore
 from .listing_file_parser import parse_listing_file
 from packages.medical_monitoring.admission import (
     AdmissionMappingPipeline,
+    current_admission_mapping_revision,
     DataAdmissionPipeline,
 )
 from .medical_writing import MedicalWritingRevisionService
@@ -1143,6 +1144,15 @@ def _current_monitoring_ai_revision(job):
             return ""
         except (KeyError, ValueError):
             return ""
+    admission_revision = current_admission_mapping_revision(
+        monitoring_ai_repository,
+        job,
+        workspace_dir=(
+            RUNTIME_DIR / "medical_monitoring_r7" / str(job.project_id)
+        ),
+    )
+    if admission_revision is not None:
+        return admission_revision
     return current_monitoring_ai_revision(
         monitoring_ai_repository,
         monitoring_batch_repository,

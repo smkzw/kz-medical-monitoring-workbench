@@ -9,6 +9,14 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from packages.medical_monitoring.admission.mapping_gate import (
+    MONITORING_C3_MAPPING_MODEL,
+    MONITORING_C3_MAPPING_PROFILE_ID,
+    MONITORING_C3_MAPPING_PROVIDER,
+    ZHIPU_CODING_PLAN_API_KEY_ENV,
+    ZHIPU_CODING_PLAN_BASE_URL,
+)
+
 from .ai_runtime_settings import (
     AiProviderProfile,
     AiRuntimeSettingsStore,
@@ -21,6 +29,7 @@ from .ai_runtime_settings import (
 ROLE_SETTINGS_SCHEMA_VERSION = "ai_role_bindings_v2"
 LEGACY_ROLE_SETTINGS_SCHEMA_VERSION = "ai_role_bindings_v1"
 INDEPENDENT_AI_ROLE = "independent_ai"
+MEDICAL_MONITORING_AI_ROLE = "medical_monitoring_ai"
 OCR_ROLE = "ocr"
 TRANSLATION_BODY_ROLE = "translation_body"
 TRANSLATION_SUPPORT_ROLE = "translation_support"
@@ -43,7 +52,7 @@ REASONING_EFFORTS: frozenset[str] = frozenset(
     {"low", "medium", "high", "xhigh", "max"}
 )
 THINKING_CONFIGURABLE_ROLES: frozenset[str] = frozenset(
-    {INDEPENDENT_AI_ROLE, TRANSLATION_SUPPORT_ROLE}
+    {INDEPENDENT_AI_ROLE, MEDICAL_MONITORING_AI_ROLE, TRANSLATION_SUPPORT_ROLE}
 )
 
 # The gate is deliberately not a model owner. This empty compatibility
@@ -126,6 +135,13 @@ ROLE_DEFINITIONS: tuple[AiRoleDefinition, ...] = (
         description="竞品分析、方案设计、候选生成、修订与一致性核查。",
         recommendation="默认使用 DeepSeek V4 Flash（最大推理）；可在获准的私有化模型之间切换。",
         default_model="qwen3.8-max-preview",
+    ),
+    AiRoleDefinition(
+        role_id=MEDICAL_MONITORING_AI_ROLE,
+        label="医学监查AI",
+        description="字段对应建议、医学风险候选、受试者历程与医学解释。",
+        recommendation="默认使用智谱 GLM-5.3 Flash（高推理）；DeepSeek V4 Flash 可作为显式选择。",
+        default_model=MONITORING_C3_MAPPING_MODEL,
     ),
     AiRoleDefinition(
         role_id=OCR_ROLE,
@@ -252,11 +268,30 @@ def _builtin_profiles() -> tuple[AiProviderProfile, ...]:
             discovery_mode="models_endpoint",
             enabled=True,
         ),
+        AiProviderProfile(
+            profile_id=MONITORING_C3_MAPPING_PROFILE_ID,
+            provider=MONITORING_C3_MAPPING_PROVIDER,
+            label="智谱 Coding Plan 字段映射",
+            base_url=ZHIPU_CODING_PLAN_BASE_URL,
+            model=MONITORING_C3_MAPPING_MODEL,
+            expected_response_model=MONITORING_C3_MAPPING_MODEL,
+            api_key_env=ZHIPU_CODING_PLAN_API_KEY_ENV,
+            deployment_scope="cloud",
+            discovery_mode="manual_plus_probe",
+            enabled=True,
+        ),
     )
 
 
 _BUILTIN_ROLE_PROFILE_IDS = {
-    INDEPENDENT_AI_ROLE: {INDEPENDENT_AI_DEEPSEEK_FLASH_PROFILE_ID},
+    INDEPENDENT_AI_ROLE: {
+        INDEPENDENT_AI_DEEPSEEK_FLASH_PROFILE_ID,
+        MONITORING_C3_MAPPING_PROFILE_ID,
+    },
+    MEDICAL_MONITORING_AI_ROLE: {
+        MONITORING_C3_MAPPING_PROFILE_ID,
+        INDEPENDENT_AI_DEEPSEEK_FLASH_PROFILE_ID,
+    },
     OCR_ROLE: {OCR_OMLX_PROFILE_ID, OCR_PADDLE_PROFILE_ID},
     TRANSLATION_BODY_ROLE: {TRANSLATION_BODY_OMLX_PROFILE_ID},
     TRANSLATION_SUPPORT_ROLE: {TRANSLATION_SUPPORT_PROFILE_ID},
@@ -371,6 +406,14 @@ class AiRoleRuntimeSettingsStore:
                 enabled=True,
                 thinking=THINKING_ENABLED,
                 reasoning_effort="max",
+            ),
+            MEDICAL_MONITORING_AI_ROLE: AiRoleBinding(
+                role_id=MEDICAL_MONITORING_AI_ROLE,
+            profile_id=MONITORING_C3_MAPPING_PROFILE_ID,
+            model=MONITORING_C3_MAPPING_MODEL,
+            enabled=True,
+            thinking=THINKING_DISABLED,
+            reasoning_effort="high",
             ),
             OCR_ROLE: AiRoleBinding(
                 role_id=OCR_ROLE,

@@ -7,7 +7,16 @@ from typing import Any, Callable, Mapping, Optional
 
 from ..graph.store import Store
 from ..runtime.runtime_progress import ARTIFACT_DIR_NAME, RUNTIME_DB_NAME, RUNTIME_DIR_NAME
-from .mapping_bridge import MappingBridgeError, admission_record_to_harness_input
+from .mapping_bridge import (
+    MAPPING_BRIDGE_SCHEMA_VERSION,
+    MappingBridgeError,
+    admission_record_to_harness_input,
+)
+from .mapping_gate import (
+    MONITORING_C3_MAPPING_MODEL,
+    MONITORING_C3_MAPPING_PROVIDER,
+    monitoring_mapping_runtime_matches,
+)
 from .pipeline import ADMISSION_RECORD_KIND
 from .staging import StagingIncompleteError, load_attempt
 
@@ -43,8 +52,8 @@ class AdmissionMappingPipeline:
         input_revision_factory: Optional[Callable[[Mapping[str, Any]], Any]] = None,
         task_type: Any = None,
         worker_wake: Callable[[], Any] = lambda: None,
-        required_provider: str = "zhipu-coding-plan",
-        required_model: str = "GLM-5.3-flash",
+        required_provider: str = MONITORING_C3_MAPPING_PROVIDER,
+        required_model: str = MONITORING_C3_MAPPING_MODEL,
     ) -> None:
         self._service = ai_service
         self._repository = ai_repository
@@ -92,10 +101,10 @@ class AdmissionMappingPipeline:
         if record.get("state") != "profile_ready":
             raise AdmissionMappingPipelineError("mapping_profile_not_ready")
         runtime = self._service.runtime_resolver()
-        if (
-            not runtime.available
-            or runtime.provider != self._required_provider
-            or runtime.model.casefold() != self._required_model.casefold()
+        if not monitoring_mapping_runtime_matches(
+            runtime,
+            required_provider=self._required_provider,
+            required_model=self._required_model,
         ):
             raise AdmissionMappingPipelineError("mapping_model_not_configured")
         try:
@@ -189,4 +198,58 @@ class AdmissionMappingPipeline:
         }
 
 
-__all__ = ["AdmissionMappingPipeline", "AdmissionMappingPipelineError"]
+def current_admission_mapping_revision(
+    repository: Any,
+    job: Any,
+    *,
+    workspace_dir: Path,
+) -> Optional[str]:
+    """Resolve a C3 admission job against the current accepted profile.
+
+    ``None`` means the job does not belong to the admission bridge and the
+    caller should use its legacy batch resolver. An empty string means the
+    admission identity is stale or cannot be re-established.
+    """
+
+    try:
+        payload = repository.input_payload(job.project_id, job.job_id)
+        field_profile = payload.get("field_profile")
+        if not isinstance(field_profile, Mapping):
+            return None
+        if field_profile.get("bridge_schema_version") != MAPPING_BRIDGE_SCHEMA_VERSION:
+            return None
+        attempt_id = str(field_profile.get("batch_id") or "").strip()
+        if not attempt_id:
+            return ""
+        record = AdmissionMappingPipeline()._load_record(
+            project_id=job.project_id,
+            attempt_id=attempt_id,
+            workspace_dir=workspace_dir,
+        )
+        if record.get("state") != "profile_ready":
+            return ""
+        current = admission_record_to_harness_input(
+            project_id=job.project_id,
+            attempt_id=attempt_id,
+            record=record,
+        ).field_profile
+        expected = {
+            "project_id": job.project_id,
+            "batch_id": attempt_id,
+            "full_profile_sha256": current["profile_sha256"],
+            "full_input_sha256": current["input_sha256"],
+            "source_bindings": current["source_bindings"],
+            "source_sha256s": current["source_sha256s"],
+        }
+        if any(field_profile.get(key) != value for key, value in expected.items()):
+            return ""
+        return str(job.input_revision_sha256)
+    except (AdmissionMappingPipelineError, MappingBridgeError, KeyError, ValueError):
+        return ""
+
+
+__all__ = [
+    "AdmissionMappingPipeline",
+    "AdmissionMappingPipelineError",
+    "current_admission_mapping_revision",
+]

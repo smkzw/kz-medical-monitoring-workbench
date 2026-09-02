@@ -32,9 +32,20 @@ from .mapping_bridge import (
     MappingHarnessInput,
     admission_record_to_harness_input,
 )
+from .mapping_gate import (
+    MONITORING_C3_MAPPING_GATE_SCHEMA_VERSION,
+    MONITORING_C3_MAPPING_MODEL,
+    MONITORING_C3_MAPPING_PROFILE_ID,
+    MONITORING_C3_MAPPING_PROVIDER,
+    MonitoringC3MappingGateContract,
+    ZHIPU_CODING_PLAN_PRESET_ID,
+    monitoring_mapping_runtime_matches,
+    normalize_monitoring_mapping_model,
+)
 from .mapping_pipeline import (
     AdmissionMappingPipeline,
     AdmissionMappingPipelineError,
+    current_admission_mapping_revision,
 )
 
 __all__ = [

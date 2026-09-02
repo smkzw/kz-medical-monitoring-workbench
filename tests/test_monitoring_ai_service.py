@@ -1094,11 +1094,11 @@ class _RuntimeRoleStore:
         }
 
     def binding(self, role_id: str) -> SimpleNamespace:
-        assert role_id == "independent_ai"
+        assert role_id == "medical_monitoring_ai"
         return self._binding
 
     def role_env(self, role_id: str) -> Dict[str, str]:
-        assert role_id == "independent_ai"
+        assert role_id == "medical_monitoring_ai"
         return dict(self._env)
 
 

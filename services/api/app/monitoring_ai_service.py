@@ -39,7 +39,7 @@ from .ai_gateway import (
     configured_ai_provider_from_env,
 )
 from .ai_role_runtime_settings import (
-    INDEPENDENT_AI_ROLE,
+    MEDICAL_MONITORING_AI_ROLE,
     runtime_ai_role_settings_store,
 )
 from .monitoring_ai_contracts import (
@@ -1261,9 +1261,9 @@ STRUCTURED_PAYLOAD_MODEL_BY_TASK: Dict[
 def resolve_monitoring_ai_runtime() -> MonitoringAiRuntimeBinding:
     try:
         store = runtime_ai_role_settings_store()
-        binding = store.binding(INDEPENDENT_AI_ROLE)
+        binding = store.binding(MEDICAL_MONITORING_AI_ROLE)
         profile = store.provider_store.profile(binding.profile_id)
-        env = store.role_env(INDEPENDENT_AI_ROLE)
+        env = store.role_env(MEDICAL_MONITORING_AI_ROLE)
         provider = env.get("WORKBENCH_AI_PROVIDER", "").strip()
         model = env.get("WORKBENCH_AI_MODEL", "").strip()
         transport = (

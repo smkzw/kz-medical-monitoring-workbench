@@ -15,6 +15,7 @@ from services.api.app.ai_role_runtime_settings import (
     GATE_OWNED_ROLES,
     GATE_TRANSLATION_BODY_MODEL,
     INDEPENDENT_AI_ROLE,
+    MEDICAL_MONITORING_AI_ROLE,
     LOCAL_OMLX_PROFILE_ID,
     OCR_PADDLE_PROFILE_ID,
     OCR_ROLE,
@@ -67,7 +68,7 @@ class AiRoleRuntimeSettingsTests(unittest.TestCase):
             GATE_TRANSLATION_BODY_MODEL,
         ],
     )
-    def test_migration_keeps_four_independent_role_bindings_and_availability(
+    def test_migration_keeps_subsystem_role_bindings_and_availability(
         self,
         _discover,
     ):
@@ -90,6 +91,16 @@ class AiRoleRuntimeSettingsTests(unittest.TestCase):
         self.assertEqual("deepseek-v4-flash", roles[INDEPENDENT_AI_ROLE]["model"])
         self.assertEqual("enabled", roles[INDEPENDENT_AI_ROLE]["thinking"])
         self.assertEqual("max", roles[INDEPENDENT_AI_ROLE]["reasoning_effort"])
+        self.assertEqual(
+            "independent_ai__zhipu_coding_plan_glm_flash",
+            roles[MEDICAL_MONITORING_AI_ROLE]["profile_id"],
+        )
+        self.assertEqual(
+            "glm-5.3-flash",
+            roles[MEDICAL_MONITORING_AI_ROLE]["model"],
+        )
+        self.assertEqual("disabled", roles[MEDICAL_MONITORING_AI_ROLE]["thinking"])
+        self.assertEqual("high", roles[MEDICAL_MONITORING_AI_ROLE]["reasoning_effort"])
         self.assertFalse(roles[OCR_ROLE]["gate_owned_model"])
         self.assertTrue(roles[OCR_ROLE]["model_editable"])
         self.assertEqual(PADDLE_OCR_MODEL, roles[OCR_ROLE]["model"])
