@@ -215,6 +215,9 @@ export const MEDICAL_MONITORING_PRODUCT_PATHS = Object.freeze({
   dataAdmissionMappingDraftConfirm: (projectId, attemptId) => (
     `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/mapping-draft/confirm`
   ),
+  dataAdmissionFacts: (projectId, attemptId) => (
+    `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/facts`
+  ),
   // Names used by the product layer; each delegates to the same path shape.
   runSetupOptions: (projectId, selector = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.setupOptions(projectId, selector),
   history: (projectId, options = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.runs(projectId, options),
@@ -452,6 +455,20 @@ export function createMedicalMonitoringProductApi({
         requireId(projectId, "projectId"),
         requireId(attemptId, "attemptId"),
       ), payload, { signal });
+    },
+
+    generateDataAdmissionFacts(projectId, attemptId, { signal } = {}) {
+      return post(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionFacts(
+        requireId(projectId, "projectId"),
+        requireId(attemptId, "attemptId"),
+      ), undefined, { signal });
+    },
+
+    getDataAdmissionFacts(projectId, attemptId, { signal } = {}) {
+      return get(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionFacts(
+        requireId(projectId, "projectId"),
+        requireId(attemptId, "attemptId"),
+      ), { signal });
     },
 
     getSetupOptions(projectId, options = {}) {

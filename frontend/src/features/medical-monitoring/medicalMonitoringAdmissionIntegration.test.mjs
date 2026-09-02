@@ -169,12 +169,12 @@ const needle = (text) => compact(text);
     "admission open state is declared beside the wizard state",
   );
   check(
-    src.includes(needle(`{!loadingBody && !resultError && (!setupHistoryError || admissionOnly) && !resultLoaded && !publicRunToken ? (\n        <>\n          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError.text : startSurfaceCopy}</span></section>\n          <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />\n          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} /> : null}\n        </>\n      ) : null}`)),
+    src.includes(needle(`{!loadingBody && !resultError && (!setupHistoryError || admissionOnly) && !resultLoaded && !publicRunToken ? (\n        <>\n          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError.text : startSurfaceCopy}</span></section>\n          <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />\n          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={retryPage} /> : null}\n        </>\n      ) : null}`)),
     "card and wizard mount only on the project start-surface gate",
   );
   check(
-    src.includes(needle(`<MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} />`)),
-    "wizard receives the project identity and resets when the project changes",
+    src.includes(needle(`<MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={retryPage} />`)),
+    "wizard receives the project identity and refreshes when monitor-ready data is complete",
   );
   passed += 4;
 }

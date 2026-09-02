@@ -229,6 +229,7 @@ function MappingConfirmPanel({ mappingState, onAnswerCard }) {
 export function MedicalMonitoringAdmissionWizardView({
   state,
   mappingState = null,
+  factState = null,
   onSourceDirChange,
   onSourceFilesChange,
   onPrimaryAction,
@@ -239,11 +240,16 @@ export function MedicalMonitoringAdmissionWizardView({
   const stepIndex = state?.stepIndex || 0;
   const profile = state?.profile || null;
   const resolvedMappingState = mappingState || createAdmissionMappingConfirmState();
-  const error = state?.error || resolvedMappingState?.error || null;
+  const resolvedFactState = factState || { phase: "idle", error: null };
+  const error = state?.error || resolvedMappingState?.error || resolvedFactState.error || null;
   const steps = admissionStepView(state);
   const primary = (
     phase === "done" && mappingState?.phase === "confirmed"
-      ? { key: "noop", label: "下一步：生成可用于监查的数据", disabled: true }
+      ? resolvedFactState.phase === "ready"
+        ? { key: "facts-ready", label: "进入医学监查", disabled: false }
+        : resolvedFactState.phase === "failed"
+          ? { key: "generate-facts", label: "重试生成监查数据", disabled: false }
+          : { key: "generating-facts", label: "正在生成监查数据…", disabled: true }
       : stepIndex === 2 && phase !== "done"
       ? admissionMappingPrimaryAction(resolvedMappingState)
       : admissionPrimaryAction(state)
@@ -282,12 +288,18 @@ export function MedicalMonitoringAdmissionWizardView({
         {phase === "done" ? (
           <div className="monitoring-admission-done" role="status">
             <p className="monitoring-admission-done-title">
-              {mappingState?.phase === "confirmed" ? "字段对应已确认" : "数据已完成接入"}
+              {resolvedFactState.phase === "ready"
+                ? "监查数据已准备完成"
+                : mappingState?.phase === "confirmed" ? "系统已完成字段识别" : "数据已完成接入"}
             </p>
             <p className="monitoring-admission-big">{profile?.summaryText || ""}</p>
             <p className="monitoring-admission-minor">
               {mappingState?.phase === "confirmed"
-                ? "可用于监查的数据尚未生成，当前还不能开始监查。"
+                ? resolvedFactState.phase === "ready"
+                  ? "已与原始表格逐格对齐，可以开始医学监查。"
+                  : resolvedFactState.phase === "failed"
+                    ? "本次未生成监查数据，原始文件未受影响。"
+                    : "正在自动生成可用于监查的数据，无需逐项确认。"
                 : "如需替换本批数据，请重新发起导入；已接入的数据版本不会被覆盖。"}
             </p>
           </div>
@@ -438,6 +450,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   const adoptInFlight = useRef(false);
   const adjudicationInFlight = useRef(false);
   const confirmInFlight = useRef(false);
+  const factsInFlight = useRef(false);
+  const [factState, setFactState] = useState({ phase: "idle", payload: null, error: null });
 
   useEffect(() => {
     if (!state.projectId || state.attemptId || state.phase !== "input") return undefined;
@@ -445,7 +459,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     let cancelled = false;
     api.getLatestDataAdmission(state.projectId, { signal: controller.signal })
       .then((payload) => {
-        if (!cancelled) dispatch({ type: "import-created", payload });
+        if (!cancelled) dispatch({ type: "resume-created", payload });
       })
       .catch((error) => {
         const code = error?.detail?.code || error?.code || "";
@@ -524,7 +538,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   }, [api, state.phase, state.attemptId, state.projectId, onAdmitted]);
 
   useEffect(() => {
-    if (state.phase !== "ready" || state.stepIndex !== 2) return undefined;
+    if (state.phase !== "ready") return undefined;
     if (mappingState.phase === "idle") loadMappingCandidates();
     return undefined;
   }, [loadMappingCandidates, mappingState.phase, state.phase, state.stepIndex]);
@@ -632,6 +646,40 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     }
   }, [api, mappingState, state.attemptId, state.projectId]);
 
+  const generateFacts = useCallback(async () => {
+    if (!state.projectId || !state.attemptId || factsInFlight.current) return;
+    factsInFlight.current = true;
+    setFactState({ phase: "generating", payload: null, error: null });
+    try {
+      const payload = await api.generateDataAdmissionFacts(
+        state.projectId,
+        state.attemptId,
+      );
+      setFactState({ phase: "ready", payload, error: null });
+      onAdmitted?.(payload);
+    } catch (error) {
+      factsInFlight.current = false;
+      setFactState({
+        phase: "failed",
+        payload: null,
+        error: {
+          serverText: error?.detail?.message || error?.message || "监查数据生成失败。",
+          guidance: ["请点击重试；原始文件不会被修改。"],
+        },
+      });
+    }
+  }, [api, onAdmitted, state.attemptId, state.projectId]);
+
+  useEffect(() => {
+    if (
+      state.phase === "done"
+      && mappingState.phase === "confirmed"
+      && factState.phase === "idle"
+    ) {
+      generateFacts();
+    }
+  }, [factState.phase, generateFacts, mappingState.phase, state.phase]);
+
   useEffect(() => {
     if (mappingState.phase !== "drafting" || mappingState.error) return undefined;
     const quality = semanticQualityPresentation(mappingState.draft?.semantic_quality);
@@ -667,13 +715,24 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       await confirmDraft();
       return;
     }
+    if (key === "generate-facts") {
+      await generateFacts();
+      return;
+    }
+    if (key === "facts-ready") {
+      onAdmitted?.(factState.payload);
+      return;
+    }
     dispatch({ type: key });
   }, [
     adoptDraft,
     api,
     confirmDraft,
+    generateFacts,
     loadMappingCandidates,
     mappingState,
+    onAdmitted,
+    factState.payload,
     state.attemptId,
     state.projectId,
     state.retryTarget,
@@ -721,6 +780,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     <MedicalMonitoringAdmissionWizardView
       state={state}
       mappingState={mappingState}
+      factState={factState}
       onSourceDirChange={(value) => dispatch({ type: "source-dir-change", value })}
       onSourceFilesChange={(files) => dispatch({ type: "source-files-change", files })}
       onPrimaryAction={onPrimaryAction}

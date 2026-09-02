@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from ...admission.fact_materialization import latest_fact_materialization_ready
 from pydantic import ValidationError
 
 from ..run_entry import ProfileFieldsRequest, chinese_message_for
@@ -89,7 +90,10 @@ def register_setup_routes(router: APIRouter, context: SetupRouteContext) -> None
                     rs.RunSetupError("invalid_snapshot")
                 )
         workspace = _workspace_dir(root, canonical)
-        if (workspace / "admissions").is_dir():
+        if (
+            (workspace / "admissions").is_dir()
+            and not latest_fact_materialization_ready(canonical, workspace)
+        ):
             return _run_entry_error_response(rs.RunSetupError("run_data_not_ready"))
         try:
             legacy_options = legacy_setup_projection(canonical)

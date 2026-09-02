@@ -209,6 +209,9 @@ from packages.medical_monitoring.admission import (
     current_admission_mapping_revision,
     DataAdmissionPipeline,
 )
+from packages.medical_monitoring.admission.fact_materialization import (
+    FactMaterializationService,
+)
 from .medical_writing import MedicalWritingRevisionService
 from .medical_writing_durable_jobs import (
     DurableJobNotFound,
@@ -3495,6 +3498,9 @@ _r7_admission_mapping_confirmation = AdmissionMappingConfirmationService(
     proposed_status=MonitoringAiCandidateStatus.PROPOSED,
     task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
 )
+_r7_admission_fact_materializer = FactMaterializationService(
+    mapping_repository=monitoring_mapping_draft_repository,
+)
 app.include_router(
     create_medical_monitoring_r7_product_router(
         runtime_dir=RUNTIME_DIR,
@@ -3506,6 +3512,7 @@ app.include_router(
         admission_pipeline=DataAdmissionPipeline(parse_listing_file),
         admission_mapping_pipeline=_r7_admission_mapping_pipeline,
         admission_mapping_confirmation=_r7_admission_mapping_confirmation,
+        admission_fact_materializer=_r7_admission_fact_materializer,
         synthetic_fixture_mode=_r5_s7_fixture_mode,
     )
 )

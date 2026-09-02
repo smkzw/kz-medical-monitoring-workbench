@@ -165,11 +165,30 @@ class FakeAdmissionPipeline:
         return self.profile_result
 
 
+class FakeFactMaterializer:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    def materialize(self, **kwargs: Any) -> Mapping[str, Any]:
+        self.calls.append(("materialize", kwargs))
+        return {
+            "state": "ready",
+            "facts_generated": True,
+            "summary": {"tables": 2, "rows": 25, "values": 90},
+            "message": "可用于监查的数据已生成，可以开始监查。",
+        }
+
+    def status(self, **kwargs: Any) -> Mapping[str, Any]:
+        self.calls.append(("status", kwargs))
+        return {"state": "not_generated", "facts_generated": False}
+
+
 def _make_app(
     runtime_dir: Path,
     *,
     principal: MonitoringAuthenticatedPrincipal,
     admission_pipeline: Any = None,
+    fact_materializer: Any = None,
 ) -> FastAPI:
     app = FastAPI()
 
@@ -187,6 +206,7 @@ def _make_app(
             principal_resolver=_resolve_principal,
             require_server_principal=True,
             admission_pipeline=admission_pipeline,
+            admission_fact_materializer=fact_materializer,
         )
     )
     return app
@@ -200,6 +220,7 @@ def _client(
     *,
     principal: Any = _SENTINEL,
     admission_pipeline: Any = None,
+    fact_materializer: Any = None,
 ) -> TestClient:
     if principal is _SENTINEL:
         principal = _principal(PROJECT_A)
@@ -208,7 +229,28 @@ def _client(
             runtime_dir,
             principal=principal,
             admission_pipeline=admission_pipeline,
+            fact_materializer=fact_materializer,
         )
+    )
+
+
+def test_fact_routes_are_project_scoped_and_use_plain_chinese_results(tmp_path: Path) -> None:
+    materializer = FakeFactMaterializer()
+    client = _client(
+        tmp_path / "runtime",
+        fact_materializer=materializer,
+    )
+    created = client.post(f"{_base()}/data-admissions/attempt-0001/facts")
+    assert created.status_code == 201
+    assert created.json()["facts_generated"] is True
+    assert "可以开始监查" in created.json()["message"]
+    status = client.get(f"{_base()}/data-admissions/attempt-0001/facts")
+    assert status.status_code == 200
+    assert status.json()["facts_generated"] is False
+    assert [name for name, _ in materializer.calls] == ["materialize", "status"]
+    assert all(
+        call["project_id"] == PROJECT_A and call["attempt_id"] == "attempt-0001"
+        for _, call in materializer.calls
     )
 
 
@@ -266,10 +308,11 @@ def test_admission_registration_is_additive_and_r7_scoped(tmp_path: Path) -> Non
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/upload",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/latest",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}",
+        "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/facts",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-candidates",
-            "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft",
-            "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft/adjudicate",
-            "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft/field",
+        "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft",
+        "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft/adjudicate",
+        "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft/field",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft/confirm",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/profile",
     }

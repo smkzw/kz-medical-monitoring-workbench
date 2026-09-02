@@ -233,6 +233,12 @@ export function admissionWizardReducer(state, action) {
       if (!ATTEMPT_ID_PATTERN.test(attemptId)) return responseInvalidFailure(state);
       return { ...state, attemptId, stepIndex: 1, phase: "reading", retryTarget: "read", error: null };
     }
+    case "resume-created": {
+      if (state.selectedFiles.length || state.sourceDir.trim()) return state;
+      const attemptId = cleanText(action.payload?.attempt_id);
+      if (!ATTEMPT_ID_PATTERN.test(attemptId)) return responseInvalidFailure(state);
+      return { ...state, attemptId, stepIndex: 1, phase: "reading", retryTarget: "read", error: null };
+    }
     case "profile-loaded": {
       if (!Array.isArray(action.payload?.tables) || action.payload.tables.length === 0) {
         return responseInvalidFailure(state);

@@ -181,11 +181,14 @@ check(
   "zero-question draft completes without user confirmation",
 );
 
-// Done: outcome, no exposed record identity, mapping confirmed guidance, restart primary.
-check(renders.done.includes("字段对应已确认"), "done outcome names mapping confirmation");
+// Done: automatic fact generation and a plain ready state, without identities.
+check(renders.done.includes("系统已完成字段识别"), "done outcome uses plain Chinese recognition copy");
 check(!renders.done.includes("adm-20260902-0001"), "attempt record identity remains hidden");
-check(renders.done.includes("可用于监查的数据尚未生成"), "post-confirm facts still blocked");
-check(renders.done.includes("下一步：生成可用于监查的数据"), "done primary names the blocked next stage");
+check(renders.done.includes("无需逐项确认"), "post-confirm facts generate automatically");
+check(renders.done.includes("正在生成监查数据"), "done primary reports automatic progress");
+check(renders.doneReady.includes("监查数据已准备完成"), "ready outcome names the user result");
+check(renders.doneReady.includes("已与原始表格逐格对齐"), "ready outcome explains source alignment");
+check(renders.doneReady.includes("进入医学监查"), "ready outcome offers one clear next action");
 
 // Failures: alert role, server text, concrete guidance, retry hierarchy.
 check(renders.failedRetry.includes('role="alert"'), "failure uses alert role");

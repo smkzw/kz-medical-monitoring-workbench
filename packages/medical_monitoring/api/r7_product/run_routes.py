@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from ...admission.fact_materialization import latest_fact_materialization_ready
 from pydantic import ValidationError
 
 from ..run_entry import chinese_message_for
@@ -243,6 +244,7 @@ def register_run_launch_routes(router: APIRouter, context: RunRouteContext) -> N
         workspace = _workspace_dir(root, canonical)
         if (
             (workspace / "admissions").is_dir()
+            and not latest_fact_materialization_ready(canonical, workspace)
             and not (workspace / lr.LAUNCH_REGISTRY_DB_NAME).exists()
         ):
             return {"runs": []}
