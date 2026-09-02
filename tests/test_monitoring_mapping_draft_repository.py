@@ -1030,6 +1030,44 @@ def test_only_system_harness_can_revise_user_decision_requirement(
     assert edited_field.user_decision_required is True
 
 
+def test_repository_confirmation_cannot_bypass_an_unanswered_question(
+    repositories,
+) -> None:
+    _, ai_repository, mapping_repository = repositories
+    _seed_complete_source(ai_repository)
+    draft = mapping_repository.assemble(
+        "project-alpha",
+        "batch-001",
+        PROFILE_HASH,
+    )
+    flagged = mapping_repository.edit_field(
+        "project-alpha",
+        draft.draft_id,
+        domain="AE",
+        source_field="AETERM",
+        patch={
+            "user_decision_required": True,
+            "user_action": "该列是否为不良事件原始术语？",
+        },
+        expected_version=draft.version,
+        actor="system_harness",
+        idempotency_key="flag-unanswered-question",
+    )
+
+    with pytest.raises(
+        MonitoringMappingStateConflictError,
+        match="user decisions remain unresolved",
+    ):
+        mapping_repository.confirm(
+            "project-alpha",
+            draft.draft_id,
+            expected_version=flagged.version,
+            confirmed_by="legacy-route",
+            confirmation_reason="尝试绕过未答问题。",
+            idempotency_key="confirm-with-unanswered-question",
+        )
+
+
 def test_field_edits_cannot_bypass_monitoring_semantic_boundaries(
     repositories,
 ) -> None:

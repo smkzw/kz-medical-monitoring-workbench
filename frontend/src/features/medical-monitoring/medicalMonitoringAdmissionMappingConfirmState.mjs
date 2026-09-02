@@ -12,7 +12,7 @@ export const MAPPING_FOCUS_ALL = "all";
 
 export function createAdmissionMappingConfirmState() {
   return {
-    phase: "idle", // idle | loading | ready | adopting | drafting | confirming | confirmed | failed
+    phase: "idle", // idle | loading | ready | adopting | adjudicating | drafting | confirming | confirmed | failed
     payload: null,
     draft: null,
     revision: null,
@@ -168,9 +168,41 @@ export function mappingUnansweredCount(mappingState) {
 export function mappingConfirmationReason(mappingState) {
   const total = mappingQuestionCards(mappingState).length;
   const answered = total - mappingUnansweredCount(mappingState);
+  const adjudicated = Number(
+    mappingState?.draft?.review_summary?.system_adjudicated_count,
+  ) || 0;
   return total > 0
-    ? `已逐条回答系统提出的 ${total} 个医学确认问题（${answered}/${total} 已确认）。`
-    : "系统字段识别结果无实质歧义，全部字段已自动对应。";
+    ? `系统独立复核 ${adjudicated} 项；用户逐条回答 ${total} 个医学确认问题（${answered}/${total} 已确认）。`
+    : adjudicated > 0
+      ? `系统独立复核并自动处理 ${adjudicated} 项，当前无须用户补充判断。`
+      : "系统字段识别结果无实质歧义，全部字段已自动对应。";
+}
+
+function projectDraftState(state, draft, message = "") {
+  const questions = draftQuestionCards(draft);
+  const payload = questions === null ? state.payload : {
+    ...state.payload,
+    questionCount: questions.length,
+    headline: mappingHeadline({
+      fieldCount: state.payload?.fieldCount || 0,
+      questionCount: questions.length,
+    }),
+    questions,
+    tableSummaries: (state.payload?.tableSummaries || []).map((table) => ({
+      ...table,
+      questionCount: questions.filter((item) => item.domain === table.name).length,
+    })),
+  };
+  return {
+    ...state,
+    phase: "drafting",
+    payload,
+    draft,
+    message: message || ((payload?.questionCount || 0) > 0
+      ? "系统识别结果已就绪，请回答下方需要您确认的问题。"
+      : ""),
+    error: null,
+  };
 }
 
 export function admissionMappingConfirmReducer(state, action) {
@@ -191,32 +223,38 @@ export function admissionMappingConfirmReducer(state, action) {
       };
     case "adopt-start":
       return { ...state, phase: "adopting", error: null, message: "正在采用系统识别结果…" };
-    case "adopt-ready": {
-      const questions = draftQuestionCards(action.payload);
-      const payload = questions === null ? state.payload : {
-        ...state.payload,
-        questionCount: questions.length,
-        headline: mappingHeadline({
-          fieldCount: state.payload?.fieldCount || 0,
-          questionCount: questions.length,
-        }),
-        questions,
-        tableSummaries: (state.payload?.tableSummaries || []).map((table) => ({
-          ...table,
-          questionCount: questions.filter((item) => item.domain === table.name).length,
-        })),
-      };
+    case "adopt-ready":
+      return projectDraftState(state, action.payload);
+    case "adjudication-start":
       return {
         ...state,
-        phase: "drafting",
-        payload,
+        phase: "adjudicating",
         draft: action.payload,
-        message: (payload?.questionCount || 0) > 0
-          ? "系统识别结果已就绪，请回答下方需要您确认的问题。"
-          : "",
+        message: "系统正在复核少量疑点，尽量减少需要您判断的内容…",
         error: null,
       };
+    case "adjudication-running":
+      return {
+        ...state,
+        phase: "adjudicating",
+        draft: action.payload,
+        message: "系统正在复核少量疑点，尽量减少需要您判断的内容…",
+        error: null,
+      };
+    case "adjudication-ready": {
+      const resolved = Number(action.payload?.adjudication?.resolved_count) || 0;
+      return projectDraftState(
+        state,
+        action.payload,
+        resolved > 0 ? `系统又自动完成了 ${resolved} 项判断。` : "",
+      );
     }
+    case "adjudication-fallback":
+      return projectDraftState(
+        state,
+        action.payload,
+        "系统没有足够依据继续自动判断，仅保留确实需要核对的问题。",
+      );
     case "answer-ready":
       return {
         ...state,
@@ -259,7 +297,12 @@ export function admissionMappingConfirmReducer(state, action) {
 
 export function admissionMappingPrimaryAction(state) {
   if (!state) return { key: "noop", label: "请稍候", disabled: true };
-  if (state.phase === "loading" || state.phase === "adopting" || state.phase === "confirming") {
+  if (
+    state.phase === "loading"
+    || state.phase === "adopting"
+    || state.phase === "adjudicating"
+    || state.phase === "confirming"
+  ) {
     return { key: "busy", label: state.message || "处理中…", disabled: true };
   }
   if (state.phase === "confirmed") {

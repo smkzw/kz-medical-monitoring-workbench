@@ -600,6 +600,41 @@ def test_malformed_provider_user_triage_stays_system_owned() -> None:
     assert normalized["field_mappings"][1]["user_decision_required"] is True
 
 
+def test_adjudication_never_silently_demotes_a_malformed_question(
+    tmp_path: Path,
+) -> None:
+    def malformed_adjudication(envelope: AiPromptEnvelope) -> Dict[str, Any]:
+        output = _valid_output(envelope)
+        mapping = output["candidates"][0]["structured_payload"][
+            "field_mappings"
+        ][0]
+        mapping["user_decision_required"] = True
+        mapping["user_action"] = "建议继续核对当前证据。"
+        return output
+
+    profile = _field_profile(field_count=1)
+    profile["adjudication_contract"] = {
+        "schema_version": "monitoring_mapping_adjudication_v1",
+        "first_pass_mappings": [],
+    }
+    provider = FakeProvider([malformed_adjudication, malformed_adjudication])
+    service = _service(tmp_path, provider)
+    service.submit_listing_field_mapping(
+        project_id="project-alpha",
+        input_revision=_revision(),
+        field_profile=profile,
+        prompt_version="monitoring-listing-field-mapping-adjudication-v1",
+    )
+
+    result = service.run_next("worker-a")
+
+    assert result.job is not None
+    assert result.job.status == MonitoringAiJobStatus.FAILED
+    assert result.job.failure_code == "invalid_ai_output"
+    assert len(provider.envelopes) == 2
+    assert "独立第二轮复核" in provider.envelopes[0].system_prompt
+
+
 def test_listing_provider_helper_echoes_do_not_consume_repair(
     tmp_path: Path,
 ) -> None:

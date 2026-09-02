@@ -124,7 +124,8 @@ check(
   "plain recognition headline rendered",
 );
 check(
-  renders.confirm.indexOf("系统已自动识别") < renders.confirm.indexOf("monitoring-admission-question"),
+  renders.confirmDrafting.indexOf("系统已自动识别")
+    < renders.confirmDrafting.indexOf("monitoring-admission-question"),
   "headline precedes the question cards",
 );
 check(renders.confirm.includes('aria-label="数据表识别摘要"'), "table summary region labelled");
@@ -143,11 +144,11 @@ for (const engineering of ["重点优先", "全部建议", 'aria-label="搜索�
 
 // Question guide: only the current substantive ambiguity is prominent.
 check(!renders.confirm.includes("低置信度"), "internal attention label stays hidden");
-check(renders.confirm.includes("访视列表 · 访视日期"), "question names the table and column");
-check(renders.confirm.includes("请确认这一列是否为实际访视日期。"), "harness question copy rendered");
-check(renders.confirm.includes("126/128 条非空"), "value-profile evidence rendered");
-check(renders.confirm.includes("2 个样例默认隐藏"), "sample values stay hidden by default");
-check(renders.confirm.includes("查看系统判断依据"), "technical evidence is collapsed by default");
+check(renders.confirmDrafting.includes("访视列表 · 访视日期"), "question names the table and column");
+check(renders.confirmDrafting.includes("请确认这一列是否为实际访视日期。"), "harness question copy rendered");
+check(renders.confirmDrafting.includes("126/128 条非空"), "value-profile evidence rendered");
+check(renders.confirmDrafting.includes("2 个样例默认隐藏"), "sample values stay hidden by default");
+check(renders.confirmDrafting.includes("查看系统判断依据"), "technical evidence is collapsed by default");
 check(!renders.confirm.includes("确认无误"), "answer controls wait for the adopted draft");
 check(!renders.confirm.includes("subject_id"), "technical role stays out of the question surface");
 

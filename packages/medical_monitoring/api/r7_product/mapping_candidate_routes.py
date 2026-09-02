@@ -91,6 +91,12 @@ class MappingDraftFieldEditRequest(BaseModel):
     idempotency_key: str = Field(min_length=2, max_length=240)
 
 
+class MappingDraftAdjudicateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    draft_id: str = Field(min_length=2, max_length=200)
+
+
 class MappingDraftConfirmRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -391,6 +397,58 @@ def register_mapping_candidate_routes(
         finally:
             write_permit.release()
 
+    @router.post("/data-admissions/{attempt_id}/mapping-draft/adjudicate")
+    async def adjudicate_mapping_draft(
+        project_id: str,
+        attempt_id: str,
+        request: Request,
+        body: MappingDraftAdjudicateRequest,
+    ) -> Any:
+        canonical = context.resolve_project(project_id)
+        if isinstance(canonical, JSONResponse):
+            return canonical
+        auth = context.authorize(
+            request,
+            project_id=canonical,
+            action=context.monitoring_action.REVIEW_AI_CANDIDATE,
+        )
+        if isinstance(auth, JSONResponse):
+            return auth
+        confirmation = _confirmation_or_error()
+        if isinstance(confirmation, JSONResponse):
+            return confirmation
+        validated_attempt = _validated_attempt_id(attempt_id)
+        if validated_attempt is None:
+            return _mapping_error("mapping_attempt_id_invalid")
+        try:
+            write_permit = context.acquire_product_write_gate(canonical)
+        except pb.ProjectBackupError as exc:
+            return _run_entry_error_response(exc)
+        try:
+            result = confirmation.adjudicate_draft(
+                project_id=canonical,
+                attempt_id=validated_attempt,
+                draft_id=body.draft_id,
+                workspace_dir=context.workspace_dir(context.root, canonical),
+            )
+            public = _public_mapping_projection(result)
+            if isinstance(public, JSONResponse):
+                return public
+            return {
+                "project_id": canonical,
+                **public,
+                "schema_version": MAPPING_CONFIRMATION_SCHEMA_VERSION,
+            }
+        except AdmissionMappingPipelineError as exc:
+            return _mapping_error(exc.code)
+        except Exception as exc:
+            mapped = _repo_error_code(exc)
+            if mapped:
+                return _mapping_error(mapped)
+            return _mapping_error("mapping_bridge_failed")
+        finally:
+            write_permit.release()
+
     @router.post("/data-admissions/{attempt_id}/mapping-draft/confirm")
     async def confirm_mapping_draft(
         project_id: str,
@@ -457,6 +515,7 @@ __all__ = [
     "MAPPING_CANDIDATE_SCHEMA_VERSION",
     "MAPPING_CONFIRMATION_SCHEMA_VERSION",
     "MappingCandidateRouteContext",
+    "MappingDraftAdjudicateRequest",
     "MappingDraftAdoptRequest",
     "MappingDraftConfirmRequest",
     "MappingDraftFieldEditRequest",

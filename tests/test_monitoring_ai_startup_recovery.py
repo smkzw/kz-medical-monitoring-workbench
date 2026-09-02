@@ -4,6 +4,9 @@ from hashlib import sha256
 import json
 from types import SimpleNamespace
 
+from packages.medical_monitoring.admission import (
+    MAPPING_ADJUDICATION_PROMPT_VERSION,
+)
 from services.api.app import main as app_main
 from services.api.app.monitoring_ai_contracts import (
     MonitoringAiInputRevision,
@@ -61,12 +64,14 @@ def test_startup_retires_old_prompt_contracts_before_waking_worker(
             "supersede",
             task_type.value,
             PROMPT_VERSION_BY_TASK[task_type],
-            (
-                PROTOCOL_RETIREMENT_AUDIT_PROMPT_VERSIONS
-                if task_type
-                == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING
-                else frozenset()
-            ),
+                (
+                    PROTOCOL_RETIREMENT_AUDIT_PROMPT_VERSIONS
+                    if task_type
+                    == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING
+                    else frozenset({MAPPING_ADJUDICATION_PROMPT_VERSION})
+                    if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
+                    else frozenset()
+                ),
         )
         for task_type in MonitoringAiTaskType
     ]

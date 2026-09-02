@@ -236,6 +236,58 @@ def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path
     ) == ""
 
 
+def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
+    tmp_path: Path,
+) -> None:
+    attempt_id, workspace = _admit(tmp_path)
+    repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
+    service = MonitoringAiService(repository, runtime_resolver=_runtime)
+    pipeline = AdmissionMappingPipeline(
+        ai_service=service,
+        ai_repository=repository,
+        input_revision_factory=MonitoringAiInputRevision.model_validate,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+    )
+
+    result = pipeline.adjudicate_candidates(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        draft_id="draft-generated-1",
+        draft_fields=[{
+            "domain": "生命体征",
+            "source_field": "收缩压",
+            "recommended_role": "vital_sign_systolic_blood_pressure",
+            "field_kind": "source_collected",
+            "uncertainty": "需结合同表字段复核。",
+            "user_action": "该列是否为收缩压？",
+            "user_decision_required": True,
+        }],
+        workspace_dir=workspace,
+    )
+
+    assert result["state"] == "running"
+    assert result["job_count"] == 1
+    jobs = repository.list_jobs(
+        PROJECT_ID,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING.value,
+        business_key_prefix=(
+            f"listing-field-mapping-adjudication:{attempt_id}:"
+        ),
+    )
+    assert len(jobs) == 1
+    payload = repository.input_payload(PROJECT_ID, jobs[0].job_id)
+    profile = payload["field_profile"]
+    assert [field["field"] for field in profile["fields"]] == ["收缩压"]
+    assert profile["adjudication_contract"]["question_count"] == 1
+    assert {
+        field["field"]
+        for field in profile["read_only_adjudication_context_profiles"]
+    } >= {"SUBJID", "VISIT", "测量日期"}
+    assert jobs[0].prompt_version == (
+        "monitoring-listing-field-mapping-adjudication-v1"
+    )
+
+
 def test_pipeline_refuses_non_default_model_without_sending_data(tmp_path: Path) -> None:
     attempt_id, workspace = _admit(tmp_path)
     repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")

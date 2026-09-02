@@ -47,6 +47,7 @@ _EDITABLE_FIELD_KEYS = frozenset(
         "value_constraints",
     }
 )
+_RECORDED_USER_DECISION_PREFIXES = ("用户已确认：", "用户已核对：")
 _PARTIAL_DATE_VALUE_RE = re.compile(
     r"^(?:\d{4}(?:[-/.](?:UK|UNK|UNKNOWN|XX|00)){1,2}"
     r"|\d{4}[-/.]\d{1,2}[-/.](?:UK|UNK|UNKNOWN|XX|00)"
@@ -1427,6 +1428,17 @@ class MonitoringMappingDraftRepository:
                 MonitoringMappingField.model_validate(item)
                 for item in json.loads(row["fields_json"])
             )
+            if any(
+                field.user_decision_required
+                and not field.user_action.startswith(
+                    _RECORDED_USER_DECISION_PREFIXES
+                )
+                for field in validated_fields
+            ):
+                connection.rollback()
+                raise MonitoringMappingStateConflictError(
+                    "mapping user decisions remain unresolved"
+                )
             semantic_quality = self._semantic_quality(
                 validated_fields,
                 field_sources,

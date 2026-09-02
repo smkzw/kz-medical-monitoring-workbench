@@ -371,6 +371,7 @@ def test_draft_payload_keeps_medical_question_projection_after_adoption() -> Non
         "field_count": 2,
         "user_question_count": 1,
         "system_adopted_count": 1,
+        "system_adjudicated_count": 0,
         "critical_count": 1,
     }
     assert payload["user_questions"][0]["source_field"] == "AETERM"
@@ -382,3 +383,99 @@ def test_draft_payload_keeps_medical_question_projection_after_adoption() -> Non
     assert adopted_field["needs_attention"] is False
     assert payload["facts_generated"] is False
     assert payload["candidate_fact_boundary"] == "draft_only"
+
+
+def test_second_pass_only_clears_an_unchanged_evidence_supported_mapping() -> None:
+    field = {
+        "domain": "AE",
+        "source_field": "AETERM",
+        "recommended_role": "ae_term",
+        "field_kind": "source_collected",
+        "confidence": 0.6,
+        "uncertainty": "第一轮仍有疑点。",
+        "user_action": "该列是否为不良事件术语？",
+        "user_decision_required": True,
+    }
+    state = {"version": 1, "field": dict(field)}
+
+    class Draft:
+        batch_id = "attempt-1"
+        draft_id = "draft-1"
+
+        @property
+        def version(self):
+            return state["version"]
+
+        def model_dump(self, mode="json"):
+            return {
+                "project_id": "p1",
+                "draft_id": self.draft_id,
+                "batch_id": self.batch_id,
+                "version": state["version"],
+                "fields": [dict(state["field"])],
+            }
+
+    draft = Draft()
+    quality = SimpleNamespace(as_payload=lambda: {"confirmable": True})
+
+    def edit_field(*_args, patch, **_kwargs):
+        state["field"].update(patch)
+        state["version"] += 1
+        return draft
+
+    mapping_repo = SimpleNamespace(
+        get_draft=lambda *_args: draft,
+        edit_field=edit_field,
+        semantic_quality=lambda *_args: quality,
+    )
+    candidate = SimpleNamespace(candidate_id="candidate-1", status="proposed")
+    job = SimpleNamespace(
+        job_id="job-1",
+        project_id="p1",
+        input_revision_sha256="r" * 64,
+    )
+    decisions = []
+    ai_repo = SimpleNamespace(
+        get=lambda *_args: job,
+        candidates=lambda *_args: (candidate,),
+        decide_candidate=lambda *_args, **kwargs: decisions.append(kwargs),
+    )
+    pipeline = SimpleNamespace(
+        adjudicate_candidates=lambda **_kwargs: {
+            "state": "ready",
+            "mappings": [{
+                **field,
+                "user_decision_required": False,
+                "uncertainty": "同表语境支持原对应。",
+                "user_action": "同表术语字段与结果分布一致。",
+                "candidate_id": "candidate-1",
+                "job_id": "job-1",
+            }],
+        },
+    )
+    service = AdmissionMappingConfirmationService(
+        mapping_pipeline=pipeline,
+        mapping_repository=mapping_repo,
+        ai_repository=ai_repo,
+        prompt_version="prompt",
+        accepted_status="accepted",
+        proposed_status="proposed",
+        current_revision_resolver=lambda *_args, **_kwargs: "r" * 64,
+    )
+
+    payload = service.adjudicate_draft(
+        project_id="p1",
+        attempt_id="attempt-1",
+        draft_id="draft-1",
+        workspace_dir="/generated/non-real",
+    )
+
+    assert payload["adjudication"] == {
+        "state": "complete",
+        "resolved_count": 1,
+        "remaining_question_count": 0,
+    }
+    assert payload["review_summary"]["system_adjudicated_count"] == 1
+    assert state["field"]["user_decision_required"] is False
+    assert state["field"]["user_action"].startswith("系统复核：")
+    assert decisions

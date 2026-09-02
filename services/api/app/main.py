@@ -205,6 +205,7 @@ from .listing_file_parser import parse_listing_file
 from packages.medical_monitoring.admission import (
     AdmissionMappingPipeline,
     AdmissionMappingConfirmationService,
+    MAPPING_ADJUDICATION_PROMPT_VERSION,
     current_admission_mapping_revision,
     DataAdmissionPipeline,
 )
@@ -1162,15 +1163,20 @@ def _current_monitoring_ai_revision(job):
             return ""
         except (KeyError, ValueError):
             return ""
-    admission_revision = current_admission_mapping_revision(
-        monitoring_ai_repository,
-        job,
-        workspace_dir=(
-            RUNTIME_DIR / "medical_monitoring_r7" / str(job.project_id)
-        ),
-    )
-    if admission_revision is not None:
-        return admission_revision
+    business_key = str(getattr(job, "business_key", ""))
+    if business_key.startswith((
+        "listing-field-mapping:",
+        "listing-field-mapping-adjudication:",
+    )):
+        admission_revision = current_admission_mapping_revision(
+            monitoring_ai_repository,
+            job,
+            workspace_dir=(
+                RUNTIME_DIR / "medical_monitoring_r7" / str(job.project_id)
+            ),
+        )
+        if admission_revision is not None:
+            return admission_revision
     return current_monitoring_ai_revision(
         monitoring_ai_repository,
         monitoring_batch_repository,
@@ -1428,6 +1434,8 @@ def _recover_monitoring_ai_jobs():
                     PROTOCOL_RETIREMENT_AUDIT_PROMPT_VERSIONS
                     if task_type
                     == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING
+                    else (MAPPING_ADJUDICATION_PROMPT_VERSION,)
+                    if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
                     else ()
                 ),
             )
