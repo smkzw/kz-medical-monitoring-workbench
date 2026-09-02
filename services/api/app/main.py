@@ -202,6 +202,7 @@ from .eligibility_protocol_rules import (
 )
 from .eligibility_artifact_store import EligibilityArtifactStore
 from .listing_file_parser import parse_listing_file
+from packages.medical_monitoring.admission import DataAdmissionPipeline
 from .medical_writing import MedicalWritingRevisionService
 from .medical_writing_durable_jobs import (
     DurableJobNotFound,
@@ -3442,6 +3443,7 @@ app.include_router(
         require_server_principal=True,
         publication_authority_provider=_r7_synthetic_publication_provider,
         r6_output_provider=_r7_synthetic_mode_output_provider,
+        admission_pipeline=DataAdmissionPipeline(parse_listing_file),
     )
 )
 app.include_router(

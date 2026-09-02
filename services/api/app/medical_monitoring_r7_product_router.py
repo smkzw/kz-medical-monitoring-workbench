@@ -289,6 +289,10 @@ from packages.medical_monitoring.api.r7_product.run_routes import (
     register_execution_routes,
     register_run_detail_route,
 )
+from packages.medical_monitoring.api.r7_product.admission_routes import (
+    AdmissionRouteContext,
+    register_admission_routes,
+)
 from packages.medical_monitoring.api.r7_product.publication_routes import (
     PublicationRouteContext,
     register_publication_routes,
@@ -396,6 +400,7 @@ def create_medical_monitoring_r7_product_router(
     mode_output_provider: Any = None,
     r6_mode_output_provider: Any = None,
     continuity_bridge: Any = None,
+    admission_pipeline: Any = None,
     audit_ledger_factory: Optional[Callable[..., Any]] = None,
 ) -> APIRouter:
     """Create the project-scoped R7 product router; no workspace I/O here."""
@@ -919,6 +924,20 @@ def create_medical_monitoring_r7_product_router(
 
     register_public_result_routes(router, publication_route_context)
     register_run_detail_route(router, run_route_context)
+
+    register_admission_routes(
+        router,
+        AdmissionRouteContext(
+            root=root,
+            resolve_project=resolve_project,
+            authorize=authorize,
+            read_json_object=_read_json_object,
+            acquire_product_write_gate=acquire_product_write_gate,
+            workspace_dir=_workspace_dir,
+            monitoring_action=MonitoringAction,
+            admission_pipeline=admission_pipeline,
+        ),
+    )
 
     @router.api_route(
         "/{r7_path:path}",

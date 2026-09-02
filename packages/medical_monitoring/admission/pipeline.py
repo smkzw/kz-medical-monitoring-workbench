@@ -1,0 +1,300 @@
+"""Product-ready deterministic listing admission pipeline (Phase C C1)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Callable, Iterable, Mapping, Sequence
+
+from ..domain.entities import SourceRevision, content_hash
+from ..graph.store import Store
+from ..intelligence.structure_profile import (
+    build_listing_profile,
+    build_table_locators,
+    build_table_snapshot,
+    canonical_listing_content,
+    execution_source_revision,
+    table_rows_from_sheet,
+)
+from ..runtime.runtime_progress import ARTIFACT_DIR_NAME, RUNTIME_DB_NAME, RUNTIME_DIR_NAME
+from .staging import (
+    StagingHashMismatchError,
+    StagingIncompleteError,
+    StagingSourceError,
+    load_attempt,
+    stage_copy,
+)
+
+ADMISSION_RECORD_KIND = "data_admission"
+LOCATOR_INDEX_KIND = "source_cell_locator_index"
+DEFAULT_LISTING_SUFFIXES = frozenset({".csv", ".xls", ".xlsx", ".xlsm"})
+
+
+class AdmissionPipelineError(RuntimeError):
+    """Stable error code consumed by the product route."""
+
+    def __init__(self, code: str) -> None:
+        self.code = str(code)
+        super().__init__(self.code)
+
+
+def _relative_listing_paths(source: Path, suffixes: frozenset[str]) -> tuple[Path, tuple[str, ...]]:
+    resolved = source.expanduser().resolve()
+    if resolved.is_file():
+        if resolved.suffix.lower() not in suffixes:
+            raise AdmissionPipelineError("admission_profile_unavailable")
+        return resolved.parent, (resolved.name,)
+    if not resolved.is_dir():
+        raise AdmissionPipelineError("admission_source_invalid")
+    files = tuple(
+        path.relative_to(resolved).as_posix()
+        for path in sorted(resolved.rglob("*"))
+        if path.is_file() and path.suffix.lower() in suffixes
+    )
+    if not files:
+        raise AdmissionPipelineError("admission_profile_unavailable")
+    return resolved, files
+
+
+def _store(workspace_dir: Path) -> Store:
+    runtime = Path(workspace_dir) / RUNTIME_DIR_NAME
+    runtime.mkdir(parents=True, exist_ok=True)
+    return Store(runtime / RUNTIME_DB_NAME, runtime / ARTIFACT_DIR_NAME)
+
+
+def _candidate_roles(column: Any) -> list[str]:
+    roles = []
+    if column.is_subject_key_candidate:
+        roles.append("受试者标识")
+    if column.is_visit_candidate:
+        roles.append("访视")
+    if column.is_date_candidate:
+        roles.append("日期")
+    return roles
+
+
+def _public_table(source_file: str, table: Any) -> dict[str, Any]:
+    columns = []
+    for column in table.columns:
+        columns.append({
+            "name": column.name,
+            "inferred_type": column.inferred_type,
+            "missing_count": column.missing_count,
+            "distinct_count": column.distinct_count,
+            "samples": list(column.samples),
+            "date_range": column.date_range,
+            "suggested_roles": _candidate_roles(column),
+        })
+    return {
+        "name": table.table_name,
+        "source_file": source_file,
+        "row_count": table.row_count,
+        "column_count": table.column_count,
+        "columns": columns,
+        "needs_confirmation": sum(bool(item["suggested_roles"]) for item in columns),
+    }
+
+
+class DataAdmissionPipeline:
+    """Compose staging, parsing, profiling and the existing Store authority."""
+
+    def __init__(
+        self,
+        parser: Callable[[str, bytes], Sequence[Any]],
+        *,
+        supported_suffixes: Iterable[str] = DEFAULT_LISTING_SUFFIXES,
+    ) -> None:
+        self._parser = parser
+        self._suffixes = frozenset(str(value).lower() for value in supported_suffixes)
+
+    @staticmethod
+    def _admission_workspace(workspace_dir: Path) -> Path:
+        return Path(workspace_dir) / "admissions"
+
+    def create_attempt(
+        self, *, project_id: str, source_dir: Path, workspace_dir: Path
+    ) -> Mapping[str, Any]:
+        root, relative_paths = _relative_listing_paths(Path(source_dir), self._suffixes)
+        admission_workspace = self._admission_workspace(workspace_dir)
+        try:
+            attempt = stage_copy(root, relative_paths, admission_workspace)
+        except StagingSourceError as exc:
+            raise AdmissionPipelineError("admission_source_invalid") from exc
+        except (StagingHashMismatchError, StagingIncompleteError) as exc:
+            raise AdmissionPipelineError("admission_copy_rejected") from exc
+
+        profiles = []
+        public_tables = []
+        revision_ids: list[str] = []
+        snapshot_ids: list[str] = []
+        locator_index_ids: list[str] = []
+        store = _store(workspace_dir)
+        try:
+            try:
+                project = store.get_project(project_id)
+            except Exception as exc:
+                if "project not found" not in str(exc).casefold():
+                    raise
+                store.create_project(project_id, project_id, is_synthetic=False)
+                project = store.get_project(project_id)
+            if project.is_synthetic:
+                raise AdmissionPipelineError("admission_project_identity_conflict")
+            for staged_file in attempt.files:
+                file_path = attempt.file_path(staged_file.path)
+                source_bytes = file_path.read_bytes()
+                revision_id = "srcc1_" + content_hash({
+                    "project_id": project_id,
+                    "relative_path": staged_file.path,
+                    "sha256": staged_file.sha256,
+                })[:24]
+                revision = SourceRevision.from_bytes(
+                    revision_id,
+                    project_id,
+                    "listing",
+                    staged_file.sha256[:16],
+                    source_bytes,
+                    scope=(("source_file", staged_file.path),),
+                )
+                store.add_source_revision(execution_source_revision(revision))
+                try:
+                    sheets = list(self._parser(file_path.name, source_bytes))
+                except Exception as exc:
+                    raise AdmissionPipelineError("admission_profile_unavailable") from exc
+                profile = build_listing_profile(
+                    project_id,
+                    revision_id,
+                    file_path.name,
+                    staged_file.sha256,
+                    sheets,
+                )
+                profiles.append(profile)
+                revision_ids.append(revision_id)
+                for table in profile.tables:
+                    public_tables.append(_public_table(file_path.name, table))
+                for sheet in sheets:
+                    table_name, headers, rows, row_numbers = table_rows_from_sheet(sheet)
+                    snapshot = build_table_snapshot(
+                        project_id,
+                        revision_id,
+                        attempt.manifest_hash[:16],
+                        table_name,
+                        headers,
+                        rows,
+                        is_synthetic=project.is_synthetic,
+                    )
+                    store.add_listing_snapshot(snapshot, canonical_listing_content([sheet]))
+                    locators = build_table_locators(
+                        project_id,
+                        revision_id,
+                        snapshot.snapshot_id,
+                        file_path.name,
+                        staged_file.sha256,
+                        table_name,
+                        headers,
+                        rows,
+                        row_numbers,
+                    )
+                    locator_index = {
+                        "project_id": project_id,
+                        "source_revision_id": revision_id,
+                        "snapshot_id": snapshot.snapshot_id,
+                        "source_file": file_path.name,
+                        "source_file_digest": staged_file.sha256,
+                        "table_name": table_name,
+                        "row_numbers": list(row_numbers),
+                        "columns": list(headers),
+                        "locator_ids": [locator.locator_id for locator in locators],
+                    }
+                    store.put_domain_object(
+                        LOCATOR_INDEX_KIND, snapshot.snapshot_id, locator_index
+                    )
+                    snapshot_ids.append(snapshot.snapshot_id)
+                    locator_index_ids.append(snapshot.snapshot_id)
+
+            summary = {
+                "files": len(attempt.files),
+                "tables": len(public_tables),
+                "rows": sum(int(table["row_count"]) for table in public_tables),
+            }
+            record = {
+                "attempt_id": attempt.attempt_id,
+                "project_id": project_id,
+                "state": "profile_ready",
+                "summary": summary,
+                "tables": public_tables,
+                "technical_details": {
+                    "manifest_hash": attempt.manifest_hash,
+                    "files": [
+                        {"path": item.path, "size": item.size, "sha256": item.sha256}
+                        for item in attempt.files
+                    ],
+                    "revision_ids": revision_ids,
+                    "snapshot_ids": snapshot_ids,
+                    "locator_index_ids": locator_index_ids,
+                    "profile_ids": [profile.profile_id for profile in profiles],
+                },
+            }
+            store.put_domain_object(ADMISSION_RECORD_KIND, attempt.attempt_id, record)
+            return {key: value for key, value in record.items() if key != "project_id"}
+        except AdmissionPipelineError:
+            raise
+        except Exception as exc:
+            raise AdmissionPipelineError("admission_pipeline_failed") from exc
+        finally:
+            store.close()
+
+    def _record(
+        self, *, project_id: str, attempt_id: str, workspace_dir: Path
+    ) -> dict[str, Any]:
+        try:
+            load_attempt(self._admission_workspace(workspace_dir), attempt_id)
+        except StagingIncompleteError as exc:
+            raise AdmissionPipelineError("admission_attempt_not_found") from exc
+        try:
+            store = _store(workspace_dir)
+            persisted = store.get_domain_object(ADMISSION_RECORD_KIND, attempt_id)
+        except Exception as exc:
+            raise AdmissionPipelineError("admission_attempt_not_found") from exc
+        finally:
+            if "store" in locals():
+                store.close()
+        if persisted is None or not isinstance(persisted[1], dict):
+            raise AdmissionPipelineError("admission_attempt_not_found")
+        record = dict(persisted[1])
+        if record.get("project_id") != project_id:
+            raise AdmissionPipelineError("admission_attempt_not_found")
+        return record
+
+    def attempt_status(
+        self, *, project_id: str, attempt_id: str, workspace_dir: Path
+    ) -> Mapping[str, Any]:
+        record = self._record(
+            project_id=project_id, attempt_id=attempt_id, workspace_dir=workspace_dir
+        )
+        return {
+            "attempt_id": attempt_id,
+            "state": record["state"],
+            "summary": record["summary"],
+            "technical_details": record["technical_details"],
+        }
+
+    def profile_preview(
+        self, *, project_id: str, attempt_id: str, workspace_dir: Path
+    ) -> Mapping[str, Any]:
+        record = self._record(
+            project_id=project_id, attempt_id=attempt_id, workspace_dir=workspace_dir
+        )
+        return {
+            "attempt_id": attempt_id,
+            "tables": record["tables"],
+            "summary": record["summary"],
+            "technical_details": record["technical_details"],
+        }
+
+
+__all__ = [
+    "ADMISSION_RECORD_KIND",
+    "DEFAULT_LISTING_SUFFIXES",
+    "LOCATOR_INDEX_KIND",
+    "AdmissionPipelineError",
+    "DataAdmissionPipeline",
+]

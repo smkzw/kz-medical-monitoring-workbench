@@ -393,23 +393,29 @@ class StoreBaseMixin:
     def create_project(self, project_id: str, name: str,
                        config: Optional[Mapping[str, Any]] = None,
                        is_synthetic: bool = True) -> StudyProject:
-        """Create a project. POC guard: only SYNTHETIC fixtures are allowed."""
-        if not is_synthetic:
-            raise StoreError("POC guard: only synthetic projects are allowed")
+        """Create one project identity, real or explicitly synthetic."""
+        if not isinstance(is_synthetic, bool):
+            raise StoreError("is_synthetic must be bool")
         existing = self._conn.execute(
             "SELECT project_id FROM projects WHERE project_id=?", (project_id,)
         ).fetchone()
         if existing is not None:
-            return self.get_project(project_id)
+            project = self.get_project(project_id)
+            if project.is_synthetic != is_synthetic:
+                raise IdempotencyConflictError(
+                    f"project id {project_id!r} cannot change synthetic provenance"
+                )
+            return project
         created = now_iso()
-        proj = StudyProject(project_id=project_id, name=name, is_synthetic=True,
+        proj = StudyProject(project_id=project_id, name=name, is_synthetic=is_synthetic,
                             created_at=created, config=dict(config or {}))
 
         def _work() -> StudyProject:
             self._conn.execute(
                 "INSERT INTO projects(project_id, name, is_synthetic, config_json, created_at)"
                 " VALUES (?,?,?,?,?)",
-                (project_id, name, 1, canonical_json(to_jsonable(proj.config)), created),
+                (project_id, name, int(is_synthetic),
+                 canonical_json(to_jsonable(proj.config)), created),
             )
             self._append_audit_row(self._conn, domain.EVENT_PROJECT_CREATED,
                                    {"project_id": project_id, "name": name}, None)
@@ -443,7 +449,19 @@ class StoreBaseMixin:
                     f"revision id {revision.revision_id!r} reused across projects "
                     f"({existing[1]} -> {revision.project_id})"
                 )
-            return self.get_source_revision(revision.revision_id)
+            persisted = self.get_source_revision(revision.revision_id)
+            if (
+                persisted.source_type != revision.source_type
+                or persisted.version != revision.version
+                or persisted.content_hash != revision.content_hash
+                or persisted.valid_from != revision.valid_from
+                or canonical_json(to_jsonable(persisted.scope))
+                != canonical_json(to_jsonable(revision.scope))
+            ):
+                raise IdempotencyConflictError(
+                    f"revision id {revision.revision_id!r} replayed with different metadata"
+                )
+            return persisted
         created = revision.created_at or now_iso()
         rev = SourceRevision(**{**to_jsonable(revision), "created_at": created})
 
@@ -488,9 +506,14 @@ class StoreBaseMixin:
         ``listing_data`` must map table name -> list of row dicts.  Content hash
         is computed over the canonical JSON of the whole listing.
         """
-        if not snapshot.is_synthetic:
-            raise StoreError("POC guard: only synthetic snapshots are allowed")
-        self.get_project(snapshot.project_id)
+        if not isinstance(snapshot.is_synthetic, bool):
+            raise StoreError("snapshot.is_synthetic must be bool")
+        project = self.get_project(snapshot.project_id)
+        if project.is_synthetic != snapshot.is_synthetic:
+            raise StoreError(
+                f"snapshot {snapshot.snapshot_id} synthetic provenance does not match "
+                f"project {snapshot.project_id}"
+            )
         rev = self.get_source_revision(snapshot.revision_id)
         if rev.project_id != snapshot.project_id:
             raise StoreError(
@@ -510,7 +533,8 @@ class StoreBaseMixin:
                     and existing[1] == snapshot.project_id
                     and existing[2] == snapshot.revision_id
                     and existing[3] == snapshot.snapshot_version
-                    and json.loads(existing[4]) == dict(snapshot.structure)):
+                    and canonical_json(json.loads(existing[4]))
+                    == canonical_json(to_jsonable(dict(snapshot.structure)))):
                 return self.get_listing_snapshot(snapshot.snapshot_id)
             raise IdempotencyConflictError(
                 f"snapshot id {snapshot.snapshot_id!r} replayed with different "
@@ -523,7 +547,9 @@ class StoreBaseMixin:
             snapshot_id=snapshot.snapshot_id, project_id=snapshot.project_id,
             revision_id=snapshot.revision_id, snapshot_version=snapshot.snapshot_version,
             content_hash=listing_hash, row_count=row_count,
-            structure=dict(snapshot.structure), is_synthetic=True, created_at=created,
+            structure=dict(snapshot.structure),
+            is_synthetic=snapshot.is_synthetic,
+            created_at=created,
         )
 
         def _work() -> ListingSnapshot:
@@ -533,7 +559,8 @@ class StoreBaseMixin:
                 " created_at) VALUES (?,?,?,?,?,?,?,?,?)",
                 (snap.snapshot_id, snap.project_id, snap.revision_id, snap.snapshot_version,
                  snap.content_hash, snap.row_count,
-                 canonical_json(to_jsonable(snap.structure)), 1, created),
+                 canonical_json(to_jsonable(snap.structure)),
+                 int(snap.is_synthetic), created),
             )
             self._conn.execute(
                 "INSERT INTO snapshot_acceptance(snapshot_id, state, accepted_by, ambiguity_json,"
