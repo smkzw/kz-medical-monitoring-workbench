@@ -579,28 +579,32 @@ def test_provider_confidences_reject_boolean_values() -> None:
         )
 
 
-def test_malformed_provider_user_triage_stays_system_owned() -> None:
-    normalized = (
-        monitoring_ai_service_module._normalize_provider_field_mapping_triage(
-            {
-                "field_mappings": [
-                    {
-                        "source_field": "AETERM",
-                        "user_action": "建议结合整表上下文继续核对。",
-                        "user_decision_required": True,
-                    },
-                    {
-                        "source_field": "TRT01A",
-                        "user_action": "该列表示实际治疗组还是计划治疗组？",
-                        "user_decision_required": True,
-                    },
-                ]
-            }
-        )
+def test_first_pass_never_silently_demotes_a_malformed_question(
+    tmp_path: Path,
+) -> None:
+    def malformed_mapping(envelope: AiPromptEnvelope) -> Dict[str, Any]:
+        output = _valid_output(envelope)
+        mapping = output["candidates"][0]["structured_payload"][
+            "field_mappings"
+        ][0]
+        mapping["user_decision_required"] = True
+        mapping["user_action"] = "建议继续核对当前证据。"
+        return output
+
+    provider = FakeProvider([malformed_mapping, malformed_mapping])
+    service = _service(tmp_path, provider)
+    service.submit_listing_field_mapping(
+        project_id="project-alpha",
+        input_revision=_revision(),
+        field_profile=_field_profile(field_count=1),
     )
 
-    assert normalized["field_mappings"][0]["user_decision_required"] is False
-    assert normalized["field_mappings"][1]["user_decision_required"] is True
+    result = service.run_next("worker-a")
+
+    assert result.job is not None
+    assert result.job.status == MonitoringAiJobStatus.FAILED
+    assert result.job.failure_code == "invalid_ai_output"
+    assert len(provider.envelopes) == 2
 
 
 def test_adjudication_never_silently_demotes_a_malformed_question(
