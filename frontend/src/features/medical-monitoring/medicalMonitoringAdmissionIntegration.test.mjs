@@ -169,7 +169,7 @@ const needle = (text) => compact(text);
     "admission open state is declared beside the wizard state",
   );
   check(
-    src.includes(needle(`{!loadingBody && !resultError && !setupHistoryError && !resultLoaded && !publicRunToken ? (\n        <>\n          <section className="monitoring-product-start-surface"><strong>{startSurfaceTitle}</strong><span>{startSurfaceCopy}</span></section>\n          <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />\n          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} /> : null}\n        </>\n      ) : null}`)),
+    src.includes(needle(`{!loadingBody && !resultError && (!setupHistoryError || admissionOnly) && !resultLoaded && !publicRunToken ? (\n        <>\n          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError.text : startSurfaceCopy}</span></section>\n          <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />\n          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} /> : null}\n        </>\n      ) : null}`)),
     "card and wizard mount only on the project start-surface gate",
   );
   check(
@@ -198,8 +198,9 @@ const needle = (text) => compact(text);
     "board loading gate excludes admission state",
   );
   check(
-    src.includes(needle(`const productStatus = resultError || setupHistoryError ? "unavailable" : loadingBody ? "loading" : productState.kind;`)),
-    "page status derivation excludes admission state",
+    src.includes(needle(`const admissionOnly = setupHistoryError?.code === "run_data_not_ready";`))
+      && src.includes(needle(`const productStatus = resultError || (setupHistoryError && !admissionOnly) ? "unavailable" : admissionOnly ? "admission_ready" : loadingBody ? "loading" : productState.kind;`)),
+    "page status keeps pre-fact admission available without synthetic setup",
   );
   check(!src.includes("medical-writing") && !src.includes("MedicalWriting"), "loop keeps importing nothing from medical-writing surfaces");
   passed += 6;

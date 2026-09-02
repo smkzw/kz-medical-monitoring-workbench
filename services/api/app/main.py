@@ -445,6 +445,9 @@ from .monitoring_assurance_service import (
 )
 from .monitoring_assurance_router import create_monitoring_assurance_router
 from .monitoring_principal_host_adapter import (
+    LOCAL_SINGLE_USER_ENV,
+    build_local_single_user_principal,
+    local_single_user_enabled,
     resolve_monitoring_principal_from_request,
 )
 from .synthetic_profile import synthetic_profile_requested
@@ -616,6 +619,19 @@ async def enforce_medical_writing_client_contract(request: Request, call_next):
                     "expected_api_contract_version": API_CONTRACT_VERSION,
                 }
             },
+        )
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def bind_local_single_user_identity(request: Request, call_next):
+    if (
+        local_single_user_enabled(os.environ.get(LOCAL_SINGLE_USER_ENV))
+        and resolve_monitoring_principal_from_request(request) is None
+    ):
+        projects = project_source_manifest_service.list_public_projects()
+        request.state.monitoring_principal = build_local_single_user_principal(
+            project["project_id"] for project in projects
         )
     return await call_next(request)
 
@@ -3482,6 +3498,7 @@ app.include_router(
         admission_pipeline=DataAdmissionPipeline(parse_listing_file),
         admission_mapping_pipeline=_r7_admission_mapping_pipeline,
         admission_mapping_confirmation=_r7_admission_mapping_confirmation,
+        synthetic_fixture_mode=_r5_s7_fixture_mode,
     )
 )
 app.include_router(

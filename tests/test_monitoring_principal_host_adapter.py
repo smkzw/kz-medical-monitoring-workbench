@@ -7,6 +7,8 @@ from starlette.requests import Request
 
 from services.api.app.monitoring_principal_host_adapter import (
     MONITORING_PRINCIPAL_STATE_KEY,
+    build_local_single_user_principal,
+    local_single_user_enabled,
     resolve_monitoring_principal_from_request,
 )
 from services.api.app.monitoring_runtime_principal import (
@@ -58,6 +60,31 @@ def test_verified_request_state_principal_is_returned_unchanged():
     setattr(request.state, MONITORING_PRINCIPAL_STATE_KEY, principal)
 
     assert resolve_monitoring_principal_from_request(request) is principal
+
+
+def test_local_single_user_identity_is_server_owned_and_project_scoped():
+    now = datetime(2026, 9, 2, tzinfo=timezone.utc)
+    principal = build_local_single_user_principal(
+        ("proj-a", "proj-b", "proj-a"),
+        now=now,
+        local_user="medical-monitor",
+        device_name="workstation-1",
+    )
+
+    assert principal.project_scope == ("proj-a", "proj-b")
+    assert principal.roles == (MonitoringRole.MEDICAL_MANAGER, MonitoringRole.SYSTEM_ADMIN)
+    assert principal.authn_method == "local-os-user-device"
+    assert principal.verification_ref_sha256 == (
+        "40eaf590cb2ec4a5e73251f3c91be4307a2a56b95234518f53183cbd7c2981ef"
+    )
+    assert principal.expires_at > now
+
+
+def test_local_single_user_profile_requires_explicit_host_switch():
+    assert local_single_user_enabled("true") is True
+    assert local_single_user_enabled("1") is True
+    assert local_single_user_enabled("") is False
+    assert local_single_user_enabled(None) is False
 
 
 def test_main_wires_the_adapter_without_installing_a_fallback_identity():

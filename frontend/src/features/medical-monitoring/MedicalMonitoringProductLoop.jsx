@@ -695,10 +695,11 @@ export function MedicalMonitoringProductLoop({
       setSetupHistoryLoading(false);
     }).catch((error) => {
       if (cancelled || error?.name === "AbortError") return;
+      const code = clean(error?.detail?.code || error?.code);
       setSetup(null);
-      setHistory(null);
+      setHistory(code === "run_data_not_ready" ? { kind: "history", rows: [] } : null);
       setSetupHistoryLoading(false);
-      setSetupHistoryError({ text: publicErrorText(error, "监查范围暂不可用，请稍后重试。"), code: error?.code || "" });
+      setSetupHistoryError({ text: publicErrorText(error, "监查范围暂不可用，请稍后重试。"), code });
     });
     return () => {
       cancelled = true;
@@ -1244,7 +1245,8 @@ export function MedicalMonitoringProductLoop({
     }
   }
   const displayState = { ...productState, workbar };
-  const productStatus = resultError || setupHistoryError ? "unavailable" : loadingBody ? "loading" : productState.kind;
+  const admissionOnly = setupHistoryError?.code === "run_data_not_ready";
+  const productStatus = resultError || (setupHistoryError && !admissionOnly) ? "unavailable" : admissionOnly ? "admission_ready" : loadingBody ? "loading" : productState.kind;
   const startSurfaceTitle = routeView === "site_overview"
     ? "当前中心暂无本次结果"
     : productState.kind === "result_available"
@@ -1271,7 +1273,7 @@ export function MedicalMonitoringProductLoop({
       {resultLoaded ? <MonitoringPublicResultIdentityStrip identity={resultContext.identity} siteScopeText={resultSiteScopeText} /> : null}
       <ProductRouteTabs route={route} resultLoaded={resultLoaded} onOverview={() => navigate("overview")} />
       {wizardOpen && wizard ? <MonitoringWizardView wizard={{ ...wizard, dataBatches: setup?.dataBatches || [], serverSummary: setup?.serverSummary || {}, errorText: wizardError || wizard.errorText }} previewText={previewText} previewBusy={previewBusy} previewOpen={previewOpen} onClose={closeWizard} onSelect={changeWizard} onAdvance={(direction) => direction > 0 && wizard.step === 4 ? submitWizard() : advanceWizard(direction)} onPreviewTextChange={setPreviewText} onPreview={requestPreview} onClosePreview={() => { setPreviewOpen(false); changeWizard("preview", null); changeWizard("previewCandidateId", ""); }} onConfirmPreview={confirmPreview} canConfirmPreview={Boolean(wizard.previewCandidateId)} /> : null}
-      {!loadingBody && (resultError || setupHistoryError) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button></section> : null}
+      {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button></section> : null}
       {!loadingBody && !resultError && !setupHistoryError && publicRunToken && !resultToken ? <MonitoringPublicProgressSurface progress={progress} error={progressError} loading={progressLoading} onRefresh={() => setRefreshEpoch((value) => value + 1)} onBack={() => navigate("overview", { public_run_token: "" })} onOpenResult={() => openResult(publicRunToken)} /> : null}
       {!loadingBody && !resultError && !setupHistoryError && resultLoaded ? (
         <div className="monitoring-product-result-body">
@@ -1303,9 +1305,9 @@ export function MedicalMonitoringProductLoop({
           ) : null}
         </div>
       ) : null}
-      {!loadingBody && !resultError && !setupHistoryError && !resultLoaded && !publicRunToken ? (
+      {!loadingBody && !resultError && (!setupHistoryError || admissionOnly) && !resultLoaded && !publicRunToken ? (
         <>
-          <section className="monitoring-product-start-surface"><strong>{startSurfaceTitle}</strong><span>{startSurfaceCopy}</span></section>
+          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError.text : startSurfaceCopy}</span></section>
           <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />
           {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} /> : null}
         </>

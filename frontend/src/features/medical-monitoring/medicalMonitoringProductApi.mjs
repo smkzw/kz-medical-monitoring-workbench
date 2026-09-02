@@ -192,6 +192,7 @@ export const MEDICAL_MONITORING_PRODUCT_PATHS = Object.freeze({
   // are never constructed here.
   dataAdmissionCreate: (projectId) => `${projectPath(projectId)}/data-admissions`,
   dataAdmissionUpload: (projectId) => `${projectPath(projectId)}/data-admissions/upload`,
+  dataAdmissionLatest: (projectId) => `${projectPath(projectId)}/data-admissions/latest`,
   dataAdmissionStatus: (projectId, attemptId) => (
     `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}`
   ),
@@ -392,6 +393,12 @@ export function createMedicalMonitoringProductApi({
       return postForm(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionUpload(
         requireId(projectId, "projectId"),
       ), form, { signal });
+    },
+
+    getLatestDataAdmission(projectId, { signal } = {}) {
+      return get(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionLatest(
+        requireId(projectId, "projectId"),
+      ), { signal });
     },
 
     getDataAdmissionStatus(projectId, attemptId, { signal } = {}) {

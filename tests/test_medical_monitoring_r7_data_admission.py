@@ -156,6 +156,10 @@ class FakeAdmissionPipeline:
         self._record("attempt_status", kwargs)
         return self.status_result
 
+    def latest_attempt_status(self, **kwargs: Any) -> Mapping[str, Any]:
+        self._record("latest_attempt_status", kwargs)
+        return self.status_result
+
     def profile_preview(self, **kwargs: Any) -> Mapping[str, Any]:
         self._record("profile_preview", kwargs)
         return self.profile_result
@@ -260,6 +264,7 @@ def test_admission_registration_is_additive_and_r7_scoped(tmp_path: Path) -> Non
     assert admission_paths == {
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/upload",
+        "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/latest",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-candidates",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft",
@@ -273,6 +278,22 @@ def test_admission_registration_is_additive_and_r7_scoped(tmp_path: Path) -> Non
     )
     non_r7 = paths - r7_paths
     assert non_r7 == {"/__sentinel_non_r7", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
+
+
+def test_real_admission_workspace_never_projects_synthetic_run_setup(tmp_path: Path) -> None:
+    runtime_dir = tmp_path / "runtime"
+    workspace = runtime_dir / "medical_monitoring_r7" / PROJECT_A
+    (workspace / "admissions").mkdir(parents=True)
+    client = _client(runtime_dir, admission_pipeline=FakeAdmissionPipeline())
+
+    setup = client.get(f"{_base()}/run-setup/options")
+    history = client.get(f"{_base()}/runs?limit=50")
+
+    assert setup.status_code == 422
+    assert setup.json()["code"] == "run_data_not_ready"
+    assert "合成数据" not in setup.text
+    assert history.status_code == 200
+    assert history.json() == {"runs": []}
 
 
 def test_create_status_and_profile_happy_path_boundary(tmp_path: Path) -> None:
@@ -307,6 +328,9 @@ def test_create_status_and_profile_happy_path_boundary(tmp_path: Path) -> None:
     assert kwargs["workspace_dir"] == runtime_dir / "medical_monitoring_r7" / PROJECT_A
 
     pipeline.calls.clear()
+    latest = client.get(f"{_base()}/data-admissions/latest")
+    assert latest.status_code == 200
+    assert latest.json()["attempt_id"] == "attempt-0001"
     status = client.get(f"{_base()}/data-admissions/attempt-0001")
     assert status.status_code == 200
     assert status.json()["state"] == "ready"
@@ -316,6 +340,7 @@ def test_create_status_and_profile_happy_path_boundary(tmp_path: Path) -> None:
     assert profile.json()["tables"][0]["name"] == "generated_sheet"
     assert profile.json()["technical_details"]["snapshot_id"] == "snap-0001"
     assert [(n, sorted(k for k in kws if k != "workspace_dir")) for n, kws in pipeline.calls] == [
+        ("latest_attempt_status", ["project_id"]),
         ("attempt_status", ["attempt_id", "project_id"]),
         ("profile_preview", ["attempt_id", "project_id"]),
     ]

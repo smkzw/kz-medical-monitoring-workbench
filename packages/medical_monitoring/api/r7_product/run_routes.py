@@ -240,6 +240,12 @@ def register_run_launch_routes(router: APIRouter, context: RunRouteContext) -> N
         )
         if isinstance(auth, JSONResponse):
             return auth
+        workspace = _workspace_dir(root, canonical)
+        if (
+            (workspace / "admissions").is_dir()
+            and not (workspace / lr.LAUNCH_REGISTRY_DB_NAME).exists()
+        ):
+            return {"runs": []}
         view = open_legacy_view(canonical)
         if view is not None:
             try:

@@ -88,6 +88,9 @@ def register_setup_routes(router: APIRouter, context: SetupRouteContext) -> None
                 return _run_entry_error_response(
                     rs.RunSetupError("invalid_snapshot")
                 )
+        workspace = _workspace_dir(root, canonical)
+        if (workspace / "admissions").is_dir():
+            return _run_entry_error_response(rs.RunSetupError("run_data_not_ready"))
         try:
             legacy_options = legacy_setup_projection(canonical)
         except Exception as exc:
