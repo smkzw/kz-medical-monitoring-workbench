@@ -11,6 +11,7 @@ materializes canonical facts.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from typing import Any, Callable, Mapping, Optional
 
 from .mapping_pipeline import (
@@ -44,6 +45,7 @@ _DECISION_PREFIXES = (
     "用户已确认：",
     "用户已核对：",
 )
+_SYSTEM_ADJUDICATION_PREFIX = "系统复核："
 
 _TRIAGE_QUESTION = "user_question"
 _TRIAGE_ADOPTED = "system_adopted"
@@ -356,6 +358,149 @@ class AdmissionMappingConfirmationService:
         )
         return self._draft_payload(draft)
 
+    def adjudicate_draft(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        draft_id: str,
+        workspace_dir: Any,
+    ) -> Mapping[str, Any]:
+        """Advance the focused second pass without creating facts."""
+
+        draft = self._require_attempt_draft(project_id, attempt_id, draft_id)
+        payload = (
+            draft.model_dump(mode="json")
+            if hasattr(draft, "model_dump")
+            else dict(draft)
+        )
+        unresolved = [
+            field
+            for field in payload.get("fields") or []
+            if classify_user_question(field) is not None
+        ]
+        result = self.mapping_pipeline.adjudicate_candidates(
+            project_id=project_id,
+            attempt_id=attempt_id,
+            draft_id=draft_id,
+            draft_fields=unresolved,
+            workspace_dir=workspace_dir,
+        )
+        state = str(result.get("state") or "failed")
+        if state != "ready":
+            projected = self._draft_payload(draft)
+            projected["adjudication"] = {
+                "state": "complete" if state in {"failed", "not_needed"} else state,
+                "resolved_count": 0,
+                "remaining_question_count": len(unresolved),
+            }
+            return projected
+
+        for job_id in {
+            str(item.get("job_id") or "")
+            for item in result.get("mappings") or []
+            if str(item.get("job_id") or "")
+        }:
+            job = self.ai_repository.get(project_id, job_id)
+            if self._revision_for_job(job, workspace_dir=workspace_dir) != str(
+                job.input_revision_sha256
+            ):
+                raise AdmissionMappingPipelineError("mapping_run_incomplete")
+            candidates = self.ai_repository.candidates(project_id, job_id)
+            for candidate in candidates:
+                status = _value(candidate.status)
+                if status == _value(self.proposed_status):
+                    self.ai_repository.decide_candidate(
+                        project_id,
+                        candidate.candidate_id,
+                        decision=self.accepted_status,
+                        actor="system_harness",
+                        reason="已作为字段语义第二轮复核依据。",
+                        current_input_revision_sha256=str(
+                            job.input_revision_sha256
+                        ),
+                    )
+                elif status != _value(self.accepted_status):
+                    raise AdmissionMappingPipelineError(
+                        "mapping_candidate_not_adoptable"
+                    )
+
+        first_pass = {
+            (str(field.get("domain")), str(field.get("source_field"))): field
+            for field in unresolved
+        }
+        resolved = 0
+        for item in result.get("mappings") or []:
+            pair = (
+                str(item.get("domain") or ""),
+                str(item.get("source_field") or ""),
+            )
+            original = first_pass.get(pair)
+            rationale = str(item.get("user_action") or "").strip()
+            if (
+                original is None
+                or _model_flag(item)
+                or not rationale
+                or "?" in rationale
+                or "？" in rationale
+                or str(item.get("recommended_role") or "").strip()
+                != str(original.get("recommended_role") or "").strip()
+                or str(_value(item.get("field_kind") or "")).strip()
+                != str(_value(original.get("field_kind") or "")).strip()
+            ):
+                continue
+            current = self.mapping_repository.get_draft(project_id, draft_id)
+            current_payload = current.model_dump(mode="json")
+            current_field = next(
+                (
+                    field
+                    for field in current_payload.get("fields") or []
+                    if (
+                        str(field.get("domain")),
+                        str(field.get("source_field")),
+                    )
+                    == pair
+                ),
+                None,
+            )
+            # A saved user answer always wins over a later system result.
+            if current_field is None or classify_user_question(current_field) is None:
+                continue
+            uncertainty = str(item.get("uncertainty") or "").strip()
+            operation_id = "adjudicate-" + hashlib.sha256(
+                (
+                    f"{draft_id}|{item.get('candidate_id')}|"
+                    f"{pair[0]}|{pair[1]}"
+                ).encode("utf-8")
+            ).hexdigest()
+            self.mapping_repository.edit_field(
+                project_id,
+                draft_id,
+                domain=pair[0],
+                source_field=pair[1],
+                patch={
+                    "user_decision_required": False,
+                    "uncertainty": (
+                        f"第二轮独立复核：{uncertainty or '当前证据支持原字段对应。'}"
+                    ),
+                    "user_action": f"{_SYSTEM_ADJUDICATION_PREFIX}{rationale}",
+                },
+                expected_version=int(current.version),
+                actor="system_harness",
+                idempotency_key=operation_id,
+            )
+            resolved += 1
+        refreshed = self.mapping_repository.get_draft(project_id, draft_id)
+        projected = self._draft_payload(refreshed)
+        projected["adjudication"] = {
+            "state": "complete",
+            "resolved_count": resolved,
+            "remaining_question_count": projected["review_summary"][
+                "user_question_count"
+            ],
+        }
+        return projected
+
     def confirm_draft(
         self,
         *,
@@ -442,6 +587,12 @@ class AdmissionMappingConfirmationService:
             "field_count": len(fields),
             "user_question_count": question_count,
             "system_adopted_count": len(fields) - question_count,
+            "system_adjudicated_count": sum(
+                str(field.get("user_action") or "").startswith(
+                    _SYSTEM_ADJUDICATION_PREFIX
+                )
+                for field in fields
+            ),
             # Backward-compatible alias for pre-triage surfaces.
             "critical_count": question_count,
         }

@@ -209,6 +209,9 @@ export const MEDICAL_MONITORING_PRODUCT_PATHS = Object.freeze({
   dataAdmissionMappingDraftField: (projectId, attemptId) => (
     `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/mapping-draft/field`
   ),
+  dataAdmissionMappingDraftAdjudicate: (projectId, attemptId) => (
+    `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/mapping-draft/adjudicate`
+  ),
   dataAdmissionMappingDraftConfirm: (projectId, attemptId) => (
     `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/mapping-draft/confirm`
   ),
@@ -432,6 +435,13 @@ export function createMedicalMonitoringProductApi({
 
     editDataAdmissionMappingDraftField(projectId, attemptId, payload, { signal } = {}) {
       return patch(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionMappingDraftField(
+        requireId(projectId, "projectId"),
+        requireId(attemptId, "attemptId"),
+      ), payload, { signal });
+    },
+
+    adjudicateDataAdmissionMappingDraft(projectId, attemptId, payload, { signal } = {}) {
+      return post(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionMappingDraftAdjudicate(
         requireId(projectId, "projectId"),
         requireId(attemptId, "attemptId"),
       ), payload, { signal });

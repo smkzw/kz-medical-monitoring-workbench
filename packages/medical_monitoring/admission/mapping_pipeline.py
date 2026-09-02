@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+import hashlib
+import json
 from pathlib import Path
+import re
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from ..domain.execution import StoreError
@@ -26,6 +30,16 @@ class AdmissionMappingPipelineError(RuntimeError):
     def __init__(self, code: str) -> None:
         self.code = str(code)
         super().__init__(self.code)
+
+
+MAPPING_ADJUDICATION_PROMPT_VERSION = (
+    "monitoring-listing-field-mapping-adjudication-v1"
+)
+MAPPING_ADJUDICATION_BUSINESS_PREFIX = (
+    "listing-field-mapping-adjudication"
+)
+_ADJUDICATION_GENERATION_RE = re.compile(r":g(\d{2}):")
+_ADJUDICATION_MAX_GENERATIONS = 2
 
 
 def _store(workspace_dir: Path) -> Store:
@@ -203,6 +217,245 @@ class AdmissionMappingPipeline:
             raise AdmissionMappingPipelineError("mapping_candidates_not_found")
         return self._project(_latest_job_cohort(jobs), attempt_id=attempt_id)
 
+    def adjudicate_candidates(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        draft_id: str,
+        draft_fields: Sequence[Mapping[str, Any]],
+        workspace_dir: Path,
+    ) -> Mapping[str, Any]:
+        """Run a focused, auditable second pass over unresolved fields only."""
+
+        if not self._configured():
+            raise AdmissionMappingPipelineError("mapping_bridge_unconfigured")
+        fields = [dict(field) for field in draft_fields]
+        if not fields:
+            return {"state": "not_needed", "mappings": [], "job_count": 0}
+        identity = [
+            {
+                "domain": str(field.get("domain") or "").strip(),
+                "source_field": str(field.get("source_field") or "").strip(),
+                "recommended_role": str(
+                    field.get("recommended_role") or ""
+                ).strip(),
+                "field_kind": str(_value(field.get("field_kind") or "")).strip(),
+            }
+            for field in fields
+        ]
+        if any(not row["domain"] or not row["source_field"] for row in identity):
+            raise AdmissionMappingPipelineError("mapping_bridge_failed")
+        identity.sort(key=lambda row: (row["domain"], row["source_field"]))
+        digest = hashlib.sha256(
+            json.dumps(
+                {"draft_id": draft_id, "fields": identity},
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()[:20]
+        query_prefix = (
+            f"{MAPPING_ADJUDICATION_BUSINESS_PREFIX}:"
+            f"{attempt_id}:{digest}:"
+        )
+        existing = self._repository.list_jobs(
+            project_id,
+            task_type=str(_value(self._task_type)),
+            business_key_prefix=query_prefix,
+        )
+        generation = max(
+            (
+                int(match.group(1))
+                for job in existing
+                if (match := _ADJUDICATION_GENERATION_RE.search(job.business_key))
+            ),
+            default=0,
+        )
+        jobs = tuple(
+            job
+            for job in existing
+            if f":g{generation:02d}:" in str(job.business_key)
+        )
+        states = [str(_value(job.status)) for job in jobs]
+        if states and all(state == "completed" for state in states):
+            return {
+                "state": "ready",
+                "generation": generation,
+                "job_count": len(jobs),
+                "mappings": self._adjudication_mappings(jobs),
+            }
+        if states and not any(
+            state in {"failed", "blocked", "stale_input", "cancelled"}
+            for state in states
+        ):
+            return {
+                "state": "running",
+                "generation": generation,
+                "job_count": len(jobs),
+                "mappings": [],
+            }
+        if generation >= _ADJUDICATION_MAX_GENERATIONS:
+            return {
+                "state": "failed",
+                "generation": generation,
+                "job_count": len(jobs),
+                "mappings": [],
+            }
+
+        record = self._load_record(
+            project_id=project_id,
+            attempt_id=attempt_id,
+            workspace_dir=workspace_dir,
+        )
+        if record.get("state") != "profile_ready":
+            raise AdmissionMappingPipelineError("mapping_profile_not_ready")
+        runtime = self._service.runtime_resolver()
+        if not monitoring_mapping_runtime_matches(
+            runtime,
+            required_provider=self._required_provider,
+            required_model=self._required_model,
+        ):
+            raise AdmissionMappingPipelineError("mapping_model_not_configured")
+        try:
+            harness_input = admission_record_to_harness_input(
+                project_id=project_id,
+                attempt_id=attempt_id,
+                record=record,
+                table_rows_by_snapshot=self._load_table_rows(
+                    record=record,
+                    workspace_dir=workspace_dir,
+                ),
+            )
+            profile = deepcopy(harness_input.field_profile)
+            pair_set = {
+                (row["domain"], row["source_field"])
+                for row in identity
+            }
+            question_domains = {domain for domain, _ in pair_set}
+            question_names = {name for _, name in pair_set}
+            all_fields = list(profile["fields"])
+            profile["fields"] = [
+                field
+                for field in all_fields
+                if (
+                    str(field.get("domain") or "").strip(),
+                    str(field.get("field") or "").strip(),
+                )
+                in pair_set
+            ]
+            if len(profile["fields"]) != len(pair_set):
+                raise AdmissionMappingPipelineError("mapping_bridge_failed")
+            profile["relationships"] = [
+                relationship
+                for relationship in profile.get("relationships", [])
+                if (
+                    str(relationship.get("domain") or "").strip(),
+                    str(relationship.get("left_field") or "").strip(),
+                )
+                in pair_set
+                or (
+                    str(relationship.get("domain") or "").strip(),
+                    str(relationship.get("right_field") or "").strip(),
+                )
+                in pair_set
+            ]
+            profile["read_only_adjudication_context_profiles"] = [
+                field
+                for field in all_fields
+                if (
+                    (
+                        str(field.get("domain") or "").strip()
+                        in question_domains
+                        or str(field.get("field") or "").strip()
+                        in question_names
+                    )
+                    and (
+                        str(field.get("domain") or "").strip(),
+                        str(field.get("field") or "").strip(),
+                    )
+                    not in pair_set
+                )
+            ]
+            profile["table_bindings"] = [
+                binding
+                for binding in profile.get("table_bindings", [])
+                if str(binding.get("domain") or "").strip()
+                in question_domains
+            ]
+            profile["treatment_identity_bindings"] = [
+                binding
+                for binding in profile.get(
+                    "treatment_identity_bindings",
+                    [],
+                )
+                if str(binding.get("target_domain") or "").strip()
+                in question_domains
+            ]
+            profile["table_field_order"] = []
+            profile["adjudication_contract"] = {
+                "schema_version": "monitoring_mapping_adjudication_v1",
+                "first_pass_mappings": [
+                    {
+                        **row,
+                        "uncertainty": str(field.get("uncertainty") or "")[:1000],
+                        "user_question": str(field.get("user_action") or "")[:1000],
+                    }
+                    for row, field in zip(identity, sorted(
+                        fields,
+                        key=lambda item: (
+                            str(item.get("domain") or ""),
+                            str(item.get("source_field") or ""),
+                        ),
+                    ))
+                ],
+                "question_count": len(identity),
+                "decision_policy": (
+                    "Only clear user decision when role and field kind remain "
+                    "unchanged and the independent evidence is sufficient."
+                ),
+            }
+            generation += 1
+            jobs = self._service.submit_listing_field_mapping_chunks(
+                project_id=project_id,
+                input_revision=self._revision_factory(
+                    harness_input.input_revision
+                ),
+                field_profile=profile,
+                chunk_size=12,
+                prompt_version=MAPPING_ADJUDICATION_PROMPT_VERSION,
+                business_key_prefix=(
+                    f"{query_prefix}g{generation:02d}"
+                ),
+            )
+        except (MappingBridgeError, ValueError) as exc:
+            raise AdmissionMappingPipelineError("mapping_bridge_failed") from exc
+        self._worker_wake()
+        return {
+            "state": "running",
+            "generation": generation,
+            "job_count": len(jobs),
+            "mappings": [],
+        }
+
+    def _adjudication_mappings(self, jobs: Sequence[Any]) -> list[dict[str, Any]]:
+        mappings = []
+        for job in jobs:
+            for candidate in self._repository.candidates(
+                job.project_id,
+                job.job_id,
+            ):
+                for item in candidate.structured_payload.get(
+                    "field_mappings",
+                    [],
+                ):
+                    mappings.append({
+                        **dict(item),
+                        "candidate_id": candidate.candidate_id,
+                        "job_id": job.job_id,
+                    })
+        return mappings
+
     def _project(self, jobs: Any, *, attempt_id: str) -> dict[str, Any]:
         job_rows = []
         mappings = []
@@ -328,5 +581,7 @@ def current_admission_mapping_revision(
 __all__ = [
     "AdmissionMappingPipeline",
     "AdmissionMappingPipelineError",
+    "MAPPING_ADJUDICATION_BUSINESS_PREFIX",
+    "MAPPING_ADJUDICATION_PROMPT_VERSION",
     "current_admission_mapping_revision",
 ]

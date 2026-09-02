@@ -1580,6 +1580,7 @@ class MonitoringAiService:
         field_profile: Dict[str, Any],
         chunk_size: int = DEFAULT_FIELD_MAPPING_CHUNK_SIZE,
         prompt_version: str = "",
+        business_key_prefix: str = "listing-field-mapping",
         max_attempts: int = 2,
     ) -> Tuple[MonitoringAiJob, ...]:
         if (
@@ -1589,6 +1590,9 @@ class MonitoringAiService:
             raise ValueError(
                 "field mapping chunk_size must be an integer from 1 to 12"
             )
+        business_key_prefix = business_key_prefix.strip()
+        if not business_key_prefix or len(business_key_prefix) > 160:
+            raise ValueError("field mapping business key prefix is invalid")
         self._validate_input_payload(
             MonitoringAiTaskType.LISTING_FIELD_MAPPING,
             project_id,
@@ -1768,7 +1772,7 @@ class MonitoringAiService:
                     }
                 )
                 business_key = (
-                    "listing-field-mapping:"
+                    f"{business_key_prefix}:"
                     f"{batch_id}:{domain}:"
                     f"{chunk_index:04d}-of-{chunk_total:04d}"
                 )
@@ -2578,6 +2582,35 @@ class MonitoringAiService:
             ],
         }
         profile.pop("read_only_cross_table_context_profiles", None)
+        adjudication_context_profiles = [
+            deepcopy(field)
+            for field in profile.get(
+                "read_only_adjudication_context_profiles",
+                [],
+            )
+            if isinstance(field, dict)
+        ]
+        if adjudication_context_profiles:
+            profile["read_only_adjudication_context"] = {
+                "policy": (
+                    "These are the relevant same-table and same-named "
+                    "cross-table profiles for an independent second pass. "
+                    "Use their bounded desensitized distributions and row "
+                    "context only to review the first-pass mapping. Never "
+                    "emit mappings for these context fields."
+                ),
+                "fields": [
+                    _read_only_table_context_field(
+                        field,
+                        profile_sha256=_require_service_sha256(
+                            profile.get("profile_sha256"),
+                            "field_profile.profile_sha256",
+                        ),
+                    )
+                    for field in adjudication_context_profiles
+                ],
+            }
+        profile.pop("read_only_adjudication_context_profiles", None)
         chunk_domain = str(profile.get("domain", "")).strip()
         domain_field_names = profile.get("domain_field_names")
         if chunk_domain and isinstance(domain_field_names, list):
@@ -2851,6 +2884,22 @@ class MonitoringAiService:
                 "不足以单独构成用户决定；只有该缺口确实导致下游医学分类"
                 "无法确定并会改变分析结果时，才可标为true。"
             )
+            adjudication_contract = provider_input_payload[
+                "field_profile"
+            ].get("adjudication_contract")
+            if isinstance(adjudication_contract, dict):
+                system_prompt += (
+                    " 本任务是字段映射的独立第二轮复核。"
+                    "adjudication_contract.first_pass_mappings记录第一轮判断，"
+                    "read_only_adjudication_context提供与疑点有关的同表及跨表"
+                    "脱敏画像。必须独立核对，不得机械附和第一轮。只有当当前"
+                    "证据足以支持第一轮recommended_role与field_kind均保持不变，"
+                    "且无需用户补充资料即可可靠用于医学分析时，才把"
+                    "user_decision_required设为false，并在user_action中用中文"
+                    "简述证据依据。若角色应改变、证据仍不足或缺失的标签会改变"
+                    "下游医学分类，必须保持true并提出一个具体中文问题。"
+                    "不得仅因希望减少问题数量而清除疑点。"
+                )
         elif (
             job.task_type
             == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING
@@ -3499,11 +3548,16 @@ class MonitoringAiService:
                         "system_generated_mapping_provenance",
                         None,
                     )
-                    structured_payload = (
-                        _normalize_provider_field_mapping_triage(
-                            structured_payload
+                    field_profile = input_payload.get("field_profile") or {}
+                    if not isinstance(
+                        field_profile.get("adjudication_contract"),
+                        dict,
+                    ):
+                        structured_payload = (
+                            _normalize_provider_field_mapping_triage(
+                                structured_payload
+                            )
                         )
-                    )
                 try:
                     structured = model_type.model_validate(
                         structured_payload

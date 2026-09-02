@@ -45,6 +45,7 @@ from .mapping_gate import (
 from .mapping_pipeline import (
     AdmissionMappingPipeline,
     AdmissionMappingPipelineError,
+    MAPPING_ADJUDICATION_PROMPT_VERSION,
     current_admission_mapping_revision,
 )
 from .mapping_confirmation import (
@@ -83,6 +84,7 @@ __all__ = [
     "admission_record_to_harness_input",
     "AdmissionMappingPipeline",
     "AdmissionMappingPipelineError",
+    "MAPPING_ADJUDICATION_PROMPT_VERSION",
     "AdmissionMappingConfirmationService",
     "USER_QUESTION_LOW_CONFIDENCE",
     "USER_QUESTION_MISSING_ADVICE",

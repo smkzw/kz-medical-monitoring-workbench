@@ -268,6 +268,9 @@ await admissionApi.editDataAdmissionMappingDraftField("proj/01", "attempt-0001",
   expected_version: 1,
   idempotency_key: "edit-1",
 });
+await admissionApi.adjudicateDataAdmissionMappingDraft("proj/01", "attempt-0001", {
+  draft_id: "draft-1",
+});
 await admissionApi.confirmDataAdmissionMappingDraft("proj/01", "attempt-0001", {
   draft_id: "draft-1",
   expected_version: 2,
@@ -286,10 +289,15 @@ check(
 check(admissionCalls[5].options.method === "POST", "mapping draft adopt is POST");
 check(admissionCalls[6].options.method === "PATCH", "mapping draft field edit is PATCH");
 check(
-  admissionCalls[7].url.endsWith("/mapping-draft/confirm"),
+  admissionCalls[7].url.endsWith("/mapping-draft/adjudicate"),
+  "mapping draft adjudication stays on attempt route",
+);
+check(admissionCalls[7].options.method === "POST", "mapping draft adjudication is POST");
+check(
+  admissionCalls[8].url.endsWith("/mapping-draft/confirm"),
   "mapping draft confirm stays on attempt confirm route",
 );
-check(admissionCalls[7].options.method === "POST", "mapping draft confirm is POST");
+check(admissionCalls[8].options.method === "POST", "mapping draft confirm is POST");
 check(
   admissionCalls.every((call) => call.options.headers.Accept === "application/json"),
   "admission requests JSON",
@@ -306,7 +314,7 @@ for (const invalid of [
   assert.throws(invalid, TypeError);
   passed += 1;
 }
-check(admissionCalls.length === 8, "invalid admission identifiers and payloads never reach fetch");
+check(admissionCalls.length === 9, "invalid admission identifiers and payloads never reach fetch");
 
 const uploadCalls = [];
 const admissionUploadApi = createMedicalMonitoringProductApi({

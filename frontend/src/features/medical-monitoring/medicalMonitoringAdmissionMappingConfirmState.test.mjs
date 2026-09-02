@@ -176,6 +176,43 @@ test("adopted draft replaces stale candidate questions after system normalizatio
   assert.deepEqual(mappingQuestionCards(state).map((item) => item.key), ["AE::AETERM"]);
 });
 
+test("second pass stays automatic and exposes only residual questions", () => {
+  let state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "load-ready",
+    payload: candidatesPayload(),
+  });
+  const draft = {
+    draft_id: "d1",
+    version: 1,
+    user_questions: [
+      { domain: "AE", source_field: "AETERM", question_text: "问题1" },
+      { domain: "AE", source_field: "AESTDT", question_text: "问题2" },
+    ],
+  };
+  state = admissionMappingConfirmReducer(state, {
+    type: "adjudication-start",
+    payload: draft,
+  });
+  assert.equal(state.phase, "adjudicating");
+  assert.equal(admissionMappingPrimaryAction(state).disabled, true);
+
+  state = admissionMappingConfirmReducer(state, {
+    type: "adjudication-ready",
+    payload: {
+      ...draft,
+      version: 2,
+      adjudication: { state: "complete", resolved_count: 1 },
+      user_questions: [
+        { domain: "AE", source_field: "AESTDT", question_text: "问题2" },
+      ],
+    },
+  });
+  assert.equal(state.phase, "drafting");
+  assert.equal(state.payload.questionCount, 1);
+  assert.deepEqual(mappingQuestionCards(state).map((item) => item.key), ["AE::AESTDT"]);
+  assert.match(state.message, /自动完成了 1 项/);
+});
+
 test("confirmation reason names the answered questions and clears the server minimum", () => {
   let state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
     type: "load-ready",

@@ -84,7 +84,9 @@ function MappingConfirmPanel({ mappingState, onAnswerCard }) {
   const drafting = mappingState.phase === "drafting";
   const quality = drafting ? semanticQualityPresentation(mappingState.draft?.semantic_quality) : null;
   const payload = mappingState.payload;
-  const headline = payload?.headline || "正在读取系统识别结果…";
+  const headline = mappingState.phase === "adjudicating"
+    ? "系统正在进一步核对少量疑点"
+    : payload?.headline || "正在读取系统识别结果…";
   const tables = payload?.tableSummaries || [];
   const questionTableCount = tables.filter((table) => table.questionCount > 0).length;
 
@@ -126,7 +128,7 @@ function MappingConfirmPanel({ mappingState, onAnswerCard }) {
           {quality.detail ? <span>{quality.detail}</span> : null}
         </div>
       ) : null}
-      {questions.length ? (
+      {drafting && questions.length ? (
         <div className="monitoring-admission-questions">
           <p className="monitoring-admission-questions-head">
             只需确认会改变医学分析的疑点（已完成 {answeredCount}/{questions.length}）
@@ -434,6 +436,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     createAdmissionMappingConfirmState,
   );
   const adoptInFlight = useRef(false);
+  const adjudicationInFlight = useRef(false);
   const confirmInFlight = useRef(false);
 
   useEffect(() => {
@@ -466,6 +469,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       dispatch({ type: "import-created", payload });
       mappingDispatch({ type: "reset" });
       adoptInFlight.current = false;
+      adjudicationInFlight.current = false;
     } catch (error) {
       dispatch({ type: "error", error });
     }
@@ -519,8 +523,30 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     return undefined;
   }, [loadMappingCandidates, mappingState.phase, state.phase, state.stepIndex]);
 
-  // The system adopts the basically-correct recognition draft by itself; the
-  // user only answers the genuinely material medical questions.
+  const advanceAdjudication = useCallback(async (draft) => {
+    if (!draft?.draft_id || adjudicationInFlight.current) return;
+    adjudicationInFlight.current = true;
+    try {
+      const payload = await api.adjudicateDataAdmissionMappingDraft(
+        state.projectId,
+        state.attemptId,
+        { draft_id: draft.draft_id },
+      );
+      mappingDispatch({
+        type: payload?.adjudication?.state === "running"
+          ? "adjudication-running"
+          : "adjudication-ready",
+        payload,
+      });
+    } catch (_error) {
+      mappingDispatch({ type: "adjudication-fallback", payload: draft });
+    } finally {
+      adjudicationInFlight.current = false;
+    }
+  }, [api, state.attemptId, state.projectId]);
+
+  // The system adopts the basically-correct recognition draft and performs
+  // one focused independent pass before showing any residual questions.
   const adoptDraft = useCallback(async () => {
     if (adoptInFlight.current) return;
     adoptInFlight.current = true;
@@ -531,7 +557,12 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         state.attemptId,
         { reason: "采用系统字段识别结果，进入医学确认。" },
       );
-      mappingDispatch({ type: "adopt-ready", payload: draft });
+      if ((draft?.user_questions || []).length) {
+        mappingDispatch({ type: "adjudication-start", payload: draft });
+        await advanceAdjudication(draft);
+      } else {
+        mappingDispatch({ type: "adopt-ready", payload: draft });
+      }
     } catch (error) {
       adoptInFlight.current = false;
       mappingDispatch({
@@ -542,7 +573,18 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         },
       });
     }
-  }, [api, state.attemptId, state.projectId]);
+  }, [advanceAdjudication, api, state.attemptId, state.projectId]);
+
+  useEffect(() => {
+    if (mappingState.phase !== "adjudicating" || !mappingState.draft) {
+      return undefined;
+    }
+    const timer = setTimeout(
+      () => advanceAdjudication(mappingState.draft),
+      1500,
+    );
+    return () => clearTimeout(timer);
+  }, [advanceAdjudication, mappingState.draft, mappingState.phase]);
 
   useEffect(() => {
     if (mappingState.phase !== "ready") return undefined;
