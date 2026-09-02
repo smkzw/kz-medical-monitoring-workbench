@@ -2,22 +2,48 @@
 
 ## Goal
 
-五项目只读隔离副本准入、结构画像、mapping 与 canonical facts。
+让用户在不接触技术目录和内部术语的前提下，把五个真实项目的 data listing 安全地接入医学监查：系统先生成可核对的结构画像和字段对应建议，用户只确认关键歧义，随后形成能够逐项回到原始单元格的 canonical facts。
+
+## Start Gate
+
+- Phase B 经用户确认后，归档 B8 并创建 `mm-consolidated`，再把本任务从 `planning` 切换为 `in_progress`。
+- 开工前核对五个原始项目目录及隔离输出根目录；原始目录只读，不在其中创建 sidecar、缓存、索引或临时文件。
+- 医学写作路由、组件与 assets 不进入本阶段改动集。
 
 ## Requirements
 
-- Provide project registration, read-only isolated-copy import, source hash/read-only verification, and structure-profile preview.
-- For each of the five projects, produce SourceRevision, ListingSnapshot, mapping candidates, user-confirmed critical mappings, and canonical facts.
-- Run a snapshot diff where compatible real dual snapshots exist.
-- Keep model-assisted semantic mapping configurable and evidence-bound.
+- 提供一个最小准入向导：选择项目与 listing → 复制到隔离目录 → 校验原始文件 SHA-256、隔离副本 SHA-256 和原始目录只读状态 → 预览结构画像。
+- 结构画像默认只呈现医学监察员需要判断的内容：工作表/数据域、记录数、可能的受试者键、访视/日期字段、明显缺失与歧义；哈希、路径和内部对象 ID 收进“技术详情”。
+- 五个项目逐个形成 `SourceRevision → ListingSnapshot → 结构画像 → mapping 候选 → 用户确认关键 mapping → canonical facts`，不跨项目复用业务主键。
+- mapping 建议与事实严格分离：确定性规则或可配置模型只能生成候选；关键字段存在歧义时阻断 facts 生成，并用原生中文告诉用户“还需要确认什么”。
+- 每条 canonical fact 保留项目、源修订、快照、工作表/表、行和列定位；用户可从事实预览一键回看原始单元格附近上下文。
+- 对存在兼容真实双快照的项目运行一次 snapshot diff，区分新增、修改、删除和无法可靠比较，不把差异文件当作完整快照。
+- 模型辅助 mapping 由用户配置，输入只来自隔离副本；输出保留绑定、输入哈希和候选依据。默认 harness 路由和 DeepSeek 备用能力在后续真实模型阶段验证，本阶段不让模型直接提升事实。
+- 公共内核不得出现项目名、项目专有列名、药物名、疾病名或具体风险模式常量；真实项目只用于验证通用解析与提示框架。
+
+## User Experience Contract
+
+- 默认页是“五项目接入进度”看板：每个项目只显示“待导入 / 待确认字段 / 可生成事实 / 已完成”，并突出下一步唯一主操作。
+- 用户无需理解 `SourceRevision`、`ListingSnapshot`、`mapping candidate`、`canonical fact` 等内部名词；界面分别使用“数据版本”“数据快照”“字段对应建议”“可用于监查的数据”。
+- 预览优先回答四个问题：系统读到了哪些数据、每类数据有多少、哪些字段已识别、哪些地方需要我确认。
+- 关键 mapping 采用左右对照：左侧原始列名与样例值，右侧建议含义与置信依据；支持批量接受明确项，歧义项逐个确认，不要求用户填写技术配置。
+- 所有数量、日期范围和字段识别结果先显示可视摘要，再提供明细表；错误信息说明影响和下一动作，不显示堆栈、内部状态码或临时日志标签。
 
 ## Acceptance Criteria
 
-- [ ] All five projects parse into canonical facts from isolated copies.
-- [ ] User spot checks map facts back to the exact original listing cells.
-- [ ] Shared-core grep contains no project, proprietary column, drug, or disease constants.
-- [ ] Independent review and user confirmation complete.
+- [ ] 五个原始项目目录保持零写入，导入、索引、运行与输出全部位于隔离目录。
+- [ ] 五个项目均从隔离副本生成可审阅结构画像和 canonical facts。
+- [ ] 每个项目至少抽查若干事实，均能回到精确的原始工作表/表、行、列和原始值。
+- [ ] 所有关键 mapping 已由用户确认；未确认或冲突项保持候选状态且阻断相应事实。
+- [ ] 至少一个兼容真实双快照项目完成新增/修改/删除 diff，并保持全量快照身份。
+- [ ] 公共内核 grep 不含项目、专有列、药物、疾病或具体风险常量。
+- [ ] 准入向导与进度看板经 ego(lite) 宽屏真实操作，无 P0/P1 用户体验问题。
+- [ ] 独立 fresh-context 评审和用户确认完成。
 
 ## Constraints
 
-- Original project directories remain read-only; all outputs are isolated.
+- 五个真实项目原始文件只读；所有分析使用隔离副本，所有输出进入隔离目录。
+- 医学写作子系统不动。
+- 候选/事实分离、身份/治疗边界和来源定位合同不弱化。
+- 不设计或测试安全功能；这里的只读校验仅用于防止临床源数据被误写。
+- 不启动三个真实项目或批量运行五项目；每个真实项目按本任务切片逐个进入，并保留用户抽查门。
