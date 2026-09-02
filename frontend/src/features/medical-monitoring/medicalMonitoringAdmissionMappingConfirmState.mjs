@@ -210,17 +210,35 @@ export function admissionMappingConfirmReducer(state, action) {
     case "load-start":
       return { ...state, phase: "loading", error: null, message: "正在读取系统识别结果…" };
     case "load-ready":
-      return {
+      {
+        const payload = projectMappingCandidates(action.payload);
+        const loaded = {
         ...state,
         phase: "ready",
-        payload: projectMappingCandidates(action.payload),
+        payload,
         message: action.payload?.state === "generating"
           ? "字段识别仍在生成中，请稍后刷新进度。"
           : action.payload?.state === "needs_attention"
             ? "部分字段识别尚未完成，请先刷新等待生成结束。"
             : "",
         error: null,
-      };
+        };
+        if (
+          action.payload?.confirmation_status === "confirmed"
+          || action.payload?.draft?.status === "confirmed"
+        ) {
+          return {
+            ...loaded,
+            phase: "confirmed",
+            draft: action.payload?.draft || null,
+            message: "系统已保存全部字段对应关系，无需您逐项核对。",
+          };
+        }
+        if (action.payload?.draft?.draft_id) {
+          return projectDraftState(loaded, action.payload.draft);
+        }
+        return loaded;
+      }
     case "adopt-start":
       return { ...state, phase: "adopting", error: null, message: "正在采用系统识别结果…" };
     case "adopt-ready":

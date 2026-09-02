@@ -281,6 +281,23 @@ test("failed load waits for an explicit retry", () => {
   assert.equal(admissionMappingPrimaryAction(state).key, "reload");
 });
 
+test("confirmed mapping resumes as complete without adopting another draft", () => {
+  const state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "load-ready",
+    payload: {
+      state: "candidates_ready",
+      confirmation_status: "confirmed",
+      summary: { field_count: 1495, user_question_count: 0 },
+      candidates: [],
+      draft: { draft_id: "d1", version: 1, status: "confirmed" },
+    },
+  });
+
+  assert.equal(state.phase, "confirmed");
+  assert.equal(admissionMappingPrimaryAction(state).key, "finish");
+  assert.match(state.message, /无需您逐项核对/);
+});
+
 test("draft error keeps the draft and the confirmation gate", () => {
   let state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
     type: "adopt-ready",

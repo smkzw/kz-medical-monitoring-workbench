@@ -60,6 +60,24 @@ class ListingFileParserTests(unittest.TestCase):
             ["SUBJID", "VISIT", "AETERM", "AESTDTC", "SUBJID__2"],
             sheets[0].headers,
         )
+        self.assertEqual(
+            ["SUBJID", "VISIT", "AETERM", "AESTDTC", "SUBJID"],
+            sheets[0].source_headers,
+        )
+
+    def test_parse_listing_preserves_original_label_beside_semantic_code(self):
+        content = (
+            "受试者编号(SUBJID),是否为注射部位反应(AEINJYN)\n"
+            "S01003,否\n"
+        ).encode("utf-8-sig")
+
+        sheet = parse_listing_file("AE.csv", content)[0]
+
+        self.assertEqual(["SUBJID", "AEINJYN"], sheet.headers)
+        self.assertEqual(
+            ["受试者编号(SUBJID)", "是否为注射部位反应(AEINJYN)"],
+            sheet.source_headers,
+        )
 
     def test_parse_xlsx_preserves_header_only_domain_schema(self):
         workbook = openpyxl.Workbook()

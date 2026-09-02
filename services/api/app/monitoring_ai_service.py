@@ -106,7 +106,7 @@ from .monitoring_rule_templates import (
 
 
 PROMPT_VERSION_BY_TASK: Dict[MonitoringAiTaskType, str] = {
-    MonitoringAiTaskType.LISTING_FIELD_MAPPING: ("monitoring-listing-field-mapping-v18"),
+    MonitoringAiTaskType.LISTING_FIELD_MAPPING: ("monitoring-listing-field-mapping-v19"),
     MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING: (
         "monitoring-protocol-clause-structuring-v12"
     ),
@@ -768,6 +768,7 @@ def _read_only_context_field(
             "domain": str(field.get("domain", "")).strip(),
             "field": str(field.get("field", "")).strip(),
         },
+        "source_label": str(field.get("source_label", "")).strip(),
         "recommended_role": recommended_role,
         "total_rows": int(field.get("total_rows", 0) or 0),
         "non_empty_count": int(field.get("non_empty_count", 0) or 0),
@@ -808,6 +809,7 @@ def _read_only_table_context_field(
             "domain": str(field.get("domain", "")).strip(),
             "field": str(field.get("field", "")).strip(),
         },
+        "source_label": str(field.get("source_label", "")).strip(),
         "column_index": field.get("column_index"),
         "total_rows": int(field.get("total_rows", 0) or 0),
         "non_empty_count": int(field.get("non_empty_count", 0) or 0),
@@ -2877,6 +2879,13 @@ class MonitoringAiService:
                 "采用该候选，user_action应简要记录系统判断依据。"
                 "不得把全部字段都标为需要用户决定，也不得为省事把实质"
                 "歧义标为false。"
+                " source_label是来源文件第一行的原始列标题，与field及"
+                "column_index来自同一冻结工作表；当其包含中文名称或标签"
+                "并在括号中标出field时，它是判断字段语义的直接来源证据。"
+                "应优先结合source_label、同表结构和值分布自行裁决，不能在"
+                "source_label已明确含义时再要求用户重复确认。"
+                " source_field必须逐字等于对应field的值；source_label仅作"
+                "判断依据，不得替代字段身份。"
                 " read_only_cross_table_context提供同一冻结listing内其他表中"
                 "同名字段的脱敏分布。若同名字段跨表呈现一致分布且角色家族"
                 "一致，应由系统形成一个稳定判断并保留不确定性，不得在每张"
@@ -7072,6 +7081,14 @@ class MonitoringAiService:
             ):
                 raise ValueError(
                     "every listing field profile requires domain and field"
+                )
+            source_label = field.get("source_label")
+            if source_label is not None and (
+                not str(source_label).strip() or len(str(source_label)) > 500
+            ):
+                raise ValueError(
+                    "listing field profile source_label must be a non-empty "
+                    "bounded string"
                 )
             field_pairs.append(
                 (

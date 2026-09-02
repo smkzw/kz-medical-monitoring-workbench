@@ -244,7 +244,25 @@ class AdmissionMappingConfirmationService:
             attempt_id=attempt_id,
             workspace_dir=workspace_dir,
         )
-        return enrich_candidates(payload, focus=focus)
+        projected = enrich_candidates(payload, focus=focus)
+        if self.mapping_repository is None:
+            return projected
+        draft = self.mapping_repository.find_draft_for_batch(
+            project_id,
+            attempt_id,
+        )
+        if draft is None:
+            return projected
+        if str(_value(draft.status)) == "confirmed":
+            projected["confirmation_status"] = "confirmed"
+            projected["draft"] = {
+                "draft_id": draft.draft_id,
+                "version": draft.version,
+                "status": "confirmed",
+            }
+            return projected
+        projected["draft"] = self._draft_payload(draft)
+        return projected
 
     def adopt_draft(
         self,

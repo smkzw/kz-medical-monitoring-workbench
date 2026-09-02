@@ -33,7 +33,7 @@ class AdmissionMappingPipelineError(RuntimeError):
 
 
 MAPPING_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-listing-field-mapping-adjudication-v1"
+    "monitoring-listing-field-mapping-adjudication-v2"
 )
 MAPPING_ADJUDICATION_BUSINESS_PREFIX = (
     "listing-field-mapping-adjudication"

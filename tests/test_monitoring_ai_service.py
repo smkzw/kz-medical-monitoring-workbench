@@ -142,6 +142,7 @@ def _field_profile(field_count: int = 8) -> Dict[str, Any]:
             {
                 "domain": "LB",
                 "field": f"LB_FIELD_{index:02d}",
+                "source_label": f"检验项目{index}(LB_FIELD_{index:02d})",
                 "total_rows": 147,
                 "non_empty_count": 140,
                 "null_rate": 0.0476,
@@ -482,13 +483,15 @@ def test_normal_output_preserves_all_field_profiles_and_response_identity(
     assert prompt.payload["scientific_boundary"]["source_record"].endswith(
         "FIELD_MAPPING_SCIENTIFIC_BOUNDARY.md"
     )
-    assert prompt.prompt_version == "monitoring-listing-field-mapping-v18"
+    assert prompt.prompt_version == "monitoring-listing-field-mapping-v19"
     assert "CM只表示非试验用药" in prompt.system_prompt
     assert "relationships只提供同域同行的聚合统计" in prompt.system_prompt
     assert "则不得标为普通source_collected" in prompt.system_prompt
     assert "required_output_field_names" in prompt.system_prompt
     assert "read_only_table_context" in prompt.system_prompt
     assert "user_decision_required" in prompt.system_prompt
+    assert "source_field必须逐字等于对应field的值" in prompt.system_prompt
+    assert sent_fields[-1]["source_label"] == "检验项目7(LB_FIELD_07)"
     assert "user_decision_required" in prompt.payload["candidate_count_contract"]
     mapping_schema = prompt.payload["output_schema"]["candidates"][0][
         "structured_payload"
@@ -623,7 +626,7 @@ def test_adjudication_never_silently_demotes_a_malformed_question(
         project_id="project-alpha",
         input_revision=_revision(),
         field_profile=profile,
-        prompt_version="monitoring-listing-field-mapping-adjudication-v1",
+        prompt_version="monitoring-listing-field-mapping-adjudication-v2",
     )
 
     result = service.run_next("worker-a")
@@ -865,6 +868,8 @@ def _same_table_profile() -> Dict[str, Any]:
     profile["fields"][1]["field"] = "AETERM"
     profile["fields"][2]["field"] = "AEDECOD"
     profile["fields"][3]["field"] = "MDRAVER"
+    for field in profile["fields"]:
+        field["source_label"] = f"原始列名({field['field']})"
     profile["table_field_order"] = [
         {
             "domain": "LB",
@@ -929,6 +934,8 @@ def test_chunk_context_exposes_full_same_table_distributions(
             name for name in business_fields if name not in required
         }
         context_field = context["fields"][0]
+        expected_source_field = context_field["source_profile_identity"]["field"]
+        assert context_field["source_label"] == f"原始列名({expected_source_field})"
         assert context_field["total_rows"] == 147
         assert context_field["non_empty_count"] == 140
         assert context_field["inferred_type"] == "string"
@@ -1115,6 +1122,23 @@ def test_listing_field_profile_rejects_boolean_numeric_fields(
                 input_revision=_revision(),
                 field_profile=profile,
             )
+
+
+@pytest.mark.parametrize("source_label", ["", "列" * 501])
+def test_listing_field_profile_rejects_invalid_source_label(
+    tmp_path: Path,
+    source_label: str,
+) -> None:
+    service = _service(tmp_path, FakeProvider([_valid_output]))
+    profile = _field_profile(field_count=1)
+    profile["fields"][0]["source_label"] = source_label
+
+    with pytest.raises(ValueError, match="source_label"):
+        service.submit_listing_field_mapping(
+            project_id="project-alpha",
+            input_revision=_revision(),
+            field_profile=profile,
+        )
 
 
 def test_listing_profile_requires_exact_paired_source_bindings(

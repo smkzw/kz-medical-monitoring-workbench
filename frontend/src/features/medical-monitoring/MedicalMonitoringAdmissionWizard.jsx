@@ -485,6 +485,12 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         { focus: MAPPING_FOCUS_ALL },
       );
       mappingDispatch({ type: "load-ready", payload });
+      if (
+        payload?.confirmation_status === "confirmed"
+        || payload?.draft?.status === "confirmed"
+      ) {
+        dispatch({ type: "finish" });
+      }
     } catch (error) {
       mappingDispatch({
         type: "error",

@@ -78,11 +78,21 @@ def _candidate_roles(column: Any) -> list[str]:
     return roles
 
 
-def _public_table(source_file: str, table: Any) -> dict[str, Any]:
+def _public_table(
+    source_file: str,
+    table: Any,
+    source_headers: Sequence[str] = (),
+) -> dict[str, Any]:
     columns = []
-    for column in table.columns:
+    for index, column in enumerate(table.columns):
         columns.append({
             "name": column.name,
+            "source_label": (
+                str(source_headers[index]).strip()
+                if index < len(source_headers)
+                and str(source_headers[index]).strip()
+                else column.name
+            ),
             "inferred_type": column.inferred_type,
             "missing_count": column.missing_count,
             "distinct_count": column.distinct_count,
@@ -174,8 +184,16 @@ class DataAdmissionPipeline:
                 )
                 profiles.append(profile)
                 revision_ids.append(revision_id)
-                for table in profile.tables:
-                    public_tables.append(_public_table(file_path.name, table))
+                if len(profile.tables) != len(sheets):
+                    raise AdmissionPipelineError("admission_profile_unavailable")
+                for table, sheet in zip(profile.tables, sheets):
+                    public_tables.append(
+                        _public_table(
+                            file_path.name,
+                            table,
+                            tuple(getattr(sheet, "source_headers", ()) or ()),
+                        )
+                    )
                 for sheet in sheets:
                     table_name, headers, rows, row_numbers = table_rows_from_sheet(sheet)
                     snapshot = build_table_snapshot(
