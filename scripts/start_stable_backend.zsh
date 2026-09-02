@@ -19,13 +19,13 @@ set +a
 : "${WORKBENCH_AI_DEPLOYMENT_PROFILE:?WORKBENCH_AI_DEPLOYMENT_PROFILE is required}"
 export WORKBENCH_CLIENT_CONTRACT_MODE="${WORKBENCH_CLIENT_CONTRACT_MODE:-enforce}"
 export WORKBENCH_MONITORING_AI_PARALLELISM="${WORKBENCH_MONITORING_AI_PARALLELISM:-8}"
-# The desktop environment may export Hermes' Python 3.11 site-packages while
-# `python3` is the system Python 3.9. Mixing those runtimes crashes uvicorn
-# before the application imports.
+export WORKBENCH_LOCAL_SINGLE_USER="${WORKBENCH_LOCAL_SINGLE_USER:-true}"
+# Keep the stable launcher on the repository environment. The host `python3`
+# is not a project dependency boundary and may change independently.
 unset PYTHONPATH
 
 cd "$ROOT"
-exec python3 -m uvicorn services.api.app.main:app \
+exec .venv/bin/python -m uvicorn services.api.app.main:app \
   --app-dir "$ROOT" \
   --host 127.0.0.1 \
   --port 8911

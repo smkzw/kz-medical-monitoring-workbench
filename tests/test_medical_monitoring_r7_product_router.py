@@ -170,6 +170,7 @@ def _make_app(
             project_resolver=project_resolver or (lambda project_id: project_id),
             principal_resolver=_resolve_principal,
             require_server_principal=require_server_principal,
+            synthetic_fixture_mode=True,
             harness_runtime_factory=harness_runtime_factory,
             harness_adapter=harness_adapter,
             harness_catalog=harness_catalog,

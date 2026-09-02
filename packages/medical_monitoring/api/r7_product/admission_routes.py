@@ -127,6 +127,10 @@ class AdmissionPipeline(Protocol):
         self, *, project_id: str, attempt_id: str, workspace_dir: Path
     ) -> Mapping[str, Any]: ...
 
+    def latest_attempt_status(
+        self, *, project_id: str, workspace_dir: Path
+    ) -> Mapping[str, Any]: ...
+
 
 class ProductDataAdmissionCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -353,6 +357,43 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
                 "schema_version": ADMISSION_SCHEMA_VERSION,
                 "project_id": canonical,
                 "attempt_id": validated_attempt,
+                **public,
+            }
+        except AdmissionPipelineError as exc:
+            return _admission_error(exc.code)
+        except Exception:
+            return _admission_error("admission_pipeline_failed")
+
+    @router.get("/data-admissions/latest")
+    async def get_latest_data_admission(
+        project_id: str, request: Request
+    ) -> Any:
+        canonical = resolve_project(project_id)
+        if isinstance(canonical, JSONResponse):
+            return canonical
+        auth = authorize(
+            request,
+            project_id=canonical,
+            action=MonitoringAction.READ_SOURCE_EVIDENCE,
+        )
+        if isinstance(auth, JSONResponse):
+            return auth
+        pipeline = _pipeline_or_error()
+        if isinstance(pipeline, JSONResponse):
+            return pipeline
+        try:
+            result = pipeline.latest_attempt_status(
+                project_id=canonical,
+                workspace_dir=_workspace_dir(context.root, canonical),
+            )
+            public = _public_admission_projection(
+                result, required_keys=("attempt_id", "state")
+            )
+            if isinstance(public, JSONResponse):
+                return public
+            return {
+                "schema_version": ADMISSION_SCHEMA_VERSION,
+                "project_id": canonical,
                 **public,
             }
         except AdmissionPipelineError as exc:

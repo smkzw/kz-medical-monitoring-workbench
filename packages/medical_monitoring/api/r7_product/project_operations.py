@@ -628,7 +628,10 @@ def build_project_operations(
         registry = setup_registry(canonical_project_id)
         if isinstance(registry, JSONResponse):
             return registry
-        snapshots, baselines = _synthetic_setup_inputs(canonical_project_id)
+        try:
+            snapshots, baselines = _synthetic_setup_inputs(canonical_project_id)
+        except Exception as exc:
+            return _run_entry_error_response(exc)
         return rs.RunSetupCatalog(
             project_id=canonical_project_id,
             snapshots=snapshots,

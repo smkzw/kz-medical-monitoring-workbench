@@ -68,7 +68,8 @@ const needle = (text) => compact(text);
     "page unavailable text excludes continuity errors",
   );
   check(
-    src.includes(needle(`const productStatus = resultError || setupHistoryError ? "unavailable" : loadingBody ? "loading" : productState.kind;`)),
+    src.includes(needle(`const admissionOnly = setupHistoryError?.code === "run_data_not_ready";
+  const productStatus = resultError || (setupHistoryError && !admissionOnly) ? "unavailable" : admissionOnly ? "admission_ready" : loadingBody ? "loading" : productState.kind;`)),
     "page status derivation excludes continuity state",
   );
   check(

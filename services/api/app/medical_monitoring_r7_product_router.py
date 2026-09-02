@@ -379,6 +379,10 @@ def _synthetic_setup_inputs(
 ) -> tuple[tuple[rs.DataSnapshot, ...], tuple[rs.PublishedBaseline, ...]]:
     return _synthetic_setup_inputs_impl(canonical_project_id)
 
+
+def _raise_run_data_not_ready() -> None:
+    raise rs.RunSetupError("run_data_not_ready")
+
 def create_medical_monitoring_r7_product_router(
     *,
     runtime_dir: Union[str, Path],
@@ -387,6 +391,7 @@ def create_medical_monitoring_r7_product_router(
         Callable[[Request], MonitoringAuthenticatedPrincipal | None]
     ] = None,
     require_server_principal: bool = True,
+    synthetic_fixture_mode: bool = False,
     maintenance_wait_seconds: float = DEFAULT_WAIT_SECONDS,
     harness_runtime_factory: Optional[Callable[..., Any]] = None,
     harness_adapter: Any = None,
@@ -478,7 +483,9 @@ def create_medical_monitoring_r7_product_router(
             blocked_legacy_view_type=_BlockedLegacyView,
             monitoring_action=MonitoringAction,
             synthetic_setup_inputs=(
-                lambda project_id: _synthetic_setup_inputs(project_id)
+                (lambda project_id: _synthetic_setup_inputs(project_id))
+                if synthetic_fixture_mode
+                else (lambda _project_id: (_raise_run_data_not_ready()))
             ),
             risk_rule_db_name=R7_RISK_RULE_DB_NAME,
         ),

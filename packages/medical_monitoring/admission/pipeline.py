@@ -24,6 +24,7 @@ from .staging import (
     StagingHashMismatchError,
     StagingIncompleteError,
     StagingSourceError,
+    list_attempt_ids,
     load_attempt,
     stage_copy,
 )
@@ -348,6 +349,23 @@ class DataAdmissionPipeline:
             "summary": record["summary"],
             "technical_details": record["technical_details"],
         }
+
+    def latest_attempt_status(
+        self, *, project_id: str, workspace_dir: Path
+    ) -> Mapping[str, Any]:
+        admission_workspace = self._admission_workspace(workspace_dir)
+        attempts = [
+            load_attempt(admission_workspace, attempt_id, verify_files=False)
+            for attempt_id in list_attempt_ids(admission_workspace)
+        ]
+        if not attempts:
+            raise AdmissionPipelineError("admission_attempt_not_found")
+        latest = max(attempts, key=lambda item: (item.created_at, item.attempt_id))
+        return self.attempt_status(
+            project_id=project_id,
+            attempt_id=latest.attempt_id,
+            workspace_dir=workspace_dir,
+        )
 
     def profile_preview(
         self, *, project_id: str, attempt_id: str, workspace_dir: Path

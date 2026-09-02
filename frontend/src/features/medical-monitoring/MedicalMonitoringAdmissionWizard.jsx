@@ -509,6 +509,26 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     createAdmissionMappingConfirmState,
   );
 
+  useEffect(() => {
+    if (!state.projectId || state.attemptId || state.phase !== "input") return undefined;
+    const controller = new AbortController();
+    let cancelled = false;
+    api.getLatestDataAdmission(state.projectId, { signal: controller.signal })
+      .then((payload) => {
+        if (!cancelled) dispatch({ type: "import-created", payload });
+      })
+      .catch((error) => {
+        const code = error?.detail?.code || error?.code || "";
+        if (!cancelled && code !== "admission_attempt_not_found" && error?.name !== "AbortError") {
+          dispatch({ type: "error", error });
+        }
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [api, state.attemptId, state.phase, state.projectId]);
+
   const submitImport = useCallback(async () => {
     dispatch({ type: "import-start" });
     if (!state.projectId.trim()) return;

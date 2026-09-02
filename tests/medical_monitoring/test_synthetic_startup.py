@@ -64,6 +64,7 @@ def _synthetic_app(runtime_dir: Path) -> FastAPI:
             ),
             principal_resolver=lambda _request: _synthetic_route_principal(),
             require_server_principal=True,
+            synthetic_fixture_mode=True,
         )
     )
     return app
