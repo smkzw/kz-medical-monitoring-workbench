@@ -7,11 +7,17 @@ from pathlib import Path
 
 import pytest
 
+from packages.medical_monitoring.admission.mapping_gate import (
+    MONITORING_C3_MAPPING_MODEL,
+    MONITORING_C3_MAPPING_PROFILE_ID,
+    MONITORING_C3_MAPPING_PROVIDER,
+)
 from packages.medical_monitoring.admission import (
     AdmissionMappingPipeline,
     AdmissionMappingPipelineError,
     DataAdmissionPipeline,
     admission_record_to_harness_input,
+    current_admission_mapping_revision,
 )
 from packages.medical_monitoring.graph.store import Store
 from packages.medical_monitoring.runtime.runtime_progress import (
@@ -81,10 +87,10 @@ def _record(workspace: Path, attempt_id: str) -> dict:
 
 
 def _runtime(
-    provider: str = "zhipu-coding-plan", model: str = "GLM-5.3-flash"
+    provider: str = MONITORING_C3_MAPPING_PROVIDER, model: str = MONITORING_C3_MAPPING_MODEL
 ) -> MonitoringAiRuntimeBinding:
     return MonitoringAiRuntimeBinding(
-        profile_id="monitoring-mapping-glm-flash",
+        profile_id=MONITORING_C3_MAPPING_PROFILE_ID,
         provider=provider,
         model=model,
         env={},
@@ -135,8 +141,8 @@ def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path
     assert result["summary"]["job_count"] >= 2
     assert result["summary"]["candidate_count"] == 0
     assert result["execution"] == {
-        "providers": ["zhipu-coding-plan"],
-        "requested_models": ["GLM-5.3-flash"],
+        "providers": [MONITORING_C3_MAPPING_PROVIDER],
+        "requested_models": [MONITORING_C3_MAPPING_MODEL],
     }
     jobs = repository.list_jobs(
         PROJECT_ID,
@@ -147,6 +153,17 @@ def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path
     payload = repository.input_payload(PROJECT_ID, jobs[0].job_id)
     assert "S001" not in str(payload)
     assert payload["field_profile"]["full_profile_sha256"]
+    assert current_admission_mapping_revision(
+        repository,
+        jobs[0],
+        workspace_dir=workspace,
+    ) == jobs[0].input_revision_sha256
+
+    assert current_admission_mapping_revision(
+        repository,
+        jobs[0],
+        workspace_dir=workspace.parent / "missing-workspace",
+    ) == ""
 
 
 def test_pipeline_refuses_non_default_model_without_sending_data(tmp_path: Path) -> None:
