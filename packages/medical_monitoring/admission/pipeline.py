@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from pathlib import PurePosixPath
+from typing import Any, BinaryIO, Callable, Iterable, Mapping, Sequence
 
 from ..domain.entities import SourceRevision, content_hash
 from ..graph.store import Store
@@ -27,6 +31,7 @@ from .staging import (
 ADMISSION_RECORD_KIND = "data_admission"
 LOCATOR_INDEX_KIND = "source_cell_locator_index"
 DEFAULT_LISTING_SUFFIXES = frozenset({".csv", ".xls", ".xlsx", ".xlsm"})
+_UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 class AdmissionPipelineError(RuntimeError):
@@ -241,6 +246,73 @@ class DataAdmissionPipeline:
             raise AdmissionPipelineError("admission_pipeline_failed") from exc
         finally:
             store.close()
+
+    def create_uploaded_attempt(
+        self,
+        *,
+        project_id: str,
+        uploads: Sequence[tuple[str, BinaryIO]],
+        workspace_dir: Path,
+    ) -> Mapping[str, Any]:
+        """Admit browser-selected files without exposing a local path.
+
+        Upload streams are first materialized under a short-lived directory
+        inside the project workspace. ``create_attempt`` then applies the same
+        staging hash, atomic-completion, profile and Store contract used for a
+        read-only local source. The temporary intake is always removed; only
+        the verified staging attempt remains.
+        """
+        if not uploads:
+            raise AdmissionPipelineError("admission_source_invalid")
+        intake_parent = self._admission_workspace(workspace_dir) / "upload-intake"
+        intake_parent.mkdir(parents=True, exist_ok=True)
+        intake = Path(tempfile.mkdtemp(prefix="upload-", dir=intake_parent))
+        seen: set[str] = set()
+        try:
+            for raw_path, stream in uploads:
+                raw = str(raw_path or "").replace("\\", "/")
+                normalized = raw.strip("/")
+                relative = PurePosixPath(normalized)
+                if (
+                    not normalized
+                    or raw.startswith("/")
+                    or relative.is_absolute()
+                    or any(part in {"", ".", ".."} for part in relative.parts)
+                    or ":" in relative.parts[0]
+                    or normalized in seen
+                    or relative.suffix.lower() not in self._suffixes
+                ):
+                    raise AdmissionPipelineError("admission_source_invalid")
+                seen.add(normalized)
+                target = intake.joinpath(*relative.parts)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    stream.seek(0)
+                except (AttributeError, OSError):
+                    pass
+                with open(target, "xb") as output:
+                    while True:
+                        chunk = stream.read(_UPLOAD_CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        output.write(chunk)
+                    output.flush()
+                    os.fsync(output.fileno())
+            return self.create_attempt(
+                project_id=project_id,
+                source_dir=intake,
+                workspace_dir=workspace_dir,
+            )
+        except AdmissionPipelineError:
+            raise
+        except Exception as exc:
+            raise AdmissionPipelineError("admission_copy_rejected") from exc
+        finally:
+            shutil.rmtree(intake, ignore_errors=True)
+            try:
+                intake_parent.rmdir()
+            except OSError:
+                pass
 
     def _record(
         self, *, project_id: str, attempt_id: str, workspace_dir: Path

@@ -1,0 +1,435 @@
+.monitoring-admission {
+  background: #fff;
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  color: var(--monitoring-ink, #17212b);
+}
+
+.monitoring-admission-head h2 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.monitoring-admission-head p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--monitoring-muted, #6b7785);
+  max-width: 620px;
+}
+
+.monitoring-admission-steps {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.monitoring-admission-step {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  background: var(--monitoring-soft, #f6f8fa);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--monitoring-muted, #6b7785);
+}
+
+.monitoring-admission-step.is-current {
+  border-color: var(--monitoring-orange, #e96828);
+  background: #fff4ed;
+  color: #a74316;
+  font-weight: 700;
+}
+
+.monitoring-admission-step.is-done {
+  border-color: #a8c9b8;
+  background: #eef7f2;
+  color: #2f6b52;
+}
+
+.monitoring-admission-step-index {
+  font-variant-numeric: tabular-nums;
+}
+
+.monitoring-admission-body {
+  margin-top: 12px;
+}
+
+.monitoring-admission-field {
+  display: grid;
+  gap: 6px;
+  max-width: 560px;
+}
+
+.monitoring-admission-field label,
+.monitoring-admission-field-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.monitoring-admission-field input[type="text"] {
+  min-height: 34px;
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  border-radius: 7px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--monitoring-ink, #17212b);
+  background: #fff;
+}
+
+.monitoring-admission-field input:disabled {
+  opacity: 0.55;
+}
+
+.monitoring-admission-field input:focus-visible,
+.monitoring-admission-picker:focus-within {
+  outline: 2px solid var(--monitoring-orange, #e96828);
+  outline-offset: 2px;
+}
+
+.monitoring-admission-picker {
+  width: fit-content;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--monitoring-orange, #e96828);
+  border-radius: 7px;
+  padding: 0 14px;
+  color: #a74316;
+  background: #fff4ed;
+  cursor: pointer;
+}
+
+.monitoring-admission-picker input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.monitoring-admission-picker:has(input:disabled) {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.monitoring-admission-selection {
+  width: fit-content;
+  margin: 0;
+  border-radius: 6px;
+  padding: 5px 9px;
+  background: #eef7f2;
+  color: #2f6b52;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.monitoring-admission-manual {
+  margin-top: 3px;
+  border-top: 1px solid var(--monitoring-line, #dce3e9);
+  padding-top: 8px;
+  font-size: 12px;
+}
+
+.monitoring-admission-manual summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--monitoring-muted, #6b7785);
+}
+
+.monitoring-admission-manual summary:focus-visible {
+  outline: 2px solid var(--monitoring-orange, #e96828);
+  outline-offset: 2px;
+}
+
+.monitoring-admission-manual[open] {
+  display: grid;
+  gap: 6px;
+}
+
+.monitoring-admission-hint,
+.monitoring-admission-prompt,
+.monitoring-admission-minor,
+.monitoring-admission-loading {
+  font-size: 12px;
+  color: var(--monitoring-muted, #6b7785);
+  margin: 0;
+}
+
+.monitoring-admission-loading {
+  margin-top: 8px;
+}
+
+.monitoring-admission-prompt {
+  color: #4f5f6d;
+}
+
+.monitoring-admission-warning {
+  font-size: 12px;
+  color: #91531d;
+  margin: 0;
+}
+
+.monitoring-admission-big {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.monitoring-admission-summary {
+  margin: 0 0 4px;
+}
+
+.monitoring-admission-table {
+  margin-top: 10px;
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.monitoring-admission-table-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.monitoring-admission-table-head h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.monitoring-admission-table-meta {
+  font-size: 12px;
+  color: var(--monitoring-muted, #6b7785);
+  font-variant-numeric: tabular-nums;
+}
+
+.monitoring-admission-columns {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.monitoring-admission-columns li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.monitoring-admission-column-name {
+  font-weight: 700;
+}
+
+.monitoring-admission-column-meta {
+  color: var(--monitoring-muted, #6b7785);
+  font-variant-numeric: tabular-nums;
+}
+
+.monitoring-admission-roles {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d89b56;
+  background: #fff6e9;
+  color: #91531d;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.monitoring-admission-technical {
+  margin-top: 12px;
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  border-radius: 8px;
+  background: var(--monitoring-soft, #f6f8fa);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.monitoring-admission-technical summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #4f5f6d;
+}
+
+.monitoring-admission-technical summary:focus-visible {
+  outline: 2px solid var(--monitoring-orange, #e96828);
+  outline-offset: 2px;
+}
+
+.monitoring-admission-tech-list {
+  margin: 8px 0 0;
+  display: grid;
+  gap: 6px;
+}
+
+.monitoring-admission-tech-row {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+}
+
+.monitoring-admission-tech-row dt {
+  color: var(--monitoring-muted, #6b7785);
+}
+
+.monitoring-admission-tech-row dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.monitoring-admission-tech-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.monitoring-admission-confirm {
+  display: grid;
+  gap: 8px;
+}
+
+.monitoring-admission-pending-note {
+  font-size: 13px;
+  margin: 0;
+}
+
+.monitoring-admission-pending {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.monitoring-admission-pending li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.monitoring-admission-pending-field {
+  font-weight: 700;
+}
+
+.monitoring-admission-done {
+  display: grid;
+  gap: 6px;
+}
+
+.monitoring-admission-done-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: #2f6b52;
+}
+
+.monitoring-admission-alert {
+  margin-top: 10px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--monitoring-red, #b83b3b);
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--monitoring-red, #b83b3b);
+  background: #fdf6f5;
+}
+
+.monitoring-admission-alert-text {
+  margin: 0;
+  font-weight: 700;
+}
+
+.monitoring-admission-alert-guide {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+}
+
+.monitoring-admission-actions {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.monitoring-admission-primary,
+.monitoring-admission-secondary {
+  border-radius: 7px;
+  min-height: 32px;
+  padding: 0 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.monitoring-admission-primary {
+  border: 1px solid var(--monitoring-orange, #e96828);
+  background: var(--monitoring-orange, #e96828);
+  color: #fff;
+}
+
+.monitoring-admission-primary:hover:not(:disabled) {
+  color: #fff;
+  filter: brightness(0.94);
+}
+
+.monitoring-admission-secondary {
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  background: #fff;
+  color: var(--monitoring-ink, #17212b);
+}
+
+.monitoring-admission-secondary:hover {
+  border-color: var(--monitoring-orange, #e96828);
+  color: var(--monitoring-orange, #e96828);
+}
+
+.monitoring-admission-primary:disabled {
+  border-color: var(--monitoring-line, #dce3e9);
+  background: #eef1f4;
+  color: #7d8792;
+  opacity: 1;
+  cursor: default;
+}
+
+.monitoring-admission-primary:focus-visible,
+.monitoring-admission-secondary:focus-visible {
+  outline: 2px solid var(--monitoring-orange, #e96828);
+  outline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  .monitoring-admission-tech-row {
+    grid-template-columns: 1fr;
+  }
+}
