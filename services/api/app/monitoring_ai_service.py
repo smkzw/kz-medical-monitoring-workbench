@@ -1125,31 +1125,6 @@ class _FieldMappingItem(BaseModel):
         return self
 
 
-def _normalize_provider_field_mapping_triage(
-    payload: Mapping[str, Any],
-) -> Dict[str, Any]:
-    """Keep malformed provider triage out of the user confirmation queue."""
-
-    normalized = dict(payload)
-    mappings = normalized.get("field_mappings")
-    if not isinstance(mappings, list):
-        return normalized
-    normalized_mappings: List[Any] = []
-    for item in mappings:
-        if not isinstance(item, Mapping):
-            normalized_mappings.append(item)
-            continue
-        mapping = dict(item)
-        action = mapping.get("user_action")
-        if mapping.get("user_decision_required") is True and not (
-            isinstance(action, str) and ("？" in action or "?" in action)
-        ):
-            mapping["user_decision_required"] = False
-        normalized_mappings.append(mapping)
-    normalized["field_mappings"] = normalized_mappings
-    return normalized
-
-
 class _FieldMappingOrigin(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -3557,16 +3532,6 @@ class MonitoringAiService:
                         "system_generated_mapping_provenance",
                         None,
                     )
-                    field_profile = input_payload.get("field_profile") or {}
-                    if not isinstance(
-                        field_profile.get("adjudication_contract"),
-                        dict,
-                    ):
-                        structured_payload = (
-                            _normalize_provider_field_mapping_triage(
-                                structured_payload
-                            )
-                        )
                 try:
                     structured = model_type.model_validate(
                         structured_payload
