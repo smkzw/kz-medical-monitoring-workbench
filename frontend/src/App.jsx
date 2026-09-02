@@ -13426,8 +13426,17 @@ export function App() {
             refreshWorkbenchInbox={refreshWorkbenchInbox}
             refreshDashboard={refreshDashboard}
             onOpenMonitoringRisk={(risk) => {
+              const riskRef = risk.riskKey || risk.riskRef || "";
+              const riskInstanceRef = risk.riskId || risk.riskInstanceRef || risk.id || "";
+              if (!monitoringRouteProjectId || !riskRef || !riskInstanceRef) return;
               if (risk.subject && risk.subject !== "-") setSelectedSubject(risk.subject);
-              requestActivePage("monitoring");
+              requestMedicalMonitoringProductRouteChange({
+                project_ref: monitoringRouteProjectId,
+                view: "overview",
+                risk_ref: riskRef,
+                risk_instance_ref: riskInstanceRef,
+                return_context_key: `safety-pv:${riskInstanceRef}`,
+              });
             }}
           />
         )

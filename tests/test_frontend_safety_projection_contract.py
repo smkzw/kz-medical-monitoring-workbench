@@ -61,12 +61,14 @@ class FrontendSafetyProjectionContractTests(unittest.TestCase):
         self.assertIn("<SafetyPvManifestPanel", self.app)
 
     def test_projection_deep_links_exact_risk_to_monitoring(self) -> None:
-        self.assertIn("monitoringFocusRiskId", self.app)
-        self.assertIn("initialRiskId={monitoringFocusRiskId}", self.app)
         self.assertIn("onOpenMonitoringRisk", self.app)
-        self.assertIn("setRiskDockOpen(true)", self.app)
-        self.assertIn("const selectedRisk = initialRiskMatch", self.app)
-        self.assertIn("requestMonitoringRiskFocus(risk)", self.app)
+        self.assertIn("const riskRef = risk.riskKey || risk.riskRef", self.app)
+        self.assertIn("const riskInstanceRef = risk.riskId || risk.riskInstanceRef", self.app)
+        self.assertIn("requestMedicalMonitoringProductRouteChange({", self.app)
+        self.assertIn("project_ref: monitoringRouteProjectId", self.app)
+        self.assertIn("risk_ref: riskRef", self.app)
+        self.assertIn("risk_instance_ref: riskInstanceRef", self.app)
+        self.assertIn("return_context_key: `safety-pv:${riskInstanceRef}`", self.app)
 
     def test_projection_reuses_the_same_seven_column_sortable_filterable_checklist(self) -> None:
         for label in ("受试者编号", "中心编号", "风险级别", "风险类别", "具体风险项", "当前处置", "更新时间"):
