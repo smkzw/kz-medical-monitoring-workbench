@@ -74,9 +74,10 @@ export function buildTimelineScale({ windowStart, windowEnd, visits = [], events
   if (endMs == null || endMs <= startMs) endMs = startMs + 30 * DAY_MS;
   const spanMs = Math.max(endMs - startMs, DAY_MS);
   const pxPerDay = pxPerDayForZoom(zoomLevel);
-  const contentWidth = Math.max(640, Math.ceil(spanMs / DAY_MS) * pxPerDay);
-  const pad = 28;
-  const width = contentWidth + pad * 2;
+  const pad = 72;
+  const rawContentWidth = Math.ceil(spanMs / DAY_MS) * pxPerDay;
+  const width = Math.max(640, rawContentWidth + pad * 2);
+  const contentWidth = width - pad * 2;
 
   function xFor(iso) {
     const ms = parseTimelineDate(iso);

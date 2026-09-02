@@ -204,6 +204,8 @@ check(normalizedPublicResult.projection.centers[0].coverageLabel === "完整", "
 check(normalizedPublicResult.projection.centers[0].risks.length === 2, "center keeps its referenced risk prompts for center summary counts");
 check(normalizedPublicResult.projection.centers[0].siteLabel === "中心 006", "center hides the synthetic internal site token behind a user label");
 check(normalizedPublicResult.projection.currentRisks.every((risk) => risk.siteLabel === "中心 006"), "risk rows keep the user-facing center label");
+check(bundled.publicResultSiteScopeText(normalizedPublicResult, {}) === "中心 006", "project result scope derives its audience center labels from the projection");
+check(bundled.publicResultSiteScopeText({ projection: { centers: [], raw: {} } }, { site_ref: "s7-site-006" }) === "中心 6", "subject result scope never falls back to the internal site token");
 
 const publicProgressHtml = render(element("MonitoringPublicProgressSurface", {
   progress: {
