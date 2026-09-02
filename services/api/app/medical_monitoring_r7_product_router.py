@@ -406,6 +406,7 @@ def create_medical_monitoring_r7_product_router(
     continuity_bridge: Any = None,
     admission_pipeline: Any = None,
     admission_mapping_pipeline: Any = None,
+    admission_mapping_confirmation: Any = None,
     audit_ledger_factory: Optional[Callable[..., Any]] = None,
 ) -> APIRouter:
     """Create the project-scoped R7 product router; no workspace I/O here."""
@@ -954,6 +955,7 @@ def create_medical_monitoring_r7_product_router(
             workspace_dir=_workspace_dir,
             monitoring_action=MonitoringAction,
             admission_mapping_pipeline=admission_mapping_pipeline,
+            admission_mapping_confirmation=admission_mapping_confirmation,
         ),
     )
 

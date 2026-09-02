@@ -37,6 +37,26 @@ def _value(value: Any) -> Any:
     return getattr(value, "value", value)
 
 
+def _evidence_summary(candidate: Any, evidence_ids: list[str]) -> list[dict[str, Any]]:
+    selected = set(evidence_ids)
+    rows = []
+    for evidence in getattr(candidate, "evidence", ()):
+        if str(getattr(evidence, "evidence_id", "")) not in selected:
+            continue
+        raw = getattr(evidence, "raw_fields", {})
+        if not isinstance(raw, Mapping):
+            continue
+        samples = list(raw.get("representative_values") or [])
+        rows.append({
+            "inferred_type": str(raw.get("inferred_type") or ""),
+            "total_rows": int(raw.get("total_rows") or 0),
+            "non_empty_count": int(raw.get("non_empty_count") or 0),
+            "sample_count": min(len(samples), 3),
+            "samples_hidden": True,
+        })
+    return rows
+
+
 class AdmissionMappingPipeline:
     """Submit admitted profiles to the established candidate repository.
 
@@ -156,14 +176,20 @@ class AdmissionMappingPipeline:
                 continue
             for candidate in self._repository.candidates(job.project_id, job.job_id):
                 for item in candidate.structured_payload.get("field_mappings", []):
+                    evidence_ids = list(item.get("evidence_ids") or [])
                     mappings.append({
                         "domain": item.get("domain"),
                         "source_field": item.get("source_field"),
                         "recommended_role": item.get("recommended_role"),
+                        "field_kind": item.get("field_kind"),
                         "confidence": item.get("confidence"),
                         "uncertainty": item.get("uncertainty"),
                         "user_action": item.get("user_action"),
-                        "evidence_ids": list(item.get("evidence_ids") or []),
+                        "evidence_ids": evidence_ids,
+                        "evidence_summary": _evidence_summary(
+                            candidate,
+                            evidence_ids,
+                        ),
                         "confirmation_status": "pending_confirmation",
                     })
         states = [item["status"] for item in job_rows]

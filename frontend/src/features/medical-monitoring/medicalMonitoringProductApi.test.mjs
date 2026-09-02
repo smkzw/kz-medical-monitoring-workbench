@@ -257,6 +257,39 @@ check(
     && admissionCalls[3].options.signal === admissionSignal,
   "admission calls forward the caller abort signal",
 );
+
+await admissionApi.listDataAdmissionMappingCandidates("proj/01", "attempt-0001", { focus: "critical", signal: admissionSignal });
+await admissionApi.adoptDataAdmissionMappingDraft("proj/01", "attempt-0001", { reason: "采用建议" });
+await admissionApi.editDataAdmissionMappingDraftField("proj/01", "attempt-0001", {
+  draft_id: "draft-1",
+  domain: "AE",
+  source_field: "AETERM",
+  patch: { recommended_role: "ae_term" },
+  expected_version: 1,
+  idempotency_key: "edit-1",
+});
+await admissionApi.confirmDataAdmissionMappingDraft("proj/01", "attempt-0001", {
+  draft_id: "draft-1",
+  expected_version: 2,
+  confirmation_reason: "确认完成",
+  idempotency_key: "confirm-1",
+});
+check(
+  admissionCalls[4].url.includes("/mapping-candidates?focus=critical"),
+  "mapping candidate list uses focus query",
+);
+check(admissionCalls[4].options.method === "GET", "mapping candidate list is GET");
+check(
+  admissionCalls[5].url.endsWith("/mapping-draft"),
+  "mapping draft adopt stays on attempt route",
+);
+check(admissionCalls[5].options.method === "POST", "mapping draft adopt is POST");
+check(admissionCalls[6].options.method === "PATCH", "mapping draft field edit is PATCH");
+check(
+  admissionCalls[7].url.endsWith("/mapping-draft/confirm"),
+  "mapping draft confirm stays on attempt confirm route",
+);
+check(admissionCalls[7].options.method === "POST", "mapping draft confirm is POST");
 check(
   admissionCalls.every((call) => call.options.headers.Accept === "application/json"),
   "admission requests JSON",
@@ -273,7 +306,7 @@ for (const invalid of [
   assert.throws(invalid, TypeError);
   passed += 1;
 }
-check(admissionCalls.length === 4, "invalid admission identifiers and payloads never reach fetch");
+check(admissionCalls.length === 8, "invalid admission identifiers and payloads never reach fetch");
 
 const uploadCalls = [];
 const admissionUploadApi = createMedicalMonitoringProductApi({

@@ -47,6 +47,11 @@ from .mapping_pipeline import (
     AdmissionMappingPipelineError,
     current_admission_mapping_revision,
 )
+from .mapping_confirmation import (
+    AdmissionMappingConfirmationService,
+    attention_reason,
+    enrich_candidates,
+)
 
 __all__ = [
     "MANIFEST_NAME",
@@ -73,4 +78,8 @@ __all__ = [
     "admission_record_to_harness_input",
     "AdmissionMappingPipeline",
     "AdmissionMappingPipelineError",
+    "AdmissionMappingConfirmationService",
+    "attention_reason",
+    "enrich_candidates",
+    "current_admission_mapping_revision",
 ]

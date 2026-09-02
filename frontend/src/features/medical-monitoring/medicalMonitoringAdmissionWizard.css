@@ -433,3 +433,180 @@
     grid-template-columns: 1fr;
   }
 }
+
+.monitoring-admission-mapping-filters {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+  flex-wrap: wrap;
+}
+.monitoring-admission-mapping-filters button,
+.monitoring-admission-mapping-filters select,
+.monitoring-admission-mapping-filters input {
+  border: 1px solid #c9d4e5;
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 12px;
+  min-height: 34px;
+}
+.monitoring-admission-mapping-filters button {
+  cursor: pointer;
+}
+
+.monitoring-admission-mapping-filters input {
+  min-width: 240px;
+}
+.monitoring-admission-mapping-filters button.is-active {
+  background: #fff4ed;
+  border-color: var(--monitoring-orange, #e96828);
+  color: var(--monitoring-orange, #e96828);
+}
+.monitoring-admission-mapping-row {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 16px;
+  border: 0;
+  background: transparent;
+  padding: 8px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.monitoring-admission-mapping-row:hover:not(:disabled),
+.monitoring-admission-mapping-row.is-selected {
+  background: #fff4ed;
+}
+
+.monitoring-admission-mapping-row:disabled {
+  color: inherit;
+  cursor: default;
+}
+
+.monitoring-admission-mapping-row:focus-visible {
+  outline: 2px solid var(--monitoring-orange, #e96828);
+  outline-offset: 2px;
+}
+
+.monitoring-admission-mapping-source,
+.monitoring-admission-mapping-advice {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.monitoring-admission-mapping-source small,
+.monitoring-admission-mapping-advice small,
+.monitoring-admission-mapping-source span,
+.monitoring-admission-mapping-advice span {
+  color: var(--monitoring-muted, #64727d);
+  overflow-wrap: anywhere;
+}
+
+.monitoring-admission-mapping .monitoring-admission-pending {
+  max-height: min(52vh, 520px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.monitoring-admission-mapping-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.monitoring-admission-mapping-workspace.has-editor {
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+}
+
+.monitoring-admission-mapping-list {
+  min-width: 0;
+}
+
+.monitoring-admission-confirmation-note {
+  margin: 10px 0 12px;
+}
+
+.monitoring-admission-attention-chip {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fff4ed;
+  color: var(--monitoring-orange, #e96828);
+  font-weight: 700;
+}
+
+.monitoring-admission-mapping-message {
+  margin: 10px 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--monitoring-orange, #e96828);
+  background: #fff8f3;
+  color: var(--monitoring-ink, #24313a);
+}
+.monitoring-admission-field-editor {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #d7deea;
+  border-radius: 8px;
+  background: #fffaf6;
+}
+.monitoring-admission-field-editor label {
+  display: grid;
+  gap: 4px;
+}
+.monitoring-admission-field-editor input,
+.monitoring-admission-field-editor textarea,
+.monitoring-admission-mapping textarea {
+  width: 100%;
+  min-height: 36px;
+}
+
+.monitoring-admission-quality {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  border-radius: 8px;
+  background: #f7f9fa;
+  color: var(--monitoring-ink, #24313a);
+}
+
+.monitoring-admission-quality span {
+  color: var(--monitoring-muted, #64727d);
+}
+
+.monitoring-admission-quality.is-blocked {
+  border-color: var(--monitoring-red, #b83b3b);
+  background: #fdf6f5;
+}
+
+.monitoring-admission-quality.is-warning,
+.monitoring-admission-quality.is-restricted {
+  border-color: var(--monitoring-orange, #e96828);
+  background: #fff8f3;
+}
+
+.monitoring-admission[data-admission-phase="ready"] .monitoring-admission-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 12px 0;
+  background: #fff;
+  border-top: 1px solid var(--monitoring-line, #dce3e9);
+}
+
+@media (max-width: 900px) {
+  .monitoring-admission-mapping-row {
+    grid-template-columns: 1fr;
+  }
+
+  .monitoring-admission-mapping-workspace.has-editor {
+    grid-template-columns: 1fr;
+  }
+}
