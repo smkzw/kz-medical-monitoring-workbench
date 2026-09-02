@@ -3,7 +3,7 @@
   "name": "mm-phase-c-real-data",
   "title": "阶段 C：真实数据确定性接入",
   "description": "五项目只读隔离副本准入、结构画像、mapping 与 canonical facts。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

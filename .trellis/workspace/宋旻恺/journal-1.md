@@ -689,3 +689,9 @@ Introduced generation-neutral application and route entry points without changin
 - User-view retrospective: consolidation now gives one obvious medical-monitoring entry, project/center/subject risk navigation, a readable visit-axis Patient Journey and no exposed internal center tokens. The remaining limitation is deliberate: synthetic evidence proves the product loop, not real listing interpretation, fact provenance or clinical usability.
 - Engineering retrospective: migration preserved candidate/fact and publication boundaries while removing parallel authorities. The highest-risk Phase C transition is no longer architecture consolidation; it is preventing real source mutation, preserving exact cell locators and resisting project-specific parser or prompt branches.
 - Phase C starts with one deterministic admission contract and generated files only. It will not open all five projects at once: first close isolated-copy/hash/profile/locator behavior, then add the user-facing wizard, then pilot one real project before the other four.
+
+## 2026-09-02 — Phase C started
+
+- Archived B8, the remaining completed B2 task and the Phase B parent after user confirmation. Tag `mm-consolidated` points to the confirmed Phase B retrospective commit.
+- Validated the Phase C PRD, technical design, implementation plan and Trellis context manifests, then moved `09-01-mm-phase-c-real-data` from `planning` to `in_progress`.
+- Active implementation unit is C1 only: deterministic isolated-copy admission using generated non-real files, existing source/snapshot/store authorities and exact cell locators. No service, browser, model or real project starts until this contract is implemented and committed.
