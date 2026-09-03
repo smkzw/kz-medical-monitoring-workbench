@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any, Literal, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, field_validator, model_validator
@@ -37,6 +38,34 @@ _SHEET_KEYS = frozenset({
     "locator", "sheet_name", "row_count", "headers", "visibility", "used_range",
     "parser_warnings",
 })
+_CONFLICT_PACKET_KEYS = frozenset({
+    "schema_version", "batch_id", "input_sha256", "reconciliation_sha256",
+    "conflict_roles", "allowed_candidate_ids_by_role", "candidates",
+    "candidate_coverage", "conflict_packet_sha256",
+})
+_DOCUMENT_VERSION_RE = re.compile(
+    r"(?:[Vv](?:ersion)?\s*[0-9]+(?:[._-][0-9A-Za-z]+)*(?:版|版本|稿)?|"
+    r"版本(?:号)?[:：]?\s*[0-9]+(?:[._-][0-9A-Za-z]+)*|"
+    r"第\s*[0-9]+(?:[._-][0-9A-Za-z]+)*\s*(?:版|版本|稿)|"
+    r"[0-9]+(?:[._-][0-9A-Za-z]+)*(?:版|版本|稿)?|"
+    r"初稿|终稿|正式版|最终版|修订稿|修订版)",
+    re.IGNORECASE,
+)
+_DOCUMENT_DATE_RE = re.compile(
+    r"(?:[0-9]{4}[-/.][0-9]{1,2}[-/.][0-9]{1,2}|"
+    r"[0-9]{4}年[0-9]{1,2}月(?:[0-9]{1,2}日)?)"
+)
+AuthorityUncertainty = Literal[
+    "",
+    "role_unclear",
+    "version_unclear",
+    "date_unclear",
+    "content_unreadable",
+    "evidence_insufficient",
+    "multiple_current_candidates",
+]
+
+
 class DocumentAuthorityError(RuntimeError):
     pass
 
@@ -59,11 +88,72 @@ def validate_document_authority_analysis(
     )
 
 
+def validate_document_authority_conflict_packet(
+    packet: Mapping[str, Any],
+) -> str:
+    if set(packet) != _CONFLICT_PACKET_KEYS:
+        raise DocumentAuthorityError("document_authority_conflict_packet_invalid")
+    claimed = str(packet.get("conflict_packet_sha256") or "")
+    body = {key: value for key, value in packet.items() if key != "conflict_packet_sha256"}
+    if claimed != _digest(body):
+        raise DocumentAuthorityError("document_authority_conflict_packet_invalid")
+    roles = tuple(str(value) for value in packet.get("conflict_roles", ()))
+    candidates = tuple(packet.get("candidates", ()))
+    candidate_ids = tuple(
+        str(item.get("candidate_id") or "")
+        for item in candidates
+        if isinstance(item, Mapping)
+    )
+    expected_allowed = {role: sorted(candidate_ids) for role in roles}
+    if (
+        not roles
+        or len(roles) != len(set(roles))
+        or len(candidate_ids) != len(candidates)
+        or any(not value for value in candidate_ids)
+        or len(candidate_ids) != len(set(candidate_ids))
+        or sorted(candidate_ids) != sorted(packet.get("candidate_coverage", ()))
+        or packet.get("allowed_candidate_ids_by_role") != expected_allowed
+    ):
+        raise DocumentAuthorityError("document_authority_conflict_packet_invalid")
+    return claimed
+
+
+def validate_document_authority_conflict_review(
+    packet: Mapping[str, Any], review: "DocumentAuthorityConflictReview"
+) -> None:
+    packet_sha256 = validate_document_authority_conflict_packet(packet)
+    if review.conflict_packet_sha256 != packet_sha256:
+        raise DocumentAuthorityError("document_authority_review_input_mismatch")
+    roles = tuple(str(value) for value in packet["conflict_roles"])
+    decisions = _review_index(review, roles)
+    candidates = {
+        str(item["candidate_id"]): item for item in packet["candidates"]
+    }
+    for role in roles:
+        _validate_conflict_decision(
+            decisions[role],
+            set(packet["allowed_candidate_ids_by_role"][role]),
+            candidates,
+        )
+
+
 def _validate_nonempty_unique(values: tuple[str, ...]) -> tuple[str, ...]:
     cleaned = tuple(value.strip() for value in values)
     if any(not value for value in cleaned) or len(cleaned) != len(set(cleaned)):
         raise ValueError("values must be non-empty and unique")
     return cleaned
+
+
+def _validate_document_version(value: str) -> str:
+    if value and (value != value.strip() or not _DOCUMENT_VERSION_RE.fullmatch(value)):
+        raise ValueError("document version must be a controlled version identifier")
+    return value
+
+
+def _validate_document_date(value: str) -> str:
+    if value and (value != value.strip() or not _DOCUMENT_DATE_RE.fullmatch(value)):
+        raise ValueError("document date must be a controlled date identifier")
+    return value
 
 
 class CandidateAssessment(BaseModel):
@@ -78,9 +168,11 @@ class CandidateAssessment(BaseModel):
     document_version: str = Field(default="", max_length=120)
     document_date: str = Field(default="", max_length=40)
     evidence_locators: tuple[str, ...] = Field(default=(), max_length=20)
-    uncertainty: str = Field(default="", max_length=2_000)
+    uncertainty: AuthorityUncertainty = ""
 
     _locators = field_validator("evidence_locators")(_validate_nonempty_unique)
+    _version = field_validator("document_version")(_validate_document_version)
+    _date = field_validator("document_date")(_validate_document_date)
 
 
 class RoleSelection(BaseModel):
@@ -91,7 +183,7 @@ class RoleSelection(BaseModel):
     selected_candidate_id: str = Field(default="", max_length=160)
     confidence: StrictFloat = Field(ge=0, le=1)
     evidence_locators: tuple[str, ...] = Field(default=(), max_length=20)
-    uncertainty: str = Field(default="", max_length=2_000)
+    uncertainty: AuthorityUncertainty = ""
 
     _locators = field_validator("evidence_locators")(_validate_nonempty_unique)
 
@@ -128,6 +220,7 @@ class DocumentAuthorityRunEnvelope(BaseModel):
     model: str
     prompt_version: str
     input_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    job_input_revision_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     output_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     analysis: DocumentAuthorityAnalysis
 
@@ -158,9 +251,11 @@ class ConflictDecision(BaseModel):
     confidence: StrictFloat = Field(ge=0, le=1)
     considered_candidate_ids: tuple[str, ...] = Field(default=(), max_length=100)
     evidence_references: tuple[EvidenceReference, ...] = Field(default=(), max_length=100)
-    uncertainty: str = Field(default="", max_length=2_000)
+    uncertainty: AuthorityUncertainty = ""
 
     _candidates = field_validator("considered_candidate_ids")(_validate_nonempty_unique)
+    _version = field_validator("document_version")(_validate_document_version)
+    _date = field_validator("document_date")(_validate_document_date)
 
     @model_validator(mode="after")
     def validate_decision(self) -> "ConflictDecision":
@@ -202,6 +297,7 @@ class DocumentAuthorityConflictRunEnvelope(BaseModel):
     model: str
     prompt_version: str
     conflict_packet_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    job_input_revision_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     output_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     review: DocumentAuthorityConflictReview
 
@@ -360,6 +456,13 @@ def resolve_document_authority_conflicts(
     primary: DocumentAuthorityConflictRunEnvelope,
     verifier: DocumentAuthorityConflictRunEnvelope,
 ) -> dict[str, Any]:
+    if len({
+        analysis_primary.job_input_revision_sha256,
+        analysis_verifier.job_input_revision_sha256,
+        primary.job_input_revision_sha256,
+        verifier.job_input_revision_sha256,
+    }) != 1:
+        raise DocumentAuthorityError("document_authority_input_revision_mismatch")
     reconciliation = reconcile_document_authority(
         batch, analysis_primary, analysis_verifier
     )
@@ -463,6 +566,8 @@ def _validate_analysis(
 def _validate_run_pair(left: Any, right: Any, input_hash: str, *, review: bool) -> None:
     if left.run_id == right.run_id or left.job_id == right.job_id:
         raise DocumentAuthorityError("document_authority_runs_not_independent")
+    if left.job_input_revision_sha256 != right.job_input_revision_sha256:
+        raise DocumentAuthorityError("document_authority_input_revision_mismatch")
     expected = (
         (
             "primary", MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL,

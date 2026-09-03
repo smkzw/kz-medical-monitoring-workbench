@@ -61,6 +61,7 @@ def _require_sha256(value: Any, message: str) -> str:
 class MonitoringAiTaskType(str, Enum):
     LISTING_FIELD_MAPPING = "listing_field_mapping"
     DOCUMENT_AUTHORITY_ANALYSIS = "document_authority_analysis"
+    DOCUMENT_AUTHORITY_REVIEW = "document_authority_review"
     PROTOCOL_CLAUSE_STRUCTURING = "protocol_clause_structuring"
     RULE_TEMPLATE_RECOMMENDATION = "rule_template_recommendation"
     CROSS_TABLE_CLUE_SYNTHESIS = "cross_table_clue_synthesis"
