@@ -1700,7 +1700,7 @@ class MonitoringAiService:
                     f"document-authority-"
                     f"{'adjudication' if adjudication_context is not None else 'review'}:"
                     f"{role}:"
-                    f"{'v4:' if adjudication_context is not None else ''}"
+                    f"{'v5:' if adjudication_context is not None else ''}"
                     f"{packet_sha256}"
                 ),
             )
@@ -3278,14 +3278,14 @@ class MonitoringAiService:
                 " 这是文件权威冲突的系统内最终裁决。input_payload中的"
                 "document_authority_adjudication_context只列出前轮仍未收敛的"
                 "匿名选项，不含模型身份；必须回到冻结候选内容逐项裁决，不能"
-                "按选项顺序、票数或原置信度选边。你仍须独立输出冲突包全部角色，"
-                "不得照抄任一匿名选项。"
+                "按选项顺序、票数或原置信度选边。只输出unresolved_roles列出的"
+                "角色，不得重答已经收敛的角色，也不得照抄任一匿名选项。"
                 if "document_authority_adjudication_context" in input_payload
                 else " 这是文件权威冲突的全量盲复核。"
             )
             system_prompt += (
                 "必须独立检查匿名冲突包中"
-                "每个候选，为每个冲突角色给出一项决定；不得推测首轮或另一"
+                "每个候选，为本轮要求的每个角色给出一项决定；不得推测首轮或另一"
                 "复核者的答案。决定必须同时给出当前主文件和全部仍有效的勘误、"
                 "修订说明或增补文件；补充文件写入supplementary_candidate_ids，"
                 "且每个主文件和补充文件都要有自身的candidate_id+locator证据。"
@@ -3570,6 +3570,16 @@ class MonitoringAiService:
         input_payload: Dict[str, Any],
     ) -> Dict[str, Any]:
         packet = input_payload["document_authority_conflict_packet"]
+        adjudication_context = input_payload.get(
+            "document_authority_adjudication_context"
+        )
+        roles = (
+            list(adjudication_context["unresolved_roles"])
+            if isinstance(adjudication_context, dict)
+            and adjudication_context.get("schema_version")
+            == "monitoring-document-authority-adjudication-v2"
+            else list(packet["conflict_roles"])
+        )
         evidence_required = [
             str(candidate["candidate_id"])
             for candidate in packet["candidates"]
@@ -3581,7 +3591,7 @@ class MonitoringAiService:
             )
         ]
         return {
-            "conflict_roles": list(packet["conflict_roles"]),
+            "conflict_roles": roles,
             "by_role": {
                 role: {
                     "required_considered_candidate_ids": list(
@@ -3589,7 +3599,7 @@ class MonitoringAiService:
                     ),
                     "evidence_required_candidate_ids": evidence_required,
                 }
-                for role in packet["conflict_roles"]
+                for role in roles
             },
         }
 
@@ -4191,6 +4201,7 @@ class MonitoringAiService:
                                     ],
                                     adjudication_context,
                                     structured,
+                                    prompt_version=job.prompt_version,
                                 )
                             else:
                                 validate_document_authority_conflict_review(

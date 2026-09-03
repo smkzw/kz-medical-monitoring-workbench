@@ -1362,7 +1362,7 @@ def test_parallel_current_prompts_survive_while_legacy_only_preserves_terminal(
     tmp_path: Path,
 ) -> None:
     repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
-    legacy_generations = ("v1", "v2", "v3")
+    legacy_generations = ("v1", "v2", "v3", "v4")
     legacy_completed = []
     for generation in legacy_generations:
         queued = repository.create_or_get(
@@ -1412,13 +1412,15 @@ def test_parallel_current_prompts_survive_while_legacy_only_preserves_terminal(
             "adjudication-primary-v1",
             "adjudication-primary-v2",
             "adjudication-primary-v3",
+            "adjudication-primary-v4",
             "adjudication-verifier-v1",
             "adjudication-verifier-v2",
             "adjudication-verifier-v3",
+            "adjudication-verifier-v4",
         },
     )
 
-    assert changed == 3
+    assert changed == 4
     assert repository.get(
         current_primary.project_id, current_primary.job_id
     ).status == MonitoringAiJobStatus.QUEUED
