@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import json
 from typing import Any, Callable, Iterable, Mapping, Optional
 
 from .mapping_gate import (
@@ -516,18 +517,83 @@ class AdmissionMappingConfirmationService:
             for field in payload.get("fields") or []
             if classify_user_question(field) is not None
         ]
+        reconciliation = None
+        reconciliation_sha256 = ""
+        divergence_pairs: set[tuple[str, str]] = set()
+        if self.require_dual_reconciliation:
+            try:
+                reconciliation = self.reconcile_with_verifier(
+                    project_id=project_id,
+                    attempt_id=attempt_id,
+                    draft_id=draft_id,
+                    workspace_dir=workspace_dir,
+                )["reconciliation"]
+            except AdmissionMappingPipelineError as exc:
+                if exc.code != "mapping_verifier_incomplete":
+                    raise
+                projected = self._draft_payload(draft)
+                projected["adjudication"] = {
+                    "state": "running",
+                    "resolved_count": 0,
+                    "remaining_question_count": len(unresolved),
+                }
+                return projected
+            if reconciliation["state"] == "blocked":
+                projected = self._draft_payload(draft)
+                projected["adjudication"] = {
+                    "state": "blocked",
+                    "resolved_count": 0,
+                    "remaining_question_count": len(unresolved),
+                }
+                return projected
+            reconciliation_sha256 = hashlib.sha256(
+                json.dumps(
+                    reconciliation,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            divergence_pairs = {
+                (
+                    str(item.get("domain") or ""),
+                    str(item.get("source_field") or ""),
+                )
+                for item in reconciliation.get("divergences") or []
+                if item.get("result") == "diverged"
+            }
+            unresolved_by_pair = {
+                (str(field.get("domain")), str(field.get("source_field"))): field
+                for field in unresolved
+            }
+            for field in payload.get("fields") or []:
+                pair = (
+                    str(field.get("domain") or ""),
+                    str(field.get("source_field") or ""),
+                )
+                if pair in divergence_pairs and pair not in unresolved_by_pair:
+                    unresolved.append(field)
         result = self.mapping_pipeline.adjudicate_candidates(
             project_id=project_id,
             attempt_id=attempt_id,
             draft_id=draft_id,
             draft_fields=unresolved,
             workspace_dir=workspace_dir,
+            review_context=(
+                {"divergences": reconciliation.get("divergences") or []}
+                if reconciliation is not None and divergence_pairs
+                else None
+            ),
         )
         state = str(result.get("state") or "failed")
         if state != "ready":
             projected = self._draft_payload(draft)
             projected["adjudication"] = {
-                "state": "complete" if state in {"failed", "not_needed"} else state,
+                "state": (
+                    "complete" if state == "not_needed"
+                    else "blocked" if state == "failed"
+                    else state
+                ),
                 "resolved_count": 0,
                 "remaining_question_count": len(unresolved),
             }
@@ -574,7 +640,7 @@ class AdmissionMappingConfirmationService:
             )
             original = first_pass.get(pair)
             rationale = str(item.get("user_action") or "").strip()
-            if (
+            requires_user = (
                 original is None
                 or _model_flag(item)
                 or not rationale
@@ -584,7 +650,8 @@ class AdmissionMappingConfirmationService:
                 != str(original.get("recommended_role") or "").strip()
                 or str(_value(item.get("field_kind") or "")).strip()
                 != str(_value(original.get("field_kind") or "")).strip()
-            ):
+            )
+            if original is None:
                 continue
             current = self.mapping_repository.get_draft(project_id, draft_id)
             current_payload = current.model_dump(mode="json")
@@ -601,7 +668,12 @@ class AdmissionMappingConfirmationService:
                 None,
             )
             # A saved user answer always wins over a later system result.
-            if current_field is None or classify_user_question(current_field) is None:
+            if current_field is None:
+                continue
+            if (
+                pair not in divergence_pairs
+                and classify_user_question(current_field) is None
+            ):
                 continue
             uncertainty = str(item.get("uncertainty") or "").strip()
             operation_id = "adjudicate-" + hashlib.sha256(
@@ -610,23 +682,55 @@ class AdmissionMappingConfirmationService:
                     f"{pair[0]}|{pair[1]}"
                 ).encode("utf-8")
             ).hexdigest()
-            self.mapping_repository.edit_field(
-                project_id,
-                draft_id,
-                domain=pair[0],
-                source_field=pair[1],
-                patch={
+            if requires_user:
+                if pair not in divergence_pairs:
+                    continue
+                question = rationale if ("?" in rationale or "？" in rationale) else (
+                    f"请确认「{pair[0]}·{pair[1]}」记录的实际医学含义。"
+                )
+                patch = {
+                    "user_decision_required": True,
+                    "uncertainty": (
+                        f"系统复核后仍需医学确认：{uncertainty or '现有证据支持不止一种解释。'}"
+                    ),
+                    "user_action": question,
+                }
+            else:
+                patch = {
                     "user_decision_required": False,
                     "uncertainty": (
                         f"第二轮独立复核：{uncertainty or '当前证据支持原字段对应。'}"
                     ),
                     "user_action": f"{_SYSTEM_ADJUDICATION_PREFIX}{rationale}",
-                },
+                }
+            self.mapping_repository.edit_field(
+                project_id,
+                draft_id,
+                domain=pair[0],
+                source_field=pair[1],
+                patch=patch,
                 expected_version=int(current.version),
                 actor="system_harness",
                 idempotency_key=operation_id,
             )
-            resolved += 1
+            if pair in divergence_pairs:
+                self.mapping_repository.record_adjudication(
+                    project_id,
+                    draft_id,
+                    domain=pair[0],
+                    source_field=pair[1],
+                    reconciliation_sha256=reconciliation_sha256,
+                    resolution=(
+                        "escalated" if requires_user else "primary_retained"
+                    ),
+                    job_id=str(item.get("job_id") or ""),
+                    candidate_id=str(item.get("candidate_id") or ""),
+                    evidence_ids=tuple(
+                        str(value) for value in (item.get("evidence_ids") or ())
+                    ),
+                )
+            if not requires_user:
+                resolved += 1
         refreshed = self.mapping_repository.get_draft(project_id, draft_id)
         projected = self._draft_payload(refreshed)
         projected["adjudication"] = {
@@ -704,6 +808,7 @@ class AdmissionMappingConfirmationService:
                 workspace_dir=workspace_dir,
             )
             primary = cohort_payload_from_candidates(primary_candidates)
+            primary_mappings = primary["mappings"]
             primary_evidence_ids = primary["evidence_ids"]
             if not primary_execution_route:
                 primary_execution_route = self._first_pass_execution(
@@ -834,7 +939,12 @@ class AdmissionMappingConfirmationService:
                 draft_id=draft_id,
                 workspace_dir=workspace_dir,
             )["reconciliation"]
-            if not reconciliation["auto_pass"]:
+            if not reconciliation["auto_pass"] and not self._resolved_dual_review(
+                project_id=project_id,
+                draft_id=draft_id,
+                draft_fields=payload.get("fields") or [],
+                reconciliation=reconciliation,
+            ):
                 raise AdmissionMappingPipelineError(
                     "mapping_reconciliation_required"
                 )
@@ -853,6 +963,68 @@ class AdmissionMappingConfirmationService:
         payload["next_action"] = "generate_facts_later"
         payload["confirmation_status"] = "confirmed"
         return payload
+
+    def _resolved_dual_review(
+        self,
+        *,
+        project_id: str,
+        draft_id: str,
+        draft_fields: Any,
+        reconciliation: Mapping[str, Any],
+    ) -> bool:
+        """Verify that every blind-review divergence has a durable resolution."""
+
+        if reconciliation.get("state") != "diverged":
+            return False
+        divergences = [
+            dict(item)
+            for item in reconciliation.get("divergences") or []
+            if item.get("result") == "diverged"
+        ]
+        fields = {
+            (str(item.get("domain") or ""), str(item.get("source_field") or "")): item
+            for item in draft_fields
+        }
+        reconciliation_sha256 = hashlib.sha256(
+            json.dumps(
+                reconciliation,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        if not hasattr(self.mapping_repository, "adjudication_receipts"):
+            return False
+        receipts = {
+            (item.domain, item.source_field): item
+            for item in self.mapping_repository.adjudication_receipts(
+                project_id,
+                draft_id,
+            )
+            if item.reconciliation_sha256 == reconciliation_sha256
+        }
+        for divergence in divergences:
+            pair = (
+                str(divergence.get("domain") or ""),
+                str(divergence.get("source_field") or ""),
+            )
+            field = fields.get(pair)
+            receipt = receipts.get(pair)
+            if field is None or receipt is None:
+                return False
+            if _decision_recorded(field):
+                if receipt.resolution != "escalated":
+                    return False
+                continue
+            if (
+                _model_flag(field)
+                or receipt.resolution != "primary_retained"
+                or not str(field.get("user_action") or "").startswith(
+                    _SYSTEM_ADJUDICATION_PREFIX
+                )
+            ):
+                return False
+        return bool(divergences)
 
     def _revision_for_job(self, job: Any, *, workspace_dir: Any) -> str:
         if self.current_revision_resolver is not None:

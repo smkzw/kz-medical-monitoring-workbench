@@ -621,8 +621,16 @@ def test_adjudication_never_silently_demotes_a_malformed_question(
 
     profile = _field_profile(field_count=1)
     profile["adjudication_contract"] = {
-        "schema_version": "monitoring_mapping_adjudication_v1",
+        "schema_version": "monitoring_mapping_dual_adjudication_v1",
         "first_pass_mappings": [],
+        "dual_reconciliation": [{
+            "domain": profile["fields"][0]["domain"],
+            "source_field": profile["fields"][0]["field"],
+            "result": "diverged",
+            "primary": {},
+            "verifier": {},
+            "violations": [],
+        }],
     }
     provider = FakeProvider([malformed_adjudication, malformed_adjudication])
     service = _service(tmp_path, provider)
@@ -640,6 +648,29 @@ def test_adjudication_never_silently_demotes_a_malformed_question(
     assert result.job.failure_code == "invalid_ai_output"
     assert len(provider.envelopes) == 2
     assert "独立第二轮复核" in provider.envelopes[0].system_prompt
+    assert "问题不得提及主模型、核对模型" in provider.envelopes[0].system_prompt
+
+
+def test_verifier_prompt_is_a_full_blind_challenge_not_a_primary_echo(
+    tmp_path: Path,
+) -> None:
+    provider = FakeProvider([_valid_output])
+    service = _service(tmp_path, provider)
+    service.submit_listing_field_mapping(
+        project_id="project-alpha",
+        input_revision=_revision(),
+        field_profile=_field_profile(field_count=1),
+        prompt_version="monitoring-listing-field-mapping-verifier-v1",
+    )
+
+    result = service.run_next("worker-a")
+
+    assert result.job is not None
+    assert result.job.status == MonitoringAiJobStatus.COMPLETED
+    prompt = provider.envelopes[0].system_prompt
+    assert "全量盲核harness" in prompt
+    assert "输入中不会提供主分析答案" in prompt
+    assert "严禁生成CTCAE分级、风险、Query" in prompt
 
 
 def test_listing_provider_helper_echoes_do_not_consume_repair(

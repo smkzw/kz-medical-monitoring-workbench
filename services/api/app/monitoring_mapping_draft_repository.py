@@ -260,6 +260,28 @@ class MonitoringMappingFieldSource(BaseModel):
         return _require_sha256(value, "field source hash")
 
 
+class MonitoringMappingAdjudicationReceipt(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    receipt_id: str
+    project_id: str
+    draft_id: str
+    domain: str
+    source_field: str
+    input_revision_sha256: str
+    reconciliation_sha256: str
+    resolution: Literal["primary_retained", "escalated"]
+    job_id: str
+    candidate_id: str
+    evidence_ids: tuple[str, ...]
+    created_at: datetime
+
+    @field_validator("input_revision_sha256", "reconciliation_sha256")
+    @classmethod
+    def validate_receipt_hash(cls, value: str) -> str:
+        return _require_sha256(value, "adjudication receipt hash")
+
+
 class MonitoringMappingDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -886,6 +908,27 @@ class MonitoringMappingDraftRepository:
                     UNIQUE(draft_id, operation_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS monitoring_mapping_adjudication_receipts (
+                    receipt_id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    draft_id TEXT NOT NULL,
+                    domain TEXT NOT NULL,
+                    source_field TEXT NOT NULL,
+                    input_revision_sha256 TEXT NOT NULL,
+                    reconciliation_sha256 TEXT NOT NULL,
+                    resolution TEXT NOT NULL,
+                    job_id TEXT NOT NULL,
+                    candidate_id TEXT NOT NULL,
+                    evidence_ids_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(draft_id)
+                        REFERENCES monitoring_mapping_drafts(draft_id),
+                    UNIQUE(
+                        project_id, draft_id, domain, source_field,
+                        reconciliation_sha256
+                    )
+                );
+
                 CREATE TABLE IF NOT EXISTS monitoring_mapping_revisions (
                     mapping_revision TEXT PRIMARY KEY,
                     draft_id TEXT NOT NULL UNIQUE,
@@ -912,6 +955,8 @@ class MonitoringMappingDraftRepository:
                 ON monitoring_mapping_drafts(project_id, updated_at);
                 CREATE INDEX IF NOT EXISTS idx_monitoring_mapping_sources_project
                 ON monitoring_mapping_field_sources(project_id, draft_id);
+                CREATE INDEX IF NOT EXISTS idx_monitoring_mapping_adjudication_project
+                ON monitoring_mapping_adjudication_receipts(project_id, draft_id);
                 CREATE INDEX IF NOT EXISTS idx_monitoring_mapping_revisions_project
                 ON monitoring_mapping_revisions(project_id, created_at);
 
@@ -938,6 +983,18 @@ class MonitoringMappingDraftRepository:
                 BEFORE DELETE ON monitoring_mapping_field_sources
                 BEGIN
                     SELECT RAISE(ABORT, 'mapping source lineage deletion is forbidden');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS trg_mapping_adjudication_no_update
+                BEFORE UPDATE ON monitoring_mapping_adjudication_receipts
+                BEGIN
+                    SELECT RAISE(ABORT, 'mapping adjudication receipt is immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS trg_mapping_adjudication_no_delete
+                BEFORE DELETE ON monitoring_mapping_adjudication_receipts
+                BEGIN
+                    SELECT RAISE(ABORT, 'mapping adjudication receipt deletion is forbidden');
                 END;
 
                 CREATE TRIGGER IF NOT EXISTS trg_mapping_revision_no_update
@@ -1536,6 +1593,162 @@ class MonitoringMappingDraftRepository:
             ).fetchone()
             connection.commit()
         return self._revision_from_row(revision_row)
+
+    def record_adjudication(
+        self,
+        project_id: str,
+        draft_id: str,
+        *,
+        domain: str,
+        source_field: str,
+        reconciliation_sha256: str,
+        resolution: Literal["primary_retained", "escalated"],
+        job_id: str,
+        candidate_id: str,
+        evidence_ids: tuple[str, ...],
+    ) -> MonitoringMappingAdjudicationReceipt:
+        """Append one typed, replay-safe receipt for a dual-review decision."""
+
+        project_id = _require_safe_identifier(project_id, "project_id")
+        draft_id = _require_safe_identifier(draft_id, "draft_id")
+        reconciliation_sha256 = _require_sha256(
+            reconciliation_sha256,
+            "reconciliation_sha256",
+        )
+        domain = domain.strip()
+        source_field = source_field.strip()
+        job_id = _require_safe_identifier(job_id, "job_id")
+        candidate_id = _require_safe_identifier(candidate_id, "candidate_id")
+        cleaned_evidence = tuple(str(item).strip() for item in evidence_ids)
+        if (
+            not domain
+            or not source_field
+            or not cleaned_evidence
+            or any(not item for item in cleaned_evidence)
+            or len(cleaned_evidence) != len(set(cleaned_evidence))
+        ):
+            raise ValueError("adjudication receipt evidence is invalid")
+        now = self.clock()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            draft = connection.execute(
+                """
+                SELECT input_revision_sha256, status
+                FROM monitoring_mapping_drafts
+                WHERE project_id = ? AND draft_id = ?
+                """,
+                (project_id, draft_id),
+            ).fetchone()
+            if draft is None:
+                connection.rollback()
+                raise MonitoringMappingNotFoundError("mapping draft not found")
+            if draft["status"] != MonitoringMappingDraftStatus.DRAFT.value:
+                connection.rollback()
+                raise MonitoringMappingStateConflictError(
+                    "confirmed mapping draft cannot receive adjudication"
+                )
+            payload = {
+                "project_id": project_id,
+                "draft_id": draft_id,
+                "domain": domain,
+                "source_field": source_field,
+                "input_revision_sha256": draft["input_revision_sha256"],
+                "reconciliation_sha256": reconciliation_sha256,
+                "resolution": resolution,
+                "job_id": job_id,
+                "candidate_id": candidate_id,
+                "evidence_ids": cleaned_evidence,
+            }
+            receipt_id = "monmapadj_" + content_sha256(payload)[:28]
+            prior = connection.execute(
+                """
+                SELECT * FROM monitoring_mapping_adjudication_receipts
+                WHERE project_id = ? AND draft_id = ? AND domain = ?
+                  AND source_field = ? AND reconciliation_sha256 = ?
+                """,
+                (
+                    project_id,
+                    draft_id,
+                    domain,
+                    source_field,
+                    reconciliation_sha256,
+                ),
+            ).fetchone()
+            if prior is not None:
+                receipt = self._adjudication_receipt_from_row(prior)
+                if receipt.receipt_id != receipt_id:
+                    connection.rollback()
+                    raise MonitoringMappingStateConflictError(
+                        "adjudication receipt conflicts with prior resolution"
+                    )
+                connection.commit()
+                return receipt
+            connection.execute(
+                """
+                INSERT INTO monitoring_mapping_adjudication_receipts(
+                    receipt_id, project_id, draft_id, domain, source_field,
+                    input_revision_sha256, reconciliation_sha256, resolution,
+                    job_id, candidate_id, evidence_ids_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    receipt_id,
+                    project_id,
+                    draft_id,
+                    domain,
+                    source_field,
+                    draft["input_revision_sha256"],
+                    reconciliation_sha256,
+                    resolution,
+                    job_id,
+                    candidate_id,
+                    canonical_json(cleaned_evidence),
+                    _iso(now),
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM monitoring_mapping_adjudication_receipts WHERE receipt_id = ?",
+                (receipt_id,),
+            ).fetchone()
+            connection.commit()
+        return self._adjudication_receipt_from_row(row)
+
+    def adjudication_receipts(
+        self,
+        project_id: str,
+        draft_id: str,
+    ) -> tuple[MonitoringMappingAdjudicationReceipt, ...]:
+        project_id = _require_safe_identifier(project_id, "project_id")
+        draft_id = _require_safe_identifier(draft_id, "draft_id")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM monitoring_mapping_adjudication_receipts
+                WHERE project_id = ? AND draft_id = ?
+                ORDER BY created_at, receipt_id
+                """,
+                (project_id, draft_id),
+            ).fetchall()
+        return tuple(self._adjudication_receipt_from_row(row) for row in rows)
+
+    @staticmethod
+    def _adjudication_receipt_from_row(
+        row: sqlite3.Row,
+    ) -> MonitoringMappingAdjudicationReceipt:
+        return MonitoringMappingAdjudicationReceipt(
+            receipt_id=row["receipt_id"],
+            project_id=row["project_id"],
+            draft_id=row["draft_id"],
+            domain=row["domain"],
+            source_field=row["source_field"],
+            input_revision_sha256=row["input_revision_sha256"],
+            reconciliation_sha256=row["reconciliation_sha256"],
+            resolution=row["resolution"],
+            job_id=row["job_id"],
+            candidate_id=row["candidate_id"],
+            evidence_ids=tuple(json.loads(row["evidence_ids_json"])),
+            created_at=_datetime(row["created_at"]),
+        )
 
     def semantic_quality(
         self,

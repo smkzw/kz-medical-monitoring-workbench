@@ -213,6 +213,30 @@ test("second pass stays automatic and exposes only residual questions", () => {
   assert.match(state.message, /自动完成了 1 项/);
 });
 
+test("blocked blind review never falls through to automatic confirmation", () => {
+  let state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "load-ready",
+    payload: candidatesPayload(),
+  });
+  state = admissionMappingConfirmReducer(state, {
+    type: "adjudication-start",
+    payload: { draft_id: "d1", version: 1, user_questions: [] },
+  });
+  state = admissionMappingConfirmReducer(state, {
+    type: "adjudication-blocked",
+    payload: {
+      draft_id: "d1",
+      version: 1,
+      adjudication: { state: "blocked", resolved_count: 0 },
+      user_questions: [],
+    },
+  });
+
+  assert.equal(state.phase, "failed");
+  assert.match(state.error.serverText, /复核暂未完成/);
+  assert.equal(admissionMappingPrimaryAction(state).key, "reload");
+});
+
 test("confirmation reason names the answered questions and clears the server minimum", () => {
   let state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
     type: "load-ready",

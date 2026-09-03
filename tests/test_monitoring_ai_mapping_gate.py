@@ -40,6 +40,9 @@ def test_gate_contract_aligns_primary_profile_and_verifier_preset() -> None:
     assert profile.provider == contract.provider
     assert profile.model == contract.model
     assert profile.expected_response_model == contract.model
+    assert profile.base_url == contract.base_url
+    assert profile.api_key_env == contract.api_key_env
+    assert contract.preset_id == "cms_smk"
     assert verifier.provider == MONITORING_C3_VERIFIER_PROVIDER == preset["provider"]
     assert verifier.model == MONITORING_C3_VERIFIER_MODEL == preset["default_model"]
     assert verifier.base_url == ZHIPU_CODING_PLAN_BASE_URL

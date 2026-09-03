@@ -126,6 +126,7 @@ PROMPT_VERSION_BY_TASK: Dict[MonitoringAiTaskType, str] = {
         "monitoring-query-explanation-candidates-v2"
     ),
 }
+_C3_VERIFIER_PROMPT_VERSION = "monitoring-listing-field-mapping-verifier-v1"
 
 AI_TASK_TYPE_BY_MONITORING_TASK: Dict[MonitoringAiTaskType, AiTaskType] = {
     MonitoringAiTaskType.LISTING_FIELD_MAPPING: (AiTaskType.LISTING_SEMANTIC_MAPPING),
@@ -2933,10 +2934,23 @@ class MonitoringAiService:
                 "不足以单独构成用户决定；只有该缺口确实导致下游医学分类"
                 "无法确定并会改变分析结果时，才可标为true。"
             )
+            if job.prompt_version == _C3_VERIFIER_PROMPT_VERSION:
+                system_prompt += (
+                    " 你现在是全量盲核harness，不是主分析的复述者。输入中不会"
+                    "提供主分析答案；必须逐字段独立查漏、寻找反证和替代解释，"
+                    "并核对sheet覆盖、列值分布、邻列同行关系、跨表候选关系、"
+                    "空列、公式列、单位与日期精度。不得猜测主分析可能如何判断，"
+                    "不得因为字段名熟悉就忽略值证据，也不得把候选join写成已确认"
+                    "关系。输出仍须覆盖本次授权的全部字段，证据不足时保守标为"
+                    "unmapped；严禁生成CTCAE分级、风险、Query或其他临床结论。"
+                )
             adjudication_contract = provider_input_payload[
                 "field_profile"
             ].get("adjudication_contract")
             if isinstance(adjudication_contract, dict):
+                dual_review = adjudication_contract.get(
+                    "dual_reconciliation"
+                )
                 system_prompt += (
                     " 本任务是字段映射的独立第二轮复核。"
                     "adjudication_contract.first_pass_mappings记录第一轮判断，"
@@ -2949,6 +2963,17 @@ class MonitoringAiService:
                     "下游医学分类，必须保持true并提出一个具体中文问题。"
                     "不得仅因希望减少问题数量而清除疑点。"
                 )
+                if isinstance(dual_review, list) and dual_review:
+                    system_prompt += (
+                        " adjudication_contract.dual_reconciliation记录主分析与"
+                        "全量盲核之间的差异以及各自证据闭合状态。请依据同一冻结"
+                        "输入、字段画像、同表与跨表关系独立裁决，不得按模型身份、"
+                        "多数或置信度数值机械选边。只有证据仍支持主分析原有的"
+                        "recommended_role与field_kind时才可设为false；若盲核解释"
+                        "更合理、需要改角色或医学含义仍不确定，必须设为true，"
+                        "并只提出一个普通医学监查人员看得懂的中文问题。问题不得"
+                        "提及主模型、核对模型、字段映射、JSON、置信度或内部状态。"
+                    )
         elif (
             job.task_type
             == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING

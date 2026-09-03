@@ -167,6 +167,25 @@ def test_case_only_role_difference_still_agrees() -> None:
     assert report["auto_pass"] is True
 
 
+def test_non_role_semantic_difference_never_auto_passes() -> None:
+    primary = _primary_verdicts()
+    verifier = _verifier_verdicts()
+    primary[0]["standards_reference"] = {
+        "system": "MedDRA",
+        "version": "27.1",
+    }
+    verifier[0]["standards_reference"] = None
+
+    report = _reconcile(
+        primary_mappings=primary,
+        verifier_mappings=verifier,
+    )
+
+    assert report["state"] == "diverged"
+    assert report["auto_pass"] is False
+    assert report["divergences"][0]["source_field"] == "AETERM"
+
+
 def test_unmapped_verdicts_agree_without_evidence() -> None:
     primary = [
         _item("AE", "AETERM", "unmapped", kind="unmapped", evidence=()),
@@ -584,7 +603,7 @@ def test_service_reconciliation_refuses_cohorts_mapped_on_different_inputs() -> 
     mean the cohorts did not see identical inputs and must never reconcile.
     """
 
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timezone
 
     from packages.medical_monitoring.admission.mapping_confirmation import (
         MONITORING_C3_VERIFIER_PROMPT_VERSION,
