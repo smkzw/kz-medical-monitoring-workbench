@@ -201,13 +201,14 @@ def _looks_like_header(values: Any) -> bool:
 
 def _header_and_data_rows(
     raw_rows: List[List[Any]],
-) -> tuple[List[str], List[str], List[List[Any]], int, List[int]]:
+) -> tuple[List[str], List[str], List[List[Any]], int, List[int], bool]:
     """Locate the header block and return parsed header rows plus data.
 
-    Returns ``(headers, source_headers, data_rows, data_start, header_indexes)``
-    where ``header_indexes`` lists the raw-row indexes consumed as header rows
-    (one row, or two rows when an EDC variable-name row follows the label row)
-    and ``data_start`` is the raw-row index of the first data row.
+    The final boolean distinguishes a semantically detected header from the
+    compatibility fallback that treats row 1 as a header. ``header_indexes``
+    lists the raw-row indexes consumed as header rows (one row, or two rows
+    when an EDC variable-name row follows the label row), and ``data_start``
+    is the raw-row index of the first data row.
     """
     header_index = None
     scan_limit = min(25, len(raw_rows))
@@ -215,6 +216,7 @@ def _header_and_data_rows(
         if _looks_like_header(raw_rows[index]):
             header_index = index
             break
+    header_detected = header_index is not None
     if header_index is None:
         header_index = 0
 
@@ -240,7 +242,14 @@ def _header_and_data_rows(
         or header
         for index, header in enumerate(headers)
     ]
-    return headers, source_headers, raw_rows[data_start:], data_start, header_indexes
+    return (
+        headers,
+        source_headers,
+        raw_rows[data_start:],
+        data_start,
+        header_indexes,
+        header_detected,
+    )
 
 
 def _build_rows(
@@ -382,7 +391,14 @@ def _parse_csv_listing(filename: str, content: bytes) -> ListingSheetPayload:
     raw_rows = [list(row) for row in reader]
     if not raw_rows:
         raise ValueError("csv listing has no header row")
-    headers, source_headers, data_rows, data_start, header_indexes = _header_and_data_rows(raw_rows)
+    (
+        headers,
+        source_headers,
+        data_rows,
+        data_start,
+        header_indexes,
+        header_detected,
+    ) = _header_and_data_rows(raw_rows)
     rows, row_numbers = _build_rows(headers, data_rows, data_start)
     sheet_name = Path(filename or "CSV").stem or "CSV"
     used_columns = max((len(row) for row in raw_rows), default=0)
@@ -425,6 +441,7 @@ def _parse_csv_listing(filename: str, content: bytes) -> ListingSheetPayload:
         used_column_count=used_columns,
         header_row_numbers=[index + 1 for index in header_indexes],
         data_start_row_number=data_start + 1,
+        header_detection_status="detected" if header_detected else "fallback_first_row",
         workbook_manifest=manifest,
     )
 
@@ -485,7 +502,14 @@ def _parse_xlsx_listing(content: bytes) -> List[ListingSheetPayload]:
                     "data_start_row_number": None,
                 }
                 continue
-            headers, source_headers, data_rows, data_start, header_indexes = _header_and_data_rows(raw_rows)
+            (
+                headers,
+                source_headers,
+                data_rows,
+                data_start,
+                header_indexes,
+                header_detected,
+            ) = _header_and_data_rows(raw_rows)
             rows, row_numbers = _build_rows(headers, data_rows, data_start)
             usable = bool(rows) or _has_usable_headers(headers)
             parse_facts[worksheet.title] = {
@@ -502,6 +526,9 @@ def _parse_xlsx_listing(content: bytes) -> List[ListingSheetPayload]:
                     sheet_evidence,
                 ),
                 "data_start_row_number": data_start + 1,
+                "header_detection_status": (
+                    "detected" if header_detected else "fallback_first_row"
+                ),
             }
             if usable:
                 sheets.append(
@@ -607,6 +634,7 @@ def _attach_sheet_evidence(
     payload.used_column_count = fact_data.get("used_column_count")
     payload.header_row_numbers = list(fact_data.get("header_row_numbers") or [])
     payload.data_start_row_number = fact_data.get("data_start_row_number")
+    payload.header_detection_status = fact_data.get("header_detection_status")
     if not evidence:
         return
     payload.hidden_rows = list(evidence.get("hidden_rows") or [])
@@ -987,7 +1015,14 @@ def _parse_xls_listing(content: bytes) -> List[ListingSheetPayload]:
                     "data_start_row_number": None,
                 }
                 continue
-            headers, source_headers, data_rows, data_start, header_indexes = _header_and_data_rows(raw_rows)
+            (
+                headers,
+                source_headers,
+                data_rows,
+                data_start,
+                header_indexes,
+                header_detected,
+            ) = _header_and_data_rows(raw_rows)
             rows, row_numbers = _build_rows(headers, data_rows, data_start)
             usable = bool(rows) or _has_usable_headers(headers)
             parse_facts[sheet_name] = {
@@ -1001,6 +1036,9 @@ def _parse_xls_listing(content: bytes) -> List[ListingSheetPayload]:
                 "omission_reason": None if usable else "no_usable_headers",
                 "header_row_numbers": [index + 1 for index in header_indexes],
                 "data_start_row_number": data_start + 1,
+                "header_detection_status": (
+                    "detected" if header_detected else "fallback_first_row"
+                ),
             }
             if usable:
                 sheets.append(
