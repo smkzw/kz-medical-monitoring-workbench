@@ -149,6 +149,11 @@ def test_bridge_redacts_subject_values_and_binds_every_table(tmp_path: Path) -> 
     )
     assert len(profile["table_bindings"]) == 2
     assert len({item["snapshot_id"] for item in profile["table_bindings"]}) == 2
+    assert [item["sheet_index"] for item in profile["table_bindings"]] == [1, 2]
+    assert all(
+        item["table_binding_id"].startswith("mmtable_")
+        for item in profile["table_bindings"]
+    )
     subject_fields = [item for item in profile["fields"] if item["field"] == "SUBJID"]
     assert len(subject_fields) == 2
     assert all(item["values_redacted"] is True for item in subject_fields)
@@ -182,6 +187,11 @@ def test_bridge_exposes_value_distribution_and_table_structure(
     assert by_name["SUBJID"]["column_index"] == 0
     assert by_name["SYSBP"]["column_index"] == 3
     assert by_name["SYSBP"]["source_label"] == "收缩压(SYSBP)"
+    assert by_name["SYSBP"]["sheet_index"] == 1
+    assert by_name["SYSBP"]["field_binding_id"].startswith("mmfield_")
+    assert by_name["SYSBP"]["table_binding_id"] == profile[
+        "table_bindings"
+    ][0]["table_binding_id"]
     assert by_name["SYSBP"]["inferred_type"] == "decimal"
     assert by_name["SYSBP"]["representative_values"] == ["118", "120"]
     assert by_name["SYSBP"]["representative_sample_count"] == 2

@@ -767,12 +767,16 @@ def _read_only_context_field(
     representative_values = (
         field.get("representative_values", []) if include_values else []
     )
+    identity = {
+        "profile_sha256": profile_sha256,
+        "domain": str(field.get("domain", "")).strip(),
+        "field": str(field.get("field", "")).strip(),
+    }
+    for key in ("field_binding_id", "table_binding_id"):
+        if str(field.get(key, "")).strip():
+            identity[key] = str(field[key]).strip()
     return {
-        "source_profile_identity": {
-            "profile_sha256": profile_sha256,
-            "domain": str(field.get("domain", "")).strip(),
-            "field": str(field.get("field", "")).strip(),
-        },
+        "source_profile_identity": identity,
         "source_label": str(field.get("source_label", "")).strip(),
         "recommended_role": recommended_role,
         "total_rows": int(field.get("total_rows", 0) or 0),
@@ -808,12 +812,16 @@ def _read_only_table_context_field(
         if isinstance(field.get("representative_values"), list)
         else []
     )
+    identity = {
+        "profile_sha256": profile_sha256,
+        "domain": str(field.get("domain", "")).strip(),
+        "field": str(field.get("field", "")).strip(),
+    }
+    for key in ("field_binding_id", "table_binding_id"):
+        if str(field.get(key, "")).strip():
+            identity[key] = str(field[key]).strip()
     return {
-        "source_profile_identity": {
-            "profile_sha256": profile_sha256,
-            "domain": str(field.get("domain", "")).strip(),
-            "field": str(field.get("field", "")).strip(),
-        },
+        "source_profile_identity": identity,
         "source_label": str(field.get("source_label", "")).strip(),
         "column_index": field.get("column_index"),
         "total_rows": int(field.get("total_rows", 0) or 0),
@@ -7075,6 +7083,10 @@ class MonitoringAiService:
         if not isinstance(table_bindings, list):
             raise ValueError("listing field profile table_bindings must be a list")
         table_domains: list[str] = []
+        table_identity: dict[str, tuple[str, int, str]] = {}
+        stable_identity_required = field_profile.get(
+            "bridge_schema_version"
+        ) == "mm-c3-mapping-profile-bridge-v7"
         for binding in table_bindings:
             if not isinstance(binding, dict):
                 raise ValueError("listing field profile table binding is malformed")
@@ -7084,6 +7096,10 @@ class MonitoringAiService:
             ).strip()
             source_file = str(binding.get("source_file", "")).strip()
             snapshot_id = str(binding.get("snapshot_id", "")).strip()
+            table_binding_id = str(
+                binding.get("table_binding_id", "")
+            ).strip()
+            sheet_index = binding.get("sheet_index")
             if (
                 not domain
                 or not source_file
@@ -7092,6 +7108,20 @@ class MonitoringAiService:
                 not in {entry_id for entry_id, _ in profile_source_pairs}
             ):
                 raise ValueError("listing field profile table binding is incomplete")
+            if stable_identity_required:
+                if (
+                    not table_binding_id.startswith("mmtable_")
+                    or len(table_binding_id) != 36
+                    or not _is_non_bool_int(sheet_index)
+                    or sheet_index < 1
+                    or table_binding_id in table_identity
+                ):
+                    raise ValueError(
+                        "listing field profile stable table identity is invalid"
+                    )
+                table_identity[table_binding_id] = (
+                    source_revision_id, sheet_index, domain
+                )
             table_domains.append(domain)
         if len(table_domains) != len(set(table_domains)):
             raise ValueError("listing field profile table bindings must be unique")
@@ -7154,6 +7184,29 @@ class MonitoringAiService:
                     "listing field profile source_label must be a non-empty "
                     "bounded string"
                 )
+            if stable_identity_required:
+                field_binding_id = str(
+                    field.get("field_binding_id", "")
+                ).strip()
+                table_binding_id = str(
+                    field.get("table_binding_id", "")
+                ).strip()
+                table_identity_row = table_identity.get(table_binding_id)
+                if (
+                    not field_binding_id.startswith("mmfield_")
+                    or len(field_binding_id) != 36
+                    or table_identity_row is None
+                    or str(field.get("source_revision_id", "")).strip()
+                    != table_identity_row[0]
+                    or field.get("sheet_index") != table_identity_row[1]
+                    or str(field.get("domain", "")).strip()
+                    != table_identity_row[2]
+                    or not _is_non_bool_int(field.get("column_index"))
+                    or field["column_index"] < 0
+                ):
+                    raise ValueError(
+                        "listing field profile stable field identity is invalid"
+                    )
             field_pairs.append(
                 (
                     str(field["domain"]).strip(),

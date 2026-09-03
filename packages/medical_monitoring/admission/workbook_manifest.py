@@ -101,6 +101,8 @@ BLOCKING_FINDING_CODES = frozenset({
     "hidden_data_not_admitted",
     "unknown_visibility_data_omission",
     "unexplained_sheet_exclusion",
+    "physical_evidence_capture_failed",
+    "sheet_evidence_degraded",
 })
 
 # Non-blocking finding codes — recorded and surfaced, never auto-silent.
@@ -536,6 +538,19 @@ def reconcile_source_to_profile(
     for entry in manifest_bundle.get("files", []):
         source_file = str(entry.get("source_file") or "")
         manifest = entry.get("manifest") or {}
+        for limitation in manifest.get("evidence_limitations") or []:
+            if str(limitation).endswith("_physical_evidence_capture_failed"):
+                findings.append(_finding(
+                    "physical_evidence_capture_failed",
+                    source_file=source_file,
+                    detail=str(limitation),
+                ))
+            elif str(limitation) == "xlsx_sheet_evidence_degraded":
+                findings.append(_finding(
+                    "sheet_evidence_degraded",
+                    source_file=source_file,
+                    detail=str(limitation),
+                ))
         record_file = _matched_record_file(entry, technical_files)
         if record_file is None:
             findings.append(_finding(
