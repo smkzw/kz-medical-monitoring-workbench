@@ -466,7 +466,12 @@ class AdmissionMappingPipeline:
                 "label": _DOCUMENT_ROLE_LABELS[item.role],
                 "required_now": item.role in MAPPING_REQUIRED_DOCUMENT_ROLES,
                 "status": item.status,
-                "status_text": status_text[item.status],
+                "status_text": (
+                    "可稍后添加"
+                    if item.status == "missing"
+                    and item.role not in MAPPING_REQUIRED_DOCUMENT_ROLES
+                    else status_text[item.status]
+                ),
             }
             for item in packet.roles
         ]

@@ -23,7 +23,11 @@ from packages.contracts.workbench_contracts import (
 from .ai_gateway import AiSourceRef
 from .ai_execution_policy import AiExecutionPolicyResolver
 from .listing_file_parser import parse_listing_file
-from .protocol_text_extractor import ProtocolTextDocument, parse_protocol_docx
+from .protocol_text_extractor import (
+    ProtocolTextDocument,
+    ProtocolTextSpan,
+    parse_protocol_docx,
+)
 from .raw_subject_bundle import RawSubjectBundleInventory, inventory_subject_bundle
 from .source_content_validation import (
     VALIDATOR_VERSION,
@@ -42,8 +46,24 @@ SOURCE_ID_NAMESPACE = "workbench_source_registry_v0_1"
 MAX_PROTOCOL_REGISTRY_SPANS = 10_000
 MAX_EVIDENCE_SPAN_SEARCH_RESULTS = 200
 MAX_EVIDENCE_SPAN_SEARCH_TERMS = 32
-MONITORING_MAPPING_DOCUMENT_ROLES = frozenset({"protocol", "ecrf"})
+MONITORING_MAPPING_DOCUMENT_ROLES = frozenset({
+    "protocol",
+    "investigator_brochure",
+    "ecrf",
+    "sap",
+})
 MONITORING_LOCATOR_MANIFEST_REVISION = "monitoring-locator-manifest-v1"
+
+
+def _monitoring_validation_role(source_kind: str) -> str:
+    return {
+        "protocol_docx": "protocol",
+        "investigator_brochure": "investigator_brochure",
+        "ecrf": "ecrf",
+        "ecrf_document": "ecrf",
+        "ecrf_xlsx": "ecrf",
+        "statistical_analysis_plan": "sap",
+    }.get(source_kind, source_kind)
 
 
 def protocol_document_to_ai_sources(
@@ -557,7 +577,7 @@ class SourceRegistryService:
         *,
         document_role: str,
     ) -> SourceRegistrationResult:
-        """Register one mapping prerequisite in the monitoring namespace."""
+        """Register one study document in the monitoring namespace."""
 
         role = str(document_role or "").strip()
         if role not in MONITORING_MAPPING_DOCUMENT_ROLES:
@@ -572,21 +592,161 @@ class SourceRegistryService:
                 module="medical_monitoring",
                 expected_file_role="protocol",
             )
-        if Path(filename).suffix.lower() != ".xlsx":
+        if role == "ecrf" and Path(filename).suffix.lower() != ".xlsx":
             raise ValueError("electronic case report form must be an XLSX file")
-        sheets = parse_listing_file(filename, content)
-        if len(sheets) > 80:
-            raise ValueError(
-                "electronic case report form exceeds the complete locator limit"
+        if role == "ecrf":
+            sheets = parse_listing_file(filename, content)
+            if len(sheets) > 80:
+                raise ValueError(
+                    "electronic case report form exceeds the complete locator limit"
+                )
+            return self.register_listing_file(
+                project_id,
+                filename,
+                content,
+                module="medical_monitoring",
+                expected_file_role="ecrf",
+                parsed_sheets=sheets,
             )
-        return self.register_listing_file(
+        return self._register_monitoring_reference_document(
             project_id,
             filename,
             content,
-            module="medical_monitoring",
-            expected_file_role="ecrf",
-            parsed_sheets=sheets,
+            document_role=role,
         )
+
+    def _register_monitoring_reference_document(
+        self,
+        project_id: str,
+        filename: str,
+        content: bytes,
+        *,
+        document_role: str,
+    ) -> SourceRegistrationResult:
+        suffix = Path(filename).suffix.lower()
+        if suffix not in {".docx", ".pdf"}:
+            raise ValueError("monitoring reference must be a PDF or DOCX file")
+        if not content or len(content) > 50 * 1024 * 1024:
+            raise ValueError("monitoring reference size is invalid")
+        if suffix == ".pdf" and not content.startswith(b"%PDF-"):
+            raise ValueError("selected PDF file cannot be read as a PDF")
+        if suffix == ".docx" and not content.startswith(b"PK"):
+            raise ValueError("selected DOCX file cannot be read as a DOCX")
+
+        from .writing_reference import extract_pdf_sections
+        from .writing_reference_docx import extract_docx_sections
+
+        content_hash = _sha256_bytes(content)
+        artifact_id = "mmsource_" + _opaque_source_token(
+            project_id,
+            "medical_monitoring",
+            document_role,
+            content_hash,
+        )
+        artifact = WritingReferenceDocumentArtifact(
+            artifact_id=artifact_id,
+            project_id=project_id,
+            snapshot_id="monitoring_source_intake",
+            nct_id=project_id,
+            source_document_id=artifact_id,
+            document_type=document_role,
+            filename=Path(filename).name,
+            requested_url="user-upload",
+            final_url="user-upload",
+            content_type=(
+                "application/pdf"
+                if suffix == ".pdf"
+                else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
+            declared_size=len(content),
+            actual_size=len(content),
+            content_sha256=content_hash,
+            source_status="user_uploaded",
+            created_by="medical_manager",
+            created_at=datetime.now(timezone.utc),
+        )
+        extracted = (
+            extract_pdf_sections(content, artifact)
+            if suffix == ".pdf"
+            else extract_docx_sections(content, artifact)
+        )
+        readable_spans = [
+            span for span in extracted.spans if span.source_text.strip()
+        ]
+        if not readable_spans or len(readable_spans) > MAX_PROTOCOL_REGISTRY_SPANS:
+            raise ValueError("monitoring reference has no complete text locator set")
+        storage_key = ""
+        if self.artifact_root is not None:
+            storage_key = (
+                f"{_slug(project_id)}/medical_monitoring/{document_role}/"
+                f"{content_hash}{suffix}"
+            )
+            output_path = self.artifact_root / storage_key
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            if output_path.exists():
+                if _sha256_file(output_path) != content_hash:
+                    raise RuntimeError("existing monitoring source hash does not match")
+            else:
+                output_path.write_bytes(content)
+
+        entry = self._entry(
+            project_id=project_id,
+            module="medical_monitoring",
+            source_kind=(
+                "investigator_brochure"
+                if document_role == "investigator_brochure"
+                else "statistical_analysis_plan"
+            ),
+            public_title=Path(filename).name,
+            content_hash=content_hash,
+            size_bytes=len(content),
+            metadata={
+                "filename": Path(filename).name,
+                "media_type": artifact.content_type,
+                "document_role": document_role,
+                "parser_name": _slug(extracted.parser_name),
+                "parser_version": extracted.parser_version,
+                "page_count": extracted.page_count,
+                "extraction_revision": extracted.extraction_revision,
+            },
+            server_path=storage_key,
+        )
+        refs = [
+            AiSourceRef(
+                source_id=f"{entry.entry_id}_{span.span_id}",
+                source_type=f"{document_role}_span",
+                title=Path(filename).name,
+                locator=span.source_locator,
+                text_preview=_sanitize_preview_text(span.source_text[:6000]),
+            )
+            for span in readable_spans
+        ]
+        result = self._result_from_refs(entry, refs)
+        self.store.append(result)
+        validation_document = ProtocolTextDocument(
+            filename=Path(filename).name,
+            title=Path(filename).stem,
+            paragraphs=[],
+            tables=[],
+            spans=[
+                ProtocolTextSpan(
+                    span_id=str(index),
+                    kind="reference_text",
+                    text=span.source_text,
+                    source_locator=span.source_locator,
+                )
+                for index, span in enumerate(readable_spans, start=1)
+            ],
+            source_hash=content_hash,
+        )
+        self._assess_protocol(
+            result,
+            filename,
+            validation_document,
+            content_hash,
+            expected_file_role=document_role,
+        )
+        return result
 
     def register_raw_subject_bundle(
         self,
@@ -927,6 +1087,13 @@ class SourceRegistryService:
                 raise ValueError(f"registered source entry is unavailable: {span.entry_id}")
             if self.expected_context_resolver is not None:
                 expected = self.expected_context_resolver(project_id, entry.module, entry.source_kind)
+                if entry.module == "medical_monitoring":
+                    expected = replace(
+                        expected,
+                        expected_file_role=_monitoring_validation_role(
+                            entry.source_kind
+                        ),
+                    )
                 if validation.expected_context_hash != expected.context_hash:
                     raise ValueError(
                         "registered source project context changed and must be refreshed before AI use: "
@@ -977,9 +1144,11 @@ class SourceRegistryService:
         identity_source_kind = source_kind
         if module == "medical_monitoring" and source_kind in {
             "protocol_docx",
+            "investigator_brochure",
             "ecrf",
             "ecrf_document",
             "ecrf_xlsx",
+            "statistical_analysis_plan",
         }:
             identity_source_kind = (
                 f"{source_kind}:{MONITORING_LOCATOR_MANIFEST_REVISION}"
@@ -1095,9 +1264,11 @@ class SourceRegistryService:
         )
         if entry.module == "medical_monitoring" and entry.source_kind in {
             "protocol_docx",
+            "investigator_brochure",
             "ecrf",
             "ecrf_document",
             "ecrf_xlsx",
+            "statistical_analysis_plan",
         }:
             entry = entry.model_copy(
                 update={

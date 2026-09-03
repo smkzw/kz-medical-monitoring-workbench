@@ -821,6 +821,7 @@ class SourceContentValidationService:
     @staticmethod
     def _protocol_role_check(full_text: str, expected_role: str) -> SourceContentValidationCheck:
         lowered = full_text.lower()
+        role_markers = None
         protocol_markers = sum(
             marker in lowered
             for marker in (
@@ -844,6 +845,33 @@ class SourceContentValidationService:
                 outcome = "mismatch"
             else:
                 outcome = "warning"
+        elif expected_role == "investigator_brochure":
+            role_markers = sum(
+                marker in lowered
+                for marker in (
+                    "研究者手册",
+                    "investigator brochure",
+                    "investigator's brochure",
+                    "非临床研究",
+                    "nonclinical studies",
+                    "临床试验经验",
+                    "effects in humans",
+                )
+            )
+            outcome = "match" if role_markers >= 2 else "warning"
+        elif expected_role in {"sap", "statistical_analysis_plan"}:
+            role_markers = sum(
+                marker in lowered
+                for marker in (
+                    "统计分析计划",
+                    "statistical analysis plan",
+                    "分析人群",
+                    "analysis population",
+                    "统计方法",
+                    "statistical methods",
+                )
+            )
+            outcome = "match" if role_markers >= 2 else "warning"
         elif expected_role == "dsur_source_document":
             dsur_markers = sum(
                 marker in lowered
@@ -864,7 +892,12 @@ class SourceContentValidationService:
         else:
             outcome = "not_assessed"
         observed = (
-            f"方案结构标志{protocol_markers}项；publication结构标志{publication_markers}项"
+            f"文件角色结构标志{role_markers}项"
+            if role_markers is not None
+            else (
+                f"方案结构标志{protocol_markers}项；"
+                f"publication结构标志{publication_markers}项"
+            )
         )
         return SourceContentValidationCheck(
             check_code="file_role",

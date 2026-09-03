@@ -69,15 +69,25 @@ function DocumentReadinessPanel({ state, onFile, onRetry }) {
         {(payload.roles || []).map((item) => (
           <li key={item.role}>
             <span><strong>{item.label}</strong><small>{item.status_text}</small></span>
-            {item.required_now && item.status !== "current" ? (
+            {item.status !== "current" ? (
               <label className="monitoring-admission-document-picker">
                 <input
                   type="file"
-                  accept={item.role === "protocol" ? ".docx" : ".xlsx"}
+                  accept={
+                    item.role === "ecrf"
+                      ? ".xlsx"
+                      : item.role === "protocol"
+                        ? ".docx"
+                        : ".pdf,.docx"
+                  }
                   disabled={state.phase === "uploading"}
                   onChange={(event) => onFile?.(item.role, event.target.files?.[0])}
                 />
-                {state.phase === "uploading" ? "正在识别…" : "添加文件"}
+                {state.phase === "uploading"
+                  ? "正在识别…"
+                  : item.required_now
+                    ? "添加文件"
+                    : "添加（可选）"}
               </label>
             ) : null}
           </li>
