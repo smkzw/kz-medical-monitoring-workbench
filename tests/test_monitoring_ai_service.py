@@ -3381,7 +3381,10 @@ def test_field_mapping_rejects_english_only_user_facing_guidance(
         item
         for item in AI_TASK_TYPE_BY_MONITORING_TASK.items()
         if item[0]
-        != MonitoringAiTaskType.RULE_TEMPLATE_RECOMMENDATION
+        not in {
+            MonitoringAiTaskType.RULE_TEMPLATE_RECOMMENDATION,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+        }
     ],
 )
 def test_general_task_prompt_contracts_map_to_existing_gateway_types(
