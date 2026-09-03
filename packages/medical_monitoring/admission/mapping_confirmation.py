@@ -731,6 +731,21 @@ class AdmissionMappingConfirmationService:
                 for job in verifier_jobs
             ):
                 raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
+            # Dual-cohort input validation: agreement only counts when both
+            # cohorts mapped the identical frozen input. Cohort submissions
+            # share one deterministic bridge output, so any revision
+            # divergence means the inputs (including relationship evidence)
+            # are not the same and the pass must not be counted.
+            primary_revisions = {
+                str(job.input_revision_sha256) for job in primary_jobs
+            }
+            verifier_revisions = {
+                str(job.input_revision_sha256) for job in verifier_jobs
+            }
+            if primary_revisions != verifier_revisions:
+                raise AdmissionMappingPipelineError(
+                    "mapping_cohort_input_mismatch"
+                )
             verifier_candidates = self._completed_candidates(
                 project_id,
                 verifier_jobs,
@@ -853,6 +868,11 @@ class AdmissionMappingConfirmationService:
             self.ai_repository,
             job,
             workspace_dir=workspace_dir,
+            relationship_profiler=(
+                self.mapping_pipeline._resolve_relationship_profiler()
+                if self.mapping_pipeline is not None
+                else None
+            ),
         )
         if resolved is None:
             return str(job.input_revision_sha256)

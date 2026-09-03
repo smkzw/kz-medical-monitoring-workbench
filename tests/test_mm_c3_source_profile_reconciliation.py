@@ -232,6 +232,11 @@ def test_gate_passes_complete_record_and_binds_input_completeness() -> None:
         "table_bindings": profile["table_bindings"],
         "fields": profile["fields"],
         "input_completeness": completeness,
+        # Relationship evidence sections are always part of the frozen input
+        # digest; without a profiler they are explicitly empty.
+        "relationship_profile": {},
+        "relationships": [],
+        "cross_table_relationships": [],
     })
     assert profile["input_sha256"] == expected_input_sha256
 

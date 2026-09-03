@@ -116,6 +116,7 @@ class AdmissionMappingPipeline:
         verifier_ai_service: Any = None,
         verifier_required_provider: str = MONITORING_C3_VERIFIER_PROVIDER,
         verifier_required_model: str = MONITORING_C3_VERIFIER_MODEL,
+        relationship_profiler: Optional[Callable[..., Any]] = None,
     ) -> None:
         self._service = ai_service
         self._repository = ai_repository
@@ -127,6 +128,75 @@ class AdmissionMappingPipeline:
         self._verifier_service = verifier_ai_service
         self._verifier_required_provider = verifier_required_provider
         self._verifier_required_model = verifier_required_model
+        self._relationship_profiler_override = relationship_profiler
+
+    def _resolve_relationship_profiler(self) -> Optional[Callable[..., Any]]:
+        """Return the deterministic relationship profiler for submissions.
+
+        The injected override wins; otherwise the default profiler module is
+        resolved lazily so a fresh context can light the bridge up without
+        production wiring. ``None`` means no profiler is available and every
+        submission path must refuse to run (fail-closed, no silent empty
+        relationship evidence).
+        """
+
+        if self._relationship_profiler_override is not None:
+            return self._relationship_profiler_override
+        try:
+            from .relationship_profiler import build_relationship_profile
+        except ImportError:
+            return None
+        return build_relationship_profile
+
+    def _required_relationship_profiler(self) -> Callable[..., Any]:
+        profiler = self._resolve_relationship_profiler()
+        if profiler is None:
+            raise AdmissionMappingPipelineError(
+                "mapping_relationship_profiler_unavailable"
+            )
+        return profiler
+
+    def _ready_record(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Path,
+    ) -> dict[str, Any]:
+        record = self._load_record(
+            project_id=project_id, attempt_id=attempt_id, workspace_dir=workspace_dir
+        )
+        if record.get("state") != "profile_ready":
+            raise AdmissionMappingPipelineError("mapping_profile_not_ready")
+        return record
+
+    def _frozen_harness_input(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        record: Mapping[str, Any],
+        workspace_dir: Path,
+    ) -> Any:
+        """Build the evidence-bound harness input for one admitted record.
+
+        Both mapping cohorts and the revision resolver must build their input
+        through this path so the frozen relationship evidence stays
+        byte-identical across cohorts and rechecks. A missing profiler or a
+        missing/malformed relationship payload refuses the input (fail-closed);
+        no submission ever runs on silently empty relationship evidence.
+        """
+
+        return admission_record_to_harness_input(
+            project_id=project_id,
+            attempt_id=attempt_id,
+            record=record,
+            table_rows_by_snapshot=self._load_table_rows(
+                record=record,
+                workspace_dir=workspace_dir,
+            ),
+            relationship_profiler=self._required_relationship_profiler(),
+        )
 
     def _cohort_contract(self, cohort: str) -> MonitoringMappingCohortContract:
         try:
@@ -216,29 +286,29 @@ class AdmissionMappingPipeline:
 
         Both cohorts receive the identical deterministic field profile built
         from the admitted record — the verifier input never carries primary
-        analysis results, adjudication context, or draft decisions.
+        analysis results, adjudication context, or draft decisions. The
+        frozen relationship evidence is part of that shared input and is
+        content-bound into the input revision, so both cohorts always map
+        the exact same rows and pair statistics.
         """
 
         contract = self._cohort_contract(cohort)
         service = self._cohort_service(contract.cohort)
         if not self._configured(service):
             raise AdmissionMappingPipelineError("mapping_bridge_unconfigured")
-        record = self._load_record(
-            project_id=project_id, attempt_id=attempt_id, workspace_dir=workspace_dir
+        record = self._ready_record(
+            project_id=project_id,
+            attempt_id=attempt_id,
+            workspace_dir=workspace_dir,
         )
-        if record.get("state") != "profile_ready":
-            raise AdmissionMappingPipelineError("mapping_profile_not_ready")
         if not self._cohort_runtime_ready(service, contract):
             raise AdmissionMappingPipelineError("mapping_model_not_configured")
         try:
-            harness_input = admission_record_to_harness_input(
+            harness_input = self._frozen_harness_input(
                 project_id=project_id,
                 attempt_id=attempt_id,
                 record=record,
-                table_rows_by_snapshot=self._load_table_rows(
-                    record=record,
-                    workspace_dir=workspace_dir,
-                ),
+                workspace_dir=workspace_dir,
             )
             revision = self._revision_factory(harness_input.input_revision)
             jobs = service.submit_listing_field_mapping_chunks(
@@ -372,13 +442,11 @@ class AdmissionMappingPipeline:
                 "mappings": [],
             }
 
-        record = self._load_record(
+        record = self._ready_record(
             project_id=project_id,
             attempt_id=attempt_id,
             workspace_dir=workspace_dir,
         )
-        if record.get("state") != "profile_ready":
-            raise AdmissionMappingPipelineError("mapping_profile_not_ready")
         runtime = self._service.runtime_resolver()
         if not monitoring_mapping_runtime_matches(
             runtime,
@@ -387,14 +455,11 @@ class AdmissionMappingPipeline:
         ):
             raise AdmissionMappingPipelineError("mapping_model_not_configured")
         try:
-            harness_input = admission_record_to_harness_input(
+            harness_input = self._frozen_harness_input(
                 project_id=project_id,
                 attempt_id=attempt_id,
                 record=record,
-                table_rows_by_snapshot=self._load_table_rows(
-                    record=record,
-                    workspace_dir=workspace_dir,
-                ),
+                workspace_dir=workspace_dir,
             )
             profile = deepcopy(harness_input.field_profile)
             pair_set = {
@@ -415,6 +480,10 @@ class AdmissionMappingPipeline:
             ]
             if len(profile["fields"]) != len(pair_set):
                 raise AdmissionMappingPipelineError("mapping_bridge_failed")
+            # The trimmed profile only carries the question fields, and the
+            # harness relationship validator requires both sides of a pair to
+            # exist in the submitted field set — so keep only fully covered
+            # pairs; everything else stays in the full-profile evidence.
             profile["relationships"] = [
                 relationship
                 for relationship in profile.get("relationships", [])
@@ -423,11 +492,27 @@ class AdmissionMappingPipeline:
                     str(relationship.get("left_field") or "").strip(),
                 )
                 in pair_set
-                or (
+                and (
                     str(relationship.get("domain") or "").strip(),
                     str(relationship.get("right_field") or "").strip(),
                 )
                 in pair_set
+            ]
+            profile["cross_table_relationships"] = [
+                entry
+                for entry in profile.get("cross_table_relationships", [])
+                if (
+                    str(entry.get("left_domain") or "").strip(),
+                    str(entry.get("left_field") or "").strip(),
+                )
+                in pair_set
+                or (
+                    str(entry.get("right_domain") or "").strip(),
+                    str(entry.get("right_field") or "").strip(),
+                )
+                in pair_set
+                or str(entry.get("left_domain") or "").strip() in question_domains
+                or str(entry.get("right_domain") or "").strip() in question_domains
             ]
             profile["read_only_adjudication_context_profiles"] = [
                 field
@@ -604,12 +689,17 @@ def current_admission_mapping_revision(
     job: Any,
     *,
     workspace_dir: Path,
+    relationship_profiler: Optional[Callable[..., Any]] = None,
 ) -> Optional[str]:
     """Resolve a C3 admission job against the current accepted profile.
 
     ``None`` means the job does not belong to the admission bridge and the
     caller should use its legacy batch resolver. An empty string means the
-    admission identity is stale or cannot be re-established.
+    admission identity is stale or cannot be re-established. Callers that
+    submit through a specific profiler must pass the same
+    ``relationship_profiler`` so the recomputed digests cover the identical
+    frozen evidence; without it the default profiler is resolved, and no
+    evidence-bearing profile can pass while it is unavailable.
     """
 
     try:
@@ -622,7 +712,9 @@ def current_admission_mapping_revision(
         attempt_id = str(field_profile.get("batch_id") or "").strip()
         if not attempt_id:
             return ""
-        pipeline = AdmissionMappingPipeline()
+        pipeline = AdmissionMappingPipeline(
+            relationship_profiler=relationship_profiler,
+        )
         record = pipeline._load_record(
             project_id=job.project_id,
             attempt_id=attempt_id,
@@ -630,6 +722,10 @@ def current_admission_mapping_revision(
         )
         if record.get("state") != "profile_ready":
             return ""
+        # Recompute must mirror the submission path, including the frozen
+        # relationship evidence. When the profiler is unavailable a v6
+        # profile (which always carries evidence) cannot be reproduced and
+        # the job falls back to the stale branch instead of passing.
         current = admission_record_to_harness_input(
             project_id=job.project_id,
             attempt_id=attempt_id,
@@ -638,6 +734,7 @@ def current_admission_mapping_revision(
                 record=record,
                 workspace_dir=workspace_dir,
             ),
+            relationship_profiler=pipeline._resolve_relationship_profiler(),
         ).field_profile
         expected = {
             "project_id": job.project_id,

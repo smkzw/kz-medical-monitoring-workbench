@@ -43,6 +43,9 @@ from services.api.app.monitoring_ai_service import (
     MonitoringAiRuntimeBinding,
     MonitoringAiService,
 )
+from tests.medical_monitoring.relationship_profiler_stub import (
+    build_relationship_profile as _stub_profiler,
+)
 
 
 PROJECT_ID = "c3-mapping-bridge-demo"
@@ -139,7 +142,8 @@ def test_bridge_redacts_subject_values_and_binds_every_table(tmp_path: Path) -> 
     )
     profile = bridged.field_profile
     assert profile["payload_policy"] == (
-        "bounded_full_column_statistics_source_labels_and_redacted_row_context_v3"
+        "bounded_full_column_statistics_source_labels_"
+        "redacted_row_context_and_relationship_profile_v4"
     )
     assert len(profile["table_bindings"]) == 2
     assert len({item["snapshot_id"] for item in profile["table_bindings"]}) == 2
@@ -241,6 +245,7 @@ def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path
         ai_repository=repository,
         input_revision_factory=MonitoringAiInputRevision.model_validate,
         task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+        relationship_profiler=_stub_profiler,
     )
     result = pipeline.generate_candidates(
         project_id=PROJECT_ID,
@@ -282,6 +287,7 @@ def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path
         repository,
         jobs[0],
         workspace_dir=workspace,
+        relationship_profiler=_stub_profiler,
     ) == jobs[0].input_revision_sha256
 
     assert current_admission_mapping_revision(
@@ -302,6 +308,7 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
         ai_repository=repository,
         input_revision_factory=MonitoringAiInputRevision.model_validate,
         task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+        relationship_profiler=_stub_profiler,
     )
 
     result = pipeline.adjudicate_candidates(
@@ -356,6 +363,7 @@ def test_pipeline_refuses_non_default_model_without_sending_data(tmp_path: Path)
         ai_repository=repository,
         input_revision_factory=MonitoringAiInputRevision.model_validate,
         task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+        relationship_profiler=_stub_profiler,
     )
     with pytest.raises(AdmissionMappingPipelineError) as exc_info:
         pipeline.generate_candidates(
@@ -382,6 +390,7 @@ def test_pipeline_accepts_direct_cms_router_minimax_alternate(tmp_path: Path) ->
         ai_repository=repository,
         input_revision_factory=MonitoringAiInputRevision.model_validate,
         task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+        relationship_profiler=_stub_profiler,
     )
 
     result = pipeline.generate_candidates(
@@ -550,3 +559,205 @@ def test_list_candidates_ignores_superseded_submission_cohorts(tmp_path: Path) -
 
     assert result["state"] == "candidates_ready"
     assert result["summary"]["job_count"] == 2
+
+
+def _load_rows_by_snapshot(
+    workspace: Path,
+    record: dict,
+) -> dict[str, dict[str, list[dict]]]:
+    runtime = workspace / RUNTIME_DIR_NAME
+    store = Store(runtime / RUNTIME_DB_NAME, runtime / ARTIFACT_DIR_NAME)
+    try:
+        return {
+            str(snapshot_id): store.load_listing_content(str(snapshot_id))
+            for snapshot_id in record["technical_details"]["snapshot_ids"]
+        }
+    finally:
+        store.close()
+
+
+def test_bridge_embeds_relationship_evidence_bound_to_frozen_rows(
+    tmp_path: Path,
+) -> None:
+    attempt_id, workspace = _admit(tmp_path)
+    record = _record(workspace, attempt_id)
+    rows_by_snapshot = _load_rows_by_snapshot(workspace, record)
+
+    bridged = admission_record_to_harness_input(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        record=record,
+        table_rows_by_snapshot=rows_by_snapshot,
+        relationship_profiler=_stub_profiler,
+    ).field_profile
+
+    fields = {
+        (item["domain"], item["field"]) for item in bridged["fields"]
+    }
+    relationships = bridged["relationships"]
+    assert relationships
+    for relationship in relationships:
+        assert (relationship["domain"], relationship["left_field"]) in fields
+        assert (relationship["domain"], relationship["right_field"]) in fields
+        assert relationship["total_rows"] == 2
+        assert relationship["jointly_non_empty_count"] >= 1
+    cross_table = bridged["cross_table_relationships"]
+    assert {
+        frozenset({
+            (entry["left_domain"], entry["left_field"]),
+            (entry["right_domain"], entry["right_field"]),
+        })
+        for entry in cross_table
+    } == {frozenset({("生命体征", "SUBJID"), ("实验室检查", "SUBJID")})}
+    assert all(entry["match_rate"] == 1.0 for entry in cross_table)
+    summary = bridged["relationship_profile"]
+    assert summary["same_table_pair_count"] == len(relationships)
+    assert summary["cross_table_entry_count"] == len(cross_table)
+    assert len(summary["input_binding_sha256"]) == 64
+    assert len(summary["evidence_sha256"]) == 64
+    # The evidence stays desensitized: only counts, rates and field names.
+    assert "S001" not in str(bridged)
+
+    # Deterministic recompute over the same frozen input.
+    rebuilt = admission_record_to_harness_input(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        record=record,
+        table_rows_by_snapshot=rows_by_snapshot,
+        relationship_profiler=_stub_profiler,
+    ).field_profile
+    assert rebuilt["input_sha256"] == bridged["input_sha256"]
+    assert rebuilt["profile_sha256"] == bridged["profile_sha256"]
+
+
+def test_relationship_evidence_participates_in_frozen_input_revision(
+    tmp_path: Path,
+) -> None:
+    attempt_id, workspace = _admit(tmp_path)
+    record = _record(workspace, attempt_id)
+    rows_by_snapshot = _load_rows_by_snapshot(workspace, record)
+
+    def _shifted_profiler(**kwargs):
+        payload = _stub_profiler(**kwargs)
+        # Same contract, different honest evidence: the first column pair is
+        # also a stable identity pairing, so the same pair carries a second
+        # relationship type with internally consistent counts.
+        domain = sorted(kwargs["rows_by_domain"])[0]
+        fields = kwargs["table_field_order"][domain]
+        payload["same_table"] = [*payload["same_table"], {
+            "domain": domain,
+            "left_field": fields[0],
+            "right_field": fields[1],
+            "relationship_type": "site_identity_pair",
+            "total_rows": len(kwargs["rows_by_domain"][domain]),
+            "jointly_non_empty_count": 2,
+            "left_only_count": 0,
+            "right_only_count": 0,
+            "unique_pair_count": 2,
+            "left_values_with_multiple_right": 0,
+            "right_values_with_multiple_left": 0,
+        }]
+        return payload
+
+    base = admission_record_to_harness_input(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        record=record,
+        table_rows_by_snapshot=rows_by_snapshot,
+        relationship_profiler=_stub_profiler,
+    ).field_profile
+    shifted = admission_record_to_harness_input(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        record=record,
+        table_rows_by_snapshot=rows_by_snapshot,
+        relationship_profiler=_shifted_profiler,
+    ).field_profile
+
+    assert shifted["input_sha256"] != base["input_sha256"]
+    assert shifted["profile_sha256"] != base["profile_sha256"]
+    assert shifted["input_completeness"] == base["input_completeness"]
+
+
+def test_pipeline_resolves_default_relationship_profiler(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No injection: the lazily resolved production profiler lights up the bridge."""
+
+    attempt_id, workspace = _admit(tmp_path)
+    repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
+    pipeline = AdmissionMappingPipeline(
+        ai_service=MonitoringAiService(repository, runtime_resolver=_runtime),
+        ai_repository=repository,
+        input_revision_factory=MonitoringAiInputRevision.model_validate,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+    )
+    result = pipeline.generate_candidates(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        workspace_dir=workspace,
+    )
+    assert result["state"] == "generating"
+    jobs = repository.list_jobs(
+        PROJECT_ID,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING.value,
+        business_key_prefix=f"listing-field-mapping:{attempt_id}:",
+    )
+    assert jobs
+    payload = repository.input_payload(PROJECT_ID, jobs[0].job_id)
+    profile = payload["field_profile"]
+    assert profile["relationship_profile"]["profiler_contract"] == (
+        "admission-relationship-profiler-strided-max512-v2"
+    )
+    assert profile["relationship_profile"]["same_table_pair_count"] >= len(
+        profile["relationships"]
+    )
+    # The revision resolver recomputes through the same default profiler, so
+    # the submitted job stays fresh without any caller-side wiring.
+    assert current_admission_mapping_revision(
+        repository,
+        jobs[0],
+        workspace_dir=workspace,
+    ) == jobs[0].input_revision_sha256
+
+    monkeypatch.setattr(
+        pipeline,
+        "_resolve_relationship_profiler",
+        lambda: None,
+    )
+    with pytest.raises(AdmissionMappingPipelineError) as exc_info:
+        pipeline.generate_candidates(
+            project_id=PROJECT_ID,
+            attempt_id=attempt_id,
+            workspace_dir=workspace,
+        )
+    assert exc_info.value.code == "mapping_relationship_profiler_unavailable"
+
+
+def test_pipeline_refuses_relationship_evidence_not_bound_to_frozen_rows(
+    tmp_path: Path,
+) -> None:
+    attempt_id, workspace = _admit(tmp_path)
+    repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
+
+    def _unbound_profiler(**kwargs):
+        payload = _stub_profiler(**kwargs)
+        payload["input_binding_sha256"] = "0" * 64
+        return payload
+
+    pipeline = AdmissionMappingPipeline(
+        ai_service=MonitoringAiService(repository, runtime_resolver=_runtime),
+        ai_repository=repository,
+        input_revision_factory=MonitoringAiInputRevision.model_validate,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+        relationship_profiler=_unbound_profiler,
+    )
+    with pytest.raises(AdmissionMappingPipelineError) as exc_info:
+        pipeline.generate_candidates(
+            project_id=PROJECT_ID,
+            attempt_id=attempt_id,
+            workspace_dir=workspace,
+        )
+    assert exc_info.value.code == "mapping_bridge_failed"
+    assert repository.list_jobs(PROJECT_ID) == ()

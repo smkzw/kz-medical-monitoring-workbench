@@ -42,6 +42,7 @@
 - Use the independent harness/model for semantic mapping and protocol/drug/disease interpretation. Product code owns prompts, schemas, deterministic evidence checks, and workflow orchestration.
 - For first-listing semantic decomposition, use direct `cms-smk/MiniMax-M3:high` as the primary analysis and direct `zhipu-coding-plan/GLM-5.3-flash:high` as a blind, full-coverage verifier. Do not wrap either product call in OMP. Local `MTPLX/Qwen3.8-next-flash` is allowed only after both remote routes have auditable terminal-unavailable evidence and can never be labelled a dual-model pass.
 - Dual-model agreement covers only the frozen evidence packet. It cannot compensate for parser omissions: physical workbook completeness, cross-sheet relationships and current-document evidence must close before automatic mapping confirmation.
+- Relationship evidence is aggregate, de-identified and recomputable. Unfamiliar labels receive neutral statistical-pair evidence rather than being dropped or assigned a guessed semantic type; sampled evidence must state its observed-row denominator, and cross-table overlap is a candidate join signal rather than a confirmed mapping.
 
 ## Verification
 

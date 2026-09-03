@@ -51,6 +51,9 @@ from services.api.app.monitoring_ai_service import (
     MonitoringAiRuntimeBinding,
     MonitoringAiService,
 )
+from tests.medical_monitoring.relationship_profiler_stub import (
+    build_relationship_profile as _stub_profiler,
+)
 
 
 PROJECT_ID = "c3-dual-cohort-demo"
@@ -223,6 +226,7 @@ def _dual_pipeline(
         input_revision_factory=MonitoringAiInputRevision.model_validate,
         task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
         verifier_ai_service=verifier_service,
+        relationship_profiler=_stub_profiler,
     )
     return pipeline, repository
 
@@ -333,6 +337,14 @@ def test_verifier_submission_uses_blind_input_and_own_namespace(
         and job.requested_model == MONITORING_C3_VERIFIER_MODEL
         for job in verifier_jobs
     )
+    # Dual-cohort input validation premise: both cohorts map the identical
+    # frozen input, relationship evidence included, so every job of the same
+    # attempt carries one shared input revision digest.
+    assert {
+        str(job.input_revision_sha256) for job in primary_jobs
+    } == {
+        str(job.input_revision_sha256) for job in verifier_jobs
+    }
 
     # Blind input: the verifier payload is the identical deterministic
     # profile — same digest, no primary analysis results, no adjudication
