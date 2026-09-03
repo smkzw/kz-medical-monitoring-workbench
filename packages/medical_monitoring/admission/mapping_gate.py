@@ -74,6 +74,9 @@ ZHIPU_CODING_PLAN_API_KEY_ENV_ALIASES = (
     ZHIPU_CODING_PLAN_API_KEY_ENV,
     "ZHIPU_CODING_PLAN_API_KEY",
 )
+CMS_SMK_PRESET_ID = "cms_smk"
+CMS_SMK_BASE_URL = "https://new-api.mediportal.com.cn/v1"
+CMS_SMK_API_KEY_ENV = "CMS_SMK_API_KEY"
 
 
 def normalize_monitoring_mapping_model(model: str) -> str:
@@ -200,9 +203,9 @@ class MonitoringC3MappingGateContract:
             provider=MONITORING_C3_MAPPING_PROVIDER,
             model=MONITORING_C3_MAPPING_MODEL,
             profile_id=MONITORING_C3_MAPPING_PROFILE_ID,
-            preset_id=ZHIPU_CODING_PLAN_PRESET_ID,
-            base_url=ZHIPU_CODING_PLAN_BASE_URL,
-            api_key_env=ZHIPU_CODING_PLAN_API_KEY_ENV,
+            preset_id=CMS_SMK_PRESET_ID,
+            base_url=CMS_SMK_BASE_URL,
+            api_key_env=CMS_SMK_API_KEY_ENV,
         )
 
     @classmethod

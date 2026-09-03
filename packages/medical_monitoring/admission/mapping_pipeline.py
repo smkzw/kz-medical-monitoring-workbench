@@ -39,7 +39,7 @@ class AdmissionMappingPipelineError(RuntimeError):
 
 
 MAPPING_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-listing-field-mapping-adjudication-v2"
+    "monitoring-listing-field-mapping-adjudication-v3"
 )
 MAPPING_ADJUDICATION_BUSINESS_PREFIX = (
     "listing-field-mapping-adjudication"
@@ -359,12 +359,13 @@ class AdmissionMappingPipeline:
         draft_id: str,
         draft_fields: Sequence[Mapping[str, Any]],
         workspace_dir: Path,
+        review_context: Optional[Mapping[str, Any]] = None,
     ) -> Mapping[str, Any]:
-        """Run a focused, auditable second pass over unresolved fields only.
+        """Run a focused, auditable pass over questions or dual divergences.
 
-        Adjudication is a primary-cohort feature: it feeds first-pass draft
-        decisions back to the primary model. The verifier cohort stays blind
-        by construction and can never receive this pass.
+        Adjudication is a primary-harness feature: it may compare the already
+        completed blind-review verdict with the primary draft, but the blind
+        verifier itself never receives primary output or this follow-up pass.
         """
 
         if not self._configured():
@@ -386,9 +387,25 @@ class AdmissionMappingPipeline:
         if any(not row["domain"] or not row["source_field"] for row in identity):
             raise AdmissionMappingPipelineError("mapping_bridge_failed")
         identity.sort(key=lambda row: (row["domain"], row["source_field"]))
+        dual_rows = []
+        if review_context is not None:
+            raw_rows = review_context.get("divergences") or []
+            if not isinstance(raw_rows, list):
+                raise AdmissionMappingPipelineError("mapping_bridge_failed")
+            dual_rows = sorted(
+                [dict(row) for row in raw_rows],
+                key=lambda row: (
+                    str(row.get("domain") or ""),
+                    str(row.get("source_field") or ""),
+                ),
+            )
         digest = hashlib.sha256(
             json.dumps(
-                {"draft_id": draft_id, "fields": identity},
+                {
+                    "draft_id": draft_id,
+                    "fields": identity,
+                    "dual_review": dual_rows,
+                },
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),
@@ -548,7 +565,11 @@ class AdmissionMappingPipeline:
             ]
             profile["table_field_order"] = []
             profile["adjudication_contract"] = {
-                "schema_version": "monitoring_mapping_adjudication_v1",
+                "schema_version": (
+                    "monitoring_mapping_dual_adjudication_v1"
+                    if dual_rows
+                    else "monitoring_mapping_adjudication_v1"
+                ),
                 "first_pass_mappings": [
                     {
                         **row,
@@ -564,9 +585,17 @@ class AdmissionMappingPipeline:
                     ))
                 ],
                 "question_count": len(identity),
+                "dual_reconciliation": dual_rows,
                 "decision_policy": (
-                    "Only clear user decision when role and field kind remain "
-                    "unchanged and the independent evidence is sufficient."
+                    "Resolve the blind-review disagreement from evidence. "
+                    "Set user_decision_required=false only when the primary "
+                    "role and field kind remain unchanged. If another mapping "
+                    "is better supported or material ambiguity remains, keep "
+                    "the primary mapping unchanged and ask one plain Chinese "
+                    "medical-meaning question without mentioning models."
+                    if dual_rows
+                    else "Only clear user decision when role and field kind "
+                    "remain unchanged and the independent evidence is sufficient."
                 ),
             }
             generation += 1

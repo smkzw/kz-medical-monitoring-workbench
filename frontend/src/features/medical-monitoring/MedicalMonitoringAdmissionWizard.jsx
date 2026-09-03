@@ -552,14 +552,23 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         state.attemptId,
         { draft_id: draft.draft_id },
       );
+      const adjudicationState = payload?.adjudication?.state;
       mappingDispatch({
-        type: payload?.adjudication?.state === "running"
+        type: adjudicationState === "running"
           ? "adjudication-running"
-          : "adjudication-ready",
+          : adjudicationState === "blocked"
+            ? "adjudication-blocked"
+            : "adjudication-ready",
         payload,
       });
-    } catch (_error) {
-      mappingDispatch({ type: "adjudication-fallback", payload: draft });
+    } catch (error) {
+      mappingDispatch({
+        type: "adjudication-blocked",
+        payload: draft,
+        error: {
+          serverText: error?.detail?.message || error?.message || "系统复核暂未完成。",
+        },
+      });
     } finally {
       adjudicationInFlight.current = false;
     }
@@ -577,12 +586,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         state.attemptId,
         { reason: "采用系统字段识别结果，进入医学确认。" },
       );
-      if ((draft?.user_questions || []).length) {
-        mappingDispatch({ type: "adjudication-start", payload: draft });
-        await advanceAdjudication(draft);
-      } else {
-        mappingDispatch({ type: "adopt-ready", payload: draft });
-      }
+      mappingDispatch({ type: "adjudication-start", payload: draft });
+      await advanceAdjudication(draft);
     } catch (error) {
       adoptInFlight.current = false;
       mappingDispatch({

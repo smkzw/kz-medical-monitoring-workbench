@@ -450,6 +450,58 @@ def test_assemble_requires_all_accepted_chunks_and_preserves_lineage(
     ) is None
 
 
+def test_dual_adjudication_receipt_is_typed_idempotent_and_immutable(
+    repositories,
+) -> None:
+    path, ai_repository, mapping_repository = repositories
+    _seed_complete_source(ai_repository)
+    draft = mapping_repository.assemble(
+        "project-alpha",
+        "batch-001",
+        PROFILE_HASH,
+    )
+
+    receipt = mapping_repository.record_adjudication(
+        "project-alpha",
+        draft.draft_id,
+        domain="AE",
+        source_field="AETERM",
+        reconciliation_sha256="d" * 64,
+        resolution="primary_retained",
+        job_id="job-adjudication-1",
+        candidate_id="candidate-adjudication-1",
+        evidence_ids=("ev-adjudication-1",),
+    )
+    replay = mapping_repository.record_adjudication(
+        "project-alpha",
+        draft.draft_id,
+        domain="AE",
+        source_field="AETERM",
+        reconciliation_sha256="d" * 64,
+        resolution="primary_retained",
+        job_id="job-adjudication-1",
+        candidate_id="candidate-adjudication-1",
+        evidence_ids=("ev-adjudication-1",),
+    )
+
+    assert replay.receipt_id == receipt.receipt_id
+    assert mapping_repository.adjudication_receipts(
+        "project-alpha",
+        draft.draft_id,
+    ) == (receipt,)
+    with sqlite3.connect(path) as connection, pytest.raises(
+        sqlite3.IntegrityError,
+        match="immutable",
+    ):
+        connection.execute(
+            """
+            UPDATE monitoring_mapping_adjudication_receipts
+            SET resolution = 'escalated' WHERE receipt_id = ?
+            """,
+            (receipt.receipt_id,),
+        )
+
+
 def test_assemble_adds_partial_date_constraint_from_frozen_profile_evidence(
     repositories,
 ) -> None:

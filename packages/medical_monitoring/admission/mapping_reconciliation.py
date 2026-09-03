@@ -246,6 +246,42 @@ def _verdict_projection(item: Mapping[str, Any]) -> dict[str, Any]:
         value = str(item.get(optional) or "").strip()
         if value:
             projection[optional] = value
+    semantic_verdict = {
+        key: item.get(key)
+        for key in (
+            "recommended_role",
+            "field_kind",
+            "related_fields",
+            "standards_reference",
+            "derivation_lineage",
+            "value_constraints",
+            "object_identity",
+            "object_identity_evidence_fields",
+            "object_identity_binding_id",
+            "validated_treatment_identity_binding",
+            "dose_semantics",
+            "quality_gate_actions",
+        )
+        if key in item
+    }
+    if "recommended_role" in semantic_verdict:
+        semantic_verdict["recommended_role"] = str(
+            semantic_verdict["recommended_role"] or ""
+        ).strip().casefold()
+    if "field_kind" in semantic_verdict:
+        semantic_verdict["field_kind"] = normalize_field_kind(
+            semantic_verdict["field_kind"]
+        )
+    for unordered in (
+        "related_fields",
+        "object_identity_evidence_fields",
+        "quality_gate_actions",
+    ):
+        if unordered in semantic_verdict:
+            semantic_verdict[unordered] = sorted(
+                str(value) for value in (semantic_verdict[unordered] or ())
+            )
+    projection["semantic_verdict"] = semantic_verdict
     return projection
 
 
@@ -496,12 +532,7 @@ def reconcile_mapping_cohorts(
             row["human_decision_required"] = False
             row["system_review_required"] = True
         elif primary is not None and verifier is not None:
-            agreed = (
-                str(primary.get("recommended_role") or "").strip().casefold()
-                == str(verifier.get("recommended_role") or "").strip().casefold()
-                and normalize_field_kind(primary.get("field_kind"))
-                == normalize_field_kind(verifier.get("field_kind"))
-            )
+            agreed = primary["semantic_verdict"] == verifier["semantic_verdict"]
             row["result"] = RESULT_AGREED if agreed else RESULT_DIVERGED
             # A model disagreement first returns to the harness for focused
             # evidence adjudication. Only the later medically substantive

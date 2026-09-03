@@ -267,6 +267,16 @@ export function admissionMappingConfirmReducer(state, action) {
         resolved > 0 ? `系统又自动完成了 ${resolved} 项判断。` : "",
       );
     }
+    case "adjudication-blocked":
+      return {
+        ...state,
+        phase: "failed",
+        draft: action.payload?.draft_id ? action.payload : state.draft,
+        message: "",
+        error: action.error || {
+          serverText: "系统复核暂未完成，请稍后重试。原始数据不会受到影响。",
+        },
+      };
     case "adjudication-fallback":
       return projectDraftState(
         state,

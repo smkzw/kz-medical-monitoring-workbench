@@ -325,6 +325,22 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
             "user_decision_required": True,
         }],
         workspace_dir=workspace,
+        review_context={
+            "divergences": [{
+                "domain": "生命体征",
+                "source_field": "SYSBP",
+                "result": "diverged",
+                "primary": {
+                    "recommended_role": "vital_sign_systolic_blood_pressure",
+                    "field_kind": "source_collected",
+                },
+                "verifier": {
+                    "recommended_role": "lab_result",
+                    "field_kind": "source_collected",
+                },
+                "violations": [],
+            }],
+        },
     )
 
     assert result["state"] == "running"
@@ -342,12 +358,18 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
     assert [field["field"] for field in profile["fields"]] == ["SYSBP"]
     assert profile["fields"][0]["source_label"] == "收缩压(SYSBP)"
     assert profile["adjudication_contract"]["question_count"] == 1
+    assert profile["adjudication_contract"]["schema_version"] == (
+        "monitoring_mapping_dual_adjudication_v1"
+    )
+    assert profile["adjudication_contract"]["dual_reconciliation"][0][
+        "result"
+    ] == "diverged"
     assert {
         field["field"]
         for field in profile["read_only_adjudication_context_profiles"]
     } >= {"SUBJID", "VISIT", "VSDAT"}
     assert jobs[0].prompt_version == (
-        "monitoring-listing-field-mapping-adjudication-v2"
+        "monitoring-listing-field-mapping-adjudication-v3"
     )
 
 

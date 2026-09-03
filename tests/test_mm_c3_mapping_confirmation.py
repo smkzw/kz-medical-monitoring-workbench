@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from types import SimpleNamespace
 
 import pytest
 
 from packages.medical_monitoring.admission.mapping_confirmation import (
     AdmissionMappingConfirmationService,
-    USER_QUESTION_LOW_CONFIDENCE,
     USER_QUESTION_MODEL_FLAGGED,
-    USER_QUESTION_UNMAPPED,
     attention_reason,
     classify_user_question,
     enrich_candidates,
@@ -522,3 +522,209 @@ def test_second_pass_only_clears_an_unchanged_evidence_supported_mapping() -> No
     assert state["field"]["user_decision_required"] is False
     assert state["field"]["user_action"].startswith("系统复核：")
     assert decisions
+
+
+@pytest.mark.parametrize(
+    ("adjudicated_role", "needs_user", "resolved_count"),
+    [
+        ("ae_term", False, 1),
+        ("ae_term_text", True, 0),
+    ],
+)
+def test_dual_disagreement_is_adjudicated_before_any_user_question(
+    adjudicated_role: str,
+    needs_user: bool,
+    resolved_count: int,
+) -> None:
+    field = {
+        "domain": "AE",
+        "source_field": "AETERM",
+        "recommended_role": "ae_term",
+        "field_kind": "source_collected",
+        "confidence": 0.92,
+        "uncertainty": "主分析依据同表事件记录判断。",
+        "user_action": "系统已按建议采用，无需额外操作。",
+        "user_decision_required": False,
+    }
+    state = {"version": 1, "field": dict(field)}
+    receipts = []
+
+    class Draft:
+        batch_id = "attempt-1"
+        draft_id = "draft-1"
+
+        @property
+        def version(self):
+            return state["version"]
+
+        def model_dump(self, mode="json"):
+            return {
+                "project_id": "p1",
+                "draft_id": self.draft_id,
+                "batch_id": self.batch_id,
+                "version": state["version"],
+                "fields": [dict(state["field"])],
+            }
+
+    draft = Draft()
+
+    def edit_field(*_args, patch, **_kwargs):
+        state["field"].update(patch)
+        state["version"] += 1
+        return draft
+
+    mapping_repo = SimpleNamespace(
+        get_draft=lambda *_args: draft,
+        edit_field=edit_field,
+        record_adjudication=lambda *_args, **kwargs: receipts.append(kwargs),
+        semantic_quality=lambda *_args: SimpleNamespace(
+            as_payload=lambda: {"confirmable": True}
+        ),
+    )
+    candidate = SimpleNamespace(candidate_id="candidate-dual", status="proposed")
+    job = SimpleNamespace(
+        job_id="job-dual",
+        project_id="p1",
+        input_revision_sha256="r" * 64,
+    )
+    calls = []
+    pipeline = SimpleNamespace(
+        adjudicate_candidates=lambda **kwargs: calls.append(kwargs) or {
+            "state": "ready",
+            "mappings": [{
+                **field,
+                "recommended_role": adjudicated_role,
+                "user_decision_required": needs_user,
+                "uncertainty": "同表及跨表证据复核完成。",
+                "user_action": (
+                    "该列记录的是原始不良事件描述，还是标准化后的事件名称？"
+                    if needs_user
+                    else "同表事件名称及记录分布支持原对应。"
+                ),
+                "evidence_ids": ["ev-dual-1"],
+                "candidate_id": "candidate-dual",
+                "job_id": "job-dual",
+            }],
+        },
+    )
+    service = AdmissionMappingConfirmationService(
+        mapping_pipeline=pipeline,
+        mapping_repository=mapping_repo,
+        ai_repository=SimpleNamespace(
+            get=lambda *_args: job,
+            candidates=lambda *_args: (candidate,),
+            decide_candidate=lambda *_args, **_kwargs: None,
+        ),
+        prompt_version="prompt",
+        accepted_status="accepted",
+        proposed_status="proposed",
+        current_revision_resolver=lambda *_args, **_kwargs: "r" * 64,
+        require_dual_reconciliation=True,
+    )
+    divergence = {
+        "domain": "AE",
+        "source_field": "AETERM",
+        "result": "diverged",
+        "primary": {"recommended_role": "ae_term", "field_kind": "source_collected"},
+        "verifier": {"recommended_role": "ae_term_text", "field_kind": "source_collected"},
+        "violations": [],
+    }
+    service.reconcile_with_verifier = lambda **_kwargs: {
+        "reconciliation": {
+            "state": "diverged",
+            "auto_pass": False,
+            "divergences": [divergence],
+        }
+    }
+
+    payload = service.adjudicate_draft(
+        project_id="p1",
+        attempt_id="attempt-1",
+        draft_id="draft-1",
+        workspace_dir="/generated/non-real",
+    )
+
+    assert calls[0]["review_context"] == {"divergences": [divergence]}
+    assert receipts[0]["resolution"] == (
+        "escalated" if needs_user else "primary_retained"
+    )
+    assert payload["adjudication"]["resolved_count"] == resolved_count
+    assert payload["review_summary"]["user_question_count"] == int(needs_user)
+    assert state["field"]["recommended_role"] == "ae_term"
+    assert state["field"]["user_decision_required"] is needs_user
+    if needs_user:
+        assert "模型" not in state["field"]["user_action"]
+    else:
+        assert state["field"]["user_action"].startswith("系统复核：")
+
+
+def test_confirm_accepts_a_durable_system_resolution_of_dual_disagreement() -> None:
+    reconciliation = {
+        "state": "diverged",
+        "auto_pass": False,
+        "divergences": [{
+            "domain": "AE",
+            "source_field": "AETERM",
+            "result": "diverged",
+        }],
+    }
+    reconciliation_sha256 = hashlib.sha256(
+        json.dumps(
+            reconciliation,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    draft = SimpleNamespace(
+        batch_id="attempt-1",
+        model_dump=lambda mode="json": {
+            "fields": [{
+                "domain": "AE",
+                "source_field": "AETERM",
+                "recommended_role": "ae_term",
+                "field_kind": "source_collected",
+                "user_decision_required": False,
+                "user_action": "系统复核：同表事件名称及记录分布支持原对应。",
+            }],
+        },
+    )
+    repo = SimpleNamespace(
+        get_draft=lambda *_args: draft,
+        adjudication_receipts=lambda *_args: (
+            SimpleNamespace(
+                domain="AE",
+                source_field="AETERM",
+                reconciliation_sha256=reconciliation_sha256,
+                resolution="primary_retained",
+            ),
+        ),
+        confirm=lambda *_args, **_kwargs: SimpleNamespace(
+            model_dump=lambda mode="json": {"mapping_revision": "revision-1"}
+        ),
+    )
+    service = AdmissionMappingConfirmationService(
+        mapping_pipeline=SimpleNamespace(),
+        mapping_repository=repo,
+        ai_repository=SimpleNamespace(),
+        prompt_version="prompt",
+        accepted_status="accepted",
+        proposed_status="proposed",
+        require_dual_reconciliation=True,
+    )
+    service.reconcile_with_verifier = lambda **_kwargs: {
+        "reconciliation": reconciliation
+    }
+
+    payload = service.confirm_draft(
+        project_id="p1",
+        attempt_id="attempt-1",
+        draft_id="draft-1",
+        expected_version=2,
+        confirmed_by="system_harness",
+        confirmation_reason="系统已完成盲核差异裁决。",
+        idempotency_key="confirm-dual-adjudicated",
+    )
+
+    assert payload["mapping_revision"] == "revision-1"
+    assert payload["facts_generated"] is False
