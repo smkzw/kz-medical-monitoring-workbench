@@ -41,6 +41,24 @@ class DocumentAuthorityError(RuntimeError):
     pass
 
 
+def document_authority_batch_sha256(batch: Mapping[str, Any]) -> str:
+    _validate_batch(batch)
+    return _digest(batch)
+
+
+def validate_document_authority_analysis(
+    batch: Mapping[str, Any], analysis: "DocumentAuthorityAnalysis"
+) -> None:
+    candidate_ids, locators = _validate_batch(batch)
+    _validate_analysis(
+        analysis,
+        batch_id=str(batch["batch_id"]),
+        input_sha256=_digest(batch),
+        candidate_ids=candidate_ids,
+        locators=locators,
+    )
+
+
 def _validate_nonempty_unique(values: tuple[str, ...]) -> tuple[str, ...]:
     cleaned = tuple(value.strip() for value in values)
     if any(not value for value in cleaned) or len(cleaned) != len(set(cleaned)):
