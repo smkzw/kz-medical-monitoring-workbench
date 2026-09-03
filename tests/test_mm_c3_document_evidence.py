@@ -283,6 +283,60 @@ def test_mapping_bridge_requires_bound_current_documents_when_enabled(
     assert bridged.field_profile["bridge_schema_version"].endswith("-v8")
 
 
+def test_missing_required_document_creates_no_mapping_job(
+    tmp_path: Path,
+) -> None:
+    record, workspace = _admission_record(tmp_path)
+    repository = MonitoringAiRepository(tmp_path / "missing-doc-ai.sqlite3")
+
+    def runtime(provider: str, model: str, profile_id: str):
+        return MonitoringAiRuntimeBinding(
+            profile_id=profile_id,
+            provider=provider,
+            model=model,
+            env={},
+            available=True,
+        )
+
+    pipeline = AdmissionMappingPipeline(
+        ai_service=MonitoringAiService(
+            repository,
+            runtime_resolver=lambda: runtime(
+                MONITORING_C3_MAPPING_PROVIDER,
+                MONITORING_C3_MAPPING_MODEL,
+                MONITORING_C3_MAPPING_PROFILE_ID,
+            ),
+        ),
+        verifier_ai_service=MonitoringAiService(
+            repository,
+            runtime_resolver=lambda: runtime(
+                MONITORING_C3_VERIFIER_PROVIDER,
+                MONITORING_C3_VERIFIER_MODEL,
+                "independent_ai__zhipu_coding_plan_glm_flash",
+            ),
+        ),
+        ai_repository=repository,
+        input_revision_factory=MonitoringAiInputRevision.model_validate,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+        relationship_profiler=build_relationship_profile,
+        require_document_evidence=True,
+        document_evidence_resolver=lambda **_kwargs: _packet(
+            ecrf_status="missing"
+        ),
+    )
+
+    with pytest.raises(
+        AdmissionMappingPipelineError,
+        match="mapping_document_evidence_incomplete",
+    ):
+        pipeline.generate_dual_candidates(
+            project_id=PROJECT_ID,
+            attempt_id=record["attempt_id"],
+            workspace_dir=workspace,
+        )
+    assert repository.list_jobs(PROJECT_ID) == ()
+
+
 def test_mapping_pipeline_freezes_resolved_documents_at_attempt_date(
     tmp_path: Path,
 ) -> None:
@@ -382,6 +436,13 @@ def test_dual_submission_resolves_one_shared_document_snapshot(
         for profile in profiles
     }) == 1
     assert len({profile["full_input_sha256"] for profile in profiles}) == 1
+    assert pipeline._document_selection_ids(
+        workspace,
+        record["attempt_id"],
+    ) == {
+        "protocol": "source-a",
+        "ecrf": "source-c",
+    }
 
 
 def test_document_selection_is_validated_before_it_is_versioned(
@@ -421,7 +482,7 @@ def test_document_selection_is_validated_before_it_is_versioned(
             role="ecrf",
             source_entry_id="source-wrong-role",
         )
-    assert pipeline._document_selection_ids(workspace) == {}
+    assert pipeline._document_selection_ids(workspace, record["attempt_id"]) == {}
 
     saved = pipeline.select_document(
         project_id=PROJECT_ID,
@@ -431,9 +492,95 @@ def test_document_selection_is_validated_before_it_is_versioned(
         source_entry_id="source-c",
     )
     assert saved["version"] == 1
-    assert pipeline._document_selection_ids(workspace) == {
+    assert pipeline._document_selection_ids(
+        workspace,
+        record["attempt_id"],
+    ) == {
         "ecrf": "source-c"
     }
+
+
+def test_document_selection_is_isolated_between_admission_attempts(
+    tmp_path: Path,
+) -> None:
+    first, workspace = _admission_record(tmp_path)
+    second = DataAdmissionPipeline(parse_listing_file).create_attempt(
+        project_id=PROJECT_ID,
+        source_dir=tmp_path / "source",
+        workspace_dir=workspace,
+    )
+
+    def resolve_documents(**kwargs):
+        selected = kwargs["selected_entry_ids"].get("ecrf", "")
+        token = {"source-c": "c", "source-d": "d"}.get(selected, "c")
+        roles = list(_packet().roles)
+        roles[2] = DocumentRoleEvidence(
+            role="ecrf",
+            status="current",
+            binding=_binding("ecrf", token),
+        )
+        return MonitoringDocumentEvidencePacket(
+            project_id=PROJECT_ID,
+            listing_admission_date="2026-09-03",
+            registry_revision_sha256="9" * 64,
+            roles=tuple(roles),
+        )
+
+    pipeline = AdmissionMappingPipeline(
+        require_document_evidence=True,
+        document_evidence_resolver=resolve_documents,
+    )
+    pipeline.select_document(
+        project_id=PROJECT_ID,
+        attempt_id=first["attempt_id"],
+        workspace_dir=workspace,
+        role="ecrf",
+        source_entry_id="source-c",
+    )
+    pipeline.select_document(
+        project_id=PROJECT_ID,
+        attempt_id=second["attempt_id"],
+        workspace_dir=workspace,
+        role="ecrf",
+        source_entry_id="source-d",
+    )
+
+    assert pipeline._document_selection_ids(
+        workspace,
+        first["attempt_id"],
+    ) == {"ecrf": "source-c"}
+    assert pipeline._document_selection_ids(
+        workspace,
+        second["attempt_id"],
+    ) == {"ecrf": "source-d"}
+
+
+def test_document_readiness_is_plain_chinese_and_hides_registry_identity(
+    tmp_path: Path,
+) -> None:
+    record, workspace = _admission_record(tmp_path)
+    pipeline = AdmissionMappingPipeline(
+        require_document_evidence=True,
+        document_evidence_resolver=lambda **_kwargs: _packet(),
+    )
+
+    readiness = pipeline.document_readiness(
+        project_id=PROJECT_ID,
+        attempt_id=record["attempt_id"],
+        workspace_dir=workspace,
+    )
+    blob = json.dumps(readiness, ensure_ascii=False)
+
+    assert readiness["ready"] is True
+    assert "无需逐项确认" in readiness["guidance"]
+    assert [item["label"] for item in readiness["roles"]] == [
+        "研究方案",
+        "研究者手册",
+        "电子病例报告表",
+        "统计分析计划",
+    ]
+    assert "source_entry_id" not in blob
+    assert "packet_sha256" not in blob
 
 
 class _Registry:

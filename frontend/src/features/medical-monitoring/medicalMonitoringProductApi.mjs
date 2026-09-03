@@ -65,7 +65,6 @@ function publicAdmissionCreatePayload(payload) {
   return { ...payload };
 }
 
-
 function queryValues(values) {
   const source = values && typeof values === "object" && !Array.isArray(values)
     ? values
@@ -198,6 +197,9 @@ export const MEDICAL_MONITORING_PRODUCT_PATHS = Object.freeze({
   ),
   dataAdmissionProfile: (projectId, attemptId) => (
     `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/profile`
+  ),
+  dataAdmissionStudyDocuments: (projectId, attemptId) => (
+    `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/study-documents`
   ),
   dataAdmissionMappingCandidates: (projectId, attemptId, options = {}) => appendQuery(
     `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/mapping-candidates`,
@@ -419,6 +421,35 @@ export function createMedicalMonitoringProductApi({
         requireId(projectId, "projectId"),
         requireId(attemptId, "attemptId"),
       ), { signal });
+    },
+
+    getDataAdmissionDocumentReadiness(projectId, attemptId, { signal } = {}) {
+      return get(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStudyDocuments(
+        requireId(projectId, "projectId"),
+        requireId(attemptId, "attemptId"),
+      ), { signal });
+    },
+
+    uploadStudyDocument(projectId, attemptId, role, file, { signal } = {}) {
+      if (!file?.name) throw new TypeError("study document file is required");
+      const cleanRole = requireId(role, "documentRole");
+      const form = new FormData();
+      form.append("file", file, file.name);
+      return postForm(appendQuery(
+        MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStudyDocuments(
+          requireId(projectId, "projectId"),
+          requireId(attemptId, "attemptId"),
+        ),
+        { role: cleanRole },
+      ), form, { signal });
+    },
+
+    startDataAdmissionMappingCandidates(projectId, attemptId, { signal } = {}) {
+      return post(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionMappingCandidates(
+        requireId(projectId, "projectId"),
+        requireId(attemptId, "attemptId"),
+        { focus: undefined },
+      ), undefined, { signal });
     },
 
     listDataAdmissionMappingCandidates(projectId, attemptId, { focus = "critical", signal } = {}) {

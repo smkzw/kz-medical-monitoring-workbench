@@ -91,8 +91,8 @@ check(renders.reading.includes('role="status"'), "reading uses a status role");
 check(renders.reading.includes("正在识别数据结构"), "reading copy");
 check(!renders.reading.includes("张数据表"), "reading shows no premature counts");
 
-// Review step: structure summary first, tables next, technical details last
-// and collapsed.
+// Review step: structure summary first and tables next. Internal hashes and
+// storage identities never reach the user surface.
 check(renders.review.includes("2 个文件 · 2 张数据表 · 164 行数据"), "summary text rendered");
 check(
   renders.review.indexOf("2 个文件") < renders.review.indexOf("访视列表"),
@@ -103,20 +103,47 @@ check(renders.review.includes("128 行 · 4 列 · 来源 visit_listings.csv"), 
 check(renders.review.includes("缺失 2"), "missing count rendered");
 check(renders.review.includes("2026-01-12 ~ 2026-08-30"), "date range rendered");
 check(renders.review.includes("受试者标识") && renders.review.includes("访视"), "role chips rendered");
-check(renders.review.includes("<details"), "technical details collapsed by default");
-check(renders.review.includes(">技术详情</summary>"), "technical details summary label");
-const technicalOpen = renders.review.indexOf("<details");
 const manifestValue = generatedAdmissionFixture().technical_details.manifest_hash;
-const manifestIndex = renders.review.indexOf(manifestValue);
-check(
-  technicalOpen > -1 && manifestIndex > technicalOpen && renders.review.indexOf("</details>") > manifestIndex,
-  "hash values stay inside the collapsed technical region",
-);
-check(renders.review.includes("数据清单校验值"), "manifest labelled in product language");
-check(renders.review.includes("来源版本标识") && renders.review.includes("单元格定位索引标识"),
-  "internal identities labelled in product language");
+check(!renders.review.includes(manifestValue), "manifest hash stays out of the product UI");
+check(!renders.review.includes("校验值"), "file hashes stay out of the product UI");
+check(!renders.review.includes("来源版本标识"), "source revision ids stay out of the product UI");
+check(!renders.review.includes("单元格定位索引标识"), "locator ids stay out of the product UI");
 check(renders.review.includes(">下一步：核对系统识别</button>"), "review primary advances");
 check(!renders.review.includes('role="alert"'), "clean review raises no alert");
+
+// Before mapping, the system explains missing study evidence in plain Chinese
+// and asks only for the two files it cannot safely infer by itself.
+check(renders.documentsMissing.includes("还需要 2 份研究文件"), "missing-document purpose is explicit");
+check(
+  renders.documentsMissing.includes("通常不需要您逐列核对"),
+  "missing-document guidance promises system-led recognition",
+);
+check(renders.documentsMissing.includes("当前研究方案"), "protocol uses a medical-facing label");
+check(renders.documentsMissing.includes("当前 eCRF"), "eCRF uses a recognizable label");
+check(
+  renders.documentsMissing.split(">添加文件</").length - 1 === 2,
+  "only currently required documents request an upload",
+);
+check(renders.documentsMissing.includes('accept=".docx"'), "protocol picker accepts DOCX");
+check(renders.documentsMissing.includes('accept=".xlsx"'), "eCRF picker accepts XLSX");
+check(
+  renders.documentsMissing.includes(">请先添加所需文件</button>")
+    && renders.documentsMissing.includes('aria-disabled="true"'),
+  "mapping action stays disabled until required evidence is present",
+);
+check(
+  !renders.documentsMissing.includes('aria-label="数据表识别摘要"'),
+  "mapping questions stay hidden while study evidence is incomplete",
+);
+check(renders.documentsReady.includes("研究文件已准备好"), "ready evidence is acknowledged");
+check(
+  renders.documentsReady.includes('aria-label="数据表识别摘要"'),
+  "mapping summary appears only after required evidence is ready",
+);
+check(renders.documentsFailed.includes("当前研究方案"), "readiness failure preserves known document status");
+check(renders.documentsFailed.includes("已识别"), "readiness failure keeps completed work visible");
+check(renders.documentsFailed.includes(">重新核对研究文件</button>"), "readiness failure offers one plain retry action");
+check(renders.documentsFailed.includes('role="alert"'), "readiness failure is announced accessibly");
 
 // Confirm step: plain summary leads, engineering field list stays collapsed.
 check(

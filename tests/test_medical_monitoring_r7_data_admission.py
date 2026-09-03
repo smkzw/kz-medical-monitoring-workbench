@@ -26,6 +26,12 @@ from services.api.app.medical_monitoring_r7_product_router import (
     R7_PRODUCT_PREFIX,
     create_medical_monitoring_r7_product_router,
 )
+from packages.medical_monitoring.api.r7_product.mapping_candidate_routes import (
+    _public_mapping_projection,
+)
+from services.api.app.monitoring_mapping_semantic_quality import (
+    evaluate_mapping_semantic_quality,
+)
 from services.api.app.monitoring_runtime_principal import (
     MonitoringAuthenticatedPrincipal,
 )
@@ -248,12 +254,125 @@ class FakeMappingPipeline:
         self.calls.append(("generate_dual_candidates", kwargs))
         return {
             "attempt_id": kwargs["attempt_id"],
-            "verification": {"state": "generating"},
+            "state": "generating",
+            "execution": {
+                "providers": ["internal-provider"],
+                "requested_models": ["internal-model"],
+            },
+            "jobs": [{
+                "job_id": "internal-job",
+                "provider": "internal-provider",
+                "requested_model": "internal-model",
+            }],
+            "verification": {
+                "state": "generating",
+                "summary": {"job_count": 1, "completed_job_count": 0},
+            },
         }
 
     def generate_candidates(self, **kwargs: Any) -> Mapping[str, Any]:
         self.calls.append(("generate_candidates", kwargs))
         raise AssertionError("product route must not submit one cohort")
+
+    def list_candidates(self, **kwargs: Any) -> Mapping[str, Any]:
+        self.calls.append(("list_candidates", kwargs))
+        return {
+            "state": "candidates_ready",
+            "confirmation_status": "pending_confirmation",
+            "summary": {"candidate_count": 1},
+            "execution": {"providers": ["internal-provider"]},
+            "jobs": [{"job_id": "internal-job"}],
+            "candidates": [{
+                "domain": "AE",
+                "source_field": "AETERM",
+                "recommended_role": "ae_term",
+                "field_kind": "source_collected",
+                "confidence": 0.99,
+                "uncertainty": "无实质歧义",
+                "user_action": "系统已自动识别。",
+                "user_decision_required": False,
+                "evidence_ids": ["internal-evidence"],
+            }],
+        }
+
+    def document_readiness(self, **kwargs: Any) -> Mapping[str, Any]:
+        self.calls.append(("document_readiness", kwargs))
+        return {
+            "ready": True,
+            "headline": "研究方案和电子病例报告表已准备好",
+            "guidance": "系统会自动完成理解和核对。",
+            "roles": [],
+        }
+
+    def select_document(self, **kwargs: Any) -> Mapping[str, Any]:
+        self.calls.append(("select_document", kwargs))
+        return {"version": 1}
+
+
+def test_real_semantic_quality_is_safely_projected_without_hashes() -> None:
+    quality = evaluate_mapping_semantic_quality(fields=()).as_payload()
+    projected = _public_mapping_projection({
+        "draft_id": "draft-1",
+        "version": 1,
+        "status": "draft",
+        "fields": [],
+        "semantic_quality": quality,
+        "review_summary": {"field_count": 0},
+    })
+
+    assert isinstance(projected, dict)
+    assert projected["semantic_quality"]["status"] == quality["status"]
+    blob = json.dumps(projected, ensure_ascii=False)
+    assert "sha256" not in blob
+    assert "input_sha256" not in blob
+
+
+def test_document_refresh_failure_preserves_selection_and_can_retry(
+    tmp_path: Path,
+) -> None:
+    class RefreshRetryPipeline(FakeMappingPipeline):
+        def __init__(self) -> None:
+            super().__init__()
+            self.readiness_calls = 0
+
+        def document_readiness(self, **kwargs: Any) -> Mapping[str, Any]:
+            self.calls.append(("document_readiness", kwargs))
+            self.readiness_calls += 1
+            if self.readiness_calls == 1:
+                raise RuntimeError("synthetic refresh interruption")
+            return {
+                "ready": True,
+                "headline": "研究文件已准备好",
+                "guidance": "系统会自动完成理解和核对。",
+                "roles": [],
+            }
+
+    mapping = RefreshRetryPipeline()
+    client = _client(
+        tmp_path / "runtime",
+        mapping_pipeline=mapping,
+        document_registrar=lambda **_kwargs: {
+            "source_entry_id": "source-synthetic-001"
+        },
+    )
+    uploaded = client.post(
+        f"{_base()}/data-admissions/attempt-0001/study-documents?role=ecrf",
+        files={"file": ("forms.xlsx", b"synthetic", "application/octet-stream")},
+    )
+    retried = client.get(
+        f"{_base()}/data-admissions/attempt-0001/study-documents"
+    )
+
+    assert uploaded.status_code == 409
+    assert uploaded.json()["code"] == "mapping_document_refresh_pending"
+    assert "无需再次上传" in uploaded.json()["message"]
+    assert retried.status_code == 200
+    assert retried.json()["ready"] is True
+    assert [name for name, _ in mapping.calls[:3]] == [
+        "select_document",
+        "document_readiness",
+        "document_readiness",
+    ]
 
 
 def test_product_mapping_start_is_always_dual_and_document_upload_is_reachable(
@@ -278,7 +397,7 @@ def test_product_mapping_start_is_always_dual_and_document_upload_is_reachable(
         document_registrar=register_document,
     )
     uploaded = client.post(
-        f"{_base()}/study-documents?role=ecrf",
+        f"{_base()}/data-admissions/attempt-0001/study-documents?role=ecrf",
         files={
             "file": (
                 "forms.xlsx",
@@ -288,15 +407,41 @@ def test_product_mapping_start_is_always_dual_and_document_upload_is_reachable(
         },
     )
     assert uploaded.status_code == 201
-    assert uploaded.json()["source_entry_id"] == "source-ecrf-001"
+    assert uploaded.json()["ready"] is True
+    assert "source_entry_id" not in uploaded.json()
     assert registrations[0]["project_id"] == PROJECT_A
+
+    readiness = client.get(
+        f"{_base()}/data-admissions/attempt-0001/study-documents"
+    )
+    assert readiness.status_code == 200
+    assert readiness.json()["ready"] is True
 
     started = client.post(
         f"{_base()}/data-admissions/attempt-0001/mapping-candidates?cohort=primary"
     )
     assert started.status_code == 201
+    started_blob = json.dumps(started.json(), ensure_ascii=False)
+    assert "provider" not in started_blob
+    assert "model" not in started_blob
+    assert "job_id" not in started_blob
+    listed = client.get(
+        f"{_base()}/data-admissions/attempt-0001/mapping-candidates?focus=all"
+    )
+    assert listed.status_code == 200
+    listed_blob = json.dumps(listed.json(), ensure_ascii=False)
+    assert "provider" not in listed_blob
+    assert "model" not in listed_blob
+    assert "job_id" not in listed_blob
+    assert "evidence_ids" not in listed_blob
+    assert listed.json()["candidates"][0]["source_field"] == "AETERM"
     assert [name for name, _ in mapping.calls] == [
-        "generate_dual_candidates"
+        "select_document",
+        "document_readiness",
+        "document_readiness",
+        "generate_dual_candidates",
+        "list_candidates",
+        "list_candidates",
     ]
 
 
@@ -375,7 +520,7 @@ def test_admission_registration_is_additive_and_r7_scoped(tmp_path: Path) -> Non
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/latest",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}",
             "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/facts",
-            "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/document-selection",
+        "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/study-documents",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-candidates",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft/adjudicate",
@@ -386,10 +531,6 @@ def test_admission_registration_is_additive_and_r7_scoped(tmp_path: Path) -> Non
     assert all(
         path.startswith("/api/projects/{project_id}/modules/medical-monitoring/r7")
         for path in r7_paths
-    )
-    assert (
-        "/api/projects/{project_id}/modules/medical-monitoring/r7/study-documents"
-        in r7_paths
     )
     non_r7 = paths - r7_paths
     assert non_r7 == {"/__sentinel_non_r7", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}

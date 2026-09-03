@@ -101,10 +101,11 @@ function mappingFrom(transitions) {
   return mapping;
 }
 
-function render(state, mappingState, factState) {
+function render(state, mappingState, factState, documentState) {
   return renderToStaticMarkup(
     <MedicalMonitoringAdmissionWizardView
       state={state}
+      documentState={documentState}
       mappingState={mappingState || createAdmissionMappingConfirmState()}
       factState={factState || { phase: "idle", payload: null, error: null }}
       onSourceDirChange={() => {}}
@@ -221,6 +222,61 @@ export const renders = {
   confirm: render(readyWizardState(), mappingFrom([
     { type: "load-ready", payload: candidatesPayload() },
   ])),
+  documentsMissing: render(
+    readyWizardState(),
+    createAdmissionMappingConfirmState(),
+    null,
+    {
+      phase: "ready",
+      error: null,
+      payload: {
+        ready: false,
+        headline: "还需要 2 份研究文件",
+        guidance: "添加后，系统会自动理解表格各列含义；通常不需要您逐列核对。",
+        roles: [
+          { role: "protocol", label: "当前研究方案", required_now: true, status: "missing", status_text: "尚未添加" },
+          { role: "ecrf", label: "当前 eCRF", required_now: true, status: "missing", status_text: "尚未添加" },
+          { role: "ib", label: "研究者手册", required_now: false, status: "missing", status_text: "可稍后添加" },
+        ],
+      },
+    },
+  ),
+  documentsReady: render(
+    readyWizardState(),
+    mappingFrom([{ type: "load-ready", payload: candidatesPayload() }]),
+    null,
+    {
+      phase: "ready",
+      error: null,
+      payload: {
+        ready: true,
+        headline: "研究文件已准备好",
+        guidance: "系统正在结合研究方案和 eCRF 理解数据。",
+        roles: [
+          { role: "protocol", label: "当前研究方案", required_now: true, status: "current", status_text: "已识别" },
+          { role: "ecrf", label: "当前 eCRF", required_now: true, status: "current", status_text: "已识别" },
+        ],
+      },
+    },
+  ),
+  documentsFailed: render(
+    readyWizardState(),
+    createAdmissionMappingConfirmState(),
+    null,
+    {
+      phase: "failed",
+      error: "研究文档核对暂未完成，请重试。",
+      payload: {
+        ready: false,
+        headline: "还需补充研究文件",
+        guidance: "已添加的文件会保留。",
+        roles: [
+          { role: "protocol", label: "当前研究方案", required_now: true, status: "current", status_text: "已识别" },
+          { role: "ecrf", label: "当前 eCRF", required_now: true, status: "missing", status_text: "尚未添加" },
+        ],
+      },
+    },
+  ),
   confirmDrafting: render(readyWizardState(), mappingFrom([
     { type: "load-ready", payload: candidatesPayload() },
     { type: "adopt-ready", payload: draftPayload },
