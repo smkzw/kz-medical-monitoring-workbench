@@ -45,9 +45,6 @@ MONITORING_C3_VERIFIER_PROMPT_VERSION = (
 )
 MONITORING_C3_LOCAL_FALLBACK_PROVIDER = "mtplx"
 MONITORING_C3_LOCAL_FALLBACK_MODEL = "mtplx-flash-next-optimized-speed"
-MONITORING_C3_REMOTE_UNAVAILABLE_ENV = (
-    "MONITORING_C3_REMOTE_ROUTES_UNAVAILABLE"
-)
 # Post-hoc classification of what actually executed, used by the migration
 # gate and by the dual-model-pass contract. Deterministic system-owned jobs
 # (for example metadata-only mapping) are not classified here; callers inject
@@ -117,15 +114,9 @@ def monitoring_mapping_runtime_matches(
             MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
             MONITORING_C3_LOCAL_FALLBACK_MODEL.casefold(),
         ):
-            env = _runtime_field(runtime, "env", {})
-            fallback_admitted = (
-                isinstance(env, Mapping)
-                and str(
-                    env.get(MONITORING_C3_REMOTE_UNAVAILABLE_ENV, "")
-                ).strip().casefold()
-                in {"1", "true", "yes"}
-            )
-            return available and fallback_admitted
+            # Local admission needs repository-backed terminal evidence from
+            # both remote routes; a runtime/env declaration is never proof.
+            return False
         primary_routes = {
             (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL.casefold()),
             (MONITORING_C3_ALTERNATE_PROVIDER, MONITORING_C3_ALTERNATE_MODEL.casefold()),
@@ -302,7 +293,6 @@ __all__ = [
     "MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX",
     "MONITORING_C3_LOCAL_FALLBACK_MODEL",
     "MONITORING_C3_LOCAL_FALLBACK_PROVIDER",
-    "MONITORING_C3_REMOTE_UNAVAILABLE_ENV",
     "MONITORING_C3_SUPPORTED_RUNTIMES",
     "MONITORING_MAPPING_COHORTS",
     "MONITORING_MAPPING_COHORT_PRIMARY",

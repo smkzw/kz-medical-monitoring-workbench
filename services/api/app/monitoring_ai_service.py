@@ -85,6 +85,12 @@ from .monitoring_mapping_contract import (
 from packages.medical_monitoring.admission.mapping_reconciliation import (
     mapping_conclusion_violations,
 )
+from packages.medical_monitoring.admission.mapping_gate import (
+    MONITORING_C3_MAPPING_MODEL,
+    MONITORING_C3_MAPPING_PROVIDER,
+    MONITORING_C3_VERIFIER_MODEL,
+    MONITORING_C3_VERIFIER_PROVIDER,
+)
 from .monitoring_mapping_semantic_quality import (
     ROLE_CATALOG_VERSION,
     RULE_CATALOG_VERSION,
@@ -7125,6 +7131,33 @@ class MonitoringAiService:
             table_domains.append(domain)
         if len(table_domains) != len(set(table_domains)):
             raise ValueError("listing field profile table bindings must be unique")
+        fallback = field_profile.get("fallback_admission")
+        if fallback is not None:
+            if not isinstance(fallback, dict):
+                raise ValueError("mapping fallback admission receipt is malformed")
+            receipt_sha256 = fallback.get("receipt_sha256")
+            unsigned = {
+                key: value for key, value in fallback.items()
+                if key != "receipt_sha256"
+            }
+            routes = fallback.get("routes")
+            identities = {
+                (str(item.get("provider")), str(item.get("model")))
+                for item in routes or []
+                if isinstance(item, dict)
+            }
+            if (
+                fallback.get("schema_version")
+                != "mm-c3-remote-unavailability-receipt-v1"
+                or not isinstance(routes, list)
+                or len(routes) != 2
+                or identities != {
+                    (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
+                    (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
+                }
+                or receipt_sha256 != content_sha256(unsigned)
+            ):
+                raise ValueError("mapping fallback admission receipt is invalid")
         _require_service_sha256(
             field_profile["input_sha256"],
             "listing field profile input_sha256",

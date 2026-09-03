@@ -33,7 +33,6 @@ from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROFILE_ID,
     MONITORING_C3_MAPPING_PROVIDER,
-    MONITORING_C3_REMOTE_UNAVAILABLE_ENV,
     MONITORING_C3_VERIFIER_MODEL,
     MONITORING_C3_VERIFIER_PROFILE_ID,
     MONITORING_C3_VERIFIER_PROVIDER,
@@ -282,7 +281,7 @@ def test_verifier_cohort_gate_is_strict_without_fallback_routes() -> None:
                 profile_id=MONITORING_C3_VERIFIER_PROFILE_ID,
                 provider=MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
                 model=MONITORING_C3_LOCAL_FALLBACK_MODEL,
-                env={MONITORING_C3_REMOTE_UNAVAILABLE_ENV: "true"},
+                env={"MONITORING_C3_REMOTE_ROUTES_UNAVAILABLE": "true"},
                 available=True,
             )
         )
@@ -434,7 +433,7 @@ def test_verifier_generation_without_verifier_runtime_sends_nothing(
                 MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
                 MONITORING_C3_LOCAL_FALLBACK_MODEL,
             ),
-            MONITORING_C3_REMOTE_UNAVAILABLE_ENV: "true",
+            "MONITORING_C3_REMOTE_ROUTES_UNAVAILABLE": "true",
         },
         available=True,
     )
