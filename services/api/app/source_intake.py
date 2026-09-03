@@ -886,6 +886,26 @@ class SourceRegistryService:
         required_module: str = "medical_monitoring",
     ) -> List[Dict[str, Any]]:
         """Search current registered protocol text without making medical claims."""
+        return self.search_document_spans(
+            project_id,
+            entry_id,
+            query_terms,
+            limit=limit,
+            required_module=required_module,
+            allowed_source_kinds=frozenset({"protocol_docx"}),
+        )
+
+    def search_document_spans(
+        self,
+        project_id: str,
+        entry_id: str,
+        query_terms: Sequence[str],
+        *,
+        limit: int = 50,
+        required_module: str = "medical_monitoring",
+        allowed_source_kinds: frozenset[str] | None = None,
+    ) -> List[Dict[str, Any]]:
+        """Search one current registered document without making claims."""
         if limit < 1 or limit > MAX_EVIDENCE_SPAN_SEARCH_RESULTS:
             raise ValueError(
                 "evidence span search limit must be between 1 and "
@@ -902,9 +922,12 @@ class SourceRegistryService:
             raise ValueError(
                 "source entry is outside the medical-monitoring module boundary"
             )
-        if entry.source_kind != "protocol_docx":
+        if (
+            allowed_source_kinds is not None
+            and entry.source_kind not in allowed_source_kinds
+        ):
             raise ValueError(
-                "evidence span search requires a registered protocol document"
+                "registered document kind is outside the evidence search scope"
             )
 
         current = max(
@@ -918,7 +941,7 @@ class SourceRegistryService:
         )
         if current.entry_id != entry.entry_id:
             raise ValueError(
-                "superseded registered protocol is not allowed for "
+                "superseded registered document is not allowed for "
                 f"medical-monitoring evidence search: {entry.entry_id}"
             )
 
@@ -942,7 +965,7 @@ class SourceRegistryService:
         ]
         if ambiguous:
             raise ValueError(
-                "ambiguous registered protocol spans for evidence search: "
+                "ambiguous registered document spans for evidence search: "
                 f"{sorted(ambiguous)[:5]}"
             )
 

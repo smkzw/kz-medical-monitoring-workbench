@@ -6,7 +6,7 @@ from datetime import date
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from packages.medical_monitoring.admission.document_evidence import (
     DOCUMENT_ROLES,
@@ -34,6 +34,7 @@ _MEDIA_TYPE_BY_SUFFIX = {
         "spreadsheetml.sheet"
     ),
 }
+_RETRIEVAL_SCHEMA_VERSION = "mm-monitoring-document-retrieval-v1"
 
 
 class MonitoringDocumentEvidenceResolver:
@@ -97,6 +98,73 @@ class MonitoringDocumentEvidenceResolver:
             registry_revision_sha256=registry_revision,
             roles=role_records,
         )
+
+    def retrieve_current_excerpts(
+        self,
+        *,
+        project_id: str,
+        binding: CurrentDocumentBinding,
+        query_terms: Sequence[str],
+        limit: int = 24,
+    ) -> dict[str, Any]:
+        """Retrieve locator-bound excerpts from one still-current document."""
+
+        if binding.role not in DOCUMENT_ROLES:
+            raise ValueError("monitoring document role is unsupported")
+        packet = self.resolve(
+            project_id=project_id,
+            selected_entry_ids={
+                binding.role: binding.source_entry_id,
+            },
+        )
+        evidence = next(
+            item for item in packet.roles if item.role == binding.role
+        )
+        current = evidence.binding
+        if (
+            evidence.status != "current"
+            or current is None
+            or current.source_entry_id != binding.source_entry_id
+            or current.content_sha256 != binding.content_sha256
+            or current.locator_index_sha256
+            != binding.locator_index_sha256
+        ):
+            raise ValueError("monitoring document binding is no longer current")
+        matches = self.source_registry.search_document_spans(
+            project_id,
+            binding.source_entry_id,
+            query_terms,
+            limit=limit,
+            required_module="medical_monitoring",
+            allowed_source_kinds=_SOURCE_KINDS_BY_ROLE[binding.role],
+        )
+        excerpts = [
+            {
+                "source_id": str(item["source_id"]),
+                "locator": str(item["locator"]),
+                "text": str(item["text"]),
+                "text_sha256": content_hash(str(item["text"])),
+                "matched_keywords": list(item["matched_keywords"]),
+            }
+            for item in matches
+        ]
+        payload = {
+            "schema_version": _RETRIEVAL_SCHEMA_VERSION,
+            "project_id": project_id,
+            "role": binding.role,
+            "source_entry_id": binding.source_entry_id,
+            "content_sha256": binding.content_sha256,
+            "locator_index_sha256": binding.locator_index_sha256,
+            "query_sha256": content_hash([
+                str(term).strip() for term in query_terms
+            ]),
+            "excerpts": excerpts,
+            "clinical_conclusions": [],
+        }
+        return {
+            **payload,
+            "packet_sha256": content_hash(payload),
+        }
 
     def _role_evidence(
         self,
