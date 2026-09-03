@@ -619,6 +619,108 @@ def test_dual_conflict_review_resolves_or_asks_one_plain_question() -> None:
     assert result["state"] == "needs_user_input"
 
 
+def test_conflict_review_accepts_equivalent_metadata_and_independent_evidence() -> None:
+    batch = _batch()
+    batch["candidates"][0]["locator_count"] = 2
+    batch["candidates"][0]["excerpts"].append(
+        {"locator": "doc:p2", "text": "研究方案版本与日期"}
+    )
+    batch["candidates"][1]["locator_count"] = 2
+    batch["candidates"][1]["sheets"].append(
+        {"locator": "xlsx:sheet:2", "sheet_name": "访视数据"}
+    )
+    _reconciliation, packet, analysis_primary, analysis_verifier = _conflict_context(
+        batch
+    )
+    primary = DocumentAuthorityConflictReview(
+        schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+        conflict_packet_sha256=packet["conflict_packet_sha256"],
+        decisions=(
+            ConflictDecision(
+                role="ecrf",
+                decision="selected",
+                selected_candidate_id="candidate_ecrf",
+                document_version="V1.0",
+                document_date="2024年4月17日",
+                confidence=0.88,
+                considered_candidate_ids=("candidate_protocol", "candidate_ecrf"),
+                supplementary_candidate_ids=(),
+                evidence_references=_refs(
+                    ("candidate_protocol", "doc:p1"),
+                    ("candidate_ecrf", "xlsx:sheet:1"),
+                ),
+            ),
+        ),
+    )
+    verifier = primary.model_copy(
+        update={
+            "decisions": (
+                primary.decisions[0].model_copy(
+                    update={
+                        "document_version": "1.0",
+                        "document_date": "2024-04-17",
+                        "confidence": 0.75,
+                        "evidence_references": _refs(
+                            ("candidate_protocol", "doc:p2"),
+                            ("candidate_ecrf", "xlsx:sheet:2"),
+                        ),
+                    }
+                ),
+            )
+        }
+    )
+
+    result = resolve_document_authority_conflicts(
+        batch,
+        analysis_primary,
+        analysis_verifier,
+        packet,
+        _review_run(primary, "primary"),
+        _review_run(verifier, "verifier"),
+    )
+
+    assert result["state"] == "resolved"
+    assert result["user_question"] == ""
+
+
+def test_conflict_review_keeps_low_consensus_confidence_unresolved() -> None:
+    batch = _batch()
+    _reconciliation, packet, analysis_primary, analysis_verifier = _conflict_context(
+        batch
+    )
+    review = DocumentAuthorityConflictReview(
+        schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+        conflict_packet_sha256=packet["conflict_packet_sha256"],
+        decisions=(
+            ConflictDecision(
+                role="ecrf",
+                decision="selected",
+                selected_candidate_id="candidate_ecrf",
+                document_version="V1.0",
+                confidence=0.74,
+                considered_candidate_ids=("candidate_protocol", "candidate_ecrf"),
+                supplementary_candidate_ids=(),
+                evidence_references=_refs(
+                    ("candidate_protocol", "doc:p1"),
+                    ("candidate_ecrf", "xlsx:sheet:1"),
+                ),
+            ),
+        ),
+    )
+
+    result = resolve_document_authority_conflicts(
+        batch,
+        analysis_primary,
+        analysis_verifier,
+        packet,
+        _review_run(review, "primary"),
+        _review_run(review, "verifier"),
+    )
+
+    assert result["state"] == "needs_user_input"
+    assert result["unresolved_roles"] == ["ecrf"]
+
+
 def test_tampered_conflict_packet_is_rejected() -> None:
     batch = _batch()
     _reconciliation, packet, analysis_primary, analysis_verifier = _conflict_context(batch)
