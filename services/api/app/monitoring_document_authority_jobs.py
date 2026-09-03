@@ -9,6 +9,8 @@ from packages.medical_monitoring.admission.document_authority import (
     PRIMARY_ADJUDICATION_PROMPT_VERSION,
     LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
     LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+    PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
     PRIMARY_PROMPT_VERSION,
     PRIMARY_REVIEW_PROMPT_VERSION,
     VERIFIER_PROMPT_VERSION,
@@ -298,44 +300,39 @@ def load_document_authority_review_run(
         and adjudication_context.get("schema_version")
         == "monitoring-document-authority-adjudication-v1"
     )
-    expected = (
-        (
-            MONITORING_C3_MAPPING_PROVIDER,
-            MONITORING_C3_MAPPING_MODEL,
-            (
-                LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION
-                if legacy_adjudication
-                else PRIMARY_ADJUDICATION_PROMPT_VERSION
-            ),
-        )
-        if role == "primary" and adjudication_context is not None
-        else (
-            MONITORING_C3_VERIFIER_PROVIDER,
-            MONITORING_C3_VERIFIER_MODEL,
-            (
-                LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION
-                if legacy_adjudication
-                else VERIFIER_ADJUDICATION_PROMPT_VERSION
-            ),
-        )
-        if adjudication_context is not None
-        else
-        (
-            MONITORING_C3_MAPPING_PROVIDER,
-            MONITORING_C3_MAPPING_MODEL,
-            PRIMARY_REVIEW_PROMPT_VERSION,
-        )
+    expected_provider_model = (
+        (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL)
         if role == "primary"
-        else (
-            MONITORING_C3_VERIFIER_PROVIDER,
-            MONITORING_C3_VERIFIER_MODEL,
-            VERIFIER_REVIEW_PROMPT_VERSION,
-        )
+        else (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL)
+    )
+    allowed_prompt_versions = (
+        {
+            LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION
+            if role == "primary"
+            else LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION
+        }
+        if legacy_adjudication
+        else {
+            PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+        }
+        if role == "primary" and adjudication_context is not None
+        else {
+            VERIFIER_ADJUDICATION_PROMPT_VERSION,
+            PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+        }
+        if adjudication_context is not None
+        else {
+            PRIMARY_REVIEW_PROMPT_VERSION
+            if role == "primary"
+            else VERIFIER_REVIEW_PROMPT_VERSION
+        }
     )
     if (
         job.status != MonitoringAiJobStatus.COMPLETED
         or job.task_type != MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW
-        or (job.provider, job.requested_model, job.prompt_version) != expected
+        or job.prompt_version not in allowed_prompt_versions
+        or (job.provider, job.requested_model) != expected_provider_model
         or job.response_model != job.requested_model
     ):
         raise DocumentAuthorityError("document_authority_review_job_identity_invalid")

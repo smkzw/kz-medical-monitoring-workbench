@@ -1162,6 +1162,7 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         business_key_prefix="document-authority-adjudication:",
     )
     assert len(adjudication_jobs) == 2
+    assert all(":v3:" in job.business_key for job in adjudication_jobs)
     primary_adjudication_job = next(
         job for job in adjudication_jobs if ":primary:" in job.business_key
     )
@@ -1227,6 +1228,7 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         assert adjudication_payload["document_authority_adjudication_context"] == context
         assert "document_authority_source_bindings" not in adjudication_payload
         assert "系统内最终裁决" in provider.envelopes[0].system_prompt
+        assert "不属于当前权威补充" in provider.envelopes[0].system_prompt
 
 
 def test_resolved_authority_promotes_selected_documents_atomically(

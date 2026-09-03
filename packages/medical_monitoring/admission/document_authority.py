@@ -26,9 +26,15 @@ VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v6"
 PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v6"
 VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v6"
 PRIMARY_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-primary-v2"
+    "monitoring-document-authority-adjudication-primary-v3"
 )
 VERIFIER_ADJUDICATION_PROMPT_VERSION = (
+    "monitoring-document-authority-adjudication-verifier-v3"
+)
+PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION = (
+    "monitoring-document-authority-adjudication-primary-v2"
+)
+PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION = (
     "monitoring-document-authority-adjudication-verifier-v2"
 )
 LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION = (
@@ -37,6 +43,30 @@ LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION = (
 LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION = (
     "monitoring-document-authority-adjudication-verifier-v1"
 )
+
+CURRENT_PROMPT_VERSIONS_BY_TASK = {
+    "document_authority_analysis": frozenset(
+        {PRIMARY_PROMPT_VERSION, VERIFIER_PROMPT_VERSION}
+    ),
+    "document_authority_review": frozenset(
+        {
+            PRIMARY_REVIEW_PROMPT_VERSION,
+            VERIFIER_REVIEW_PROMPT_VERSION,
+            PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            VERIFIER_ADJUDICATION_PROMPT_VERSION,
+        }
+    ),
+}
+LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK = {
+    "document_authority_review": frozenset(
+        {
+            PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+            LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+        }
+    )
+}
 
 _BATCH_KEYS = frozenset({"manifest_version", "batch_id", "candidates", "authority_status"})
 _CANDIDATE_KEYS = frozenset({
@@ -831,6 +861,10 @@ def resolve_document_authority_adjudication(
     if adjudication_context != expected_context:
         raise DocumentAuthorityError("document_authority_adjudication_context_tampered")
     expected_hash = str(conflict_packet["conflict_packet_sha256"])
+    prompt_pair = (
+        adjudication_primary.prompt_version,
+        adjudication_verifier.prompt_version,
+    )
     _validate_run_pair(
         adjudication_primary,
         adjudication_verifier,
@@ -839,6 +873,12 @@ def resolve_document_authority_adjudication(
             "legacy_adjudication"
             if adjudication_context.get("schema_version")
             == "monitoring-document-authority-adjudication-v1"
+            else "previous_adjudication"
+            if prompt_pair
+            == (
+                PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+                PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+            )
             else "adjudication"
         ),
     )
@@ -977,7 +1017,11 @@ def _validate_run_pair(
     input_hash: str,
     *,
     stage: Literal[
-        "analysis", "review", "adjudication", "legacy_adjudication"
+        "analysis",
+        "review",
+        "adjudication",
+        "previous_adjudication",
+        "legacy_adjudication",
     ],
 ) -> None:
     if left.run_id == right.run_id or left.job_id == right.job_id:
@@ -990,6 +1034,8 @@ def _validate_run_pair(
             (
                 LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION
                 if stage == "legacy_adjudication"
+                else PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION
+                if stage == "previous_adjudication"
                 else PRIMARY_ADJUDICATION_PROMPT_VERSION
                 if stage == "adjudication"
                 else PRIMARY_REVIEW_PROMPT_VERSION
@@ -1002,6 +1048,8 @@ def _validate_run_pair(
             (
                 LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION
                 if stage == "legacy_adjudication"
+                else PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION
+                if stage == "previous_adjudication"
                 else VERIFIER_ADJUDICATION_PROMPT_VERSION
                 if stage == "adjudication"
                 else VERIFIER_REVIEW_PROMPT_VERSION
