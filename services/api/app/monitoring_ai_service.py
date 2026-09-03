@@ -3236,6 +3236,9 @@ class MonitoringAiService:
                 "第14版）或空字符串，不得填写说明文字、箭头、括号或依据；"
                 "document_date只能填写单一日期（如2024-08-14、2024.8.14或"
                 "2024年8月14日）或空字符串，不得填写日期范围、说明或依据。"
+                " structured_payload.input_sha256必须逐字复制"
+                "document_authority_output_identity.required_value；该值是"
+                "冻结候选批次哈希，不是外层input_revision_sha256。"
             )
         elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
             system_prompt += (
@@ -3255,6 +3258,9 @@ class MonitoringAiService:
                 "evidence。document_version只能填写简短版本标识（如V1.3、14、"
                 "第14版）或空字符串；document_date只能填写一个无注释日期"
                 "（如2024-08-14、2024.8.14或2024年8月14日）或空字符串。"
+                " structured_payload.conflict_packet_sha256必须逐字复制"
+                "document_authority_output_identity.required_value，不是外层"
+                "input_revision_sha256。"
             )
         elif (
             job.task_type
@@ -3427,6 +3433,31 @@ class MonitoringAiService:
                     provider_input_payload
                 ),
                 "input_payload": provider_input_payload,
+                "document_authority_output_identity": (
+                    {
+                        "structured_payload_field": "input_sha256",
+                        "required_value": provider_input_payload[
+                            "document_authority_batch_sha256"
+                        ],
+                        "forbid_input_revision_sha256_substitution": True,
+                    }
+                    if job.task_type
+                    == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS
+                    else (
+                        {
+                            "structured_payload_field": (
+                                "conflict_packet_sha256"
+                            ),
+                            "required_value": provider_input_payload[
+                                "document_authority_conflict_packet_sha256"
+                            ],
+                            "forbid_input_revision_sha256_substitution": True,
+                        }
+                        if job.task_type
+                        == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW
+                        else None
+                    )
+                ),
                 "authorized_source_pairs": [
                     {
                         "source_entry_id": item.source_entry_id,
@@ -3449,6 +3480,15 @@ class MonitoringAiService:
         """Allow one retry only for shape or controlled identifier errors."""
 
         detail = MonitoringAiService._controlled_validation_error_text(exc)
+        if any(
+            marker in detail
+            for marker in (
+                "document authority outer copy",
+                '"type":"missing"',
+                '"type":"literal_error"',
+            )
+        ):
+            return False
         error_types = set(re.findall(r'"type":"([^"]+)"', detail))
         if error_types:
             if error_types == {"extra_forbidden"}:
@@ -3460,6 +3500,8 @@ class MonitoringAiService:
             for marker in (
                 "document version must be a controlled version identifier",
                 "document date must be a controlled date identifier",
+                "document_authority_analysis_stale",
+                "document_authority_conflict_review_stale",
             )
         )
 
@@ -3566,7 +3608,11 @@ class MonitoringAiService:
                 "可用性判断、置信度或locator引用。删除output_schema未列出的"
                 "claims、evidence及其他键。document_version只保留一个简短版本"
                 "标识或空字符串；document_date只保留一个无注释日期或空字符串。"
-                "不得引入新来源、新判断或新事实。"
+                "将内层身份字段逐字改为"
+                "original_task.input_payload中对应的"
+                "document_authority_batch_sha256或"
+                "document_authority_conflict_packet_sha256，绝不能使用外层"
+                "input_revision_sha256。不得引入新来源、新判断或新事实。"
             )
         if job.task_type == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING:
             context = input_payload.get("context")
