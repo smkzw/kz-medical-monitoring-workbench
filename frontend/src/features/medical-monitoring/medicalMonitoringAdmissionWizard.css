@@ -624,6 +624,67 @@
   background: #fff8f3;
 }
 
+.monitoring-admission-documents {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  border-radius: 10px;
+  background: #fbfcfd;
+}
+
+.monitoring-admission-documents > header,
+.monitoring-admission-documents li > span {
+  display: grid;
+  gap: 4px;
+}
+
+.monitoring-admission-documents > header span,
+.monitoring-admission-documents small {
+  color: var(--monitoring-muted, #64727d);
+}
+
+.monitoring-admission-documents ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.monitoring-admission-documents li {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.monitoring-admission-document-picker {
+  position: relative;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 13px;
+  border: 1px solid var(--monitoring-orange, #e96828);
+  border-radius: 6px;
+  color: var(--monitoring-orange, #e96828);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.monitoring-admission-document-picker input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
 .monitoring-admission[data-admission-phase="ready"] .monitoring-admission-actions {
   position: sticky;
   bottom: 0;

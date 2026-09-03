@@ -345,6 +345,62 @@ for (const invalid of [
 }
 check(uploadCalls.length === 1, "invalid browser uploads never reach fetch");
 
+const documentCalls = [];
+const documentApi = createMedicalMonitoringProductApi({
+  baseUrl: "http://127.0.0.1:8911/",
+  fetchImpl: async (url, options) => {
+    documentCalls.push({ url, options });
+    return jsonResponse({ ready: true, headline: "研究文件已准备好" });
+  },
+});
+const protocolFile = new File(["synthetic protocol"], "protocol.docx", {
+  type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+});
+await documentApi.getDataAdmissionDocumentReadiness("proj/01", "attempt:0002", {
+  signal: admissionSignal,
+});
+await documentApi.uploadStudyDocument("proj/01", "attempt:0002", "protocol", protocolFile, {
+  signal: admissionSignal,
+});
+await documentApi.startDataAdmissionMappingCandidates("proj/01", "attempt:0002", {
+  signal: admissionSignal,
+});
+check(
+  documentCalls[0].url.endsWith("/data-admissions/attempt%3A0002/study-documents"),
+  "document readiness stays on the admission attempt route",
+);
+check(documentCalls[0].options.method === "GET", "document readiness is a GET");
+check(documentCalls[0].options.body === undefined, "document readiness sends no body");
+check(
+  documentCalls[1].url.endsWith("/data-admissions/attempt%3A0002/study-documents?role=protocol"),
+  "study document upload is atomically scoped to the admission attempt",
+);
+check(documentCalls[1].options.method === "POST", "study document upload is a POST");
+check(documentCalls[1].options.body instanceof FormData, "study document upload is multipart");
+check(documentCalls[1].options.body.get("file")?.name === "protocol.docx", "study document upload includes the file");
+check(!("Content-Type" in documentCalls[1].options.headers), "browser supplies the study-document multipart boundary");
+check(
+  documentCalls[2].url.endsWith("/data-admissions/attempt%3A0002/mapping-candidates"),
+  "mapping start uses the dual-generation attempt route",
+);
+check(documentCalls[2].options.method === "POST", "mapping start is a POST");
+check(documentCalls[2].options.body === undefined, "mapping start sends no client-controlled body");
+check(
+  documentCalls.every((call) => call.options.signal === admissionSignal),
+  "study document calls forward the caller abort signal",
+);
+for (const invalid of [
+  () => documentApi.getDataAdmissionDocumentReadiness("proj", ""),
+  () => documentApi.uploadStudyDocument("proj", "", "protocol", protocolFile),
+  () => documentApi.uploadStudyDocument("proj", "attempt", "", protocolFile),
+  () => documentApi.uploadStudyDocument("proj", "attempt", "protocol", null),
+  () => documentApi.startDataAdmissionMappingCandidates("proj", ""),
+]) {
+  assert.throws(invalid, TypeError);
+  passed += 1;
+}
+check(documentCalls.length === 3, "invalid study document calls never reach fetch");
+
 const admissionErrorApi = createMedicalMonitoringProductApi({
   fetchImpl: async () => jsonResponse(
     {
@@ -404,6 +460,11 @@ check(
   MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionProfile("p", "a")
     === "/api/projects/p/modules/medical-monitoring/r7/data-admissions/a/profile",
   "admission profile path helper remains deterministic",
+);
+check(
+  MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStudyDocuments("p", "a")
+    === "/api/projects/p/modules/medical-monitoring/r7/data-admissions/a/study-documents",
+  "document readiness path helper remains deterministic",
 );
 
 console.log(`medicalMonitoringProductApi: ${passed} passed`);

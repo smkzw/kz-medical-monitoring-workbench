@@ -18,7 +18,7 @@ from .mapping_bridge import (
     MappingHarnessInput,
     admission_record_to_harness_input,
 )
-from .document_evidence import DOCUMENT_ROLES
+from .document_evidence import DOCUMENT_ROLES, MAPPING_REQUIRED_DOCUMENT_ROLES
 from .mapping_gate import (
     MONITORING_C3_LOCAL_FALLBACK_MODEL,
     MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
@@ -60,6 +60,12 @@ _REMOTE_UNAVAILABLE_FAILURES = frozenset({
     "provider_runtime_error",
 })
 DOCUMENT_SELECTION_KIND = "monitoring_document_selection"
+_DOCUMENT_ROLE_LABELS = {
+    "protocol": "研究方案",
+    "investigator_brochure": "研究者手册",
+    "ecrf": "电子病例报告表",
+    "sap": "统计分析计划",
+}
 
 
 def _anonymous_review_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -248,13 +254,28 @@ class AdmissionMappingPipeline:
                 verify_files=False,
             )
             technical = dict(record.get("technical_details") or {})
+            selections = self._document_selection_ids(
+                workspace_dir,
+                attempt_id,
+            )
             resolved = self._document_evidence_resolver(
                 project_id=project_id,
                 listing_admission_date=str(attempt.created_at)[:10],
-                selected_entry_ids=self._document_selection_ids(
-                    workspace_dir
-                ),
+                selected_entry_ids=selections,
             )
+            for item in resolved.roles:
+                if (
+                    item.status == "current"
+                    and item.binding is not None
+                    and item.role not in selections
+                ):
+                    self._write_document_selection(
+                        project_id=project_id,
+                        attempt_id=attempt_id,
+                        workspace_dir=workspace_dir,
+                        role=item.role,
+                        source_entry_id=item.binding.source_entry_id,
+                    )
             technical["monitoring_document_evidence"] = (
                 resolved.to_dict()
                 if hasattr(resolved, "to_dict")
@@ -278,18 +299,27 @@ class AdmissionMappingPipeline:
         )
 
     @staticmethod
-    def _document_selection_ids(workspace_dir: Path) -> dict[str, str]:
+    def _document_selection_ids(
+        workspace_dir: Path,
+        attempt_id: str,
+    ) -> dict[str, str]:
         store = _store(workspace_dir)
         try:
             selected = {}
             for role in DOCUMENT_ROLES:
                 row = store.get_domain_object(
                     DOCUMENT_SELECTION_KIND,
-                    role,
+                    f"{attempt_id}::{role}",
                 )
                 if row is None or not isinstance(row[1], Mapping):
                     continue
-                entry_id = str(row[1].get("source_entry_id") or "").strip()
+                payload = row[1]
+                if (
+                    payload.get("attempt_id") != attempt_id
+                    or payload.get("role") != role
+                ):
+                    continue
+                entry_id = str(payload.get("source_entry_id") or "").strip()
                 if entry_id:
                     selected[role] = entry_id
             return selected
@@ -327,7 +357,7 @@ class AdmissionMappingPipeline:
             attempt_id,
             verify_files=False,
         )
-        selections = self._document_selection_ids(workspace_dir)
+        selections = self._document_selection_ids(workspace_dir, attempt_id)
         selections[role] = source_entry_id
         packet = self._document_evidence_resolver(
             project_id=project_id,
@@ -354,24 +384,106 @@ class AdmissionMappingPipeline:
             raise AdmissionMappingPipelineError(
                 "mapping_document_selection_unusable"
             )
+        version = self._write_document_selection(
+            project_id=project_id,
+            attempt_id=attempt_id,
+            workspace_dir=workspace_dir,
+            role=role,
+            source_entry_id=source_entry_id,
+        )
+        return {
+            "role": role,
+            "source_entry_id": source_entry_id,
+            "version": version,
+        }
+
+    @staticmethod
+    def _write_document_selection(
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Path,
+        role: str,
+        source_entry_id: str,
+    ) -> int:
         store = _store(workspace_dir)
         try:
             version = store.put_domain_object(
                 DOCUMENT_SELECTION_KIND,
-                role,
+                f"{attempt_id}::{role}",
                 {
-                    "schema_version": "mm-c3-document-selection-v1",
+                    "schema_version": "mm-c3-document-selection-v2",
                     "project_id": project_id,
+                    "attempt_id": attempt_id,
                     "role": role,
                     "source_entry_id": source_entry_id,
                 },
             )
         finally:
             store.close()
+        return version
+
+    def document_readiness(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Path,
+    ) -> Mapping[str, Any]:
+        """Project document readiness without registry or model internals."""
+
+        self._ready_record(
+            project_id=project_id,
+            attempt_id=attempt_id,
+            workspace_dir=workspace_dir,
+        )
+        if self._document_evidence_resolver is None:
+            raise AdmissionMappingPipelineError(
+                "mapping_document_evidence_resolver_unavailable"
+            )
+        attempt = load_attempt(
+            Path(workspace_dir) / "admissions",
+            attempt_id,
+            verify_files=False,
+        )
+        packet = self._document_evidence_resolver(
+            project_id=project_id,
+            listing_admission_date=str(attempt.created_at)[:10],
+            selected_entry_ids=self._document_selection_ids(
+                workspace_dir,
+                attempt_id,
+            ),
+        )
+        status_text = {
+            "current": "已识别",
+            "missing": "尚未添加",
+            "ambiguous": "系统正在核对版本",
+            "incomplete": "需要重新识别",
+        }
+        roles = [
+            {
+                "role": item.role,
+                "label": _DOCUMENT_ROLE_LABELS[item.role],
+                "required_now": item.role in MAPPING_REQUIRED_DOCUMENT_ROLES,
+                "status": item.status,
+                "status_text": status_text[item.status],
+            }
+            for item in packet.roles
+        ]
+        ready = bool(packet.mapping_context_ready)
         return {
-            "role": role,
-            "source_entry_id": source_entry_id,
-            "version": version,
+            "ready": ready,
+            "headline": (
+                "研究方案和电子病例报告表已准备好"
+                if ready
+                else "还需补充研究方案或电子病例报告表"
+            ),
+            "guidance": (
+                "系统会自动完成字段理解和两次独立核对，无需逐项确认。"
+                if ready
+                else "添加文件后，系统会自动识别，不需要您填写技术信息。"
+            ),
+            "roles": roles,
         }
 
     def _cohort_contract(self, cohort: str) -> MonitoringMappingCohortContract:

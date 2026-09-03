@@ -5,7 +5,6 @@ import {
   admissionPrimaryAction,
   admissionSecondaryActions,
   admissionStepView,
-  admissionTechnicalRows,
   admissionWizardReducer,
   createAdmissionWizardState,
   readAdmissionProfile,
@@ -30,6 +29,19 @@ function requestKey(prefix) {
   return `${prefix}-${random}`;
 }
 
+export async function loadOrStartAdmissionMapping(api, projectId, attemptId) {
+  try {
+    return await api.listDataAdmissionMappingCandidates(
+      projectId,
+      attemptId,
+      { focus: MAPPING_FOCUS_ALL },
+    );
+  } catch (error) {
+    if (error?.detail?.code !== "mapping_candidates_not_found") throw error;
+    return api.startDataAdmissionMappingCandidates(projectId, attemptId);
+  }
+}
+
 function mappingTypeText(value) {
   return ({
     string: "文本",
@@ -42,31 +54,42 @@ function mappingTypeText(value) {
   })[value] || "类型待定";
 }
 
-function TechnicalRows({ rows }) {
-  if (!rows) return null;
+function DocumentReadinessPanel({ state, onFile, onRetry }) {
+  if (!state || (state.phase === "loading" && !state.payload)) {
+    return <p className="monitoring-admission-loading" role="status">正在核对研究文档…</p>;
+  }
+  const payload = state.payload || {};
   return (
-    <dl className="monitoring-admission-tech-list">
-      {rows.map((row) => (
-        <div className="monitoring-admission-tech-row" key={row.label}>
-          <dt>{row.label}</dt>
-          <dd>
-            {row.files ? (
-              <ul className="monitoring-admission-tech-files">
-                {row.files.map((file) => (
-                  <li key={file.name}>
-                    {file.name}
-                    {file.sizeText ? ` · ${file.sizeText}` : ""}
-                    {file.digest ? ` · 校验值 ${file.digest}` : ""}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              row.value
-            )}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <section className="monitoring-admission-documents" aria-label="研究文档准备情况">
+      <header>
+        <strong>{payload.headline || "正在核对研究文档"}</strong>
+        <span>{payload.guidance || "系统会自动识别，无需填写技术信息。"}</span>
+      </header>
+      <ul>
+        {(payload.roles || []).map((item) => (
+          <li key={item.role}>
+            <span><strong>{item.label}</strong><small>{item.status_text}</small></span>
+            {item.required_now && item.status !== "current" ? (
+              <label className="monitoring-admission-document-picker">
+                <input
+                  type="file"
+                  accept={item.role === "protocol" ? ".docx" : ".xlsx"}
+                  disabled={state.phase === "uploading"}
+                  onChange={(event) => onFile?.(item.role, event.target.files?.[0])}
+                />
+                {state.phase === "uploading" ? "正在识别…" : "添加文件"}
+              </label>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {state.error ? <p className="monitoring-admission-warning" role="alert">{state.error}</p> : null}
+      {state.phase === "failed" ? (
+        <button type="button" className="monitoring-admission-secondary" onClick={onRetry}>
+          重新核对研究文件
+        </button>
+      ) : null}
+    </section>
   );
 }
 
@@ -228,6 +251,7 @@ function MappingConfirmPanel({ mappingState, onAnswerCard }) {
 
 export function MedicalMonitoringAdmissionWizardView({
   state,
+  documentState = { phase: "ready", payload: { ready: true, roles: [] }, error: null },
   mappingState = null,
   factState = null,
   onSourceDirChange,
@@ -235,6 +259,8 @@ export function MedicalMonitoringAdmissionWizardView({
   onPrimaryAction,
   onSecondaryAction,
   onAnswerCard,
+  onDocumentFile,
+  onDocumentRetry,
 }) {
   const phase = state?.phase || "input";
   const stepIndex = state?.stepIndex || 0;
@@ -250,13 +276,14 @@ export function MedicalMonitoringAdmissionWizardView({
         : resolvedFactState.phase === "failed"
           ? { key: "generate-facts", label: "重试生成监查数据", disabled: false }
           : { key: "generating-facts", label: "正在生成监查数据…", disabled: true }
+      : stepIndex === 2 && phase !== "done" && documentState?.payload?.ready !== true
+      ? { key: "documents-required", label: "请先添加所需文件", disabled: true }
       : stepIndex === 2 && phase !== "done"
       ? admissionMappingPrimaryAction(resolvedMappingState)
       : admissionPrimaryAction(state)
   );
   const secondary = admissionSecondaryActions(state);
   const validation = validateAdmissionSourceDir(state?.sourceDir);
-  const technical = profile ? admissionTechnicalRows(profile.technical) : null;
 
   return (
     <section
@@ -381,16 +408,21 @@ export function MedicalMonitoringAdmissionWizardView({
                 </ul>
               </section>
             ))}
-            <details className="monitoring-admission-technical">
-              <summary>技术详情</summary>
-              <TechnicalRows rows={technical} />
-            </details>
           </div>
         ) : profile && stepIndex === 2 ? (
-          <MappingConfirmPanel
-            mappingState={resolvedMappingState}
-            onAnswerCard={onAnswerCard}
-          />
+          <>
+            <DocumentReadinessPanel
+              state={documentState}
+              onFile={onDocumentFile}
+              onRetry={onDocumentRetry}
+            />
+            {documentState?.payload?.ready ? (
+              <MappingConfirmPanel
+                mappingState={resolvedMappingState}
+                onAnswerCard={onAnswerCard}
+              />
+            ) : null}
+          </>
         ) : null}
       </div>
 
@@ -447,9 +479,16 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     undefined,
     createAdmissionMappingConfirmState,
   );
+  const [documentState, setDocumentState] = useState({
+    phase: "idle",
+    payload: null,
+    error: null,
+  });
   const adoptInFlight = useRef(false);
   const adjudicationInFlight = useRef(false);
   const confirmInFlight = useRef(false);
+  const documentUploadInFlight = useRef(false);
+  const documentRequestGeneration = useRef(0);
   const factsInFlight = useRef(false);
   const [factState, setFactState] = useState({ phase: "idle", payload: null, error: null });
 
@@ -482,6 +521,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         : await api.createDataAdmission(state.projectId, { source_dir: state.sourceDir });
       dispatch({ type: "import-created", payload });
       mappingDispatch({ type: "reset" });
+      setDocumentState({ phase: "idle", payload: null, error: null });
       adoptInFlight.current = false;
       adjudicationInFlight.current = false;
     } catch (error) {
@@ -493,10 +533,10 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     if (!state.projectId || !state.attemptId) return;
     mappingDispatch({ type: "load-start" });
     try {
-      const payload = await api.listDataAdmissionMappingCandidates(
+      const payload = await loadOrStartAdmissionMapping(
+        api,
         state.projectId,
         state.attemptId,
-        { focus: MAPPING_FOCUS_ALL },
       );
       mappingDispatch({ type: "load-ready", payload });
       if (
@@ -513,6 +553,62 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           guidance: ["请稍后重试；若持续失败，请确认字段识别已生成完成。"],
         },
       });
+    }
+  }, [api, state.attemptId, state.projectId]);
+
+  const loadDocumentReadiness = useCallback(async () => {
+    if (!state.projectId || !state.attemptId) return;
+    const generation = documentRequestGeneration.current + 1;
+    documentRequestGeneration.current = generation;
+    setDocumentState((current) => ({ ...current, phase: "loading", error: null }));
+    try {
+      const payload = await api.getDataAdmissionDocumentReadiness(
+        state.projectId,
+        state.attemptId,
+      );
+      if (documentRequestGeneration.current === generation) {
+        setDocumentState({ phase: "ready", payload, error: null });
+      }
+    } catch (error) {
+      if (documentRequestGeneration.current === generation) {
+        setDocumentState((current) => ({
+          ...current,
+          phase: "failed",
+          error: error?.detail?.message || error?.message || "研究文档核对失败。",
+        }));
+      }
+    }
+  }, [api, state.attemptId, state.projectId]);
+
+  const uploadDocument = useCallback(async (role, file) => {
+    if (
+      !file || !state.projectId || !state.attemptId
+      || documentUploadInFlight.current
+    ) return;
+    documentUploadInFlight.current = true;
+    const generation = documentRequestGeneration.current + 1;
+    documentRequestGeneration.current = generation;
+    setDocumentState((current) => ({ ...current, phase: "uploading", error: null }));
+    try {
+      const payload = await api.uploadStudyDocument(
+        state.projectId,
+        state.attemptId,
+        role,
+        file,
+      );
+      if (documentRequestGeneration.current === generation) {
+        setDocumentState({ phase: "ready", payload, error: null });
+      }
+    } catch (error) {
+      if (documentRequestGeneration.current === generation) {
+        setDocumentState((current) => ({
+          ...current,
+          phase: "failed",
+          error: error?.detail?.message || error?.message || "文件识别失败。",
+        }));
+      }
+    } finally {
+      documentUploadInFlight.current = false;
     }
   }, [api, state.attemptId, state.projectId]);
 
@@ -538,10 +634,28 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   }, [api, state.phase, state.attemptId, state.projectId, onAdmitted]);
 
   useEffect(() => {
-    if (state.phase !== "ready") return undefined;
-    if (mappingState.phase === "idle") loadMappingCandidates();
+    if (state.phase !== "ready" || state.stepIndex !== 2) return undefined;
+    if (documentState.phase === "idle") loadDocumentReadiness();
+    if (documentState.payload?.ready && mappingState.phase === "idle") loadMappingCandidates();
     return undefined;
-  }, [loadMappingCandidates, mappingState.phase, state.phase, state.stepIndex]);
+  }, [
+    documentState.payload,
+    documentState.phase,
+    loadDocumentReadiness,
+    loadMappingCandidates,
+    mappingState.phase,
+    state.phase,
+    state.stepIndex,
+  ]);
+
+  useEffect(() => {
+    if (
+      mappingState.phase !== "ready"
+      || mappingState.payload?.state !== "generating"
+    ) return undefined;
+    const timer = setTimeout(loadMappingCandidates, 2500);
+    return () => clearTimeout(timer);
+  }, [loadMappingCandidates, mappingState.payload?.state, mappingState.phase]);
 
   const advanceAdjudication = useCallback(async (draft) => {
     if (!draft?.draft_id || adjudicationInFlight.current) return;
@@ -784,6 +898,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   return (
     <MedicalMonitoringAdmissionWizardView
       state={state}
+      documentState={documentState}
       mappingState={mappingState}
       factState={factState}
       onSourceDirChange={(value) => dispatch({ type: "source-dir-change", value })}
@@ -791,6 +906,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onPrimaryAction={onPrimaryAction}
       onSecondaryAction={onSecondaryAction}
       onAnswerCard={onAnswerCard}
+      onDocumentFile={uploadDocument}
+      onDocumentRetry={loadDocumentReadiness}
     />
   );
 }

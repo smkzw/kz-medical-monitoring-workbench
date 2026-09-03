@@ -134,9 +134,28 @@ check(wizardMountHtml.includes('id="monitoring-admission-files"'), "mounted wiza
 check(wizardMountHtml.includes("选择数据") && wizardMountHtml.includes("查看系统识别结果") && wizardMountHtml.includes("核对系统识别"), "mounted wizard renders the three native Chinese steps");
 check(wizardMountHtml.includes("disabled"), "wizard entry primary action waits for selected files or a fallback location");
 
+const mappingFlowCalls = [];
+const startedMapping = await wizardBundle.loadOrStartAdmissionMapping({
+  listDataAdmissionMappingCandidates: async () => {
+    mappingFlowCalls.push("list");
+    const error = new Error("尚未生成");
+    error.detail = { code: "mapping_candidates_not_found" };
+    throw error;
+  },
+  startDataAdmissionMappingCandidates: async () => {
+    mappingFlowCalls.push("start-dual");
+    return { state: "generating", candidates: [] };
+  },
+}, "proj-c2", "att-c2-0001");
+check(
+  mappingFlowCalls.join(",") === "list,start-dual",
+  "a genuinely new admission starts the dual analysis after the empty read",
+);
+check(startedMapping.state === "generating", "new dual analysis returns the generating state");
+
 // --- wizard ready phase on the real state machine proves the C1 payload
-// contract flows through the mounted component: summary first, technical
-// details collapsed ---
+// contract flows through the mounted component without exposing internal
+// storage identities ---
 const admittedState = [
   wizardState.createAdmissionWizardState({ projectId: "proj-c2" }),
   { type: "source-dir-change", value: "/tmp/mm-c2-generated-listings" },
@@ -147,16 +166,17 @@ const readyState = wizardState.admissionWizardReducer(admittedState, { type: "pr
 check(readyState.phase === "ready" && readyState.profile, "generated C1 payload drives the wizard to the ready phase");
 const readyHtml = render(element(wizardBundle, "MedicalMonitoringAdmissionWizardView", { state: readyState }));
 const summaryIndex = readyHtml.indexOf("2 个文件 · 2 张数据表 · 25 行数据");
-const technicalIndex = readyHtml.indexOf("技术详情");
 check(summaryIndex !== -1, "ready wizard renders the generated structure summary");
-check(technicalIndex !== -1 && summaryIndex < technicalIndex, "structure summary leads the collapsed technical details");
-check(readyHtml.includes("<details") && readyHtml.indexOf("<details") < technicalIndex, "technical details render only inside the collapsed region");
+check(!readyHtml.includes("技术详情"), "ready wizard hides engineering details");
+check(!readyHtml.includes("manifest-att-c2-0001"), "ready wizard hides manifest identities");
 check(readyHtml.includes("受试者标识"), "generated suggested roles reach the review step");
 
 // --- wiring pins: whitespace-normalized source sequences of the loop ---
 const source = fs.readFileSync(path.join(here, "MedicalMonitoringProductLoop.jsx"), "utf8");
+const wizardSource = fs.readFileSync(path.join(here, "MedicalMonitoringAdmissionWizard.jsx"), "utf8");
 const compact = (text) => text.replace(/\s+/g, "");
 const src = compact(source);
+const wizardSrc = compact(wizardSource);
 const needle = (text) => compact(text);
 
 {
@@ -178,6 +198,25 @@ const needle = (text) => compact(text);
   );
   passed += 4;
 }
+
+check(
+  wizardSrc.includes(needle(`const payload = await api.uploadStudyDocument(
+        state.projectId,
+        state.attemptId,
+        role,
+        file,
+      );`)),
+  "one file choice uses the attempt-scoped atomic document endpoint",
+);
+check(
+  wizardSrc.includes("api.startDataAdmissionMappingCandidates")
+    && wizardSrc.includes("mapping_candidates_not_found"),
+  "a first admission automatically starts dual mapping when no candidates exist",
+);
+check(
+  wizardSrc.includes(needle('mappingState.payload?.state !== "generating"')),
+  "only active generation is polled; terminal attention waits for a recovery action",
+);
 
 // --- result navigation and board gating unchanged ---
 {

@@ -579,9 +579,9 @@ def test_legacy_route_error_is_actionable_for_users() -> None:
 
     assert response.status_code == 409
     body = response.body.decode("utf-8")
-    assert "旧版本单模型" in body
-    assert "双模型草稿" in body
-    assert "重新生成" in body
+    assert "字段识别结果已过期" in body
+    assert "重新识别" in body
+    assert "点击重试" in body
 
 
 def test_reconciliation_errors_do_not_ask_user_for_bulk_review() -> None:
