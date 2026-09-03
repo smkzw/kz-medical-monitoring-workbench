@@ -32,6 +32,7 @@ DEFAULT_ANOMALY_LIMIT = 10
 DEFAULT_MAX_TEXT_LENGTH = 512
 FIELD_RELATIONSHIP_TYPES = frozenset(
     {
+        "statistical_pair",
         "term_code_pair",
         "site_identity_pair",
         "visit_identity_pair",

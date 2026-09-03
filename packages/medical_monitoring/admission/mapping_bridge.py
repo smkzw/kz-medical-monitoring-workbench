@@ -8,16 +8,34 @@ enforces the fail-closed source-to-profile reconciliation
 (:mod:`admission.workbook_manifest`), so the dual models can only run on an
 input whose physical workbook manifest is present, digest-bound to the
 staged files, and fully explained against the admitted tables.
+
+When a deterministic relationship profiler is supplied, the adapter also
+embeds its fail-closed relationship evidence
+(:mod:`admission.relationship_profile_gate`): same-table pair evidence joins
+the harness ``relationships`` channel, cross-table same-name evidence joins
+the read-only ``cross_table_relationships`` context, and the whole evidence
+payload is content-bound into ``input_sha256`` / ``profile_sha256`` so the
+frozen input revision covers it. Mapping submission paths must never run
+without that evidence.
 """
 
 from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Optional, Sequence
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence
 
 from ..intelligence.primitives import content_hash
 from .mapping_gate import MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION
+from .relationship_profile_gate import (
+    RELATIONSHIP_PROFILE_SCHEMA_VERSION,
+    RelationshipProfileGateError,
+    cross_table_relationship_entries,
+    relationship_input_binding_sha256,
+    relationship_rows_by_domain,
+    same_table_relationship_entries,
+    validate_relationship_profile,
+)
 from .workbook_manifest import (
     SOURCE_PROFILE_GATE_SCHEMA_VERSION,
     WorkbookManifestError,
@@ -25,7 +43,7 @@ from .workbook_manifest import (
 )
 
 
-MAPPING_BRIDGE_SCHEMA_VERSION = "mm-c3-mapping-profile-bridge-v5"
+MAPPING_BRIDGE_SCHEMA_VERSION = "mm-c3-mapping-profile-bridge-v6"
 PROFILE_SCHEMA_VERSION = "monitoring_ai_field_profile_v3"
 _SUBJECT_ROLE = "受试者标识"
 _TYPE_MAP = {
@@ -251,6 +269,7 @@ def admission_record_to_harness_input(
     table_rows_by_snapshot: Optional[
         Mapping[str, Mapping[str, Sequence[Mapping[str, Any]]]]
     ] = None,
+    relationship_profiler: Optional[Callable[..., Any]] = None,
 ) -> MappingHarnessInput:
     """Build the exact input accepted by ``MonitoringAiService``.
 
@@ -259,6 +278,15 @@ def admission_record_to_harness_input(
     missing, mutated after admission, or not fully reconciled with the
     admitted tables.  The reconciliation summary is bound into the harness
     profile via ``input_completeness`` and participates in ``input_sha256``.
+
+    When ``relationship_profiler`` is provided it must be a pure deterministic
+    callable invoked as ``profiler(rows_by_domain=..., table_field_order=...,
+    input_binding_sha256=...)`` returning the payload contract of
+    :mod:`admission.relationship_profile_gate`. The evidence is validated
+    fail-closed and bound into the frozen input digests; a missing, malformed
+    or unbound payload refuses the whole mapping input. Submission paths
+    (the admission mapping pipeline) must always supply the profiler; the
+    parameter stays optional only for the pure-adapter recovery paths.
     """
     if record.get("project_id") != project_id or record.get("attempt_id") != attempt_id:
         raise MappingBridgeError("admission identity does not match mapping request")
@@ -282,13 +310,14 @@ def admission_record_to_harness_input(
     snapshot_ids = technical.get("snapshot_ids") or []
     if len(snapshot_ids) != len(tables):
         raise MappingBridgeError("admission table snapshot binding is incomplete")
+    rows_by_snapshot = dict(table_rows_by_snapshot or {})
     for table_index, table in enumerate(tables):
         domain = str(table.get("name") or table.get("table_name") or "").strip()
         columns = table.get("columns") or []
         if not isinstance(columns, Sequence) or isinstance(columns, (str, bytes)):
             raise MappingBridgeError("admission table columns are malformed")
         snapshot_id = str(snapshot_ids[table_index] or "")
-        snapshot_content = (table_rows_by_snapshot or {}).get(snapshot_id, {})
+        snapshot_content = rows_by_snapshot.get(snapshot_id, {})
         rows = snapshot_content.get(domain, []) if isinstance(snapshot_content, Mapping) else []
         if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
             raise MappingBridgeError("admission table content is malformed")
@@ -320,6 +349,57 @@ def admission_record_to_harness_input(
         "manifest_sha256": completeness["manifest_sha256"],
         "reconciliation": completeness,
     }
+    relationship_summary: dict[str, Any] = {}
+    relationship_sections: dict[str, Any] = {}
+    if relationship_profiler is not None:
+        try:
+            evidence_rows_by_domain = relationship_rows_by_domain(
+                table_bindings,
+                rows_by_snapshot,
+            )
+            input_binding_sha256 = relationship_input_binding_sha256(
+                rows_by_snapshot
+            )
+            payload = validate_relationship_profile(
+                relationship_profiler(
+                    rows_by_domain=evidence_rows_by_domain,
+                    table_field_order=table_field_order,
+                    input_binding_sha256=input_binding_sha256,
+                ),
+                fields_by_domain={
+                    domain: set(order)
+                    for domain, order in table_field_order.items()
+                },
+                rows_by_domain=evidence_rows_by_domain,
+                input_binding_sha256=input_binding_sha256,
+            )
+        except RelationshipProfileGateError as exc:
+            error = MappingBridgeError(
+                f"relationship profile gate refused the mapping input: {exc.code}"
+            )
+            error.code = exc.code
+            raise error from exc
+        except Exception as exc:
+            error = MappingBridgeError(
+                "relationship profiler failed before the evidence could be gated"
+            )
+            error.code = "relationship_profiler_failed"
+            raise error from exc
+        same_table_entries = same_table_relationship_entries(payload)
+        cross_table_entries = cross_table_relationship_entries(payload)
+        relationship_summary = {
+            "schema_version": RELATIONSHIP_PROFILE_SCHEMA_VERSION,
+            "profiler_contract": payload["profiler_contract"],
+            "input_binding_sha256": payload["input_binding_sha256"],
+            "evidence_sha256": content_hash(payload),
+            "same_table_pair_count": len(same_table_entries),
+            "cross_table_entry_count": len(cross_table_entries),
+        }
+        relationship_sections = {
+            "relationships": same_table_entries,
+            "cross_table_relationships": cross_table_entries,
+            "relationship_profile": relationship_summary,
+        }
     input_sha256 = content_hash({
         "mapping_cohort_schema_version": MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION,
         "project_id": project_id,
@@ -328,6 +408,12 @@ def admission_record_to_harness_input(
         "table_bindings": table_bindings,
         "fields": fields,
         "input_completeness": input_completeness,
+        "relationship_profile": relationship_summary,
+        "relationships": relationship_sections.get("relationships", []),
+        "cross_table_relationships": relationship_sections.get(
+            "cross_table_relationships",
+            [],
+        ),
     })
     profile: dict[str, Any] = {
         "schema_version": PROFILE_SCHEMA_VERSION,
@@ -343,15 +429,20 @@ def admission_record_to_harness_input(
         "row_count": sum(int(table.get("row_count") or 0) for table in tables),
         "input_sha256": input_sha256,
         "fields": fields,
-        "relationships": [],
+        "relationships": relationship_sections.get("relationships", []),
         "table_bindings": table_bindings,
         "table_field_order": [
             {"domain": domain, "field_order": order}
             for domain, order in table_field_order.items()
         ],
         "input_completeness": input_completeness,
-        "payload_policy": "bounded_full_column_statistics_source_labels_and_redacted_row_context_v3",
+        "payload_policy": (
+            "bounded_full_column_statistics_source_labels_"
+            "redacted_row_context_and_relationship_profile_v4"
+        ),
     }
+    if relationship_sections:
+        profile.update(relationship_sections)
     profile["profile_sha256"] = content_hash(profile)
     revision = {
         "project_id": project_id,

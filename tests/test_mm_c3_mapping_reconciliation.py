@@ -573,3 +573,104 @@ def test_acceptance_rejects_ctcae_grade_conclusion_in_provider_output() -> None:
     with pytest.raises(ValidationError) as exc:
         service_module._FieldMappingItem.model_validate(query_push)
     assert "CTCAE grade, risk or Query conclusions" in str(exc.value)
+
+
+def test_service_reconciliation_refuses_cohorts_mapped_on_different_inputs() -> None:
+    """Dual-cohort input validation: agreement only counts on one frozen input.
+
+    The primary and verifier cohorts must carry the same
+    ``input_revision_sha256`` — the digest that binds the field profile,
+    its sources and the frozen relationship evidence. Diverging revisions
+    mean the cohorts did not see identical inputs and must never reconcile.
+    """
+
+    from datetime import datetime, timedelta, timezone
+
+    from packages.medical_monitoring.admission.mapping_confirmation import (
+        MONITORING_C3_VERIFIER_PROMPT_VERSION,
+    )
+
+    now = datetime.now(timezone.utc)
+
+    def _job(job_id: str, revision: str, prompt: str, provider: str, model: str):
+        return SimpleNamespace(
+            job_id=job_id,
+            status="completed",
+            prompt_version=prompt,
+            input_revision_sha256=revision,
+            created_at=now,
+            provider=provider,
+            requested_model=model,
+        )
+
+    primary_jobs = (
+        _job(
+            "primary-1",
+            "rev-a",
+            "monitoring-listing-field-mapping-v19",
+            "cms-smk",
+            "MiniMax-M3",
+        ),
+    )
+    verifier_jobs = (
+        _job(
+            "verifier-1",
+            "rev-b",
+            MONITORING_C3_VERIFIER_PROMPT_VERSION,
+            "zhipu-coding-plan",
+            "glm-5.3-flash",
+        ),
+    )
+
+    class Draft:
+        batch_id = "attempt-1"
+        draft_id = "draft-1"
+        version = 1
+
+        def model_dump(self, mode="json"):
+            return {
+                "project_id": "p1",
+                "draft_id": self.draft_id,
+                "batch_id": self.batch_id,
+                "version": self.version,
+                "fields": DRAFT_FIELDS,
+            }
+
+    quality = SimpleNamespace(as_payload=lambda: {"confirmable": True})
+
+    def _list_jobs(_project, *args, task_type="", business_key_prefix=""):
+        if business_key_prefix.startswith("listing-field-mapping:"):
+            return primary_jobs
+        return verifier_jobs
+
+    repo = SimpleNamespace(
+        get_draft=lambda *_args: Draft(),
+        semantic_quality=lambda *_args: quality,
+    )
+    ai_repo = SimpleNamespace(
+        list_jobs=_list_jobs,
+        candidates=lambda *_args: (
+            SimpleNamespace(
+                candidate_id="cand-1",
+                evidence=(),
+                structured_payload={"field_mappings": []},
+            ),
+        ),
+    )
+    service = AdmissionMappingConfirmationService(
+        mapping_pipeline=SimpleNamespace(),
+        mapping_repository=repo,
+        ai_repository=ai_repo,
+        prompt_version="prompt",
+        accepted_status="accepted",
+        proposed_status="proposed",
+    )
+
+    with pytest.raises(AdmissionMappingPipelineError) as exc:
+        service.reconcile_with_verifier(
+            project_id="p1",
+            attempt_id="attempt-1",
+            draft_id="draft-1",
+            workspace_dir=None,
+        )
+    assert exc.value.code == "mapping_cohort_input_mismatch"
