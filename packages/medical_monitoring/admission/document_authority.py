@@ -26,22 +26,23 @@ VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v6"
 PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v6"
 VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v6"
 PRIMARY_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-primary-v4"
+    "monitoring-document-authority-adjudication-primary-v5"
 )
 VERIFIER_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-verifier-v4"
+    "monitoring-document-authority-adjudication-verifier-v5"
 )
-PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-primary-v3"
+REPLAY_ADJUDICATION_PROMPT_PAIRS = frozenset(
+    (
+        f"monitoring-document-authority-adjudication-primary-v{version}",
+        f"monitoring-document-authority-adjudication-verifier-v{version}",
+    )
+    for version in (2, 3, 4)
 )
-PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-verifier-v3"
+REPLAY_PRIMARY_ADJUDICATION_PROMPT_VERSIONS = frozenset(
+    pair[0] for pair in REPLAY_ADJUDICATION_PROMPT_PAIRS
 )
-OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-primary-v2"
-)
-OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-verifier-v2"
+REPLAY_VERIFIER_ADJUDICATION_PROMPT_VERSIONS = frozenset(
+    pair[1] for pair in REPLAY_ADJUDICATION_PROMPT_PAIRS
 )
 LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION = (
     "monitoring-document-authority-adjudication-primary-v1"
@@ -66,10 +67,8 @@ CURRENT_PROMPT_VERSIONS_BY_TASK = {
 LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK = {
     "document_authority_review": frozenset(
         {
-            PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-            PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-            OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-            OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+            *REPLAY_PRIMARY_ADJUDICATION_PROMPT_VERSIONS,
+            *REPLAY_VERIFIER_ADJUDICATION_PROMPT_VERSIONS,
             LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
             LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
         }
@@ -299,23 +298,38 @@ def validate_document_authority_adjudication_review(
     packet: Mapping[str, Any],
     context: Mapping[str, Any],
     review: "DocumentAuthorityConflictReview",
+    *,
+    prompt_version: str | None = None,
 ) -> None:
     validate_document_authority_adjudication_context(packet, context)
     if context["schema_version"] != "monitoring-document-authority-adjudication-v2":
         validate_document_authority_conflict_review(packet, review)
         return
-    validate_document_authority_conflict_review(packet, review)
-    roles = tuple(str(value) for value in packet["conflict_roles"])
+    if review.conflict_packet_sha256 != packet["conflict_packet_sha256"]:
+        raise DocumentAuthorityError("document_authority_review_input_mismatch")
+    replay_prompt_versions = (
+        REPLAY_PRIMARY_ADJUDICATION_PROMPT_VERSIONS
+        | REPLAY_VERIFIER_ADJUDICATION_PROMPT_VERSIONS
+    )
+    roles = tuple(
+        str(value)
+        for value in (
+            packet["conflict_roles"]
+            if prompt_version in replay_prompt_versions
+            else context["unresolved_roles"]
+        )
+    )
     decisions = _review_index(review, roles)
     candidates = {
         str(item["candidate_id"]): item for item in packet["candidates"]
     }
-    for role in context["unresolved_roles"]:
+    unresolved_roles = set(context["unresolved_roles"])
+    for role in roles:
         _validate_conflict_decision(
             decisions[role],
             set(packet["allowed_candidate_ids_by_role"][role]),
             candidates,
-            require_complete_disposition=True,
+            require_complete_disposition=role in unresolved_roles,
         )
 
 
@@ -882,23 +896,16 @@ def resolve_document_authority_adjudication(
             if adjudication_context.get("schema_version")
             == "monitoring-document-authority-adjudication-v1"
             else "previous_adjudication"
-            if prompt_pair
-            in {
-                (
-                    PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-                    PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-                ),
-                (
-                    OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-                    OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-                ),
-            }
+            if prompt_pair in REPLAY_ADJUDICATION_PROMPT_PAIRS
             else "adjudication"
         ),
     )
     for run in (adjudication_primary, adjudication_verifier):
         validate_document_authority_adjudication_review(
-            conflict_packet, adjudication_context, run.review
+            conflict_packet,
+            adjudication_context,
+            run.review,
+            prompt_version=run.prompt_version,
         )
 
     initial = resolve_document_authority_conflicts(
@@ -909,9 +916,19 @@ def resolve_document_authority_adjudication(
         review_primary,
         review_verifier,
     )
-    roles = tuple(str(value) for value in conflict_packet["conflict_roles"])
-    left = _review_index(adjudication_primary.review, roles)
-    right = _review_index(adjudication_verifier.review, roles)
+    replay_pair = prompt_pair in REPLAY_ADJUDICATION_PROMPT_PAIRS
+    output_roles = tuple(
+        str(value)
+        for value in (
+            conflict_packet["conflict_roles"]
+            if adjudication_context["schema_version"]
+            == "monitoring-document-authority-adjudication-v1"
+            or replay_pair
+            else adjudication_context["unresolved_roles"]
+        )
+    )
+    left = _review_index(adjudication_primary.review, output_roles)
+    right = _review_index(adjudication_verifier.review, output_roles)
     candidates = {
         str(item["candidate_id"]): item for item in conflict_packet["candidates"]
     }
@@ -1043,16 +1060,10 @@ def _validate_run_pair(
     if left.job_input_revision_sha256 != right.job_input_revision_sha256:
         raise DocumentAuthorityError("document_authority_input_revision_mismatch")
     previous_prompt_pair = (left.prompt_version, right.prompt_version)
-    if stage == "previous_adjudication" and previous_prompt_pair not in {
-        (
-            PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-            PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-        ),
-        (
-            OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-            OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-        ),
-    }:
+    if (
+        stage == "previous_adjudication"
+        and previous_prompt_pair not in REPLAY_ADJUDICATION_PROMPT_PAIRS
+    ):
         raise DocumentAuthorityError("document_authority_run_identity_invalid")
     expected = (
         (

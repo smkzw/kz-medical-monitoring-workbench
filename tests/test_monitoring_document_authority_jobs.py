@@ -19,10 +19,7 @@ from packages.medical_monitoring.admission.document_authority import (
     EvidenceReference,
     RoleSelection,
     RoleSupplementaryBinding,
-    OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-    OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-    PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-    PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+    REPLAY_ADJUDICATION_PROMPT_PAIRS,
     build_anonymous_conflict_packet,
     document_authority_batch_sha256,
 )
@@ -1167,7 +1164,7 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         business_key_prefix="document-authority-adjudication:",
     )
     assert len(adjudication_jobs) == 2
-    assert all(":v4:" in job.business_key for job in adjudication_jobs)
+    assert all(":v5:" in job.business_key for job in adjudication_jobs)
     primary_adjudication_job = next(
         job for job in adjudication_jobs if ":primary:" in job.business_key
     )
@@ -1203,19 +1200,9 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
     assert len(result["adjudication_run_ids"]) == 2
     assert context["unresolved_roles"] == ["ecrf"]
 
-    replay_pairs = []
-    for generation, primary_prompt, verifier_prompt in (
-        (
-            "v3",
-            PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-            PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-        ),
-        (
-            "v2",
-            OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-            OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-        ),
-    ):
+    persisted_replay_jobs = []
+    for primary_prompt, verifier_prompt in sorted(REPLAY_ADJUDICATION_PROMPT_PAIRS):
+        generation = primary_prompt.rsplit("-", 1)[-1]
         replay_jobs = []
         for original, prompt_version in (
             (primary_adjudication_job, primary_prompt),
@@ -1255,7 +1242,7 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
             verifier_adjudication_job_id=replay_jobs[1].job_id,
         )
         assert replay["state"] == "resolved"
-        replay_pairs.append(replay_jobs)
+        persisted_replay_jobs.append(replay_jobs)
 
     with pytest.raises(DocumentAuthorityError, match="run_identity_invalid"):
         resolve_document_authority_from_jobs(
@@ -1266,8 +1253,8 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
             verifier_analysis_job_id=verifier_job.job_id,
             primary_review_job_id=primary_review_job.job_id,
             verifier_review_job_id=verifier_review_job.job_id,
-            primary_adjudication_job_id=replay_pairs[1][0].job_id,
-            verifier_adjudication_job_id=replay_pairs[0][1].job_id,
+            primary_adjudication_job_id=persisted_replay_jobs[1][0].job_id,
+            verifier_adjudication_job_id=persisted_replay_jobs[0][1].job_id,
         )
     assert all(
         "document_authority_source_bindings"

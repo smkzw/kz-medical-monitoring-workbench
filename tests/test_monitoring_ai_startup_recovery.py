@@ -106,8 +106,8 @@ def test_document_authority_startup_prompt_sets_are_explicit() -> None:
             {
                 "monitoring-document-authority-review-primary-v6",
                 "monitoring-document-authority-review-verifier-v6",
-                "monitoring-document-authority-adjudication-primary-v4",
-                "monitoring-document-authority-adjudication-verifier-v4",
+                "monitoring-document-authority-adjudication-primary-v5",
+                "monitoring-document-authority-adjudication-verifier-v5",
             }
         ),
     }
@@ -120,6 +120,8 @@ def test_document_authority_startup_prompt_sets_are_explicit() -> None:
                 "monitoring-document-authority-adjudication-verifier-v2",
                 "monitoring-document-authority-adjudication-primary-v3",
                 "monitoring-document-authority-adjudication-verifier-v3",
+                "monitoring-document-authority-adjudication-primary-v4",
+                "monitoring-document-authority-adjudication-verifier-v4",
             }
         )
     }

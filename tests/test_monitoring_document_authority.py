@@ -10,10 +10,7 @@ from packages.medical_monitoring.admission.document_authority import (
     DOCUMENT_AUTHORITY_SCHEMA_VERSION,
     LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
     LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-    PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-    PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-    OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-    OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+    REPLAY_ADJUDICATION_PROMPT_PAIRS,
     CandidateAssessment,
     ConflictDecision,
     DocumentAuthorityAnalysis,
@@ -39,6 +36,7 @@ from packages.medical_monitoring.admission.document_authority import (
     resolve_document_authority_conflicts,
     resolve_document_authority_adjudication,
     validate_document_authority_adjudication_context,
+    validate_document_authority_adjudication_review,
     validate_document_authority_conflict_packet,
 )
 from packages.medical_monitoring.admission.mapping_gate import (
@@ -1518,16 +1516,7 @@ def test_legacy_v1_adjudication_context_remains_replayable() -> None:
 
 @pytest.mark.parametrize(
     ("primary_prompt", "verifier_prompt"),
-    (
-        (
-            PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-            PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-        ),
-        (
-            OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-            OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-        ),
-    ),
+    tuple(sorted(REPLAY_ADJUDICATION_PROMPT_PAIRS)),
 )
 def test_previous_adjudication_prompts_remain_replayable(
     primary_prompt: str,
@@ -1587,11 +1576,12 @@ def test_previous_adjudication_prompts_remain_replayable(
             _review_run(adjudication, "verifier", adjudication=True),
         )
 
+    replay_pairs = sorted(REPLAY_ADJUDICATION_PROMPT_PAIRS)
     mixed_primary = primary_adjudication.model_copy(
-        update={"prompt_version": OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION}
+        update={"prompt_version": replay_pairs[0][0]}
     )
     mixed_verifier = verifier_adjudication.model_copy(
-        update={"prompt_version": PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION}
+        update={"prompt_version": replay_pairs[1][1]}
     )
     with pytest.raises(DocumentAuthorityError, match="run_identity_invalid"):
         resolve_document_authority_adjudication(
@@ -1615,16 +1605,74 @@ def test_previous_adjudication_prompts_remain_replayable(
             verifier_review,
             context,
             primary_adjudication.model_copy(
-                update={
-                    "prompt_version": PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION
-                }
+                update={"prompt_version": replay_pairs[1][0]}
             ),
             verifier_adjudication.model_copy(
-                update={
-                    "prompt_version": OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION
-                }
+                update={"prompt_version": replay_pairs[0][1]}
             ),
         )
+
+
+def test_v2_adjudication_review_covers_only_unresolved_roles() -> None:
+    batch = _composite_batch()
+    primary, verifier, packet = _composite_conflict_context(batch)
+    primary_review = _review_run(_ecrf_composite_review(packet), "primary")
+    verifier_review = _review_run(
+        _ecrf_composite_review(packet, supplements=()), "verifier"
+    )
+    context = build_anonymous_adjudication_context(
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+    )
+    packet_body = {
+        key: value for key, value in packet.items() if key != "conflict_packet_sha256"
+    }
+    packet_body["conflict_roles"] = ["protocol", "ecrf"]
+    packet_body["allowed_candidate_ids_by_role"] = {
+        role: sorted(packet["candidate_coverage"])
+        for role in packet_body["conflict_roles"]
+    }
+    expanded_packet = {
+        **packet_body,
+        "conflict_packet_sha256": _digest(packet_body),
+    }
+    context_body = {
+        key: value
+        for key, value in context.items()
+        if key != "adjudication_context_sha256"
+    }
+    context_body["conflict_packet_sha256"] = expanded_packet[
+        "conflict_packet_sha256"
+    ]
+    expanded_context = {
+        **context_body,
+        "adjudication_context_sha256": _digest(context_body),
+    }
+    review = _ecrf_adjudication_review(expanded_packet)
+
+    validate_document_authority_adjudication_review(
+        expanded_packet, expanded_context, review
+    )
+
+    extra_role = review.decisions[0].model_copy(
+        update={"role": "protocol", "excluded_candidate_ids": ()}
+    )
+    with pytest.raises(DocumentAuthorityError, match="review_coverage_invalid"):
+        validate_document_authority_adjudication_review(
+            expanded_packet,
+            expanded_context,
+            review.model_copy(update={"decisions": (*review.decisions, extra_role)}),
+        )
+    validate_document_authority_adjudication_review(
+        expanded_packet,
+        expanded_context,
+        review.model_copy(update={"decisions": (*review.decisions, extra_role)}),
+        prompt_version=sorted(REPLAY_ADJUDICATION_PROMPT_PAIRS)[-1][0],
+    )
 
 
 def test_internal_adjudication_remains_fail_closed_and_context_bound() -> None:

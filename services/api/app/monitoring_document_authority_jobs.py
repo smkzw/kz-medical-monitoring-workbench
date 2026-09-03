@@ -9,10 +9,8 @@ from packages.medical_monitoring.admission.document_authority import (
     PRIMARY_ADJUDICATION_PROMPT_VERSION,
     LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
     LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-    PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-    PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-    OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-    OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+    REPLAY_PRIMARY_ADJUDICATION_PROMPT_VERSIONS,
+    REPLAY_VERIFIER_ADJUDICATION_PROMPT_VERSIONS,
     PRIMARY_PROMPT_VERSION,
     PRIMARY_REVIEW_PROMPT_VERSION,
     VERIFIER_PROMPT_VERSION,
@@ -316,14 +314,12 @@ def load_document_authority_review_run(
         if legacy_adjudication
         else {
             PRIMARY_ADJUDICATION_PROMPT_VERSION,
-            PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-            OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            *REPLAY_PRIMARY_ADJUDICATION_PROMPT_VERSIONS,
         }
         if role == "primary" and adjudication_context is not None
         else {
             VERIFIER_ADJUDICATION_PROMPT_VERSION,
-            PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-            OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+            *REPLAY_VERIFIER_ADJUDICATION_PROMPT_VERSIONS,
         }
         if adjudication_context is not None
         else {
@@ -385,7 +381,10 @@ def load_document_authority_review_run(
         review = review_model.model_validate(candidates[0].structured_payload)
         if adjudication_context is not None:
             validate_document_authority_adjudication_review(
-                conflict_packet, adjudication_context, review
+                conflict_packet,
+                adjudication_context,
+                review,
+                prompt_version=job.prompt_version,
             )
         else:
             validate_document_authority_conflict_review(conflict_packet, review)
