@@ -23,8 +23,10 @@ from packages.medical_monitoring.admission.document_authority import (
     VERIFIER_PROMPT_VERSION,
     VERIFIER_REVIEW_PROMPT_VERSION,
     build_anonymous_conflict_packet,
+    document_authority_batch_sha256,
     reconcile_document_authority,
     resolve_document_authority_conflicts,
+    validate_document_authority_conflict_packet,
 )
 from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_MAPPING_MODEL,
@@ -78,6 +80,32 @@ def _batch() -> dict:
             },
         ],
     }
+
+
+def test_batch_rejects_locator_content_when_locator_count_is_zero() -> None:
+    batch = _batch()
+    batch["candidates"][0]["locator_count"] = 0
+
+    with pytest.raises(
+        DocumentAuthorityError,
+        match="document_authority_candidate_locator_count_invalid",
+    ):
+        document_authority_batch_sha256(batch)
+
+
+def test_batch_rejects_more_than_review_schema_can_cover() -> None:
+    template = _batch()["candidates"][0]
+    batch = _batch()
+    batch["candidates"] = [
+        {**template, "candidate_id": f"candidate_{index:03d}"}
+        for index in range(101)
+    ]
+
+    with pytest.raises(
+        DocumentAuthorityError,
+        match="document_authority_candidate_coverage_invalid",
+    ):
+        document_authority_batch_sha256(batch)
 
 
 def _analysis(batch: dict, *, ecrf: str = "candidate_ecrf") -> DocumentAuthorityAnalysis:
@@ -449,6 +477,44 @@ def test_conflict_packet_is_anonymous_and_order_stable() -> None:
         item["candidate_id"] for item in reversed_packet["candidates"]
     ]
     assert packet["conflict_packet_sha256"] == reversed_packet["conflict_packet_sha256"]
+
+
+def test_conflict_packet_rejects_zero_count_locator_and_excess_candidates() -> None:
+    batch = _batch()
+    primary = _run(_analysis(batch), "primary")
+    verifier = _run(_analysis(batch, ecrf=""), "verifier")
+    packet = build_anonymous_conflict_packet(batch, primary, verifier)
+
+    zero_count = json.loads(json.dumps(packet))
+    zero_count["candidates"][0]["locator_count"] = 0
+    zero_count["conflict_packet_sha256"] = _digest({
+        key: value
+        for key, value in zero_count.items()
+        if key != "conflict_packet_sha256"
+    })
+    with pytest.raises(DocumentAuthorityError, match="conflict_packet_invalid"):
+        validate_document_authority_conflict_packet(zero_count)
+
+    excess = json.loads(json.dumps(packet))
+    template = excess["candidates"][0]
+    excess["candidates"] = [
+        {**template, "candidate_id": f"candidate_{index:03d}"}
+        for index in range(101)
+    ]
+    candidate_ids = sorted(
+        item["candidate_id"] for item in excess["candidates"]
+    )
+    excess["candidate_coverage"] = candidate_ids
+    excess["allowed_candidate_ids_by_role"] = {
+        role: candidate_ids for role in excess["conflict_roles"]
+    }
+    excess["conflict_packet_sha256"] = _digest({
+        key: value
+        for key, value in excess.items()
+        if key != "conflict_packet_sha256"
+    })
+    with pytest.raises(DocumentAuthorityError, match="conflict_packet_invalid"):
+        validate_document_authority_conflict_packet(excess)
 
     leaked = json.loads(json.dumps(batch))
     leaked["candidates"][0]["excerpts"][0]["provider"] = "primary"

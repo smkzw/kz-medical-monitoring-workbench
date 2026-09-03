@@ -19,10 +19,11 @@ DOCUMENT_AUTHORITY_SCHEMA_VERSION = "monitoring-document-authority-v2"
 DOCUMENT_ROLES = ("protocol", "investigator_brochure", "ecrf", "sap")
 REQUIRED_DOCUMENT_ROLES = frozenset({"protocol", "ecrf"})
 AUTO_RESOLVE_CONFIDENCE = 0.9
-PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v5"
-VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v5"
-PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v5"
-VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v5"
+MAX_DOCUMENT_AUTHORITY_CANDIDATES = 100
+PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v6"
+VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v6"
+PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v6"
+VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v6"
 
 _BATCH_KEYS = frozenset({"manifest_version", "batch_id", "candidates", "authority_status"})
 _CANDIDATE_KEYS = frozenset({
@@ -99,6 +100,18 @@ def validate_document_authority_conflict_packet(
         raise DocumentAuthorityError("document_authority_conflict_packet_invalid")
     roles = tuple(str(value) for value in packet.get("conflict_roles", ()))
     candidates = tuple(packet.get("candidates", ()))
+    try:
+        locator_count_invalid = any(
+            int(item.get("locator_count") or 0) < 0
+            or (
+                int(item.get("locator_count") or 0) == 0
+                and bool(_candidate_locators(item))
+            )
+            for item in candidates
+            if isinstance(item, Mapping)
+        )
+    except (TypeError, ValueError):
+        locator_count_invalid = True
     candidate_ids = tuple(
         str(item.get("candidate_id") or "")
         for item in candidates
@@ -107,6 +120,8 @@ def validate_document_authority_conflict_packet(
     expected_allowed = {role: sorted(candidate_ids) for role in roles}
     if (
         not roles
+        or not 1 <= len(candidates) <= MAX_DOCUMENT_AUTHORITY_CANDIDATES
+        or locator_count_invalid
         or len(roles) != len(set(roles))
         or len(candidate_ids) != len(candidates)
         or any(not value for value in candidate_ids)
@@ -276,9 +291,13 @@ class ConflictDecision(BaseModel):
     document_version: str = Field(default="", max_length=120)
     document_date: str = Field(default="", max_length=40)
     confidence: StrictFloat = Field(ge=0, le=1)
-    considered_candidate_ids: tuple[str, ...] = Field(default=(), max_length=100)
+    considered_candidate_ids: tuple[str, ...] = Field(
+        default=(), max_length=MAX_DOCUMENT_AUTHORITY_CANDIDATES
+    )
     supplementary_candidate_ids: tuple[str, ...] = Field(max_length=20)
-    evidence_references: tuple[EvidenceReference, ...] = Field(default=(), max_length=100)
+    evidence_references: tuple[EvidenceReference, ...] = Field(
+        default=(), max_length=MAX_DOCUMENT_AUTHORITY_CANDIDATES
+    )
     uncertainty: AuthorityUncertainty = ""
 
     _candidates = field_validator("considered_candidate_ids")(_validate_nonempty_unique)
@@ -572,9 +591,12 @@ def _validate_batch(batch: Mapping[str, Any]) -> tuple[set[str], dict[str, set[s
         or batch.get("authority_status") != "not_adjudicated"
     ):
         raise DocumentAuthorityError("document_authority_batch_invalid")
+    raw_candidates = tuple(batch.get("candidates", ()))
+    if not 1 <= len(raw_candidates) <= MAX_DOCUMENT_AUTHORITY_CANDIDATES:
+        raise DocumentAuthorityError("document_authority_candidate_coverage_invalid")
     candidate_ids: set[str] = set()
     locators: dict[str, set[str]] = {}
-    for raw in batch.get("candidates", ()):
+    for raw in raw_candidates:
         if set(raw) - _CANDIDATE_KEYS:
             raise DocumentAuthorityError("document_authority_candidate_shape_invalid")
         if raw.get("authority_status") not in {None, "not_promoted"}:
@@ -583,9 +605,13 @@ def _validate_batch(batch: Mapping[str, Any]) -> tuple[set[str], dict[str, set[s
         if not candidate_id or candidate_id in candidate_ids:
             raise DocumentAuthorityError("document_authority_candidate_coverage_invalid")
         candidate_ids.add(candidate_id)
-        locators[candidate_id] = _candidate_locators(raw)
-    if not candidate_ids:
-        raise DocumentAuthorityError("document_authority_candidate_coverage_invalid")
+        candidate_locators = _candidate_locators(raw)
+        locator_count = int(raw.get("locator_count") or 0)
+        if locator_count < 0 or (locator_count == 0 and candidate_locators):
+            raise DocumentAuthorityError(
+                "document_authority_candidate_locator_count_invalid"
+            )
+        locators[candidate_id] = candidate_locators
     return candidate_ids, locators
 
 

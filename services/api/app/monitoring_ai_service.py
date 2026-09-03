@@ -3267,6 +3267,12 @@ class MonitoringAiService:
                 "input_revision_sha256。"
                 " locator_count为0的候选没有授权定位证据，不得选为"
                 "主文件或补充文件，也不得创造locator。"
+                " 对每个conflict_role，considered_candidate_ids必须逐字"
+                "完整覆盖document_authority_review_coverage_contract中该角色的"
+                "required_considered_candidate_ids，不得按role_hypotheses预先筛选。"
+                " evidence_references必须为该角色的每个"
+                "evidence_required_candidate_id至少引用一条该候选已提供的"
+                "locator，包括未入选候选；零locator候选不引用证据。"
             )
         elif (
             job.task_type
@@ -3464,6 +3470,14 @@ class MonitoringAiService:
                         else None
                     )
                 ),
+                "document_authority_review_coverage_contract": (
+                    self._document_authority_review_coverage_contract(
+                        provider_input_payload
+                    )
+                    if job.task_type
+                    == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW
+                    else None
+                ),
                 "authorized_source_pairs": [
                     {
                         "source_entry_id": item.source_entry_id,
@@ -3488,6 +3502,34 @@ class MonitoringAiService:
                 )
             ),
         )
+
+    @staticmethod
+    def _document_authority_review_coverage_contract(
+        input_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        packet = input_payload["document_authority_conflict_packet"]
+        evidence_required = [
+            str(candidate["candidate_id"])
+            for candidate in packet["candidates"]
+            if int(candidate.get("locator_count") or 0) > 0
+            and any(
+                item.get("locator")
+                for key in ("excerpts", "sheets")
+                for item in candidate.get(key, ())
+            )
+        ]
+        return {
+            "conflict_roles": list(packet["conflict_roles"]),
+            "by_role": {
+                role: {
+                    "required_considered_candidate_ids": list(
+                        packet["allowed_candidate_ids_by_role"][role]
+                    ),
+                    "evidence_required_candidate_ids": evidence_required,
+                }
+                for role in packet["conflict_roles"]
+            },
+        }
 
     @staticmethod
     def _document_authority_error_is_repairable(exc: Exception) -> bool:
