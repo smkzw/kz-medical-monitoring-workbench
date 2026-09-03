@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 import pytest
@@ -33,9 +34,12 @@ from services.api.app.monitoring_ai_service import (
 )
 from services.api.app.monitoring_document_authority_jobs import (
     load_document_authority_analysis_run,
+    promote_document_authority_from_jobs,
     resolve_document_authority_from_jobs,
     submit_document_authority_review_pair,
 )
+from services.api.app.source_intake import SourceRegistryService, SourceRegistryStore
+from tests.test_source_registry import _minimal_docx_bytes, _minimal_xlsx_bytes
 
 
 def _batch() -> dict[str, Any]:
@@ -558,3 +562,92 @@ def test_repository_jobs_drive_blind_second_review_and_final_resolution(
             verifier_review_provider["value"],
         )
     )
+
+
+def test_resolved_authority_promotes_selected_documents_atomically(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    protocol = _minimal_docx_bytes()
+    ecrf = _minimal_xlsx_bytes()
+    batch = _batch()
+    for candidate, content in zip(batch["candidates"], (protocol, ecrf)):
+        digest = hashlib.sha256(content).hexdigest()
+        candidate["content_sha256"] = digest
+        candidate["file_id"] = f"mmfile_{digest}"
+        path = tmp_path / "candidates" / "files" / (
+            digest + (".docx" if candidate["candidate_id"] == "candidate_protocol" else ".xlsx")
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    monkeypatch.setattr(
+        "services.api.app.monitoring_document_authority_jobs."
+        "resolve_document_authority_from_jobs",
+        lambda *_args, **_kwargs: {
+            "schema_version": DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+            "batch_id": batch["batch_id"],
+            "state": "resolved",
+            "resolved_roles": [
+                {"role": "protocol", "status": "selected", "candidate_id": "candidate_protocol"},
+                {"role": "investigator_brochure", "status": "missing", "candidate_id": ""},
+                {"role": "ecrf", "status": "selected", "candidate_id": "candidate_ecrf"},
+                {"role": "sap", "status": "missing", "candidate_id": ""},
+            ],
+            "unresolved_roles": [],
+            "user_question": "",
+            "review_run_ids": ["run_primary", "run_verifier"],
+        },
+    )
+    registry = SourceRegistryService(
+        SourceRegistryStore(tmp_path / "registry.jsonl")
+    )
+
+    result = promote_document_authority_from_jobs(
+        MonitoringAiRepository(tmp_path / "jobs.sqlite"),
+        project_id="project-document-authority",
+        candidate_batch=batch,
+        candidate_root=tmp_path / "candidates",
+        source_registry=registry,
+        primary_analysis_job_id="analysis-primary",
+        verifier_analysis_job_id="analysis-verifier",
+        conflict_packet={},
+        primary_review_job_id="review-primary",
+        verifier_review_job_id="review-verifier",
+    )
+
+    assert result["authority_status"] == "promoted"
+    assert {item["role"] for item in result["registrations"]} == {"protocol", "ecrf"}
+    assert {entry.source_kind for entry in registry.list_entries("project-document-authority")} == {
+        "protocol_docx",
+        "ecrf",
+    }
+
+    rollback_registry = SourceRegistryService(
+        SourceRegistryStore(tmp_path / "rollback-registry.jsonl")
+    )
+    register = rollback_registry.register_monitoring_mapping_document
+
+    def fail_second_registration(*args, **kwargs):
+        if kwargs.get("document_role") == "ecrf":
+            raise RuntimeError("synthetic second registration failure")
+        return register(*args, **kwargs)
+
+    monkeypatch.setattr(
+        rollback_registry,
+        "register_monitoring_mapping_document",
+        fail_second_registration,
+    )
+    with pytest.raises(RuntimeError, match="second registration failure"):
+        promote_document_authority_from_jobs(
+            MonitoringAiRepository(tmp_path / "rollback-jobs.sqlite"),
+            project_id="project-document-authority",
+            candidate_batch=batch,
+            candidate_root=tmp_path / "candidates",
+            source_registry=rollback_registry,
+            primary_analysis_job_id="analysis-primary",
+            verifier_analysis_job_id="analysis-verifier",
+            conflict_packet={},
+            primary_review_job_id="review-primary",
+            verifier_review_job_id="review-verifier",
+        )
+    assert rollback_registry.list_entries("project-document-authority") == []

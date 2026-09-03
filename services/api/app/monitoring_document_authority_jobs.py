@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping
 
 from packages.medical_monitoring.admission.document_authority import (
@@ -36,6 +38,7 @@ from .monitoring_ai_repository import MonitoringAiRepository
 if TYPE_CHECKING:
     from .monitoring_ai_contracts import MonitoringAiInputRevision, MonitoringAiJob
     from .monitoring_ai_service import MonitoringAiService
+    from .source_intake import SourceRegistryService
 
 
 def load_document_authority_analysis_run(
@@ -300,6 +303,98 @@ def resolve_document_authority_from_jobs(
         primary_review,
         verifier_review,
     )
+
+
+def promote_document_authority_from_jobs(
+    repository: MonitoringAiRepository,
+    *,
+    project_id: str,
+    candidate_batch: Mapping[str, Any],
+    candidate_root: Path,
+    source_registry: "SourceRegistryService",
+    primary_analysis_job_id: str,
+    verifier_analysis_job_id: str,
+    conflict_packet: Mapping[str, Any],
+    primary_review_job_id: str,
+    verifier_review_job_id: str,
+) -> dict[str, Any]:
+    resolution = resolve_document_authority_from_jobs(
+        repository,
+        project_id=project_id,
+        candidate_batch=candidate_batch,
+        primary_analysis_job_id=primary_analysis_job_id,
+        verifier_analysis_job_id=verifier_analysis_job_id,
+        conflict_packet=conflict_packet,
+        primary_review_job_id=primary_review_job_id,
+        verifier_review_job_id=verifier_review_job_id,
+    )
+    if resolution["state"] != "resolved":
+        return {**resolution, "authority_status": "not_promoted"}
+
+    candidates = {
+        str(item["candidate_id"]): item for item in candidate_batch["candidates"]
+    }
+    selected = [
+        item for item in resolution["resolved_roles"] if item["status"] == "selected"
+    ]
+    selected_ids = [str(item["candidate_id"]) for item in selected]
+    if len(selected_ids) != len(set(selected_ids)):
+        raise DocumentAuthorityError("document_authority_candidate_role_collision")
+
+    prepared: list[tuple[str, Mapping[str, Any], bytes]] = []
+    for item in selected:
+        role = str(item["role"])
+        candidate = candidates[str(item["candidate_id"])]
+        if (
+            candidate.get("technical_status") != "ready"
+            or candidate.get("extraction_status") != "parsed"
+            or role not in candidate.get("role_hypotheses", ())
+        ):
+            raise DocumentAuthorityError("document_authority_candidate_not_promotable")
+        suffix = Path(str(candidate["filename"])).suffix.lower()
+        path = Path(candidate_root) / "files" / f"{candidate['content_sha256']}{suffix}"
+        try:
+            content = path.read_bytes()
+        except OSError as exc:
+            raise DocumentAuthorityError("document_authority_isolated_file_missing") from exc
+        if hashlib.sha256(content).hexdigest() != candidate["content_sha256"]:
+            raise DocumentAuthorityError("document_authority_isolated_file_hash_mismatch")
+        prepared.append((role, candidate, content))
+
+    registrations = []
+    with source_registry.store.transaction():
+        for role, candidate, content in prepared:
+            registration = source_registry.register_monitoring_mapping_document(
+                project_id,
+                str(candidate["filename"]),
+                content,
+                document_role=role,
+            )
+            if registration.entry.content_hash != candidate["content_sha256"]:
+                raise DocumentAuthorityError("document_authority_registration_hash_mismatch")
+            if source_registry.content_validation_service is not None:
+                validation = source_registry.current_content_validation(
+                    project_id, registration.entry.entry_id
+                )
+                if (
+                    validation is None
+                    or validation.technical_status != "ready"
+                    or validation.use_status not in {"allowed", "confirmed_after_warning"}
+                ):
+                    raise DocumentAuthorityError(
+                        "document_authority_registration_validation_blocked"
+                    )
+            registrations.append({
+                "role": role,
+                "candidate_id": str(candidate["candidate_id"]),
+                "source_entry_id": registration.entry.entry_id,
+                "content_sha256": registration.entry.content_hash,
+            })
+    return {
+        **resolution,
+        "authority_status": "promoted",
+        "registrations": registrations,
+    }
 
 
 def _output_contains_analysis(
