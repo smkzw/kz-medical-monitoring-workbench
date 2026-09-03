@@ -15,14 +15,14 @@ from .mapping_gate import (
 )
 
 
-DOCUMENT_AUTHORITY_SCHEMA_VERSION = "monitoring-document-authority-v1"
+DOCUMENT_AUTHORITY_SCHEMA_VERSION = "monitoring-document-authority-v2"
 DOCUMENT_ROLES = ("protocol", "investigator_brochure", "ecrf", "sap")
 REQUIRED_DOCUMENT_ROLES = frozenset({"protocol", "ecrf"})
 AUTO_RESOLVE_CONFIDENCE = 0.9
-PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v1"
-VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v1"
-PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v1"
-VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v1"
+PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v2"
+VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v2"
+PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v2"
+VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v2"
 
 _BATCH_KEYS = frozenset({"manifest_version", "batch_id", "candidates", "authority_status"})
 _CANDIDATE_KEYS = frozenset({
@@ -175,6 +175,17 @@ class CandidateAssessment(BaseModel):
     _date = field_validator("document_date")(_validate_document_date)
 
 
+class RoleSupplementaryBinding(BaseModel):
+    """One valid supplementary file bound under a role's primary selection."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    candidate_id: str = Field(min_length=2, max_length=160)
+    evidence_locators: tuple[str, ...] = Field(min_length=1, max_length=20)
+
+    _locators = field_validator("evidence_locators")(_validate_nonempty_unique)
+
+
 class RoleSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -183,9 +194,18 @@ class RoleSelection(BaseModel):
     selected_candidate_id: str = Field(default="", max_length=160)
     confidence: StrictFloat = Field(ge=0, le=1)
     evidence_locators: tuple[str, ...] = Field(default=(), max_length=20)
+    supplementary_bindings: tuple[RoleSupplementaryBinding, ...] = Field(
+        max_length=20
+    )
     uncertainty: AuthorityUncertainty = ""
 
     _locators = field_validator("evidence_locators")(_validate_nonempty_unique)
+
+    @field_validator("supplementary_bindings")
+    @classmethod
+    def _supplementary_ids(cls, value: tuple[RoleSupplementaryBinding, ...]) -> tuple[RoleSupplementaryBinding, ...]:
+        _validate_nonempty_unique(tuple(item.candidate_id for item in value))
+        return value
 
     @model_validator(mode="after")
     def validate_selection(self) -> "RoleSelection":
@@ -195,6 +215,13 @@ class RoleSelection(BaseModel):
             raise ValueError("selected document requires locator evidence")
         if self.decision != "selected" and self.evidence_locators:
             raise ValueError("non-selected role cannot carry unbound evidence")
+        if self.decision != "selected" and self.supplementary_bindings:
+            raise ValueError("non-selected role cannot bind supplementary files")
+        if any(
+            item.candidate_id == self.selected_candidate_id
+            for item in self.supplementary_bindings
+        ):
+            raise ValueError("supplementary candidate cannot duplicate the primary file")
         return self
 
 
@@ -250,10 +277,12 @@ class ConflictDecision(BaseModel):
     document_date: str = Field(default="", max_length=40)
     confidence: StrictFloat = Field(ge=0, le=1)
     considered_candidate_ids: tuple[str, ...] = Field(default=(), max_length=100)
+    supplementary_candidate_ids: tuple[str, ...] = Field(max_length=20)
     evidence_references: tuple[EvidenceReference, ...] = Field(default=(), max_length=100)
     uncertainty: AuthorityUncertainty = ""
 
     _candidates = field_validator("considered_candidate_ids")(_validate_nonempty_unique)
+    _supplementary = field_validator("supplementary_candidate_ids")(_validate_nonempty_unique)
     _version = field_validator("document_version")(_validate_document_version)
     _date = field_validator("document_date")(_validate_document_date)
 
@@ -261,6 +290,10 @@ class ConflictDecision(BaseModel):
     def validate_decision(self) -> "ConflictDecision":
         if (self.decision == "selected") != bool(self.selected_candidate_id.strip()):
             raise ValueError("selected decision and candidate ID must agree")
+        if self.decision != "selected" and self.supplementary_candidate_ids:
+            raise ValueError("non-selected decision cannot bind supplementary files")
+        if self.selected_candidate_id in self.supplementary_candidate_ids:
+            raise ValueError("supplementary candidate cannot duplicate the primary file")
         evidence_keys = {
             (item.candidate_id, item.locator) for item in self.evidence_references
         }
@@ -316,11 +349,18 @@ class ResolvedRole(BaseModel):
     role: Literal["protocol", "investigator_brochure", "ecrf", "sap"]
     status: Literal["selected", "missing"]
     candidate_id: str = Field(default="", max_length=160)
+    supplementary_candidate_ids: tuple[str, ...] = Field(default=(), max_length=20)
+
+    _supplementary = field_validator("supplementary_candidate_ids")(_validate_nonempty_unique)
 
     @model_validator(mode="after")
     def validate_candidate(self) -> "ResolvedRole":
         if (self.status == "selected") != bool(self.candidate_id.strip()):
             raise ValueError("resolved status and candidate must agree")
+        if self.status != "selected" and self.supplementary_candidate_ids:
+            raise ValueError("non-selected role cannot carry supplementary files")
+        if self.candidate_id in self.supplementary_candidate_ids:
+            raise ValueError("supplementary candidate cannot duplicate the primary file")
         return self
 
 
@@ -377,14 +417,19 @@ def reconcile_document_authority(
 
     left_roles = {item.role: item for item in primary.analysis.role_selections}
     right_roles = {item.role: item for item in verifier.analysis.role_selections}
-    resolved: list[dict[str, str]] = []
+    resolved: list[dict[str, Any]] = []
     conflicts: list[dict[str, Any]] = []
     for role in DOCUMENT_ROLES:
         left, right = left_roles[role], right_roles[role]
         if _same_selection(left, right) and _same_role_assessments(
             primary.analysis, verifier.analysis, role, left.selected_candidate_id
         ):
-            resolved.append(_resolved_role(role, "selected", left.selected_candidate_id))
+            resolved.append(_resolved_role(
+                role,
+                "selected",
+                left.selected_candidate_id,
+                tuple(item.candidate_id for item in left.supplementary_bindings),
+            ))
         elif (
             role not in REQUIRED_DOCUMENT_ROLES
             and _same_missing(left, right)
@@ -400,8 +445,13 @@ def reconcile_document_authority(
                 "role": role,
                 "status": "needs_dual_review",
                 "candidate_options": sorted({
-                    item.selected_candidate_id for item in (left, right)
-                    if item.selected_candidate_id
+                    candidate_id
+                    for item in (left, right)
+                    for candidate_id in (
+                        item.selected_candidate_id,
+                        *(binding.candidate_id for binding in item.supplementary_bindings),
+                    )
+                    if candidate_id
                 }),
             })
     result = {
@@ -489,7 +539,12 @@ def resolve_document_authority_conflicts(
         for item in (left_item, right_item):
             _validate_conflict_decision(item, allowed, candidates)
         if _same_conflict_selection(left_item, right_item):
-            resolved.append(_resolved_role(role, "selected", left_item.selected_candidate_id))
+            resolved.append(_resolved_role(
+                role,
+                "selected",
+                left_item.selected_candidate_id,
+                left_item.supplementary_candidate_ids,
+            ))
         elif role not in REQUIRED_DOCUMENT_ROLES and _same_conflict_missing(
             left_item, right_item, allowed
         ):
@@ -559,6 +614,18 @@ def _validate_analysis(
         assessment = assessments.get(candidate_id)
         if assessment and (not assessment.usable or assessment.inferred_role != selection.role):
             raise DocumentAuthorityError("document_authority_selection_inconsistent")
+        for binding in selection.supplementary_bindings:
+            if binding.candidate_id not in candidate_ids:
+                raise DocumentAuthorityError("document_authority_selection_unknown")
+            if not set(binding.evidence_locators).issubset(locators[binding.candidate_id]):
+                raise DocumentAuthorityError("document_authority_evidence_not_closed")
+            supplement = assessments.get(binding.candidate_id)
+            if (
+                supplement is None
+                or not supplement.usable
+                or supplement.inferred_role != selection.role
+            ):
+                raise DocumentAuthorityError("document_authority_selection_inconsistent")
         if selection.decision == "missing" and not _role_absent(analysis, selection.role):
             raise DocumentAuthorityError("document_authority_missing_not_proven")
 
@@ -621,8 +688,18 @@ def _same_selection(left: RoleSelection, right: RoleSelection) -> bool:
         and left.selected_candidate_id == right.selected_candidate_id
         and min(left.confidence, right.confidence) >= AUTO_RESOLVE_CONFIDENCE
         and set(left.evidence_locators) == set(right.evidence_locators)
+        and _same_supplementary_bindings(left.supplementary_bindings, right.supplementary_bindings)
         and _normalized(left.uncertainty) == _normalized(right.uncertainty)
     )
+
+
+def _same_supplementary_bindings(
+    left: tuple[RoleSupplementaryBinding, ...],
+    right: tuple[RoleSupplementaryBinding, ...],
+) -> bool:
+    left_map = {item.candidate_id: frozenset(item.evidence_locators) for item in left}
+    right_map = {item.candidate_id: frozenset(item.evidence_locators) for item in right}
+    return left_map == right_map
 
 
 def _same_missing(left: RoleSelection, right: RoleSelection) -> bool:
@@ -675,6 +752,8 @@ def _validate_conflict_decision(
         raise DocumentAuthorityError("document_authority_review_coverage_invalid")
     if item.selected_candidate_id and item.selected_candidate_id not in allowed:
         raise DocumentAuthorityError("document_authority_review_candidate_unknown")
+    if any(candidate_id not in allowed for candidate_id in item.supplementary_candidate_ids):
+        raise DocumentAuthorityError("document_authority_review_candidate_unknown")
     locators_by_candidate = {
         candidate_id: {
             str(evidence["locator"])
@@ -697,8 +776,13 @@ def _validate_conflict_decision(
         for candidate_id, candidate_locators in locators_by_candidate.items()
     ):
         raise DocumentAuthorityError("document_authority_review_coverage_invalid")
-    if item.selected_candidate_id and not any(
-        candidate_id == item.selected_candidate_id for candidate_id, _locator in evidence
+    bound_candidate_ids = {
+        item.selected_candidate_id,
+        *item.supplementary_candidate_ids,
+    } - {""}
+    if any(
+        candidate_id not in {ref_candidate for ref_candidate, _locator in evidence}
+        for candidate_id in bound_candidate_ids
     ):
         raise DocumentAuthorityError("document_authority_review_evidence_not_closed")
 
@@ -710,6 +794,7 @@ def _same_conflict_selection(left: ConflictDecision, right: ConflictDecision) ->
         and _normalized(left.document_version) == _normalized(right.document_version)
         and _normalized(left.document_date) == _normalized(right.document_date)
         and set(left.considered_candidate_ids) == set(right.considered_candidate_ids)
+        and set(left.supplementary_candidate_ids) == set(right.supplementary_candidate_ids)
         and set(left.evidence_references) == set(right.evidence_references)
         and _normalized(left.uncertainty) == _normalized(right.uncertainty)
         and min(left.confidence, right.confidence) >= AUTO_RESOLVE_CONFIDENCE
@@ -729,8 +814,15 @@ def _same_conflict_missing(
     )
 
 
-def _resolved_role(role: str, status: str, candidate_id: str) -> dict[str, str]:
-    return {"role": role, "status": status, "candidate_id": candidate_id}
+def _resolved_role(
+    role: str, status: str, candidate_id: str, supplementary: tuple[str, ...] = ()
+) -> dict[str, Any]:
+    return {
+        "role": role,
+        "status": status,
+        "candidate_id": candidate_id,
+        "supplementary_candidate_ids": sorted(supplementary),
+    }
 
 
 def _review_index(

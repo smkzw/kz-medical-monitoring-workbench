@@ -8,6 +8,7 @@ import io
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Sequence
 
 import pytest
 import docx
@@ -232,6 +233,150 @@ def test_non_current_role_cannot_smuggle_source_identity() -> None:
             binding=_binding("sap", "d"),
             limitation_codes=("sap_not_registered",),
         )
+
+
+def _supplementary(
+    role: str,
+    token: str,
+    main: CurrentDocumentBinding,
+) -> CurrentDocumentBinding:
+    return replace(
+        _binding(role, token),
+        main_source_entry_id=main.source_entry_id,
+    )
+
+
+def _composite_packet() -> MonitoringDocumentEvidencePacket:
+    main = _binding("protocol", "a")
+    roles = list(_packet().roles)
+    roles[0] = DocumentRoleEvidence(
+        role="protocol",
+        status="current",
+        binding=main,
+        supplementary_bindings=(_supplementary("protocol", "e", main),),
+    )
+    return MonitoringDocumentEvidencePacket(
+        project_id=PROJECT_ID,
+        listing_admission_date="2026-09-03",
+        registry_revision_sha256="9" * 64,
+        roles=tuple(roles),
+    )
+
+
+def test_packet_round_trips_main_and_supplementary_bindings() -> None:
+    packet = _composite_packet()
+    payload = packet.to_dict()
+    protocol = payload["roles"][0]
+
+    assert protocol["binding"]["main_source_entry_id"] == ""
+    assert protocol["supplementary_bindings"][0]["source_entry_id"] == (
+        "source-e"
+    )
+    assert protocol["supplementary_bindings"][0]["main_source_entry_id"] == (
+        "source-a"
+    )
+    restored = MonitoringDocumentEvidencePacket.from_dict(payload)
+
+    assert restored.to_dict() == payload
+    assert restored.roles[0].supplementary_bindings == (
+        packet.roles[0].supplementary_bindings
+    )
+    assert restored.mapping_context_ready is True
+
+
+def test_supplementary_bindings_fail_closed_on_broken_relations() -> None:
+    main = _binding("protocol", "a")
+
+    def evidence_with(
+        supplementary: CurrentDocumentBinding,
+    ) -> DocumentRoleEvidence:
+        return DocumentRoleEvidence(
+            role="protocol",
+            status="current",
+            binding=main,
+            supplementary_bindings=(supplementary,),
+        )
+
+    with pytest.raises(
+        DocumentEvidenceError,
+        match="document_supplementary_role_invalid",
+    ):
+        evidence_with(_binding("sap", "e"))
+    with pytest.raises(
+        DocumentEvidenceError,
+        match="document_supplementary_relation_invalid",
+    ):
+        evidence_with(
+            replace(_binding("protocol", "e"), main_source_entry_id="source-z")
+        )
+    with pytest.raises(
+        DocumentEvidenceError,
+        match="document_supplementary_relation_invalid",
+    ):
+        evidence_with(_binding("protocol", "e"))
+    with pytest.raises(
+        DocumentEvidenceError,
+        match="document_supplementary_duplicated",
+    ):
+        DocumentRoleEvidence(
+            role="protocol",
+            status="current",
+            binding=main,
+            supplementary_bindings=(
+                _supplementary("protocol", "e", main),
+                _supplementary("protocol", "e", main),
+            ),
+        )
+    with pytest.raises(
+        DocumentEvidenceError,
+        match="document_supplementary_relation_invalid",
+    ):
+        CurrentDocumentBinding(
+            **{
+                **_binding("protocol", "e").__dict__,
+                "main_source_entry_id": "source-e",
+            }
+        )
+    with pytest.raises(
+        DocumentEvidenceError,
+        match="document_supplementary_relation_invalid",
+    ):
+        DocumentRoleEvidence(
+            role="protocol",
+            status="current",
+            binding=replace(main, main_source_entry_id="source-b"),
+        )
+    payload = _composite_packet().to_dict()
+    payload["roles"][0]["supplementary_bindings"] = "erratum"
+    with pytest.raises(
+        DocumentEvidenceError,
+        match="document_supplementary_binding_invalid",
+    ):
+        MonitoringDocumentEvidencePacket.from_dict(payload)
+
+
+def test_non_current_role_rejects_supplementary_bindings() -> None:
+    main = _binding("sap", "d")
+    with pytest.raises(
+        DocumentEvidenceError,
+        match="limited_document_role_invalid",
+    ):
+        DocumentRoleEvidence(
+            role="sap",
+            status="missing",
+            supplementary_bindings=(_supplementary("sap", "e", main),),
+            limitation_codes=("sap_not_registered",),
+        )
+
+
+def test_legacy_v1_document_evidence_snapshot_is_rejected() -> None:
+    payload = _packet().to_dict()
+    payload["schema_version"] = "mm-c3-document-evidence-v1"
+    with pytest.raises(
+        DocumentEvidenceError,
+        match="document_schema_version_invalid",
+    ):
+        MonitoringDocumentEvidencePacket.from_dict(payload)
 
 
 def _admission_record(tmp_path: Path) -> tuple[dict, Path]:
@@ -1281,4 +1426,287 @@ def test_monitoring_freshness_supersedes_legacy_role_alias(
         registry.assert_operational_sources_usable(
             PROJECT_ID,
             [legacy_spans[0].source_id],
+        )
+
+
+class _CompositeRegistry(_Registry):
+    """Registry stub for composite-authority resolver tests.
+
+    Receipt verification and relation-aware freshness belong to
+    services/api/app/source_intake.py, which does not yet accept composite
+    same-role receipts.  This stub treats self-consistent promoted receipts
+    as verified and exempts entries sharing one promotion receipt from
+    superseding each other, isolating the resolver's composite partition
+    logic until the registry layer is extended.
+    """
+
+    def monitoring_authority_entry_is_verified(self, entry) -> bool:
+        metadata = dict(entry.metadata or {})
+        if metadata.get("monitoring_authority_status") != "promoted":
+            return True
+        receipt = metadata.get("document_authority_receipt")
+        return isinstance(receipt, dict) and content_hash(receipt) == (
+            metadata.get("document_authority_receipt_sha256")
+        )
+
+    def assert_operational_sources_usable(
+        self, project_id: str, source_ids: list[str]
+    ) -> None:
+        assert project_id == PROJECT_ID
+        assert source_ids
+        target = next(
+            item
+            for item in self._entries
+            if source_ids[0].startswith(item.entry_id + "-span-")
+        )
+        receipt = dict(target.metadata or {}).get(
+            "document_authority_receipt"
+        )
+        composite_group = (
+            {
+                str(row.get("source_entry_id") or "")
+                for row in receipt.get("registrations", ())
+                if isinstance(row, dict)
+            }
+            if isinstance(receipt, dict)
+            else set()
+        )
+        competitors = [
+            item
+            for item in self._entries
+            if item.project_id == project_id
+            and item.module == "medical_monitoring"
+            and item.source_kind == target.source_kind
+            and (
+                item.entry_id == target.entry_id
+                or item.entry_id not in composite_group
+            )
+        ]
+        latest = max(
+            competitors,
+            key=lambda item: (item.created_at, item.entry_id),
+        )
+        if latest.entry_id != target.entry_id:
+            raise ValueError("superseded")
+
+    def search_document_spans(
+        self,
+        project_id: str,
+        source_entry_id: str,
+        query_terms: Sequence[str],
+        limit: int = 24,
+        required_module: str = "",
+        allowed_source_kinds: frozenset[str] | None = None,
+    ) -> list[dict]:
+        return [
+            {
+                "source_id": span.source_id,
+                "locator": span.locator,
+                "text": span.text_preview,
+                "matched_keywords": [
+                    term
+                    for term in query_terms
+                    if str(term).lower() in span.text_preview.lower()
+                ],
+            }
+            for span in self._spans
+            if span.entry_id == source_entry_id
+            and span.project_id == project_id
+            and span.module == required_module
+        ][:limit]
+
+
+def _promote_composite(main_entry, *supplementary_entries) -> None:
+    role_by_kind = {
+        "protocol_docx": "protocol",
+        "investigator_brochure": "investigator_brochure",
+        "ecrf_xlsx": "ecrf",
+        "statistical_analysis_plan": "sap",
+    }
+    role = role_by_kind[main_entry.source_kind]
+    registrations = [
+        {
+            "role": role,
+            "candidate_id": f"candidate-{main_entry.entry_id}",
+            "source_entry_id": main_entry.entry_id,
+            "content_sha256": main_entry.content_hash,
+            "binding_kind": "main",
+        }
+    ]
+    for entry in supplementary_entries:
+        registrations.append(
+            {
+                "role": role,
+                "candidate_id": f"candidate-{entry.entry_id}",
+                "source_entry_id": entry.entry_id,
+                "content_sha256": entry.content_hash,
+                "binding_kind": "supplementary",
+                "supplementary_of": main_entry.entry_id,
+            }
+        )
+    receipt = {
+        "schema_version": "monitoring-document-authority-promotion-v1",
+        "batch_id": f"mmbatch_{'c' * 24}",
+        "input_sha256": "a" * 64,
+        "analysis_job_ids": ["primary-job", "verifier-job"],
+        "review_job_ids": [],
+        "analysis_run_ids": ["primary-run", "verifier-run"],
+        "review_run_ids": [],
+        "document_identities": [
+            {
+                "role": row["role"],
+                "candidate_id": row["candidate_id"],
+                "document_version": "",
+                "document_date": "",
+            }
+            for row in registrations
+        ],
+        "registrations": registrations,
+    }
+    receipt_sha256 = content_hash(receipt)
+    for entry in (main_entry, *supplementary_entries):
+        entry.metadata.update(
+            {
+                "monitoring_authority_status": "promoted",
+                "document_authority_receipt_sha256": receipt_sha256,
+                "document_authority_receipt": receipt,
+            }
+        )
+
+
+def _composite_scenario_entries():
+    main = _entry("protocol", 1)
+    erratum = _entry("protocol", 2)
+    erratum.metadata["document_revision"] = "protocol-erratum-1"
+    _promote_composite(main, erratum)
+    spans = [
+        _span(main, 1),
+        _span(main, 2),
+        _span(erratum, 1),
+        _span(erratum, 2),
+    ]
+    return main, erratum, spans
+
+
+def test_resolver_binds_declared_supplementary_files_to_role_evidence() -> None:
+    main, erratum, spans = _composite_scenario_entries()
+    registry = _CompositeRegistry([main, erratum], spans)
+
+    packet = MonitoringDocumentEvidenceResolver(registry).resolve(
+        project_id=PROJECT_ID,
+        listing_admission_date="2026-09-03",
+    )
+    protocol = packet.roles[0]
+
+    assert protocol.status == "current"
+    assert protocol.binding is not None
+    assert protocol.binding.source_entry_id == main.entry_id
+    assert [
+        item.source_entry_id for item in protocol.supplementary_bindings
+    ] == [erratum.entry_id]
+    assert all(
+        item.main_source_entry_id == main.entry_id
+        for item in protocol.supplementary_bindings
+    )
+    restored = MonitoringDocumentEvidencePacket.from_dict(packet.to_dict())
+
+    assert restored.roles[0].supplementary_bindings == (
+        protocol.supplementary_bindings
+    )
+
+
+def test_resolver_fails_closed_when_declared_supplementary_is_unresolved() -> None:
+    main, erratum, spans = _composite_scenario_entries()
+    erratum.metadata["expected_locator_index_sha256"] = "0" * 64
+    registry = _CompositeRegistry([main, erratum], spans)
+
+    packet = MonitoringDocumentEvidenceResolver(registry).resolve(
+        project_id=PROJECT_ID,
+    )
+    protocol = packet.roles[0]
+
+    assert protocol.status == "incomplete"
+    assert protocol.limitation_codes == (
+        "protocol_supplementary_unresolved",
+    )
+
+
+def test_resolver_ignores_supplementary_declared_for_superseded_main() -> None:
+    old_main, stale_erratum, _ = _composite_scenario_entries()
+    new_main = _entry("protocol", 3)
+    _promote_entries(new_main)
+    registry = _CompositeRegistry(
+        [old_main, stale_erratum, new_main],
+        [
+            _span(old_main, 1),
+            _span(old_main, 2),
+            _span(stale_erratum, 1),
+            _span(stale_erratum, 2),
+            _span(new_main, 1),
+            _span(new_main, 2),
+        ],
+    )
+
+    packet = MonitoringDocumentEvidenceResolver(registry).resolve(
+        project_id=PROJECT_ID,
+    )
+    protocol = packet.roles[0]
+
+    assert protocol.status == "current"
+    assert protocol.binding is not None
+    assert protocol.binding.source_entry_id == new_main.entry_id
+    assert protocol.supplementary_bindings == ()
+
+
+def test_resolver_selection_cannot_promote_supplementary_file_to_main() -> None:
+    main, erratum, spans = _composite_scenario_entries()
+    registry = _CompositeRegistry([main, erratum], spans)
+
+    packet = MonitoringDocumentEvidenceResolver(registry).resolve(
+        project_id=PROJECT_ID,
+        listing_admission_date="2026-09-03",
+        selected_entry_ids={"protocol": erratum.entry_id},
+    )
+    protocol = packet.roles[0]
+
+    assert protocol.status == "incomplete"
+    assert protocol.limitation_codes == ("protocol_selection_stale",)
+
+
+def test_retrieval_covers_each_file_of_composite_authority() -> None:
+    main, erratum, spans = _composite_scenario_entries()
+    resolver = MonitoringDocumentEvidenceResolver(
+        _CompositeRegistry([main, erratum], spans)
+    )
+    packet = resolver.resolve(project_id=PROJECT_ID)
+    protocol = packet.roles[0]
+    main_binding = protocol.binding
+    erratum_binding = protocol.supplementary_bindings[0]
+
+    main_retrieval = resolver.retrieve_current_excerpts(
+        project_id=PROJECT_ID,
+        binding=main_binding,
+        query_terms=["bounded"],
+    )
+    erratum_retrieval = resolver.retrieve_current_excerpts(
+        project_id=PROJECT_ID,
+        binding=erratum_binding,
+        query_terms=["bounded"],
+    )
+
+    assert main_retrieval["binding_kind"] == "main"
+    assert main_retrieval["source_entry_id"] == main.entry_id
+    assert erratum_retrieval["binding_kind"] == "supplementary"
+    assert erratum_retrieval["source_entry_id"] == erratum.entry_id
+    assert erratum_retrieval["content_sha256"] == erratum.content_hash
+    assert {excerpt["source_id"] for excerpt in erratum_retrieval["excerpts"]} == {
+        f"{erratum.entry_id}-span-1",
+        f"{erratum.entry_id}-span-2",
+    }
+    assert len(erratum_retrieval["packet_sha256"]) == 64
+    with pytest.raises(ValueError, match="binding is no longer current"):
+        resolver.retrieve_current_excerpts(
+            project_id=PROJECT_ID,
+            binding=replace(erratum_binding, content_sha256="f" * 64),
+            query_terms=["bounded"],
         )

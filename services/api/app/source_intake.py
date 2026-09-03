@@ -58,17 +58,52 @@ MONITORING_MAPPING_DOCUMENT_ROLES = frozenset({
     "sap",
 })
 MONITORING_LOCATOR_MANIFEST_REVISION = "monitoring-locator-manifest-v1"
+_AUTHORITY_RECEIPT_V1 = "monitoring-document-authority-promotion-v1"
+_AUTHORITY_RECEIPT_V2 = "monitoring-document-authority-promotion-v2"
+_AUTHORITY_PRIMARY_KEYS = frozenset({
+    "role", "candidate_id", "source_entry_id", "content_sha256",
+    "binding_kind", "supplementary_source_entry_ids",
+})
+_AUTHORITY_SUPPLEMENTARY_KEYS = frozenset({
+    "role", "candidate_id", "source_entry_id", "content_sha256",
+    "binding_kind", "primary_candidate_id", "supplementary_of",
+})
 
 
 def _monitoring_validation_role(source_kind: str) -> str:
     return {
         "protocol_docx": "protocol",
+        "protocol_document": "protocol",
+        "protocol_supplement": "protocol_supplement",
         "investigator_brochure": "investigator_brochure",
+        "investigator_brochure_supplement": "investigator_brochure_supplement",
         "ecrf": "ecrf",
         "ecrf_document": "ecrf",
         "ecrf_xlsx": "ecrf",
+        "ecrf_supplement": "ecrf_supplement",
         "statistical_analysis_plan": "sap",
+        "sap_supplement": "sap_supplement",
     }.get(source_kind, source_kind)
+
+
+def _monitoring_logical_role(source_kind: str) -> str:
+    role = _monitoring_validation_role(source_kind)
+    return role.removesuffix("_supplement")
+
+
+def _monitoring_authority_main_entry_id(entry: SourceRegistryEntry) -> str:
+    metadata = dict(entry.metadata or {})
+    receipt = metadata.get("document_authority_receipt")
+    if not isinstance(receipt, Mapping):
+        return entry.entry_id
+    for registration in receipt.get("registrations", ()):
+        if (
+            isinstance(registration, Mapping)
+            and registration.get("source_entry_id") == entry.entry_id
+            and registration.get("binding_kind") == "supplementary"
+        ):
+            return str(registration.get("supplementary_of") or entry.entry_id)
+    return entry.entry_id
 
 
 def monitoring_authority_receipt_is_complete(
@@ -100,9 +135,8 @@ def monitoring_authority_receipt_is_complete(
         return False
     if actual_sha256 != receipt_sha256:
         return False
-    if receipt.get("schema_version") != (
-        "monitoring-document-authority-promotion-v1"
-    ):
+    schema_version = receipt.get("schema_version")
+    if schema_version not in {_AUTHORITY_RECEIPT_V1, _AUTHORITY_RECEIPT_V2}:
         return False
     required_keys = {
         "schema_version",
@@ -145,8 +179,9 @@ def monitoring_authority_receipt_is_complete(
         and item.module == "medical_monitoring"
     }
     seen_entry_ids: set[str] = set()
-    seen_roles: set[str] = set()
     registered_candidate_roles: set[tuple[str, str]] = set()
+    primary_by_role: dict[str, Mapping[str, Any]] = {}
+    supplementary_by_role: dict[str, list[Mapping[str, Any]]] = {}
     own_registration_found = False
     for registration in registrations:
         if not isinstance(registration, Mapping):
@@ -156,15 +191,45 @@ def monitoring_authority_receipt_is_complete(
         candidate_id = str(registration.get("candidate_id") or "")
         content_sha256 = str(registration.get("content_sha256") or "")
         peer = entry_by_id.get(source_entry_id)
+        binding_kind = str(registration.get("binding_kind") or "")
         if (
             not candidate_id
             or role not in MONITORING_MAPPING_DOCUMENT_ROLES
             or source_entry_id in seen_entry_ids
-            or role in seen_roles
             or peer is None
             or peer.content_hash != content_sha256
-            or _monitoring_validation_role(peer.source_kind) != role
+            or _monitoring_logical_role(peer.source_kind) != role
         ):
+            return False
+        if schema_version == _AUTHORITY_RECEIPT_V1:
+            if binding_kind or role in primary_by_role or set(registration) != {
+                "role", "candidate_id", "source_entry_id", "content_sha256"
+            }:
+                return False
+            primary_by_role[role] = registration
+        elif binding_kind == "primary":
+            supplementary_ids = registration.get("supplementary_source_entry_ids")
+            if (
+                set(registration) != _AUTHORITY_PRIMARY_KEYS
+                or role in primary_by_role
+                or not isinstance(supplementary_ids, list)
+                or not all(
+                    isinstance(value, str) and value.strip()
+                    for value in supplementary_ids
+                )
+                or len(supplementary_ids) != len(set(supplementary_ids))
+                or peer.source_kind.endswith("_supplement")
+            ):
+                return False
+            primary_by_role[role] = registration
+        elif binding_kind == "supplementary":
+            if (
+                set(registration) != _AUTHORITY_SUPPLEMENTARY_KEYS
+                or not peer.source_kind.endswith("_supplement")
+            ):
+                return False
+            supplementary_by_role.setdefault(role, []).append(registration)
+        else:
             return False
         peer_metadata = dict(peer.metadata or {})
         if (
@@ -175,11 +240,24 @@ def monitoring_authority_receipt_is_complete(
         ):
             return False
         seen_entry_ids.add(source_entry_id)
-        seen_roles.add(role)
-        registered_candidate_roles.add((candidate_id, role))
         own_registration_found = own_registration_found or (
             source_entry_id == entry.entry_id
         )
+    for role, primary in primary_by_role.items():
+        registered_candidate_roles.add((str(primary["candidate_id"]), role))
+        supplements = supplementary_by_role.get(role, [])
+        if schema_version == _AUTHORITY_RECEIPT_V2 and (
+            sorted(str(value) for value in primary["supplementary_source_entry_ids"])
+            != sorted(str(item["source_entry_id"]) for item in supplements)
+            or any(
+                item["supplementary_of"] != primary["source_entry_id"]
+                or item["primary_candidate_id"] != primary["candidate_id"]
+                for item in supplements
+            )
+        ):
+            return False
+    if set(supplementary_by_role) - set(primary_by_role):
+        return False
     identity_candidate_roles: set[tuple[str, str]] = set()
     for identity in document_identities:
         if not isinstance(identity, Mapping):
@@ -869,15 +947,18 @@ class SourceRegistryService:
         content: bytes,
         *,
         document_role: str,
+        document_relation: str = "primary",
     ) -> SourceRegistrationResult:
         """Register one study document in the monitoring namespace."""
 
         role = str(document_role or "").strip()
+        relation = str(document_relation or "").strip()
         if role not in MONITORING_MAPPING_DOCUMENT_ROLES:
             raise ValueError("unsupported monitoring mapping document role")
-        if role == "protocol":
-            if Path(filename).suffix.lower() != ".docx":
-                raise ValueError("research protocol must be a DOCX file")
+        if relation not in {"primary", "supplementary"}:
+            raise ValueError("unsupported monitoring document relation")
+        suffix = Path(filename).suffix.lower()
+        if role == "protocol" and relation == "primary" and suffix == ".docx":
             return self.register_protocol_docx(
                 project_id,
                 filename,
@@ -885,9 +966,9 @@ class SourceRegistryService:
                 module="medical_monitoring",
                 expected_file_role="protocol",
             )
-        if role == "ecrf" and Path(filename).suffix.lower() != ".xlsx":
+        if role == "ecrf" and relation == "primary" and suffix != ".xlsx":
             raise ValueError("electronic case report form must be an XLSX file")
-        if role == "ecrf":
+        if role == "ecrf" and suffix == ".xlsx":
             sheets = parse_listing_file(filename, content)
             if len(sheets) > 80:
                 raise ValueError(
@@ -898,7 +979,9 @@ class SourceRegistryService:
                 filename,
                 content,
                 module="medical_monitoring",
-                expected_file_role="ecrf",
+                expected_file_role=(
+                    "ecrf" if relation == "primary" else "ecrf_supplement"
+                ),
                 parsed_sheets=sheets,
             )
         return self._register_monitoring_reference_document(
@@ -906,6 +989,7 @@ class SourceRegistryService:
             filename,
             content,
             document_role=role,
+            document_relation=relation,
         )
 
     def _register_monitoring_reference_document(
@@ -915,6 +999,7 @@ class SourceRegistryService:
         content: bytes,
         *,
         document_role: str,
+        document_relation: str = "primary",
     ) -> SourceRegistrationResult:
         suffix = Path(filename).suffix.lower()
         if suffix not in {".docx", ".pdf"}:
@@ -986,9 +1071,14 @@ class SourceRegistryService:
             project_id=project_id,
             module="medical_monitoring",
             source_kind=(
-                "investigator_brochure"
-                if document_role == "investigator_brochure"
-                else "statistical_analysis_plan"
+                f"{document_role}_supplement"
+                if document_relation == "supplementary"
+                else {
+                    "protocol": "protocol_document",
+                    "investigator_brochure": "investigator_brochure",
+                    "ecrf": "ecrf_document",
+                    "sap": "statistical_analysis_plan",
+                }[document_role]
             ),
             public_title=Path(filename).name,
             content_hash=content_hash,
@@ -997,6 +1087,7 @@ class SourceRegistryService:
                 "filename": Path(filename).name,
                 "media_type": artifact.content_type,
                 "document_role": document_role,
+                "document_relation": document_relation,
                 "parser_name": _slug(extracted.parser_name),
                 "parser_version": extracted.parser_version,
                 "page_count": extracted.page_count,
@@ -1037,7 +1128,11 @@ class SourceRegistryService:
             filename,
             validation_document,
             content_hash,
-            expected_file_role=document_role,
+            expected_file_role=(
+                document_role
+                if document_relation == "primary"
+                else f"{document_role}_supplement"
+            ),
         )
         return result
 
@@ -1223,16 +1318,40 @@ class SourceRegistryService:
                 "registered document kind is outside the evidence search scope"
             )
 
-        current = max(
-            (
+        promoted = (
+            entry.module == "medical_monitoring"
+            and (entry.metadata or {}).get("monitoring_authority_status")
+            == "promoted"
+        )
+        if promoted:
+            logical_role = _monitoring_logical_role(entry.source_kind)
+            current_candidates = [
+                item
+                for item in entries
+                if item.module == entry.module
+                and _monitoring_logical_role(item.source_kind) == logical_role
+                and _monitoring_authority_main_entry_id(item) == item.entry_id
+                and self._monitoring_entry_is_usable(item)
+            ]
+            current_entry_id = _monitoring_authority_main_entry_id(entry)
+        else:
+            current_candidates = [
                 item
                 for item in entries
                 if item.module == entry.module
                 and item.source_kind == entry.source_kind
-            ),
+            ]
+            current_entry_id = entry.entry_id
+        if not current_candidates:
+            raise ValueError(
+                "registered document authority is incomplete for evidence search: "
+                f"{entry.entry_id}"
+            )
+        current = max(
+            current_candidates,
             key=lambda item: (item.created_at, item.entry_id),
         )
-        if current.entry_id != entry.entry_id:
+        if current.entry_id != current_entry_id:
             raise ValueError(
                 "superseded registered document is not allowed for "
                 f"medical-monitoring evidence search: {entry.entry_id}"
@@ -1417,7 +1536,7 @@ class SourceRegistryService:
                     )
             if entry.module in operational_modules:
                 logical_source_kind = (
-                    _monitoring_validation_role(entry.source_kind)
+                    _monitoring_logical_role(entry.source_kind)
                     if entry.module == "medical_monitoring"
                     else entry.source_kind
                 )
@@ -1426,11 +1545,16 @@ class SourceRegistryService:
                     for item in entries
                     if item.module == entry.module
                     and (
-                        _monitoring_validation_role(item.source_kind)
+                        _monitoring_logical_role(item.source_kind)
                         if item.module == "medical_monitoring"
                         else item.source_kind
                     )
                     == logical_source_kind
+                    and (
+                        item.module != "medical_monitoring"
+                        or _monitoring_authority_main_entry_id(item)
+                        == item.entry_id
+                    )
                     and (
                         item.module != "medical_monitoring"
                         or self._monitoring_entry_is_usable(item)
@@ -1446,7 +1570,12 @@ class SourceRegistryService:
                     latest_candidates,
                     key=lambda item: (item.created_at, item.entry_id),
                 )
-                if latest.entry_id != entry.entry_id:
+                current_entry_id = (
+                    _monitoring_authority_main_entry_id(entry)
+                    if entry.module == "medical_monitoring"
+                    else entry.entry_id
+                )
+                if latest.entry_id != current_entry_id:
                     raise ValueError(
                         "superseded registered source is not allowed for operational AI use: "
                         f"{entry.entry_id}"
@@ -1537,11 +1666,16 @@ class SourceRegistryService:
         identity_source_kind = source_kind
         if module == "medical_monitoring" and source_kind in {
             "protocol_docx",
+            "protocol_document",
+            "protocol_supplement",
             "investigator_brochure",
+            "investigator_brochure_supplement",
             "ecrf",
             "ecrf_document",
             "ecrf_xlsx",
+            "ecrf_supplement",
             "statistical_analysis_plan",
+            "sap_supplement",
         }:
             identity_source_kind = (
                 f"{source_kind}:{MONITORING_LOCATOR_MANIFEST_REVISION}"
@@ -1657,11 +1791,16 @@ class SourceRegistryService:
         )
         if entry.module == "medical_monitoring" and entry.source_kind in {
             "protocol_docx",
+            "protocol_document",
+            "protocol_supplement",
             "investigator_brochure",
+            "investigator_brochure_supplement",
             "ecrf",
             "ecrf_document",
             "ecrf_xlsx",
+            "ecrf_supplement",
             "statistical_analysis_plan",
+            "sap_supplement",
         }:
             entry = entry.model_copy(
                 update={
