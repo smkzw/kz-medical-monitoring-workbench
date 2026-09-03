@@ -1095,6 +1095,25 @@ def test_repository_jobs_drive_blind_second_review_and_final_resolution(
             verifier_review_provider["value"],
         )
     )
+    for provider in (
+        primary_review_provider["value"],
+        verifier_review_provider["value"],
+    ):
+        coverage = provider.envelopes[0].payload[
+            "document_authority_review_coverage_contract"
+        ]
+        assert coverage["conflict_roles"] == ["ecrf"]
+        assert set(
+            coverage["by_role"]["ecrf"][
+                "required_considered_candidate_ids"
+            ]
+        ) == {"candidate_protocol", "candidate_ecrf"}
+        assert set(
+            coverage["by_role"]["ecrf"][
+                "evidence_required_candidate_ids"
+            ]
+        ) == {"candidate_protocol", "candidate_ecrf"}
+        assert "包括未入选候选" in provider.envelopes[0].system_prompt
 
 
 def test_resolved_authority_promotes_selected_documents_atomically(
