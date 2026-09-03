@@ -429,6 +429,8 @@ from .monitoring_ai_router import (
     current_monitoring_ai_revision,
 )
 from .monitoring_ai_service import (
+    DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK,
+    DOCUMENT_AUTHORITY_LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK,
     PROMPT_VERSION_BY_TASK,
     MonitoringAiService,
     resolve_monitoring_ai_runtime,
@@ -1514,16 +1516,26 @@ def _recover_monitoring_ai_jobs():
     """Resume queued or lease-expired medical-monitoring AI work."""
     try:
         for task_type, prompt_version in PROMPT_VERSION_BY_TASK.items():
+            current_prompt_versions = DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK.get(
+                task_type.value,
+                frozenset({prompt_version}),
+            )
             monitoring_ai_repository.supersede_prompt_versions_except(
                 task_type=task_type,
                 current_prompt_version=prompt_version,
+                additional_current_prompt_versions=(
+                    current_prompt_versions - {prompt_version}
+                ),
                 legacy_terminal_prompt_versions=(
                     PROTOCOL_RETIREMENT_AUDIT_PROMPT_VERSIONS
                     if task_type
                     == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING
                     else (MAPPING_ADJUDICATION_PROMPT_VERSION,)
                     if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
-                    else ()
+                    else DOCUMENT_AUTHORITY_LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK.get(
+                        task_type.value,
+                        (),
+                    )
                 ),
             )
         monitoring_ai_repository.expire_exhausted_leases()

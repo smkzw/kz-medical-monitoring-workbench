@@ -1358,6 +1358,66 @@ def test_legacy_terminal_prompt_versions_preserve_terminal_audit_only(
     assert claimed.job_id == current.job_id
 
 
+def test_parallel_current_prompts_survive_while_legacy_only_preserves_terminal(
+    tmp_path: Path,
+) -> None:
+    repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
+    legacy_completed = repository.create_or_get(
+        _request(suffix="parallel-3").model_copy(
+            update={"prompt_version": "adjudication-primary-v2"}
+        )
+    )
+    claimed = repository.claim_next("legacy-worker")
+    assert claimed is not None
+    candidate = _candidate(claimed, repository.clock)
+    repository.complete(
+        claimed,
+        owner="legacy-worker",
+        response_model="test-model",
+        raw_output={"candidates": [candidate.model_dump(mode="json")]},
+        candidates=(candidate,),
+    )
+    current_primary = repository.create_or_get(
+        _request(suffix="parallel-1").model_copy(
+            update={"prompt_version": "review-primary-v3"}
+        )
+    )
+    current_verifier = repository.create_or_get(
+        _request(suffix="parallel-2").model_copy(
+            update={"prompt_version": "review-verifier-v3"}
+        )
+    )
+    legacy_queued = repository.create_or_get(
+        _request(suffix="parallel-4").model_copy(
+            update={"prompt_version": "adjudication-verifier-v2"}
+        )
+    )
+
+    changed = repository.supersede_prompt_versions_except(
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+        current_prompt_version="review-primary-v3",
+        additional_current_prompt_versions={"review-verifier-v3"},
+        legacy_terminal_prompt_versions={
+            "adjudication-primary-v2",
+            "adjudication-verifier-v2",
+        },
+    )
+
+    assert changed == 1
+    assert repository.get(
+        current_primary.project_id, current_primary.job_id
+    ).status == MonitoringAiJobStatus.QUEUED
+    assert repository.get(
+        current_verifier.project_id, current_verifier.job_id
+    ).status == MonitoringAiJobStatus.QUEUED
+    assert repository.get(
+        legacy_completed.project_id, legacy_completed.job_id
+    ).status == MonitoringAiJobStatus.COMPLETED
+    assert repository.get(
+        legacy_queued.project_id, legacy_queued.job_id
+    ).status == MonitoringAiJobStatus.STALE_INPUT
+
+
 def test_legacy_terminal_prompt_versions_empty_default_retires_terminal_jobs(
     tmp_path: Path,
 ) -> None:

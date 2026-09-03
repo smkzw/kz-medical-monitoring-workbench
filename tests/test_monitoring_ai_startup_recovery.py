@@ -7,6 +7,12 @@ from types import SimpleNamespace
 from packages.medical_monitoring.admission import (
     MAPPING_ADJUDICATION_PROMPT_VERSION,
 )
+from packages.medical_monitoring.admission.document_authority import (
+    CURRENT_PROMPT_VERSIONS_BY_TASK
+    as DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK,
+    LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK
+    as DOCUMENT_AUTHORITY_LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK,
+)
 from services.api.app import main as app_main
 from services.api.app.monitoring_ai_contracts import (
     MonitoringAiInputRevision,
@@ -23,12 +29,13 @@ from services.api.app.monitoring_protocol_preparation_service import (
 def test_startup_retires_old_prompt_contracts_before_waking_worker(
     monkeypatch,
 ) -> None:
-    events: list[tuple[str, str, str, frozenset]] = []
+    events: list[tuple[str, str, str, frozenset, frozenset]] = []
 
     def supersede(
         *,
         task_type,
         current_prompt_version,
+        additional_current_prompt_versions=(),
         legacy_terminal_prompt_versions=(),
     ):
         events.append(
@@ -36,6 +43,7 @@ def test_startup_retires_old_prompt_contracts_before_waking_worker(
                 "supersede",
                 task_type.value,
                 current_prompt_version,
+                frozenset(additional_current_prompt_versions),
                 frozenset(legacy_terminal_prompt_versions),
             )
         )
@@ -49,12 +57,12 @@ def test_startup_retires_old_prompt_contracts_before_waking_worker(
     monkeypatch.setattr(
         app_main.monitoring_ai_repository,
         "expire_exhausted_leases",
-        lambda: events.append(("expire", "", "", frozenset())),
+        lambda: events.append(("expire", "", "", frozenset(), frozenset())),
     )
     monkeypatch.setattr(
         app_main.monitoring_ai_worker,
         "wake",
-        lambda: events.append(("wake", "", "", frozenset())),
+        lambda: events.append(("wake", "", "", frozenset(), frozenset())),
     )
 
     app_main._recover_monitoring_ai_jobs()
@@ -64,20 +72,25 @@ def test_startup_retires_old_prompt_contracts_before_waking_worker(
             "supersede",
             task_type.value,
             PROMPT_VERSION_BY_TASK[task_type],
-                (
-                    PROTOCOL_RETIREMENT_AUDIT_PROMPT_VERSIONS
-                    if task_type
-                    == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING
-                    else frozenset({MAPPING_ADJUDICATION_PROMPT_VERSION})
-                    if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
-                    else frozenset()
-                ),
+            DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK.get(
+                task_type.value,
+                frozenset({PROMPT_VERSION_BY_TASK[task_type]}),
+            )
+            - {PROMPT_VERSION_BY_TASK[task_type]},
+            PROTOCOL_RETIREMENT_AUDIT_PROMPT_VERSIONS
+            if task_type == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING
+            else frozenset({MAPPING_ADJUDICATION_PROMPT_VERSION})
+            if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
+            else DOCUMENT_AUTHORITY_LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK.get(
+                task_type.value,
+                frozenset(),
+            ),
         )
         for task_type in MonitoringAiTaskType
     ]
     assert events == expected + [
-        ("expire", "", "", frozenset()),
-        ("wake", "", "", frozenset()),
+        ("expire", "", "", frozenset(), frozenset()),
+        ("wake", "", "", frozenset(), frozenset()),
     ]
 
 

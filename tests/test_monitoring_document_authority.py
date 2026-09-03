@@ -10,6 +10,8 @@ from packages.medical_monitoring.admission.document_authority import (
     DOCUMENT_AUTHORITY_SCHEMA_VERSION,
     LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
     LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+    PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
     CandidateAssessment,
     ConflictDecision,
     DocumentAuthorityAnalysis,
@@ -1510,6 +1512,62 @@ def test_legacy_v1_adjudication_context_remains_replayable() -> None:
     assert context["schema_version"] == "monitoring-document-authority-adjudication-v1"
     assert "disputed_candidate_ids_by_role" not in context
     assert result["state"] == "resolved"
+
+
+def test_previous_v2_adjudication_prompt_remains_replayable() -> None:
+    batch = _composite_batch()
+    primary, verifier, packet = _composite_conflict_context(batch)
+    with_supplement = _ecrf_composite_review(packet)
+    without_supplement = _ecrf_composite_review(packet, supplements=())
+    primary_review = _review_run(with_supplement, "primary")
+    verifier_review = _review_run(without_supplement, "verifier")
+    context = build_anonymous_adjudication_context(
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+    )
+    adjudication = _ecrf_adjudication_review(packet)
+    primary_adjudication = _review_run(
+        adjudication, "primary", adjudication=True
+    ).model_copy(
+        update={"prompt_version": PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION}
+    )
+    verifier_adjudication = _review_run(
+        adjudication, "verifier", adjudication=True
+    ).model_copy(
+        update={"prompt_version": PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION}
+    )
+
+    result = resolve_document_authority_adjudication(
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+        context,
+        primary_adjudication,
+        verifier_adjudication,
+    )
+
+    assert context["schema_version"] == "monitoring-document-authority-adjudication-v2"
+    assert result["state"] == "resolved"
+
+    with pytest.raises(DocumentAuthorityError, match="run_identity_invalid"):
+        resolve_document_authority_adjudication(
+            batch,
+            primary,
+            verifier,
+            packet,
+            primary_review,
+            verifier_review,
+            context,
+            primary_adjudication,
+            _review_run(adjudication, "verifier", adjudication=True),
+        )
 
 
 def test_internal_adjudication_remains_fail_closed_and_context_bound() -> None:

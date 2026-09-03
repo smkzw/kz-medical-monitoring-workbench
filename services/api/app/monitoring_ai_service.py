@@ -90,6 +90,8 @@ from packages.medical_monitoring.admission.document_evidence import (
     validate_document_evidence_packet,
 )
 from packages.medical_monitoring.admission.document_authority import (
+    CURRENT_PROMPT_VERSIONS_BY_TASK as DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK,
+    LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK as DOCUMENT_AUTHORITY_LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK,
     PRIMARY_ADJUDICATION_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
     PRIMARY_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_PROMPT_VERSION,
     PRIMARY_REVIEW_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_REVIEW_PROMPT_VERSION,
@@ -1698,7 +1700,7 @@ class MonitoringAiService:
                     f"document-authority-"
                     f"{'adjudication' if adjudication_context is not None else 'review'}:"
                     f"{role}:"
-                    f"{'v2:' if adjudication_context is not None else ''}"
+                    f"{'v3:' if adjudication_context is not None else ''}"
                     f"{packet_sha256}"
                 ),
             )
@@ -3318,6 +3320,13 @@ class MonitoringAiService:
                     "主文件或补充材料的授权候选；主文件、补充材料与明确排除三组"
                     "必须恰好覆盖该角色全部required_considered_candidate_ids，"
                     "不得遗漏、重叠或借候选顺序推断结论。"
+                    " supplementary_candidate_ids只允许纳入明确修改、纠正、补充或"
+                    "共同构成当前主文件规范内容，且必须与主文件合并阅读的文件。"
+                    "旧版完整主文件、重复副本、仅描述历史差异的摘要、填写或操作"
+                    "指南、数据结构或导出说明及其他参考材料，即使与该角色相关，"
+                    "也不属于当前权威补充，必须放入excluded_candidate_ids；这些"
+                    "文件仍保留在隔离候选库，不得因排除于权威组合而声称被删除。"
+                    "必须依据正文作用和版本关系判断，不能只凭文件名关键词。"
                 )
         elif (
             job.task_type

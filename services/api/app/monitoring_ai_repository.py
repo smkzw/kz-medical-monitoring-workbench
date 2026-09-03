@@ -1742,6 +1742,7 @@ class MonitoringAiRepository:
         current_prompt_version: str,
         project_id: str = "",
         reason: str = "",
+        additional_current_prompt_versions: Iterable[str] = (),
         legacy_terminal_prompt_versions: Iterable[str] = (),
     ) -> int:
         """Retire persisted jobs whose prompt contract is no longer current.
@@ -1751,7 +1752,9 @@ class MonitoringAiRepository:
         response arriving from a superseded process cannot persist obsolete
         candidates after a restart.
 
-        ``legacy_terminal_prompt_versions`` is an explicit immutable collection
+        ``additional_current_prompt_versions`` keeps parallel role/stage prompts
+        active under one task type. ``legacy_terminal_prompt_versions`` is an
+        explicit immutable collection
         of prompt versions whose terminal audit evidence survives the cutover:
         only completed and failed jobs (and their proposed candidates) are
         preserved for those versions. Queued, running and blocked jobs are
@@ -1769,6 +1772,16 @@ class MonitoringAiRepository:
                 "current prompt version is required"
             )
         project_id = project_id.strip()
+        current_versions = frozenset(
+            {
+                current_prompt_version,
+                *(
+                    str(item).strip()
+                    for item in additional_current_prompt_versions
+                    if str(item).strip()
+                ),
+            }
+        )
         legacy_versions = frozenset(
             str(item).strip()
             for item in legacy_terminal_prompt_versions
@@ -1778,16 +1791,18 @@ class MonitoringAiRepository:
             reason.strip()
             or (
                 "任务提示词合同已升级为 "
-                f"{current_prompt_version}，旧候选不再代表当前合同。"
+                f"{sorted(current_versions)}，旧候选不再代表当前合同。"
             )
         )
         clauses = [
             "task_type = ?",
-            "prompt_version != ?",
+            "prompt_version NOT IN ("
+            + ",".join("?" for _ in current_versions)
+            + ")",
         ]
         parameters: list[Any] = [
             task_type.value,
-            current_prompt_version,
+            *sorted(current_versions),
         ]
         if project_id:
             clauses.append("project_id = ?")
