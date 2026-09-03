@@ -339,6 +339,7 @@ def test_direct_job_history_builds_server_owned_run_envelope(
     assert identity["structured_payload_field"] == "input_sha256"
     assert identity["required_value"] == document_authority_batch_sha256(batch)
     assert identity["required_value"] != queued.input_revision_sha256
+    assert fake.envelopes[0].max_output_tokens == 48_000
 
 
 def test_document_authority_gets_one_schema_only_repair(tmp_path) -> None:
