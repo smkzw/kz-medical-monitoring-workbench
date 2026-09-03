@@ -25,6 +25,11 @@ _MAPPING_STATUS_CODES = {
     "mapping_profile_not_ready": 409,
     "mapping_bridge_unconfigured": 503,
     "mapping_model_not_configured": 503,
+    "mapping_verifier_unconfigured": 503,
+    "mapping_cohort_invalid": 422,
+    "mapping_cohort_legacy_route": 409,
+    "mapping_verifier_incomplete": 409,
+    "mapping_reconciliation_required": 409,
     "mapping_draft_unconfigured": 503,
     "mapping_bridge_failed": 500,
     "mapping_attempt_id_invalid": 422,
@@ -43,6 +48,14 @@ _MAPPING_MESSAGES = {
     "mapping_profile_not_ready": "数据结构识别尚未完成，暂时无法生成字段对应建议。请等待导入完成后再试。",
     "mapping_bridge_unconfigured": "字段对应服务尚未配置，暂时无法生成建议。请联系管理员完成配置后再试。",
     "mapping_model_not_configured": "字段识别模型尚未按当前项目要求完成配置，本次未发送数据。请完成模型配置后重试。",
+    "mapping_verifier_unconfigured": "独立核对模型服务尚未配置，暂时无法发起盲态核对。请联系管理员完成配置后再试。",
+    "mapping_cohort_invalid": "核对队列标识无效。请使用主分析（primary）或独立核对（verifier）。",
+    "mapping_cohort_legacy_route": (
+        "检测到旧版本单模型生成的字段对应结果，它不能进入新版双模型草稿。"
+        "请使用当前配置的模型重新生成建议后再确认。"
+    ),
+    "mapping_verifier_incomplete": "独立核对尚未完成，系统会继续处理；当前不需要您确认。",
+    "mapping_reconciliation_required": "两次独立分析仍有实质差异，系统将先继续核实；当前不需要您逐项确认。",
     "mapping_draft_unconfigured": "字段对应确认服务尚未配置，暂时无法进入修订。请联系管理员完成配置后再试。",
     "mapping_bridge_failed": "生成字段对应建议时出现问题，本次结果未保存。请重试；如再次失败请联系管理员。",
     "mapping_attempt_id_invalid": "数据导入记录标识无效。请返回上一步重新进入。",
@@ -64,11 +77,21 @@ _MAPPING_MESSAGES = {
 
 class AdmissionMappingPipeline(Protocol):
     def generate_candidates(
-        self, *, project_id: str, attempt_id: str, workspace_dir: Any
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Any,
+        cohort: str = "primary",
     ) -> Mapping[str, Any]: ...
 
     def list_candidates(
-        self, *, project_id: str, attempt_id: str, workspace_dir: Any
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Any,
+        cohort: str = "primary",
     ) -> Mapping[str, Any]: ...
 
 
@@ -181,7 +204,10 @@ def register_mapping_candidate_routes(
 
     @router.post("/data-admissions/{attempt_id}/mapping-candidates", status_code=201)
     async def generate_mapping_candidates(
-        project_id: str, attempt_id: str, request: Request
+        project_id: str,
+        attempt_id: str,
+        request: Request,
+        cohort: str = Query(default="dual"),
     ) -> Any:
         canonical = context.resolve_project(project_id)
         if isinstance(canonical, JSONResponse):
@@ -204,11 +230,34 @@ def register_mapping_candidate_routes(
         except pb.ProjectBackupError as exc:
             return _run_entry_error_response(exc)
         try:
-            result = pipeline.generate_candidates(
-                project_id=canonical,
-                attempt_id=validated_attempt,
-                workspace_dir=context.workspace_dir(context.root, canonical),
-            )
+            workspace = context.workspace_dir(context.root, canonical)
+            if cohort == "dual":
+                primary = pipeline.generate_candidates(
+                    project_id=canonical,
+                    attempt_id=validated_attempt,
+                    workspace_dir=workspace,
+                    cohort="primary",
+                )
+                verifier = pipeline.generate_candidates(
+                    project_id=canonical,
+                    attempt_id=validated_attempt,
+                    workspace_dir=workspace,
+                    cohort="verifier",
+                )
+                result = {
+                    **dict(primary),
+                    "verification": {
+                        "state": verifier.get("state"),
+                        "summary": verifier.get("summary"),
+                    },
+                }
+            else:
+                result = pipeline.generate_candidates(
+                    project_id=canonical,
+                    attempt_id=validated_attempt,
+                    workspace_dir=workspace,
+                    cohort=cohort,
+                )
             public = _public_mapping_projection(result)
             if isinstance(public, JSONResponse):
                 return public
@@ -232,6 +281,7 @@ def register_mapping_candidate_routes(
         attempt_id: str,
         request: Request,
         focus: str = Query(default="critical"),
+        cohort: str = Query(default="dual"),
     ) -> Any:
         canonical = context.resolve_project(project_id)
         if isinstance(canonical, JSONResponse):
@@ -252,7 +302,8 @@ def register_mapping_candidate_routes(
         try:
             confirmation = context.admission_mapping_confirmation
             workspace = context.workspace_dir(context.root, canonical)
-            if confirmation is not None:
+            effective_cohort = "primary" if cohort == "dual" else cohort
+            if confirmation is not None and effective_cohort == "primary":
                 result = confirmation.list_for_review(
                     project_id=canonical,
                     attempt_id=validated_attempt,
@@ -265,9 +316,35 @@ def register_mapping_candidate_routes(
                         project_id=canonical,
                         attempt_id=validated_attempt,
                         workspace_dir=workspace,
+                        cohort=effective_cohort,
                     ),
                     focus=focus,
                 )
+            if cohort == "dual":
+                try:
+                    verifier = pipeline.list_candidates(
+                        project_id=canonical,
+                        attempt_id=validated_attempt,
+                        workspace_dir=workspace,
+                        cohort="verifier",
+                    )
+                    result = {
+                        **dict(result),
+                        "verification": {
+                            "state": verifier.get("state"),
+                            "summary": verifier.get("summary"),
+                        },
+                    }
+                except AdmissionMappingPipelineError as exc:
+                    if exc.code != "mapping_candidates_not_found":
+                        raise
+                    result = {
+                        **dict(result),
+                        "verification": {
+                            "state": "waiting",
+                            "summary": {"job_count": 0, "completed_job_count": 0},
+                        },
+                    }
             public = _public_mapping_projection(result)
             if isinstance(public, JSONResponse):
                 return public
@@ -490,6 +567,7 @@ def register_mapping_candidate_routes(
                 confirmed_by=str(actor),
                 confirmation_reason=body.confirmation_reason,
                 idempotency_key=body.idempotency_key,
+                workspace_dir=context.workspace_dir(context.root, canonical),
             )
             public = _public_mapping_projection(result)
             if isinstance(public, JSONResponse):

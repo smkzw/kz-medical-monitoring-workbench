@@ -262,6 +262,10 @@ def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path
     )
     assert jobs
     payload = repository.input_payload(PROJECT_ID, jobs[0].job_id)
+    assert (
+        payload["field_profile"]["mapping_cohort_schema_version"]
+        == "mm-c3-dual-mapping-cohort-v1"
+    )
     assert "S001" not in str(payload)
     assert payload["field_profile"]["full_profile_sha256"]
     fields = payload["field_profile"]["fields"]

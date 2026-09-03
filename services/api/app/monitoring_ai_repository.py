@@ -22,6 +22,9 @@ from .monitoring_ai_contracts import (
     validate_candidates_for_job,
 )
 from .monitoring_deterministic_metadata_mapping import (
+    DETERMINISTIC_METADATA_MODEL,
+    DETERMINISTIC_METADATA_PROFILE_ID,
+    DETERMINISTIC_METADATA_PROVIDER,
     LEGACY_V7_FIELD_MAPPING_PROMPT_VERSION,
 )
 from .monitoring_protocol_preparation_contract import (
@@ -450,16 +453,77 @@ class MonitoringAiRepository:
         # identity path in ``get``/``input_payload``.
         return tuple(self._job(row, strict_input_identity=False) for row in rows)
 
-    def claim_next(self, owner: str) -> MonitoringAiJob | None:
+    def claim_next(
+        self,
+        owner: str,
+        *,
+        profile_id: str = "",
+        provider: str = "",
+        requested_model: str = "",
+    ) -> MonitoringAiJob | None:
+        """Claim the next runnable job, optionally bound to a runtime identity.
+
+        Dual-cohort queues (primary analysis + independent verifier) share one
+        repository. A worker that passes its runtime identity only claims jobs
+        stamped with that identity — plus deterministic metadata jobs, which
+        run without any model — so a worker can never claim and fail the other
+        cohort's jobs. Without identity arguments the historical unfiltered
+        claim is preserved.
+        """
+
         owner = owner.strip()
         if not owner:
             raise ValueError("claim owner is required")
+        identity = (
+            profile_id.strip(),
+            provider.strip(),
+            requested_model.strip(),
+        )
+        identity_bound = all(identity)
+        if any(identity) and not identity_bound:
+            raise ValueError(
+                "claim identity filter requires profile_id, provider and "
+                "requested_model together"
+            )
         now = self.clock()
         lease_expires = now + timedelta(seconds=self.lease_seconds)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            row = connection.execute(
+            identity_clause = ""
+            parameters: list[Any] = [
+                MonitoringAiJobStatus.QUEUED.value,
+                MonitoringAiJobStatus.RUNNING.value,
+                _iso(now),
+            ]
+            if identity_bound:
+                identity_clause = """
+                AND (
+                    (
+                        candidate.profile_id = ?
+                        AND candidate.provider = ?
+                        AND candidate.requested_model = ?
+                    )
+                    OR (
+                        candidate.profile_id = ?
+                        AND candidate.provider = ?
+                        AND candidate.requested_model = ?
+                    )
+                )
                 """
+                parameters.extend(identity)
+                parameters.extend((
+                    DETERMINISTIC_METADATA_PROFILE_ID,
+                    DETERMINISTIC_METADATA_PROVIDER,
+                    DETERMINISTIC_METADATA_MODEL,
+                ))
+            # The ORDER BY lease-count subquery placeholders follow the
+            # optional identity clause, so its parameters must come last.
+            parameters.extend((
+                MonitoringAiJobStatus.RUNNING.value,
+                _iso(now),
+            ))
+            row = connection.execute(
+                f"""
                 SELECT candidate.* FROM monitoring_ai_jobs AS candidate
                 WHERE (
                     candidate.status = ?
@@ -470,6 +534,7 @@ class MonitoringAiRepository:
                     )
                 )
                 AND candidate.attempt_count < candidate.max_attempts
+                {identity_clause}
                 ORDER BY (
                     SELECT COUNT(*)
                     FROM monitoring_ai_jobs AS active
@@ -484,13 +549,7 @@ class MonitoringAiRepository:
                 candidate.job_id
                 LIMIT 1
                 """,
-                (
-                    MonitoringAiJobStatus.QUEUED.value,
-                    MonitoringAiJobStatus.RUNNING.value,
-                    _iso(now),
-                    MonitoringAiJobStatus.RUNNING.value,
-                    _iso(now),
-                ),
+                tuple(parameters),
             ).fetchone()
             if row is None:
                 connection.commit()
