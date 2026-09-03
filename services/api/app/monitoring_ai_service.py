@@ -3240,6 +3240,9 @@ class MonitoringAiService:
                 " structured_payload.input_sha256必须逐字复制"
                 "document_authority_output_identity.required_value；该值是"
                 "冻结候选批次哈希，不是外层input_revision_sha256。"
+                " locator_count为0的候选没有授权定位证据：必须设为"
+                "usable=false，evidence_locators为空，且不得选为主文件或"
+                "supplementary_bindings。不得创造候选中未提供的locator。"
             )
         elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
             system_prompt += (
@@ -3262,6 +3265,8 @@ class MonitoringAiService:
                 " structured_payload.conflict_packet_sha256必须逐字复制"
                 "document_authority_output_identity.required_value，不是外层"
                 "input_revision_sha256。"
+                " locator_count为0的候选没有授权定位证据，不得选为"
+                "主文件或补充文件，也不得创造locator。"
             )
         elif (
             job.task_type

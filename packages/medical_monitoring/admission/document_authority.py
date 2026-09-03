@@ -19,10 +19,10 @@ DOCUMENT_AUTHORITY_SCHEMA_VERSION = "monitoring-document-authority-v2"
 DOCUMENT_ROLES = ("protocol", "investigator_brochure", "ecrf", "sap")
 REQUIRED_DOCUMENT_ROLES = frozenset({"protocol", "ecrf"})
 AUTO_RESOLVE_CONFIDENCE = 0.9
-PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v4"
-VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v4"
-PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v4"
-VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v4"
+PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v5"
+VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v5"
+PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v5"
+VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v5"
 
 _BATCH_KEYS = frozenset({"manifest_version", "batch_id", "candidates", "authority_status"})
 _CANDIDATE_KEYS = frozenset({
