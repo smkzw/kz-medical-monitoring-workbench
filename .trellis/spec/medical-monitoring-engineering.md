@@ -40,7 +40,8 @@
 - Never hardcode project names, proprietary listing columns, drugs, indications, scales, risk patterns, or one vendor's table shape into the shared core.
 - Real study documents are generalization challenges and evidence sources, not a product constant library.
 - Use the independent harness/model for semantic mapping and protocol/drug/disease interpretation. Product code owns prompts, schemas, deterministic evidence checks, and workflow orchestration.
-- Default the embedded harness to `zhipu-coding-plan/GLM-5.3-flash:high`; retain a working `deepseek/DeepSeek V4 flash:max` configuration path.
+- For first-listing semantic decomposition, use direct `cms-smk/MiniMax-M3:high` as the primary analysis and direct `zhipu-coding-plan/GLM-5.3-flash:high` as a blind, full-coverage verifier. Do not wrap either product call in OMP. Local `MTPLX/Qwen3.8-next-flash` is allowed only after both remote routes have auditable terminal-unavailable evidence and can never be labelled a dual-model pass.
+- Dual-model agreement covers only the frozen evidence packet. It cannot compensate for parser omissions: physical workbook completeness, cross-sheet relationships and current-document evidence must close before automatic mapping confirmation.
 
 ## Verification
 
