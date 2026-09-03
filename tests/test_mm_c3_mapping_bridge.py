@@ -18,6 +18,8 @@ from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_MAPPING_PROFILE_ID,
     MONITORING_C3_MAPPING_PROVIDER,
     MONITORING_C3_REMOTE_UNAVAILABLE_ENV,
+    MONITORING_C3_VERIFIER_MODEL,
+    MONITORING_C3_VERIFIER_PROVIDER,
     monitoring_mapping_runtime_matches,
 )
 from packages.medical_monitoring.admission import (
@@ -240,8 +242,16 @@ def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path
     attempt_id, workspace = _admit(tmp_path)
     repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
     service = MonitoringAiService(repository, runtime_resolver=_runtime)
+    verifier_service = MonitoringAiService(
+        repository,
+        runtime_resolver=lambda: _runtime(
+            MONITORING_C3_VERIFIER_PROVIDER,
+            MONITORING_C3_VERIFIER_MODEL,
+        ),
+    )
     pipeline = AdmissionMappingPipeline(
         ai_service=service,
+        verifier_ai_service=verifier_service,
         ai_repository=repository,
         input_revision_factory=MonitoringAiInputRevision.model_validate,
         task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
@@ -303,8 +313,16 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
     attempt_id, workspace = _admit(tmp_path)
     repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
     service = MonitoringAiService(repository, runtime_resolver=_runtime)
+    verifier_service = MonitoringAiService(
+        repository,
+        runtime_resolver=lambda: _runtime(
+            MONITORING_C3_VERIFIER_PROVIDER,
+            MONITORING_C3_VERIFIER_MODEL,
+        ),
+    )
     pipeline = AdmissionMappingPipeline(
         ai_service=service,
+        verifier_ai_service=verifier_service,
         ai_repository=repository,
         input_revision_factory=MonitoringAiInputRevision.model_validate,
         task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
@@ -345,11 +363,39 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
 
     assert result["state"] == "running"
     assert result["job_count"] == 1
+    verifier_result = pipeline.adjudicate_candidates(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        draft_id="draft-generated-1",
+        draft_fields=[{
+            "domain": "生命体征",
+            "source_field": "SYSBP",
+            "recommended_role": "vital_sign_systolic_blood_pressure",
+            "field_kind": "source_collected",
+        }],
+        workspace_dir=workspace,
+        review_context={
+            "divergences": [{
+                "domain": "生命体征",
+                "source_field": "SYSBP",
+                "primary": {
+                    "recommended_role": "vital_sign_systolic_blood_pressure",
+                    "field_kind": "source_collected",
+                },
+                "verifier": {
+                    "recommended_role": "lab_result",
+                    "field_kind": "source_collected",
+                },
+            }],
+        },
+        cohort="verifier",
+    )
+    assert verifier_result["state"] == "running"
     jobs = repository.list_jobs(
         PROJECT_ID,
         task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING.value,
         business_key_prefix=(
-            f"listing-field-mapping-adjudication:{attempt_id}:"
+            f"listing-field-mapping-adjudication:primary:{attempt_id}:"
         ),
     )
     assert len(jobs) == 1
@@ -361,9 +407,10 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
     assert profile["adjudication_contract"]["schema_version"] == (
         "monitoring_mapping_dual_adjudication_v1"
     )
-    assert profile["adjudication_contract"]["dual_reconciliation"][0][
-        "result"
-    ] == "diverged"
+    options = profile["adjudication_contract"]["candidate_options_review"][0]
+    assert len(options["candidate_options"]) == 2
+    assert "primary" not in options and "verifier" not in options
+    assert profile["adjudication_contract"]["first_pass_mappings"] == []
     assert {
         field["field"]
         for field in profile["read_only_adjudication_context_profiles"]
@@ -371,6 +418,27 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
     assert jobs[0].prompt_version == (
         "monitoring-listing-field-mapping-adjudication-v3"
     )
+    verifier_jobs = repository.list_jobs(
+        PROJECT_ID,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING.value,
+        business_key_prefix=(
+            f"listing-field-mapping-adjudication:verifier:{attempt_id}:"
+        ),
+    )
+    assert len(verifier_jobs) == 1
+    assert verifier_jobs[0].prompt_version == (
+        "monitoring-listing-field-mapping-adjudication-verifier-v1"
+    )
+    verifier_profile = repository.input_payload(
+        PROJECT_ID, verifier_jobs[0].job_id
+    )["field_profile"]
+    assert (
+        verifier_profile["adjudication_contract"]["candidate_options_review"]
+        == profile["adjudication_contract"]["candidate_options_review"]
+    )
+    anonymous_payload = str(verifier_profile["adjudication_contract"])
+    assert MONITORING_C3_VERIFIER_PROVIDER not in anonymous_payload
+    assert MONITORING_C3_MAPPING_PROVIDER not in anonymous_payload
 
 
 def test_pipeline_refuses_non_default_model_without_sending_data(tmp_path: Path) -> None:

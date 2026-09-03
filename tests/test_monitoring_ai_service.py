@@ -623,7 +623,7 @@ def test_adjudication_never_silently_demotes_a_malformed_question(
     profile["adjudication_contract"] = {
         "schema_version": "monitoring_mapping_dual_adjudication_v1",
         "first_pass_mappings": [],
-        "dual_reconciliation": [{
+        "candidate_options_review": [{
             "domain": profile["fields"][0]["domain"],
             "source_field": profile["fields"][0]["field"],
             "result": "diverged",
@@ -648,7 +648,7 @@ def test_adjudication_never_silently_demotes_a_malformed_question(
     assert result.job.failure_code == "invalid_ai_output"
     assert len(provider.envelopes) == 2
     assert "独立第二轮复核" in provider.envelopes[0].system_prompt
-    assert "问题不得提及主模型、核对模型" in provider.envelopes[0].system_prompt
+    assert "问题不得提及模型、字段映射" in provider.envelopes[0].system_prompt
 
 
 def test_verifier_prompt_is_a_full_blind_challenge_not_a_primary_echo(

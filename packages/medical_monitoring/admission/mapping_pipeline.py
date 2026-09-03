@@ -41,11 +41,49 @@ class AdmissionMappingPipelineError(RuntimeError):
 MAPPING_ADJUDICATION_PROMPT_VERSION = (
     "monitoring-listing-field-mapping-adjudication-v3"
 )
+MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION = (
+    "monitoring-listing-field-mapping-adjudication-verifier-v1"
+)
 MAPPING_ADJUDICATION_BUSINESS_PREFIX = (
     "listing-field-mapping-adjudication"
 )
 _ADJUDICATION_GENERATION_RE = re.compile(r":g(\d{2}):")
 _ADJUDICATION_MAX_GENERATIONS = 2
+
+
+def _anonymous_review_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Remove model identity while preserving the two evidence-bound options."""
+
+    projected = []
+    for row in rows:
+        options = []
+        for key in ("primary", "verifier"):
+            raw = row.get(key)
+            if not isinstance(raw, Mapping):
+                continue
+            option = {
+                name: value
+                for name, value in raw.items()
+                if name not in {"candidate_id", "job_id"}
+            }
+            options.append(option)
+        options.sort(
+            key=lambda value: json.dumps(
+                value,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+        projected.append({
+            "domain": str(row.get("domain") or ""),
+            "source_field": str(row.get("source_field") or ""),
+            "candidate_options": options,
+        })
+    return sorted(
+        projected,
+        key=lambda row: (row["domain"], row["source_field"]),
+    )
 
 
 def _store(workspace_dir: Path) -> Store:
@@ -360,15 +398,13 @@ class AdmissionMappingPipeline:
         draft_fields: Sequence[Mapping[str, Any]],
         workspace_dir: Path,
         review_context: Optional[Mapping[str, Any]] = None,
+        cohort: str = MONITORING_MAPPING_COHORT_PRIMARY,
     ) -> Mapping[str, Any]:
-        """Run a focused, auditable pass over questions or dual divergences.
+        """Run one cohort's anonymous, evidence-bound second review."""
 
-        Adjudication is a primary-harness feature: it may compare the already
-        completed blind-review verdict with the primary draft, but the blind
-        verifier itself never receives primary output or this follow-up pass.
-        """
-
-        if not self._configured():
+        contract = self._cohort_contract(cohort)
+        service = self._cohort_service(contract.cohort)
+        if not self._configured(service):
             raise AdmissionMappingPipelineError("mapping_bridge_unconfigured")
         fields = [dict(field) for field in draft_fields]
         if not fields:
@@ -392,13 +428,7 @@ class AdmissionMappingPipeline:
             raw_rows = review_context.get("divergences") or []
             if not isinstance(raw_rows, list):
                 raise AdmissionMappingPipelineError("mapping_bridge_failed")
-            dual_rows = sorted(
-                [dict(row) for row in raw_rows],
-                key=lambda row: (
-                    str(row.get("domain") or ""),
-                    str(row.get("source_field") or ""),
-                ),
-            )
+            dual_rows = _anonymous_review_rows(raw_rows)
         digest = hashlib.sha256(
             json.dumps(
                 {
@@ -413,7 +443,7 @@ class AdmissionMappingPipeline:
         ).hexdigest()[:20]
         query_prefix = (
             f"{MAPPING_ADJUDICATION_BUSINESS_PREFIX}:"
-            f"{attempt_id}:{digest}:"
+            f"{contract.cohort}:{attempt_id}:{digest}:"
         )
         existing = self._repository.list_jobs(
             project_id,
@@ -439,7 +469,7 @@ class AdmissionMappingPipeline:
                 "state": "ready",
                 "generation": generation,
                 "job_count": len(jobs),
-                "mappings": self._adjudication_mappings(jobs),
+                **self._adjudication_payload(jobs),
             }
         if states and not any(
             state in {"failed", "blocked", "stale_input", "cancelled"}
@@ -464,12 +494,7 @@ class AdmissionMappingPipeline:
             attempt_id=attempt_id,
             workspace_dir=workspace_dir,
         )
-        runtime = self._service.runtime_resolver()
-        if not monitoring_mapping_runtime_matches(
-            runtime,
-            required_provider=self._required_provider,
-            required_model=self._required_model,
-        ):
+        if not self._cohort_runtime_ready(service, contract):
             raise AdmissionMappingPipelineError("mapping_model_not_configured")
         try:
             harness_input = self._frozen_harness_input(
@@ -570,7 +595,7 @@ class AdmissionMappingPipeline:
                     if dual_rows
                     else "monitoring_mapping_adjudication_v1"
                 ),
-                "first_pass_mappings": [
+                "first_pass_mappings": [] if dual_rows else [
                     {
                         **row,
                         "uncertainty": str(field.get("uncertainty") or "")[:1000],
@@ -585,28 +610,31 @@ class AdmissionMappingPipeline:
                     ))
                 ],
                 "question_count": len(identity),
-                "dual_reconciliation": dual_rows,
+                "candidate_options_review": dual_rows,
                 "decision_policy": (
-                    "Resolve the blind-review disagreement from evidence. "
-                    "Set user_decision_required=false only when the primary "
-                    "role and field kind remain unchanged. If another mapping "
-                    "is better supported or material ambiguity remains, keep "
-                    "the primary mapping unchanged and ask one plain Chinese "
-                    "medical-meaning question without mentioning models."
+                    "Resolve the anonymous candidate options from evidence. "
+                    "Return the best-supported mapping, including a conservative "
+                    "unmapped result when appropriate. Set user_decision_required "
+                    "only when medically material ambiguity remains, and ask one "
+                    "plain Chinese question without mentioning models."
                     if dual_rows
                     else "Only clear user decision when role and field kind "
                     "remain unchanged and the independent evidence is sufficient."
                 ),
             }
             generation += 1
-            jobs = self._service.submit_listing_field_mapping_chunks(
+            jobs = service.submit_listing_field_mapping_chunks(
                 project_id=project_id,
                 input_revision=self._revision_factory(
                     harness_input.input_revision
                 ),
                 field_profile=profile,
                 chunk_size=12,
-                prompt_version=MAPPING_ADJUDICATION_PROMPT_VERSION,
+                prompt_version=(
+                    MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION
+                    if contract.cohort == MONITORING_MAPPING_COHORT_VERIFIER
+                    else MAPPING_ADJUDICATION_PROMPT_VERSION
+                ),
                 business_key_prefix=(
                     f"{query_prefix}g{generation:02d}"
                 ),
@@ -621,13 +649,17 @@ class AdmissionMappingPipeline:
             "mappings": [],
         }
 
-    def _adjudication_mappings(self, jobs: Sequence[Any]) -> list[dict[str, Any]]:
+    def _adjudication_payload(self, jobs: Sequence[Any]) -> dict[str, Any]:
         mappings = []
+        evidence_ids: set[str] = set()
         for job in jobs:
             for candidate in self._repository.candidates(
                 job.project_id,
                 job.job_id,
             ):
+                evidence_ids.update(
+                    str(item.evidence_id) for item in candidate.evidence
+                )
                 for item in candidate.structured_payload.get(
                     "field_mappings",
                     [],
@@ -637,7 +669,10 @@ class AdmissionMappingPipeline:
                         "candidate_id": candidate.candidate_id,
                         "job_id": job.job_id,
                     })
-        return mappings
+        return {
+            "mappings": mappings,
+            "evidence_ids": sorted(evidence_ids),
+        }
 
     def _project(
         self,

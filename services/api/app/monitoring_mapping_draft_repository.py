@@ -45,6 +45,13 @@ _EDITABLE_FIELD_KEYS = frozenset(
         "standards_reference",
         "derivation_lineage",
         "value_constraints",
+        "evidence_ids",
+        "object_identity",
+        "object_identity_evidence_fields",
+        "object_identity_binding_id",
+        "validated_treatment_identity_binding",
+        "dose_semantics",
+        "quality_gate_actions",
     }
 )
 _RECORDED_USER_DECISION_PREFIXES = ("用户已确认：", "用户已核对：")
@@ -270,10 +277,11 @@ class MonitoringMappingAdjudicationReceipt(BaseModel):
     source_field: str
     input_revision_sha256: str
     reconciliation_sha256: str
-    resolution: Literal["primary_retained", "escalated"]
+    resolution: Literal["primary_retained", "adjudicated_mapping", "escalated"]
     job_id: str
     candidate_id: str
     evidence_ids: tuple[str, ...]
+    review_sources: tuple[dict[str, Any], ...] = ()
     created_at: datetime
 
     @field_validator("input_revision_sha256", "reconciliation_sha256")
@@ -920,6 +928,7 @@ class MonitoringMappingDraftRepository:
                     job_id TEXT NOT NULL,
                     candidate_id TEXT NOT NULL,
                     evidence_ids_json TEXT NOT NULL,
+                    review_sources_json TEXT NOT NULL DEFAULT '[]',
                     created_at TEXT NOT NULL,
                     FOREIGN KEY(draft_id)
                         REFERENCES monitoring_mapping_drafts(draft_id),
@@ -1030,6 +1039,19 @@ class MonitoringMappingDraftRepository:
                     ALTER TABLE monitoring_mapping_revisions
                     ADD COLUMN semantic_quality_report_sha256
                     TEXT NOT NULL DEFAULT ''
+                    """
+                )
+            receipt_columns = {
+                row["name"]
+                for row in connection.execute(
+                    "PRAGMA table_info(monitoring_mapping_adjudication_receipts)"
+                ).fetchall()
+            }
+            if "review_sources_json" not in receipt_columns:
+                connection.execute(
+                    """
+                    ALTER TABLE monitoring_mapping_adjudication_receipts
+                    ADD COLUMN review_sources_json TEXT NOT NULL DEFAULT '[]'
                     """
                 )
             result = connection.execute("PRAGMA integrity_check").fetchone()
@@ -1160,7 +1182,9 @@ class MonitoringMappingDraftRepository:
                 "SELECT * FROM monitoring_mapping_drafts WHERE draft_id = ?",
                 (draft_id,),
             ).fetchone()
-            field_sources = self._field_sources(connection, project_id, draft_id)
+            field_sources = self._effective_field_sources(
+                connection, project_id, draft_id
+            )
             connection.commit()
         return self._draft_from_row(row, field_sources=field_sources)
 
@@ -1181,7 +1205,9 @@ class MonitoringMappingDraftRepository:
             ).fetchone()
             if row is None:
                 raise MonitoringMappingNotFoundError("mapping draft not found")
-            field_sources = self._field_sources(connection, project_id, draft_id)
+            field_sources = self._effective_field_sources(
+                connection, project_id, draft_id
+            )
         return self._draft_from_row(row, field_sources=field_sources)
 
     def find_draft_for_batch(
@@ -1215,10 +1241,8 @@ class MonitoringMappingDraftRepository:
             ).fetchone()
             if row is None:
                 return None
-            field_sources = self._field_sources(
-                connection,
-                project_id,
-                row["draft_id"],
+            field_sources = self._effective_field_sources(
+                connection, project_id, row["draft_id"]
             )
         return self._draft_from_row(row, field_sources=field_sources)
 
@@ -1257,6 +1281,19 @@ class MonitoringMappingDraftRepository:
         if "user_decision_required" in patch and actor != "system_harness":
             raise ValueError(
                 "only the system harness may revise the decision requirement"
+            )
+        provenance_keys = {
+            "evidence_ids",
+            "object_identity",
+            "object_identity_evidence_fields",
+            "object_identity_binding_id",
+            "validated_treatment_identity_binding",
+            "dose_semantics",
+            "quality_gate_actions",
+        }
+        if provenance_keys.intersection(patch) and actor != "system_harness":
+            raise ValueError(
+                "only the system harness may revise mapping provenance"
             )
         request_payload = {
             "project_id": project_id,
@@ -1385,7 +1422,9 @@ class MonitoringMappingDraftRepository:
                 "SELECT * FROM monitoring_mapping_drafts WHERE draft_id = ?",
                 (draft_id,),
             ).fetchone()
-            field_sources = self._field_sources(connection, project_id, draft_id)
+            field_sources = self._effective_field_sources(
+                connection, project_id, draft_id
+            )
             connection.commit()
         return self._draft_from_row(refreshed, field_sources=field_sources)
 
@@ -1480,7 +1519,9 @@ class MonitoringMappingDraftRepository:
                 raise MonitoringMappingStateConflictError(
                     "mapping source changed after draft assembly"
                 )
-            field_sources = self._field_sources(connection, project_id, draft_id)
+            field_sources = self._effective_field_sources(
+                connection, project_id, draft_id
+            )
             validated_fields = tuple(
                 MonitoringMappingField.model_validate(item)
                 for item in json.loads(row["fields_json"])
@@ -1602,10 +1643,11 @@ class MonitoringMappingDraftRepository:
         domain: str,
         source_field: str,
         reconciliation_sha256: str,
-        resolution: Literal["primary_retained", "escalated"],
+        resolution: Literal["primary_retained", "adjudicated_mapping", "escalated"],
         job_id: str,
         candidate_id: str,
         evidence_ids: tuple[str, ...],
+        review_sources: tuple[Mapping[str, Any], ...] = (),
     ) -> MonitoringMappingAdjudicationReceipt:
         """Append one typed, replay-safe receipt for a dual-review decision."""
 
@@ -1620,6 +1662,17 @@ class MonitoringMappingDraftRepository:
         job_id = _require_safe_identifier(job_id, "job_id")
         candidate_id = _require_safe_identifier(candidate_id, "candidate_id")
         cleaned_evidence = tuple(str(item).strip() for item in evidence_ids)
+        cleaned_reviews = tuple(
+            {
+                "cohort": str(item.get("cohort") or "").strip(),
+                "job_id": str(item.get("job_id") or "").strip(),
+                "candidate_id": str(item.get("candidate_id") or "").strip(),
+                "evidence_ids": tuple(
+                    str(value).strip() for value in (item.get("evidence_ids") or ())
+                ),
+            }
+            for item in review_sources
+        )
         if (
             not domain
             or not source_field
@@ -1628,6 +1681,14 @@ class MonitoringMappingDraftRepository:
             or len(cleaned_evidence) != len(set(cleaned_evidence))
         ):
             raise ValueError("adjudication receipt evidence is invalid")
+        if len(cleaned_reviews) != 2 or {
+            item["cohort"] for item in cleaned_reviews
+        } != {"primary", "verifier"}:
+            raise ValueError("adjudication receipt requires two review sources")
+        if resolution not in {
+            "primary_retained", "adjudicated_mapping", "escalated"
+        }:
+            raise ValueError("adjudication receipt resolution is invalid")
         now = self.clock()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -1647,6 +1708,36 @@ class MonitoringMappingDraftRepository:
                 raise MonitoringMappingStateConflictError(
                     "confirmed mapping draft cannot receive adjudication"
                 )
+            verified_reviews = tuple(
+                self._validated_adjudication_source(
+                    connection,
+                    project_id=project_id,
+                    domain=domain,
+                    source_field=source_field,
+                    **item,
+                )
+                for item in cleaned_reviews
+            )
+            selected = next(
+                (
+                    item for item in verified_reviews
+                    if item["job_id"] == job_id
+                    and item["candidate_id"] == candidate_id
+                ),
+                None,
+            )
+            if selected is None or tuple(selected["evidence_ids"]) != cleaned_evidence:
+                connection.rollback()
+                raise MonitoringMappingStateConflictError(
+                    "selected adjudication source is not one of the reviewers"
+                )
+            if len({
+                item["input_revision_sha256"] for item in verified_reviews
+            }) != 1:
+                connection.rollback()
+                raise MonitoringMappingStateConflictError(
+                    "adjudication reviewers did not use the same frozen revision"
+                )
             payload = {
                 "project_id": project_id,
                 "draft_id": draft_id,
@@ -1658,6 +1749,7 @@ class MonitoringMappingDraftRepository:
                 "job_id": job_id,
                 "candidate_id": candidate_id,
                 "evidence_ids": cleaned_evidence,
+                "review_sources": verified_reviews,
             }
             receipt_id = "monmapadj_" + content_sha256(payload)[:28]
             prior = connection.execute(
@@ -1688,8 +1780,9 @@ class MonitoringMappingDraftRepository:
                 INSERT INTO monitoring_mapping_adjudication_receipts(
                     receipt_id, project_id, draft_id, domain, source_field,
                     input_revision_sha256, reconciliation_sha256, resolution,
-                    job_id, candidate_id, evidence_ids_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    job_id, candidate_id, evidence_ids_json,
+                    review_sources_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     receipt_id,
@@ -1703,6 +1796,7 @@ class MonitoringMappingDraftRepository:
                     job_id,
                     candidate_id,
                     canonical_json(cleaned_evidence),
+                    canonical_json(verified_reviews),
                     _iso(now),
                 ),
             )
@@ -1747,8 +1841,102 @@ class MonitoringMappingDraftRepository:
             job_id=row["job_id"],
             candidate_id=row["candidate_id"],
             evidence_ids=tuple(json.loads(row["evidence_ids_json"])),
+            review_sources=tuple(json.loads(row["review_sources_json"])),
             created_at=_datetime(row["created_at"]),
         )
+
+    def _validated_adjudication_source(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        project_id: str,
+        domain: str,
+        source_field: str,
+        cohort: str,
+        job_id: str,
+        candidate_id: str,
+        evidence_ids: tuple[str, ...],
+    ) -> dict[str, Any]:
+        row = connection.execute(
+            """
+            SELECT j.prompt_version, j.input_revision_sha256,
+                   c.status, c.candidate_json
+            FROM monitoring_ai_jobs j
+            JOIN monitoring_ai_candidates c ON c.job_id = j.job_id
+            WHERE j.project_id = ? AND j.job_id = ? AND c.candidate_id = ?
+            """,
+            (project_id, job_id, candidate_id),
+        ).fetchone()
+        if row is None or row["status"] != MonitoringAiCandidateStatus.ACCEPTED.value:
+            raise MonitoringMappingSourceStateError(
+                "adjudication source candidate is not accepted"
+            )
+        payload = json.loads(row["candidate_json"])
+        mappings = [
+            item for item in payload.get("structured_payload", {}).get(
+                "field_mappings", []
+            )
+            if str(item.get("domain") or "").strip() == domain
+            and str(item.get("source_field") or "").strip() == source_field
+        ]
+        known_evidence = {
+            str(item.get("evidence_id") or "")
+            for item in payload.get("evidence", [])
+        }
+        if len(mappings) != 1 or not evidence_ids or not set(evidence_ids).issubset(
+            known_evidence
+        ):
+            raise MonitoringMappingSourceStateError(
+                "adjudication source evidence is not closed"
+            )
+        return {
+            "cohort": cohort,
+            "job_id": job_id,
+            "candidate_id": candidate_id,
+            "candidate_content_sha256": content_sha256(payload),
+            "input_revision_sha256": row["input_revision_sha256"],
+            "prompt_version": row["prompt_version"],
+            "evidence_ids": tuple(evidence_ids),
+        }
+
+    def _effective_field_sources(
+        self,
+        connection: sqlite3.Connection,
+        project_id: str,
+        draft_id: str,
+    ) -> tuple[MonitoringMappingFieldSource, ...]:
+        sources = {
+            (item.domain, item.source_field): item
+            for item in self._field_sources(connection, project_id, draft_id)
+        }
+        rows = connection.execute(
+            """
+            SELECT * FROM monitoring_mapping_adjudication_receipts
+            WHERE project_id = ? AND draft_id = ?
+              AND resolution = 'adjudicated_mapping'
+            ORDER BY created_at, receipt_id
+            """,
+            (project_id, draft_id),
+        ).fetchall()
+        for row in rows:
+            pair = (row["domain"], row["source_field"])
+            selected = next(
+                item
+                for item in json.loads(row["review_sources_json"])
+                if item["job_id"] == row["job_id"]
+                and item["candidate_id"] == row["candidate_id"]
+            )
+            sources[pair] = MonitoringMappingFieldSource(
+                domain=pair[0],
+                source_field=pair[1],
+                job_id=row["job_id"],
+                candidate_id=row["candidate_id"],
+                candidate_content_sha256=selected["candidate_content_sha256"],
+                input_revision_sha256=selected["input_revision_sha256"],
+                prompt_version=selected["prompt_version"],
+                evidence_ids=tuple(json.loads(row["evidence_ids_json"])),
+            )
+        return tuple(sources[pair] for pair in sorted(sources))
 
     def semantic_quality(
         self,

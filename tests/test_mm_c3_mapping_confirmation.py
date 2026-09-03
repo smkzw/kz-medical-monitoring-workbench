@@ -471,28 +471,45 @@ def test_second_pass_only_clears_an_unchanged_evidence_supported_mapping() -> No
         edit_field=edit_field,
         semantic_quality=lambda *_args: quality,
     )
-    candidate = SimpleNamespace(candidate_id="candidate-1", status="proposed")
-    job = SimpleNamespace(
-        job_id="job-1",
-        project_id="p1",
-        input_revision_sha256="r" * 64,
-    )
+    candidates = {
+        cohort: SimpleNamespace(
+            candidate_id=f"candidate-{cohort}", status="proposed"
+        )
+        for cohort in ("primary", "verifier")
+    }
+    jobs = {
+        cohort: SimpleNamespace(
+            job_id=f"job-{cohort}",
+            project_id="p1",
+            input_revision_sha256="r" * 64,
+        )
+        for cohort in ("primary", "verifier")
+    }
     decisions = []
     ai_repo = SimpleNamespace(
-        get=lambda *_args: job,
-        candidates=lambda *_args: (candidate,),
+        get=lambda _project, job_id: next(
+            job for job in jobs.values() if job.job_id == job_id
+        ),
+        candidates=lambda _project, job_id: (
+            next(
+                candidate for cohort, candidate in candidates.items()
+                if jobs[cohort].job_id == job_id
+            ),
+        ),
         decide_candidate=lambda *_args, **kwargs: decisions.append(kwargs),
     )
     pipeline = SimpleNamespace(
-        adjudicate_candidates=lambda **_kwargs: {
+        adjudicate_candidates=lambda **kwargs: {
             "state": "ready",
+            "evidence_ids": [f"ev-{kwargs['cohort']}"],
             "mappings": [{
                 **field,
                 "user_decision_required": False,
                 "uncertainty": "同表语境支持原对应。",
                 "user_action": "同表术语字段与结果分布一致。",
-                "candidate_id": "candidate-1",
-                "job_id": "job-1",
+                "evidence_ids": [f"ev-{kwargs['cohort']}"],
+                "candidate_id": f"candidate-{kwargs['cohort']}",
+                "job_id": f"job-{kwargs['cohort']}",
             }],
         },
     )
@@ -524,10 +541,76 @@ def test_second_pass_only_clears_an_unchanged_evidence_supported_mapping() -> No
     assert decisions
 
 
+def test_second_pass_waits_for_both_independent_reviewers() -> None:
+    field = {
+        "domain": "AE",
+        "source_field": "AETERM",
+        "recommended_role": "ae_term",
+        "field_kind": "source_collected",
+        "confidence": 0.8,
+        "uncertainty": "仍需内部复核。",
+        "user_action": "该列是否为不良事件术语？",
+        "user_decision_required": True,
+    }
+    draft = SimpleNamespace(
+        batch_id="attempt-1",
+        draft_id="draft-1",
+        version=1,
+        model_dump=lambda mode="json": {
+            "project_id": "p1",
+            "draft_id": "draft-1",
+            "batch_id": "attempt-1",
+            "version": 1,
+            "fields": [field],
+        },
+    )
+    edits = []
+    pipeline = SimpleNamespace(
+        adjudicate_candidates=lambda **kwargs: (
+            {
+                "state": "ready",
+                "evidence_ids": ["ev-primary"],
+                "mappings": [{
+                    **field,
+                    "evidence_ids": ["ev-primary"],
+                    "candidate_id": "candidate-primary",
+                    "job_id": "job-primary",
+                }],
+            }
+            if kwargs["cohort"] == "primary"
+            else {"state": "running", "mappings": []}
+        )
+    )
+    service = AdmissionMappingConfirmationService(
+        mapping_pipeline=pipeline,
+        mapping_repository=SimpleNamespace(
+            get_draft=lambda *_args: draft,
+            edit_field=lambda *_args, **kwargs: edits.append(kwargs),
+            semantic_quality=lambda *_args: SimpleNamespace(
+                as_payload=lambda: {"confirmable": True}
+            ),
+        ),
+        ai_repository=SimpleNamespace(),
+        prompt_version="prompt",
+        accepted_status="accepted",
+        proposed_status="proposed",
+    )
+
+    payload = service.adjudicate_draft(
+        project_id="p1",
+        attempt_id="attempt-1",
+        draft_id="draft-1",
+        workspace_dir="/generated/non-real",
+    )
+
+    assert payload["adjudication"]["state"] == "running"
+    assert edits == []
+
+
 @pytest.mark.parametrize(
     ("adjudicated_role", "needs_user", "resolved_count"),
     [
-        ("ae_term", False, 1),
+        ("ae_term_text", False, 1),
         ("ae_term_text", True, 0),
     ],
 )
@@ -581,19 +664,32 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
             as_payload=lambda: {"confirmable": True}
         ),
     )
-    candidate = SimpleNamespace(candidate_id="candidate-dual", status="proposed")
-    job = SimpleNamespace(
-        job_id="job-dual",
-        project_id="p1",
-        input_revision_sha256="r" * 64,
-    )
+    candidates = {
+        cohort: SimpleNamespace(
+            candidate_id=f"candidate-dual-{cohort}", status="proposed"
+        )
+        for cohort in ("primary", "verifier")
+    }
+    jobs = {
+        cohort: SimpleNamespace(
+            job_id=f"job-dual-{cohort}",
+            project_id="p1",
+            input_revision_sha256="r" * 64,
+        )
+        for cohort in ("primary", "verifier")
+    }
     calls = []
     pipeline = SimpleNamespace(
         adjudicate_candidates=lambda **kwargs: calls.append(kwargs) or {
             "state": "ready",
+            "evidence_ids": [f"ev-dual-{kwargs['cohort']}"],
             "mappings": [{
                 **field,
-                "recommended_role": adjudicated_role,
+                "recommended_role": (
+                    adjudicated_role
+                    if kwargs["cohort"] == "primary" or not needs_user
+                    else "ae_term"
+                ),
                 "user_decision_required": needs_user,
                 "uncertainty": "同表及跨表证据复核完成。",
                 "user_action": (
@@ -601,9 +697,9 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
                     if needs_user
                     else "同表事件名称及记录分布支持原对应。"
                 ),
-                "evidence_ids": ["ev-dual-1"],
-                "candidate_id": "candidate-dual",
-                "job_id": "job-dual",
+                "evidence_ids": [f"ev-dual-{kwargs['cohort']}"],
+                "candidate_id": f"candidate-dual-{kwargs['cohort']}",
+                "job_id": f"job-dual-{kwargs['cohort']}",
             }],
         },
     )
@@ -611,8 +707,15 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         mapping_pipeline=pipeline,
         mapping_repository=mapping_repo,
         ai_repository=SimpleNamespace(
-            get=lambda *_args: job,
-            candidates=lambda *_args: (candidate,),
+            get=lambda _project, job_id: next(
+                job for job in jobs.values() if job.job_id == job_id
+            ),
+            candidates=lambda _project, job_id: (
+                next(
+                    candidate for cohort, candidate in candidates.items()
+                    if jobs[cohort].job_id == job_id
+                ),
+            ),
             decide_candidate=lambda *_args, **_kwargs: None,
         ),
         prompt_version="prompt",
@@ -646,11 +749,13 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
 
     assert calls[0]["review_context"] == {"divergences": [divergence]}
     assert receipts[0]["resolution"] == (
-        "escalated" if needs_user else "primary_retained"
+        "escalated" if needs_user else "adjudicated_mapping"
     )
     assert payload["adjudication"]["resolved_count"] == resolved_count
     assert payload["review_summary"]["user_question_count"] == int(needs_user)
-    assert state["field"]["recommended_role"] == "ae_term"
+    assert state["field"]["recommended_role"] == (
+        "ae_term" if needs_user else adjudicated_role
+    )
     assert state["field"]["user_decision_required"] is needs_user
     if needs_user:
         assert "模型" not in state["field"]["user_action"]

@@ -461,16 +461,53 @@ def test_dual_adjudication_receipt_is_typed_idempotent_and_immutable(
         PROFILE_HASH,
     )
 
+    primary_job, primary_candidates = _seed_chunk(
+        ai_repository,
+        batch_id="adjudication-primary",
+        domain="AE",
+        chunk_index=1,
+        chunk_total=1,
+        fields=("AETERM",),
+        domain_field_count=1,
+        full_field_count=1,
+        expected_domains=("AE",),
+    )
+    verifier_job, verifier_candidates = _seed_chunk(
+        ai_repository,
+        batch_id="adjudication-verifier",
+        domain="AE",
+        chunk_index=1,
+        chunk_total=1,
+        fields=("AETERM",),
+        domain_field_count=1,
+        full_field_count=1,
+        expected_domains=("AE",),
+    )
+    review_sources = (
+        {
+            "cohort": "primary",
+            "job_id": primary_job.job_id,
+            "candidate_id": primary_candidates[0].candidate_id,
+            "evidence_ids": (primary_candidates[0].evidence[0].evidence_id,),
+        },
+        {
+            "cohort": "verifier",
+            "job_id": verifier_job.job_id,
+            "candidate_id": verifier_candidates[0].candidate_id,
+            "evidence_ids": (verifier_candidates[0].evidence[0].evidence_id,),
+        },
+    )
     receipt = mapping_repository.record_adjudication(
         "project-alpha",
         draft.draft_id,
         domain="AE",
         source_field="AETERM",
         reconciliation_sha256="d" * 64,
-        resolution="primary_retained",
-        job_id="job-adjudication-1",
-        candidate_id="candidate-adjudication-1",
-        evidence_ids=("ev-adjudication-1",),
+        resolution="adjudicated_mapping",
+        job_id=primary_job.job_id,
+        candidate_id=primary_candidates[0].candidate_id,
+        evidence_ids=(primary_candidates[0].evidence[0].evidence_id,),
+        review_sources=review_sources,
     )
     replay = mapping_repository.record_adjudication(
         "project-alpha",
@@ -478,10 +515,11 @@ def test_dual_adjudication_receipt_is_typed_idempotent_and_immutable(
         domain="AE",
         source_field="AETERM",
         reconciliation_sha256="d" * 64,
-        resolution="primary_retained",
-        job_id="job-adjudication-1",
-        candidate_id="candidate-adjudication-1",
-        evidence_ids=("ev-adjudication-1",),
+        resolution="adjudicated_mapping",
+        job_id=primary_job.job_id,
+        candidate_id=primary_candidates[0].candidate_id,
+        evidence_ids=(primary_candidates[0].evidence[0].evidence_id,),
+        review_sources=review_sources,
     )
 
     assert replay.receipt_id == receipt.receipt_id
@@ -489,6 +527,17 @@ def test_dual_adjudication_receipt_is_typed_idempotent_and_immutable(
         "project-alpha",
         draft.draft_id,
     ) == (receipt,)
+    effective = {
+        (item.domain, item.source_field): item
+        for item in mapping_repository.get_draft(
+            "project-alpha", draft.draft_id
+        ).field_sources
+    }[("AE", "AETERM")]
+    assert effective.job_id == primary_job.job_id
+    assert effective.candidate_id == primary_candidates[0].candidate_id
+    assert {item["cohort"] for item in receipt.review_sources} == {
+        "primary", "verifier"
+    }
     with sqlite3.connect(path) as connection, pytest.raises(
         sqlite3.IntegrityError,
         match="immutable",
