@@ -573,86 +573,133 @@ class AdmissionMappingConfirmationService:
                 )
                 if pair in divergence_pairs and pair not in unresolved_by_pair:
                     unresolved.append(field)
-        result = self.mapping_pipeline.adjudicate_candidates(
-            project_id=project_id,
-            attempt_id=attempt_id,
-            draft_id=draft_id,
-            draft_fields=unresolved,
-            workspace_dir=workspace_dir,
-            review_context=(
-                {"divergences": reconciliation.get("divergences") or []}
-                if reconciliation is not None and divergence_pairs
-                else None
-            ),
+        if not unresolved:
+            projected = self._draft_payload(draft)
+            projected["adjudication"] = {
+                "state": "complete",
+                "resolved_count": 0,
+                "remaining_question_count": 0,
+            }
+            return projected
+        review_context = (
+            {"divergences": reconciliation.get("divergences") or []}
+            if reconciliation is not None and divergence_pairs
+            else None
         )
-        state = str(result.get("state") or "failed")
-        if state != "ready":
+        cohort_results = {
+            cohort: self.mapping_pipeline.adjudicate_candidates(
+                project_id=project_id,
+                attempt_id=attempt_id,
+                draft_id=draft_id,
+                draft_fields=unresolved,
+                workspace_dir=workspace_dir,
+                review_context=review_context,
+                cohort=cohort,
+            )
+            for cohort in ("primary", "verifier")
+        }
+        states = {
+            str(result.get("state") or "failed")
+            for result in cohort_results.values()
+        }
+        if states != {"ready"}:
             projected = self._draft_payload(draft)
             projected["adjudication"] = {
                 "state": (
-                    "complete" if state == "not_needed"
-                    else "blocked" if state == "failed"
-                    else state
+                    "blocked"
+                    if states.intersection({"failed", "blocked"})
+                    else "running"
                 ),
                 "resolved_count": 0,
                 "remaining_question_count": len(unresolved),
             }
             return projected
 
-        for job_id in {
-            str(item.get("job_id") or "")
-            for item in result.get("mappings") or []
-            if str(item.get("job_id") or "")
-        }:
-            job = self.ai_repository.get(project_id, job_id)
-            if self._revision_for_job(job, workspace_dir=workspace_dir) != str(
-                job.input_revision_sha256
-            ):
-                raise AdmissionMappingPipelineError("mapping_run_incomplete")
-            candidates = self.ai_repository.candidates(project_id, job_id)
-            for candidate in candidates:
-                status = _value(candidate.status)
-                if status == _value(self.proposed_status):
-                    self.ai_repository.decide_candidate(
-                        project_id,
-                        candidate.candidate_id,
-                        decision=self.accepted_status,
-                        actor="system_harness",
-                        reason="已作为字段语义第二轮复核依据。",
-                        current_input_revision_sha256=str(
-                            job.input_revision_sha256
-                        ),
-                    )
-                elif status != _value(self.accepted_status):
-                    raise AdmissionMappingPipelineError(
-                        "mapping_candidate_not_adoptable"
-                    )
+        for result in cohort_results.values():
+            for job_id in {
+                str(item.get("job_id") or "")
+                for item in result.get("mappings") or []
+                if str(item.get("job_id") or "")
+            }:
+                job = self.ai_repository.get(project_id, job_id)
+                if self._revision_for_job(job, workspace_dir=workspace_dir) != str(
+                    job.input_revision_sha256
+                ):
+                    raise AdmissionMappingPipelineError("mapping_run_incomplete")
+                candidates = self.ai_repository.candidates(project_id, job_id)
+                for candidate in candidates:
+                    status = _value(candidate.status)
+                    if status == _value(self.proposed_status):
+                        self.ai_repository.decide_candidate(
+                            project_id,
+                            candidate.candidate_id,
+                            decision=self.accepted_status,
+                            actor="system_harness",
+                            reason="已作为字段语义第二轮独立复核依据。",
+                            current_input_revision_sha256=str(
+                                job.input_revision_sha256
+                            ),
+                        )
+                    elif status != _value(self.accepted_status):
+                        raise AdmissionMappingPipelineError(
+                            "mapping_candidate_not_adoptable"
+                        )
+
+        second_review = reconcile_mapping_cohorts(
+            profile_fields=[
+                {
+                    "domain": field.get("domain"),
+                    "source_field": field.get("source_field"),
+                }
+                for field in unresolved
+            ],
+            primary_mappings=cohort_results["primary"].get("mappings") or [],
+            verifier_mappings=cohort_results["verifier"].get("mappings") or [],
+            primary_evidence_ids=cohort_results["primary"].get("evidence_ids") or [],
+            verifier_evidence_ids=cohort_results["verifier"].get("evidence_ids") or [],
+        )
+        if second_review["state"] == "blocked":
+            projected = self._draft_payload(draft)
+            projected["adjudication"] = {
+                "state": "blocked",
+                "resolved_count": 0,
+                "remaining_question_count": len(unresolved),
+            }
+            return projected
 
         first_pass = {
             (str(field.get("domain")), str(field.get("source_field"))): field
             for field in unresolved
         }
         resolved = 0
-        for item in result.get("mappings") or []:
+        cohort_maps = {
+            cohort: {
+                (str(item.get("domain") or ""), str(item.get("source_field") or "")): item
+                for item in result.get("mappings") or []
+            }
+            for cohort, result in cohort_results.items()
+        }
+        for review_row in second_review.get("fields") or []:
             pair = (
-                str(item.get("domain") or ""),
-                str(item.get("source_field") or ""),
+                str(review_row.get("domain") or ""),
+                str(review_row.get("source_field") or ""),
             )
             original = first_pass.get(pair)
+            primary_item = cohort_maps["primary"].get(pair)
+            verifier_item = cohort_maps["verifier"].get(pair)
+            if original is None or primary_item is None or verifier_item is None:
+                continue
+            agreed = review_row.get("result") == "agreed"
+            item = primary_item
             rationale = str(item.get("user_action") or "").strip()
             requires_user = (
-                original is None
+                not agreed
                 or _model_flag(item)
+                or _model_flag(verifier_item)
                 or not rationale
                 or "?" in rationale
                 or "？" in rationale
-                or str(item.get("recommended_role") or "").strip()
-                != str(original.get("recommended_role") or "").strip()
-                or str(_value(item.get("field_kind") or "")).strip()
-                != str(_value(original.get("field_kind") or "")).strip()
             )
-            if original is None:
-                continue
             current = self.mapping_repository.get_draft(project_id, draft_id)
             current_payload = current.model_dump(mode="json")
             current_field = next(
@@ -683,9 +730,13 @@ class AdmissionMappingConfirmationService:
                 ).encode("utf-8")
             ).hexdigest()
             if requires_user:
-                if pair not in divergence_pairs:
-                    continue
-                question = rationale if ("?" in rationale or "？" in rationale) else (
+                questions = [
+                    str(candidate.get("user_action") or "").strip()
+                    for candidate in (primary_item, verifier_item)
+                    if "?" in str(candidate.get("user_action") or "")
+                    or "？" in str(candidate.get("user_action") or "")
+                ]
+                question = questions[0] if questions else (
                     f"请确认「{pair[0]}·{pair[1]}」记录的实际医学含义。"
                 )
                 patch = {
@@ -697,12 +748,24 @@ class AdmissionMappingConfirmationService:
                 }
             else:
                 patch = {
+                    key: item[key]
+                    for key in (
+                        "recommended_role", "field_kind", "confidence",
+                        "related_fields", "evidence_ids", "standards_reference",
+                        "derivation_lineage", "value_constraints", "object_identity",
+                        "object_identity_evidence_fields", "object_identity_binding_id",
+                        "validated_treatment_identity_binding", "dose_semantics",
+                        "quality_gate_actions",
+                    )
+                    if key in item
+                }
+                patch.update({
                     "user_decision_required": False,
                     "uncertainty": (
                         f"第二轮独立复核：{uncertainty or '当前证据支持原字段对应。'}"
                     ),
                     "user_action": f"{_SYSTEM_ADJUDICATION_PREFIX}{rationale}",
-                }
+                })
             self.mapping_repository.edit_field(
                 project_id,
                 draft_id,
@@ -714,6 +777,20 @@ class AdmissionMappingConfirmationService:
                 idempotency_key=operation_id,
             )
             if pair in divergence_pairs:
+                review_sources = tuple(
+                    {
+                        "cohort": cohort,
+                        "job_id": str(candidate.get("job_id") or ""),
+                        "candidate_id": str(candidate.get("candidate_id") or ""),
+                        "evidence_ids": tuple(
+                            str(value) for value in (candidate.get("evidence_ids") or ())
+                        ),
+                    }
+                    for cohort, candidate in (
+                        ("primary", primary_item),
+                        ("verifier", verifier_item),
+                    )
+                )
                 self.mapping_repository.record_adjudication(
                     project_id,
                     draft_id,
@@ -721,13 +798,16 @@ class AdmissionMappingConfirmationService:
                     source_field=pair[1],
                     reconciliation_sha256=reconciliation_sha256,
                     resolution=(
-                        "escalated" if requires_user else "primary_retained"
+                        "escalated"
+                        if requires_user
+                        else "adjudicated_mapping"
                     ),
                     job_id=str(item.get("job_id") or ""),
                     candidate_id=str(item.get("candidate_id") or ""),
                     evidence_ids=tuple(
                         str(value) for value in (item.get("evidence_ids") or ())
                     ),
+                    review_sources=review_sources,
                 )
             if not requires_user:
                 resolved += 1
@@ -1018,7 +1098,9 @@ class AdmissionMappingConfirmationService:
                 continue
             if (
                 _model_flag(field)
-                or receipt.resolution != "primary_retained"
+                or receipt.resolution not in {
+                    "primary_retained", "adjudicated_mapping"
+                }
                 or not str(field.get("user_action") or "").startswith(
                     _SYSTEM_ADJUDICATION_PREFIX
                 )

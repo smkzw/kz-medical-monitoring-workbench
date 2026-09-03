@@ -2949,30 +2949,39 @@ class MonitoringAiService:
             ].get("adjudication_contract")
             if isinstance(adjudication_contract, dict):
                 dual_review = adjudication_contract.get(
-                    "dual_reconciliation"
+                    "candidate_options_review"
                 )
                 system_prompt += (
                     " 本任务是字段映射的独立第二轮复核。"
-                    "adjudication_contract.first_pass_mappings记录第一轮判断，"
                     "read_only_adjudication_context提供与疑点有关的同表及跨表"
-                    "脱敏画像。必须独立核对，不得机械附和第一轮。只有当当前"
-                    "证据足以支持第一轮recommended_role与field_kind均保持不变，"
-                    "且无需用户补充资料即可可靠用于医学分析时，才把"
-                    "user_decision_required设为false，并在user_action中用中文"
-                    "简述证据依据。若角色应改变、证据仍不足或缺失的标签会改变"
-                    "下游医学分类，必须保持true并提出一个具体中文问题。"
+                    "脱敏画像。必须独立核对。只有当当前"
+                    "证据足以支持某一字段解释，且无需用户补充资料即可可靠用于"
+                    "医学分析时，应返回该解释并把user_decision_required设为false，"
+                    "在user_action中用中文简述证据依据。若证据仍不足或缺失信息会改变下游医学"
+                    "分类，才保持true并提出一个具体中文问题。"
                     "不得仅因希望减少问题数量而清除疑点。"
                 )
                 if isinstance(dual_review, list) and dual_review:
                     system_prompt += (
-                        " adjudication_contract.dual_reconciliation记录主分析与"
-                        "全量盲核之间的差异以及各自证据闭合状态。请依据同一冻结"
-                        "输入、字段画像、同表与跨表关系独立裁决，不得按模型身份、"
-                        "多数或置信度数值机械选边。只有证据仍支持主分析原有的"
-                        "recommended_role与field_kind时才可设为false；若盲核解释"
-                        "更合理、需要改角色或医学含义仍不确定，必须设为true，"
-                        "并只提出一个普通医学监查人员看得懂的中文问题。问题不得"
-                        "提及主模型、核对模型、字段映射、JSON、置信度或内部状态。"
+                        " adjudication_contract.candidate_options_review记录两组"
+                        "匿名候选解释及证据闭合状态。请依据同一冻结输入、字段画像、"
+                        "同表与跨表关系独立裁决，不得猜测候选来源，也不得按顺序、"
+                        "多数或置信度数值机械选边。证据支持任一候选或另一更合理解释"
+                        "时都应直接返回该解释；只有医学含义仍实质不确定时才提出一个"
+                        "普通医学监查人员看得懂的中文问题。问题不得提及模型、字段"
+                        "映射、JSON、置信度或内部状态。"
+                    )
+                else:
+                    system_prompt += (
+                        " adjudication_contract.first_pass_mappings记录需要复核的"
+                        "既有解释；不得机械附和，应以冻结证据重新判断。"
+                    )
+                if job.prompt_version == (
+                    "monitoring-listing-field-mapping-adjudication-verifier-v1"
+                ):
+                    system_prompt += (
+                        " 你是与另一复核harness隔离运行的第二裁决者。不得推测或复述"
+                        "另一裁决者的答案；必须独立寻找反证、遗漏和更保守解释。"
                     )
         elif (
             job.task_type
