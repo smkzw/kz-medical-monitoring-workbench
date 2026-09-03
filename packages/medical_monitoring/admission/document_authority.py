@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence, Union
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, field_validator, model_validator
 
@@ -26,9 +26,15 @@ VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v6"
 PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v6"
 VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v6"
 PRIMARY_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-primary-v1"
+    "monitoring-document-authority-adjudication-primary-v2"
 )
 VERIFIER_ADJUDICATION_PROMPT_VERSION = (
+    "monitoring-document-authority-adjudication-verifier-v2"
+)
+LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION = (
+    "monitoring-document-authority-adjudication-primary-v1"
+)
+LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION = (
     "monitoring-document-authority-adjudication-verifier-v1"
 )
 
@@ -51,12 +57,16 @@ _CONFLICT_PACKET_KEYS = frozenset({
     "conflict_roles", "allowed_candidate_ids_by_role", "candidates",
     "candidate_coverage", "conflict_packet_sha256",
 })
-_ADJUDICATION_CONTEXT_KEYS = frozenset({
+_ADJUDICATION_CONTEXT_V1_KEYS = frozenset({
     "schema_version",
     "conflict_packet_sha256",
     "unresolved_roles",
     "options_by_role",
     "adjudication_context_sha256",
+})
+_ADJUDICATION_CONTEXT_KEYS = frozenset({
+    *_ADJUDICATION_CONTEXT_V1_KEYS,
+    "disputed_candidate_ids_by_role",
 })
 _DOCUMENT_VERSION_RE = re.compile(
     r"(?:[Vv](?:ersion)?\s*[0-9]+(?:[._-][0-9A-Za-z]+)*(?:版|版本|稿)?|"
@@ -170,7 +180,13 @@ def validate_document_authority_adjudication_context(
     packet: Mapping[str, Any], context: Mapping[str, Any]
 ) -> str:
     packet_sha256 = validate_document_authority_conflict_packet(packet)
-    if set(context) != _ADJUDICATION_CONTEXT_KEYS:
+    schema_version = context.get("schema_version")
+    expected_keys = (
+        _ADJUDICATION_CONTEXT_V1_KEYS
+        if schema_version == "monitoring-document-authority-adjudication-v1"
+        else _ADJUDICATION_CONTEXT_KEYS
+    )
+    if set(context) != expected_keys:
         raise DocumentAuthorityError("document_authority_adjudication_context_invalid")
     claimed = str(context.get("adjudication_context_sha256") or "")
     body = {
@@ -180,15 +196,22 @@ def validate_document_authority_adjudication_context(
     }
     roles = tuple(str(value) for value in context.get("unresolved_roles", ()))
     options = context.get("options_by_role")
+    disputed = context.get("disputed_candidate_ids_by_role")
     if (
-        context.get("schema_version")
-        != "monitoring-document-authority-adjudication-v1"
+        schema_version not in {
+            "monitoring-document-authority-adjudication-v1",
+            "monitoring-document-authority-adjudication-v2",
+        }
         or context.get("conflict_packet_sha256") != packet_sha256
         or not roles
         or len(roles) != len(set(roles))
         or not set(roles).issubset(packet["conflict_roles"])
         or not isinstance(options, Mapping)
         or set(options) != set(roles)
+        or (
+            schema_version == "monitoring-document-authority-adjudication-v2"
+            and (not isinstance(disputed, Mapping) or set(disputed) != set(roles))
+        )
         or claimed != _digest(body)
     ):
         raise DocumentAuthorityError("document_authority_adjudication_context_invalid")
@@ -217,11 +240,45 @@ def validate_document_authority_adjudication_context(
                 set(packet["allowed_candidate_ids_by_role"][role]),
                 candidates,
             )
+        left_bound = _decision_bound_candidate_ids(decisions[0])
+        right_bound = _decision_bound_candidate_ids(decisions[1])
+        expected_disputed = sorted(left_bound ^ right_bound)
+        if (
+            schema_version == "monitoring-document-authority-adjudication-v2"
+            and disputed[role] != expected_disputed
+        ):
+            raise DocumentAuthorityError(
+                "document_authority_adjudication_context_invalid"
+            )
         if list(raw_options) != sorted(raw_options, key=_digest):
             raise DocumentAuthorityError(
                 "document_authority_adjudication_context_invalid"
             )
     return claimed
+
+
+def validate_document_authority_adjudication_review(
+    packet: Mapping[str, Any],
+    context: Mapping[str, Any],
+    review: "DocumentAuthorityConflictReview",
+) -> None:
+    validate_document_authority_adjudication_context(packet, context)
+    if context["schema_version"] != "monitoring-document-authority-adjudication-v2":
+        validate_document_authority_conflict_review(packet, review)
+        return
+    validate_document_authority_conflict_review(packet, review)
+    roles = tuple(str(value) for value in packet["conflict_roles"])
+    decisions = _review_index(review, roles)
+    candidates = {
+        str(item["candidate_id"]): item for item in packet["candidates"]
+    }
+    for role in context["unresolved_roles"]:
+        _validate_conflict_decision(
+            decisions[role],
+            set(packet["allowed_candidate_ids_by_role"][role]),
+            candidates,
+            require_complete_disposition=True,
+        )
 
 
 def _validate_nonempty_unique(values: tuple[str, ...]) -> tuple[str, ...]:
@@ -411,6 +468,28 @@ class DocumentAuthorityConflictReview(BaseModel):
     decisions: tuple[ConflictDecision, ...]
 
 
+class AdjudicationDecision(ConflictDecision):
+    excluded_candidate_ids: tuple[str, ...] = Field(
+        max_length=MAX_DOCUMENT_AUTHORITY_CANDIDATES
+    )
+
+    _excluded = field_validator("excluded_candidate_ids")(_validate_nonempty_unique)
+
+    @model_validator(mode="after")
+    def validate_exclusions(self) -> "AdjudicationDecision":
+        if set(self.excluded_candidate_ids) & _decision_bound_candidate_ids(self):
+            raise ValueError("excluded candidates cannot also be bound")
+        return self
+
+
+class DocumentAuthorityAdjudicationReview(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[DOCUMENT_AUTHORITY_SCHEMA_VERSION]
+    conflict_packet_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decisions: tuple[AdjudicationDecision, ...]
+
+
 class DocumentAuthorityConflictRunEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -423,7 +502,10 @@ class DocumentAuthorityConflictRunEnvelope(BaseModel):
     conflict_packet_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     job_input_revision_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     output_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    review: DocumentAuthorityConflictReview
+    review: Union[
+        DocumentAuthorityAdjudicationReview,
+        DocumentAuthorityConflictReview,
+    ]
 
     @model_validator(mode="after")
     def bind_output(self) -> "DocumentAuthorityConflictRunEnvelope":
@@ -596,6 +678,8 @@ def build_anonymous_adjudication_context(
     conflict_packet: Mapping[str, Any],
     review_primary: DocumentAuthorityConflictRunEnvelope,
     review_verifier: DocumentAuthorityConflictRunEnvelope,
+    *,
+    legacy_v1: bool = False,
 ) -> dict[str, Any]:
     resolution = resolve_document_authority_conflicts(
         batch,
@@ -621,12 +705,25 @@ def build_anonymous_adjudication_context(
         )
         for role in unresolved
     }
+    disputed = {
+        role: sorted(
+            _decision_bound_candidate_ids(left[role])
+            ^ _decision_bound_candidate_ids(right[role])
+        )
+        for role in unresolved
+    }
     context = {
-        "schema_version": "monitoring-document-authority-adjudication-v1",
+        "schema_version": (
+            "monitoring-document-authority-adjudication-v1"
+            if legacy_v1
+            else "monitoring-document-authority-adjudication-v2"
+        ),
         "conflict_packet_sha256": conflict_packet["conflict_packet_sha256"],
         "unresolved_roles": list(unresolved),
         "options_by_role": options,
     }
+    if not legacy_v1:
+        context["disputed_candidate_ids_by_role"] = disputed
     output = {**context, "adjudication_context_sha256": _digest(context)}
     validate_document_authority_adjudication_context(conflict_packet, output)
     return output
@@ -692,7 +789,7 @@ def resolve_document_authority_conflicts(
         "resolved_roles": sorted(resolved, key=lambda item: DOCUMENT_ROLES.index(item["role"])),
         "unresolved_roles": unresolved,
         "user_question": (
-            "系统仍无法可靠判断部分研究文件的当前版本，请选择应作为本次分析依据的文件。"
+            "现有文件仍无法明确区分版本或签署状态，请一次重新选择完整研究文件。"
             if unresolved else ""
         ),
         "review_run_ids": sorted((primary.run_id, verifier.run_id)),
@@ -726,6 +823,10 @@ def resolve_document_authority_adjudication(
         conflict_packet,
         review_primary,
         review_verifier,
+        legacy_v1=(
+            adjudication_context.get("schema_version")
+            == "monitoring-document-authority-adjudication-v1"
+        ),
     )
     if adjudication_context != expected_context:
         raise DocumentAuthorityError("document_authority_adjudication_context_tampered")
@@ -734,10 +835,17 @@ def resolve_document_authority_adjudication(
         adjudication_primary,
         adjudication_verifier,
         expected_hash,
-        stage="adjudication",
+        stage=(
+            "legacy_adjudication"
+            if adjudication_context.get("schema_version")
+            == "monitoring-document-authority-adjudication-v1"
+            else "adjudication"
+        ),
     )
     for run in (adjudication_primary, adjudication_verifier):
-        validate_document_authority_conflict_review(conflict_packet, run.review)
+        validate_document_authority_adjudication_review(
+            conflict_packet, adjudication_context, run.review
+        )
 
     initial = resolve_document_authority_conflicts(
         batch,
@@ -868,7 +976,9 @@ def _validate_run_pair(
     right: Any,
     input_hash: str,
     *,
-    stage: Literal["analysis", "review", "adjudication"],
+    stage: Literal[
+        "analysis", "review", "adjudication", "legacy_adjudication"
+    ],
 ) -> None:
     if left.run_id == right.run_id or left.job_id == right.job_id:
         raise DocumentAuthorityError("document_authority_runs_not_independent")
@@ -878,7 +988,9 @@ def _validate_run_pair(
         (
             "primary", MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL,
             (
-                PRIMARY_ADJUDICATION_PROMPT_VERSION
+                LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION
+                if stage == "legacy_adjudication"
+                else PRIMARY_ADJUDICATION_PROMPT_VERSION
                 if stage == "adjudication"
                 else PRIMARY_REVIEW_PROMPT_VERSION
                 if stage == "review"
@@ -888,7 +1000,9 @@ def _validate_run_pair(
         (
             "verifier", MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL,
             (
-                VERIFIER_ADJUDICATION_PROMPT_VERSION
+                LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION
+                if stage == "legacy_adjudication"
+                else VERIFIER_ADJUDICATION_PROMPT_VERSION
                 if stage == "adjudication"
                 else VERIFIER_REVIEW_PROMPT_VERSION
                 if stage == "review"
@@ -1002,6 +1116,8 @@ def _validate_conflict_decision(
     item: ConflictDecision,
     allowed: set[str],
     candidates: Mapping[str, Mapping[str, Any]],
+    *,
+    require_complete_disposition: bool = False,
 ) -> None:
     if set(item.considered_candidate_ids) != allowed:
         raise DocumentAuthorityError("document_authority_review_coverage_invalid")
@@ -1009,6 +1125,18 @@ def _validate_conflict_decision(
         raise DocumentAuthorityError("document_authority_review_candidate_unknown")
     if any(candidate_id not in allowed for candidate_id in item.supplementary_candidate_ids):
         raise DocumentAuthorityError("document_authority_review_candidate_unknown")
+    excluded_candidate_ids = tuple(
+        getattr(item, "excluded_candidate_ids", ())
+    )
+    if any(candidate_id not in allowed for candidate_id in excluded_candidate_ids):
+        raise DocumentAuthorityError("document_authority_review_candidate_unknown")
+    if require_complete_disposition:
+        bound = _decision_bound_candidate_ids(item)
+        excluded = set(excluded_candidate_ids)
+        if bound & excluded or bound | excluded != allowed:
+            raise DocumentAuthorityError(
+                "document_authority_review_disposition_incomplete"
+            )
     locators_by_candidate = {
         candidate_id: {
             str(evidence["locator"])
@@ -1055,6 +1183,13 @@ def _same_conflict_selection(left: ConflictDecision, right: ConflictDecision) ->
         and _normalized(left.uncertainty) == _normalized(right.uncertainty)
         and min(left.confidence, right.confidence) >= REVIEW_CONSENSUS_CONFIDENCE
     )
+
+
+def _decision_bound_candidate_ids(item: ConflictDecision) -> set[str]:
+    return {
+        item.selected_candidate_id,
+        *item.supplementary_candidate_ids,
+    } - {""}
 
 
 def _same_conflict_missing(
