@@ -40,10 +40,11 @@ from .workbook_manifest import (
     SOURCE_PROFILE_GATE_SCHEMA_VERSION,
     WorkbookManifestError,
     enforce_source_to_profile_gate,
+    validate_workbook_manifest_bundle,
 )
 
 
-MAPPING_BRIDGE_SCHEMA_VERSION = "mm-c3-mapping-profile-bridge-v6"
+MAPPING_BRIDGE_SCHEMA_VERSION = "mm-c3-mapping-profile-bridge-v7"
 PROFILE_SCHEMA_VERSION = "monitoring_ai_field_profile_v3"
 _SUBJECT_ROLE = "受试者标识"
 _TYPE_MAP = {
@@ -80,6 +81,7 @@ def _source_bindings(
         raise MappingBridgeError("admission source identity is inconsistent")
     bindings: list[dict[str, str]] = []
     revision_by_file: dict[str, str] = {}
+    revisions_by_basename: dict[str, set[str]] = {}
     for file_item, revision_id in zip(files, revision_ids):
         if not isinstance(file_item, Mapping):
             raise MappingBridgeError("admission file identity is malformed")
@@ -93,15 +95,43 @@ def _source_bindings(
             "source_content_sha256": digest,
         })
         revision_by_file[path] = revision
-        revision_by_file[path.rsplit("/", 1)[-1]] = revision
+        revisions_by_basename.setdefault(path.rsplit("/", 1)[-1], set()).add(
+            revision
+        )
+    for basename, revisions in revisions_by_basename.items():
+        if len(revisions) == 1:
+            revision_by_file[basename] = next(iter(revisions))
     return bindings, revision_by_file
+
+
+def _sheet_indexes(
+    technical: Mapping[str, Any],
+    revision_by_file: Mapping[str, str],
+) -> dict[tuple[str, str], int]:
+    bundle = validate_workbook_manifest_bundle(technical.get("physical_manifest"))
+    result: dict[tuple[str, str], int] = {}
+    for entry in bundle["files"]:
+        source_file = str(entry["source_file"])
+        revision_id = revision_by_file.get(
+            source_file,
+            revision_by_file.get(source_file.rsplit("/", 1)[-1], ""),
+        )
+        if not revision_id:
+            raise MappingBridgeError("manifest source identity is ambiguous")
+        for sheet in entry["manifest"]["sheets"]:
+            key = (revision_id, str(sheet["sheet_name"]))
+            if key in result:
+                raise MappingBridgeError("manifest sheet identity is ambiguous")
+            result[key] = int(sheet["sheet_index"])
+    return result
 
 
 def _table_bindings(
     tables: Sequence[Mapping[str, Any]],
     technical: Mapping[str, Any],
     revision_by_file: Mapping[str, str],
-) -> list[dict[str, str]]:
+    sheet_indexes: Mapping[tuple[str, str], int],
+) -> list[dict[str, Any]]:
     snapshot_ids = technical.get("snapshot_ids")
     if not isinstance(snapshot_ids, list) or len(snapshot_ids) != len(tables):
         raise MappingBridgeError("admission table identity is inconsistent")
@@ -111,13 +141,25 @@ def _table_bindings(
         source_file = str(table.get("source_file") or "").strip()
         revision_id = revision_by_file.get(source_file, "")
         snapshot = str(snapshot_id or "").strip()
-        if not domain or not source_file or not revision_id or not snapshot:
+        sheet_index = sheet_indexes.get((revision_id, domain))
+        if (
+            not domain or not source_file or not revision_id or not snapshot
+            or not _is_non_bool_int(sheet_index) or sheet_index < 1
+        ):
             raise MappingBridgeError("admission table identity is incomplete")
+        binding_id = "mmtable_" + content_hash({
+            "source_revision_id": revision_id,
+            "sheet_index": sheet_index,
+            "sheet_name": domain,
+            "snapshot_id": snapshot,
+        })[:28]
         result.append({
+            "table_binding_id": binding_id,
             "domain": domain,
             "source_file": source_file,
             "source_revision_id": revision_id,
             "snapshot_id": snapshot,
+            "sheet_index": sheet_index,
         })
     return result
 
@@ -142,6 +184,7 @@ def _field_payload(
     column_index: int,
     rows: Sequence[Mapping[str, Any]],
     columns: Sequence[Mapping[str, Any]],
+    table_binding: Mapping[str, Any],
 ) -> dict[str, Any]:
     domain = str(table.get("name") or table.get("table_name") or "").strip()
     field = str(column.get("name") or "").strip()
@@ -189,6 +232,14 @@ def _field_payload(
         rows=rows,
     )
     return {
+        "field_binding_id": "mmfield_" + content_hash({
+            "table_binding_id": table_binding["table_binding_id"],
+            "column_index": column_index,
+            "field": field,
+        })[:28],
+        "table_binding_id": table_binding["table_binding_id"],
+        "source_revision_id": table_binding["source_revision_id"],
+        "sheet_index": table_binding["sheet_index"],
         "domain": domain,
         "field": field,
         "source_label": str(column.get("source_label") or field).strip(),
@@ -304,7 +355,10 @@ def admission_record_to_harness_input(
     if not isinstance(tables, list) or not tables or not isinstance(technical, Mapping):
         raise MappingBridgeError("admission profile is incomplete")
     source_bindings, revision_by_file = _source_bindings(technical)
-    table_bindings = _table_bindings(tables, technical, revision_by_file)
+    sheet_indexes = _sheet_indexes(technical, revision_by_file)
+    table_bindings = _table_bindings(
+        tables, technical, revision_by_file, sheet_indexes
+    )
     fields = []
     table_field_order: Dict[str, list[str]] = {}
     snapshot_ids = technical.get("snapshot_ids") or []
@@ -329,7 +383,14 @@ def admission_record_to_harness_input(
         for column_index, column in enumerate(columns):
             if isinstance(column, Mapping):
                 fields.append(
-                    _field_payload(table, column, column_index, rows, columns)
+                    _field_payload(
+                        table,
+                        column,
+                        column_index,
+                        rows,
+                        columns,
+                        table_bindings[table_index],
+                    )
                 )
     if not fields:
         raise MappingBridgeError("admission profile has no fields")

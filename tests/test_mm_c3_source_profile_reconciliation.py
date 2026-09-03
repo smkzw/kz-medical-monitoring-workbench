@@ -653,6 +653,36 @@ def test_pipeline_without_manifest_records_manifest_unavailable(tmp_path) -> Non
     assert exc_info.value.code == "mapping_source_manifest_missing"
 
 
+@pytest.mark.parametrize(
+    "limitation",
+    [
+        "xlsx_physical_evidence_capture_failed",
+        "xlsx_sheet_evidence_degraded",
+    ],
+)
+def test_gate_blocks_degraded_xlsx_physical_evidence(limitation: str) -> None:
+    record = _record(
+        [_file_entry([_sheet("生命体征", 1)])],
+        [_table("生命体征")],
+    )
+    record["technical_details"]["physical_manifest"]["files"][0][
+        "manifest"
+    ]["evidence_limitations"] = [limitation]
+    record["technical_details"]["source_profile_reconciliation"] = (
+        reconcile_source_to_profile(
+            record["technical_details"]["physical_manifest"],
+            technical_files=record["technical_details"]["files"],
+            tables=record["tables"],
+        )
+    )
+
+    with pytest.raises(WorkbookManifestError) as exc_info:
+        enforce_source_to_profile_gate(record)
+
+    assert exc_info.value.code == "mapping_source_incomplete"
+    assert limitation.split("xlsx_")[-1] in str(exc_info.value.findings)
+
+
 def test_pipeline_rejects_failing_manifest_provider(tmp_path) -> None:
     def broken_provider(filename: str, content: bytes) -> dict[str, Any]:
         raise ValueError("manifest builder exploded")
