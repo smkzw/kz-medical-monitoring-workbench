@@ -15,17 +15,22 @@ from packages.medical_monitoring.admission.document_authority import (
     DocumentAuthorityError,
     DocumentAuthorityRunEnvelope,
     EvidenceReference,
+    PRIMARY_ADJUDICATION_PROMPT_VERSION,
     PRIMARY_PROMPT_VERSION,
     PRIMARY_REVIEW_PROMPT_VERSION,
     ResolvedRole,
     RoleSelection,
     RoleSupplementaryBinding,
     VERIFIER_PROMPT_VERSION,
+    VERIFIER_ADJUDICATION_PROMPT_VERSION,
     VERIFIER_REVIEW_PROMPT_VERSION,
     build_anonymous_conflict_packet,
+    build_anonymous_adjudication_context,
     document_authority_batch_sha256,
     reconcile_document_authority,
     resolve_document_authority_conflicts,
+    resolve_document_authority_adjudication,
+    validate_document_authority_adjudication_context,
     validate_document_authority_conflict_packet,
 )
 from packages.medical_monitoring.admission.mapping_gate import (
@@ -195,12 +200,15 @@ def _reconcile(
 
 
 def _review_run(
-    review: DocumentAuthorityConflictReview, role: str
+    review: DocumentAuthorityConflictReview,
+    role: str,
+    *,
+    adjudication: bool = False,
 ) -> DocumentAuthorityConflictRunEnvelope:
     primary = role == "primary"
     return DocumentAuthorityConflictRunEnvelope(
-        run_id=f"{role}-review-run",
-        job_id=f"{role}-review-job",
+        run_id=f"{role}-{'adjudication' if adjudication else 'review'}-run",
+        job_id=f"{role}-{'adjudication' if adjudication else 'review'}-job",
         role=role,
         provider=(
             MONITORING_C3_MAPPING_PROVIDER
@@ -208,8 +216,13 @@ def _review_run(
         ),
         model=MONITORING_C3_MAPPING_MODEL if primary else MONITORING_C3_VERIFIER_MODEL,
         prompt_version=(
-            PRIMARY_REVIEW_PROMPT_VERSION
-            if primary else VERIFIER_REVIEW_PROMPT_VERSION
+            PRIMARY_ADJUDICATION_PROMPT_VERSION
+            if primary and adjudication
+            else VERIFIER_ADJUDICATION_PROMPT_VERSION
+            if adjudication
+            else PRIMARY_REVIEW_PROMPT_VERSION
+            if primary
+            else VERIFIER_REVIEW_PROMPT_VERSION
         ),
         conflict_packet_sha256=review.conflict_packet_sha256,
         job_input_revision_sha256="f" * 64,
@@ -1357,6 +1370,93 @@ def test_conflict_review_supplement_disagreement_requires_user() -> None:
     )
 
     assert result["state"] == "needs_user_input"
+
+
+def test_internal_adjudication_resolves_material_supplement_disagreement() -> None:
+    batch = _composite_batch()
+    primary, verifier, packet = _composite_conflict_context(batch)
+    with_supplement = _ecrf_composite_review(packet)
+    without_supplement = _ecrf_composite_review(packet, supplements=())
+    primary_review = _review_run(with_supplement, "primary")
+    verifier_review = _review_run(without_supplement, "verifier")
+    context = build_anonymous_adjudication_context(
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+    )
+
+    assert context["unresolved_roles"] == ["ecrf"]
+    assert len(context["options_by_role"]["ecrf"]) == 2
+    validate_document_authority_adjudication_context(packet, context)
+
+    result = resolve_document_authority_adjudication(
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+        context,
+        _review_run(with_supplement, "primary", adjudication=True),
+        _review_run(with_supplement, "verifier", adjudication=True),
+    )
+
+    assert result["state"] == "resolved"
+    ecrf = next(item for item in result["resolved_roles"] if item["role"] == "ecrf")
+    assert ecrf["supplementary_candidate_ids"] == ["candidate_ecrf_addendum"]
+    assert result["adjudication_run_ids"] == [
+        "primary-adjudication-run",
+        "verifier-adjudication-run",
+    ]
+
+
+def test_internal_adjudication_remains_fail_closed_and_context_bound() -> None:
+    batch = _composite_batch()
+    primary, verifier, packet = _composite_conflict_context(batch)
+    with_supplement = _ecrf_composite_review(packet)
+    without_supplement = _ecrf_composite_review(packet, supplements=())
+    primary_review = _review_run(with_supplement, "primary")
+    verifier_review = _review_run(without_supplement, "verifier")
+    context = build_anonymous_adjudication_context(
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+    )
+
+    result = resolve_document_authority_adjudication(
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+        context,
+        _review_run(with_supplement, "primary", adjudication=True),
+        _review_run(without_supplement, "verifier", adjudication=True),
+    )
+    assert result["state"] == "needs_user_input"
+    assert result["unresolved_roles"] == ["ecrf"]
+
+    tampered = json.loads(json.dumps(context))
+    tampered["options_by_role"]["ecrf"][0]["confidence"] = 0.99
+    with pytest.raises(DocumentAuthorityError, match="context_tampered"):
+        resolve_document_authority_adjudication(
+            batch,
+            primary,
+            verifier,
+            packet,
+            primary_review,
+            verifier_review,
+            tampered,
+            _review_run(with_supplement, "primary", adjudication=True),
+            _review_run(with_supplement, "verifier", adjudication=True),
+        )
 
 
 def test_conflict_review_supplement_must_be_allowed_and_evidence_bound() -> None:

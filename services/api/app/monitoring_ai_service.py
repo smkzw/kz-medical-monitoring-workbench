@@ -90,15 +90,18 @@ from packages.medical_monitoring.admission.document_evidence import (
     validate_document_evidence_packet,
 )
 from packages.medical_monitoring.admission.document_authority import (
+    PRIMARY_ADJUDICATION_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
     PRIMARY_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_PROMPT_VERSION,
     PRIMARY_REVIEW_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_REVIEW_PROMPT_VERSION,
     VERIFIER_PROMPT_VERSION as DOCUMENT_AUTHORITY_VERIFIER_PROMPT_VERSION,
+    VERIFIER_ADJUDICATION_PROMPT_VERSION as DOCUMENT_AUTHORITY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
     VERIFIER_REVIEW_PROMPT_VERSION as DOCUMENT_AUTHORITY_VERIFIER_REVIEW_PROMPT_VERSION,
     DocumentAuthorityAnalysis,
     DocumentAuthorityConflictReview,
     DocumentAuthorityError,
     document_authority_batch_sha256,
     validate_document_authority_analysis,
+    validate_document_authority_adjudication_context,
     validate_document_authority_conflict_packet,
     validate_document_authority_conflict_review,
 )
@@ -1633,13 +1636,22 @@ class MonitoringAiService:
         conflict_packet: Dict[str, Any],
         source_bindings: List[Dict[str, str]],
         role: Literal["primary", "verifier"],
+        adjudication_context: Dict[str, Any] | None = None,
         max_attempts: int = 2,
     ) -> MonitoringAiJob:
         packet_sha256 = validate_document_authority_conflict_packet(
             conflict_packet
         )
+        if adjudication_context is not None:
+            validate_document_authority_adjudication_context(
+                conflict_packet, adjudication_context
+            )
         prompt_version = (
-            DOCUMENT_AUTHORITY_PRIMARY_REVIEW_PROMPT_VERSION
+            DOCUMENT_AUTHORITY_PRIMARY_ADJUDICATION_PROMPT_VERSION
+            if role == "primary" and adjudication_context is not None
+            else DOCUMENT_AUTHORITY_VERIFIER_ADJUDICATION_PROMPT_VERSION
+            if adjudication_context is not None
+            else DOCUMENT_AUTHORITY_PRIMARY_REVIEW_PROMPT_VERSION
             if role == "primary"
             else DOCUMENT_AUTHORITY_VERIFIER_REVIEW_PROMPT_VERSION
         )
@@ -1659,6 +1671,10 @@ class MonitoringAiService:
             "document_authority_role": role,
             "document_authority_source_bindings": deepcopy(source_bindings),
         }
+        if adjudication_context is not None:
+            input_payload["document_authority_adjudication_context"] = deepcopy(
+                adjudication_context
+            )
         self._validate_input_payload(
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
             project_id,
@@ -1677,7 +1693,9 @@ class MonitoringAiService:
                 requested_model=runtime.model,
                 max_attempts=max_attempts,
                 business_key=(
-                    f"document-authority-review:{role}:{packet_sha256}"
+                    f"document-authority-"
+                    f"{'adjudication' if adjudication_context is not None else 'review'}:"
+                    f"{role}:{packet_sha256}"
                 ),
             )
         )
@@ -3246,7 +3264,16 @@ class MonitoringAiService:
             )
         elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
             system_prompt += (
-                " 这是文件权威冲突的全量盲复核。必须独立检查匿名冲突包中"
+                " 这是文件权威冲突的系统内最终裁决。input_payload中的"
+                "document_authority_adjudication_context只列出前轮仍未收敛的"
+                "匿名选项，不含模型身份；必须回到冻结候选内容逐项裁决，不能"
+                "按选项顺序、票数或原置信度选边。你仍须独立输出冲突包全部角色，"
+                "不得照抄任一匿名选项。"
+                if "document_authority_adjudication_context" in input_payload
+                else " 这是文件权威冲突的全量盲复核。"
+            )
+            system_prompt += (
+                "必须独立检查匿名冲突包中"
                 "每个候选，为每个冲突角色给出一项决定；不得推测首轮或另一"
                 "复核者的答案。决定必须同时给出当前主文件和全部仍有效的勘误、"
                 "修订说明或增补文件；补充文件写入supplementary_candidate_ids，"
@@ -7574,6 +7601,22 @@ class MonitoringAiService:
                 raise ValueError("document authority conflict packet is invalid") from exc
             if input_payload.get("document_authority_conflict_packet_sha256") != packet_sha256:
                 raise ValueError("document authority conflict packet hash mismatch")
+            adjudication_context = input_payload.get(
+                "document_authority_adjudication_context"
+            )
+            if adjudication_context is not None:
+                if not isinstance(adjudication_context, dict):
+                    raise ValueError(
+                        "document authority adjudication context is invalid"
+                    )
+                try:
+                    validate_document_authority_adjudication_context(
+                        packet, adjudication_context
+                    )
+                except DocumentAuthorityError as exc:
+                    raise ValueError(
+                        "document authority adjudication context is invalid"
+                    ) from exc
             if input_payload.get("document_authority_role") not in {
                 "primary",
                 "verifier",
