@@ -195,6 +195,8 @@ def _make_app(
     fact_materializer: Any = None,
     mapping_pipeline: Any = None,
     document_registrar: Any = None,
+    document_authority_starter: Any = None,
+    document_authority_promoter: Any = None,
 ) -> FastAPI:
     app = FastAPI()
 
@@ -215,6 +217,12 @@ def _make_app(
             admission_fact_materializer=fact_materializer,
             admission_mapping_pipeline=mapping_pipeline,
             monitoring_document_registrar=document_registrar,
+            monitoring_document_authority_starter=(
+                document_authority_starter
+            ),
+            monitoring_document_authority_promoter=(
+                document_authority_promoter
+            ),
         )
     )
     return app
@@ -231,6 +239,8 @@ def _client(
     fact_materializer: Any = None,
     mapping_pipeline: Any = None,
     document_registrar: Any = None,
+    document_authority_starter: Any = None,
+    document_authority_promoter: Any = None,
 ) -> TestClient:
     if principal is _SENTINEL:
         principal = _principal(PROJECT_A)
@@ -242,6 +252,8 @@ def _client(
             fact_materializer=fact_materializer,
             mapping_pipeline=mapping_pipeline,
             document_registrar=document_registrar,
+            document_authority_starter=document_authority_starter,
+            document_authority_promoter=document_authority_promoter,
         )
     )
 
@@ -445,6 +457,112 @@ def test_product_mapping_start_is_always_dual_and_document_upload_is_reachable(
     ]
 
 
+def test_document_authority_promotion_is_server_wired_and_publicly_plain(
+    tmp_path: Path,
+) -> None:
+    mapping = FakeMappingPipeline()
+    calls: list[dict[str, Any]] = []
+
+    def promote(**kwargs: Any) -> Mapping[str, Any]:
+        calls.append(kwargs)
+        return {
+            "authority_status": "promoted",
+            "promotion_receipt_sha256": "f" * 64,
+            "registrations": [
+                {
+                    "role": "protocol",
+                    "source_entry_id": "source-protocol-internal",
+                },
+                {
+                    "role": "ecrf",
+                    "source_entry_id": "source-ecrf-internal",
+                },
+            ],
+        }
+
+    client = _client(
+        tmp_path / "runtime",
+        mapping_pipeline=mapping,
+        document_authority_promoter=promote,
+    )
+    response = client.post(
+        f"{_base()}/data-admissions/attempt-0001/study-documents/resolve",
+        json={
+            "batch_id": f"mmbatch_{'a' * 24}",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ready"] is True
+    public_blob = json.dumps(response.json(), ensure_ascii=False)
+    assert "source_entry_id" not in public_blob
+    assert "job_id" not in public_blob
+    assert "sha256" not in public_blob
+    assert calls[0]["project_id"] == PROJECT_A
+    assert calls[0]["workspace_dir"] == (
+        tmp_path / "runtime" / "medical_monitoring_r7" / PROJECT_A
+    )
+    selections = [
+        kwargs
+        for name, kwargs in mapping.calls
+        if name == "select_document"
+    ]
+    assert [item["role"] for item in selections] == ["protocol", "ecrf"]
+
+
+def test_document_authority_analysis_starts_both_models_without_user_review(
+    tmp_path: Path,
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    def start(**kwargs: Any) -> Mapping[str, Any]:
+        calls.append(kwargs)
+        return {"state": "analyzing", "batch_id": f"mmbatch_{'b' * 24}"}
+
+    client = _client(
+        tmp_path / "runtime",
+        mapping_pipeline=FakeMappingPipeline(),
+        document_authority_starter=start,
+    )
+    response = client.post(
+        f"{_base()}/data-admissions/attempt-0001/study-documents/analyze",
+        files=[
+            ("files", ("protocol.docx", b"protocol", "application/octet-stream")),
+            ("files", ("forms.xlsx", b"forms", "application/octet-stream")),
+        ],
+    )
+
+    assert response.status_code == 202
+    assert response.json()["state"] == "analyzing"
+    assert "无需逐项确认" in response.json()["guidance"]
+    assert calls[0]["files"] == [
+        ("protocol.docx", b"protocol"),
+        ("forms.xlsx", b"forms"),
+    ]
+
+
+def test_product_runtime_rejects_legacy_role_assigned_document_upload(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path / "runtime",
+        mapping_pipeline=FakeMappingPipeline(),
+        document_registrar=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("legacy registrar must not run")
+        ),
+        document_authority_starter=lambda **_kwargs: {},
+    )
+
+    response = client.post(
+        f"{_base()}/data-admissions/attempt-0001/study-documents?role=protocol",
+        files={"file": ("protocol.docx", b"protocol", "application/octet-stream")},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "mapping_document_batch_required"
+    assert "一次选择" in response.json()["message"]
+
+
 def test_fact_routes_are_project_scoped_and_use_plain_chinese_results(tmp_path: Path) -> None:
     materializer = FakeFactMaterializer()
     client = _client(
@@ -521,6 +639,8 @@ def test_admission_registration_is_additive_and_r7_scoped(tmp_path: Path) -> Non
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}",
             "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/facts",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/study-documents",
+        "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/study-documents/analyze",
+        "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/study-documents/resolve",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-candidates",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft/adjudicate",

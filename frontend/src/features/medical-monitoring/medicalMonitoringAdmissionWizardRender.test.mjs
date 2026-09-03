@@ -122,18 +122,16 @@ check(
 check(renders.documentsMissing.includes("当前研究方案"), "protocol uses a medical-facing label");
 check(renders.documentsMissing.includes("当前 eCRF"), "eCRF uses a recognizable label");
 check(
-  renders.documentsMissing.split(">添加文件</").length - 1 === 2,
-  "only currently required documents request an upload",
+  renders.documentsMissing.split(">一次选择研究文件</").length - 1 === 1,
+  "one batch picker replaces per-role confirmation work",
 );
 check(
-  renders.documentsMissing.split(">添加（可选）</").length - 1 === 2,
-  "optional study context is available without becoming required work",
+  renders.documentsMissing.includes('multiple=""'),
+  "the research document picker accepts a batch",
 );
-check(renders.documentsMissing.includes('accept=".docx"'), "protocol picker accepts DOCX");
-check(renders.documentsMissing.includes('accept=".xlsx"'), "eCRF picker accepts XLSX");
 check(
-  renders.documentsMissing.includes('accept=".pdf,.docx"'),
-  "IB and SAP pickers accept PDF or DOCX",
+  renders.documentsMissing.includes('accept=".docx,.pdf,.xlsx"'),
+  "the batch picker accepts all supported research document formats",
 );
 check(
   renders.documentsMissing.includes(">请先添加所需文件</button>")

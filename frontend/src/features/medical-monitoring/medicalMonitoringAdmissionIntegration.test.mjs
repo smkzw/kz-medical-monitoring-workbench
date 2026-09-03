@@ -200,13 +200,12 @@ const needle = (text) => compact(text);
 }
 
 check(
-  wizardSrc.includes(needle(`const payload = await api.uploadStudyDocument(
+  wizardSrc.includes(needle(`const payload = await api.analyzeStudyDocuments(
         state.projectId,
         state.attemptId,
-        role,
-        file,
+        files,
       );`)),
-  "one file choice uses the attempt-scoped atomic document endpoint",
+  "one batch choice starts system-led dual document analysis",
 );
 check(
   wizardSrc.includes("api.startDataAdmissionMappingCandidates")

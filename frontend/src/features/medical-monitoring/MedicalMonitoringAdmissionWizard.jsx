@@ -54,7 +54,7 @@ function mappingTypeText(value) {
   })[value] || "类型待定";
 }
 
-function DocumentReadinessPanel({ state, onFile, onRetry }) {
+function DocumentReadinessPanel({ state, onFiles, onRetry }) {
   if (!state || (state.phase === "loading" && !state.payload)) {
     return <p className="monitoring-admission-loading" role="status">正在核对研究文档…</p>;
   }
@@ -69,30 +69,23 @@ function DocumentReadinessPanel({ state, onFile, onRetry }) {
         {(payload.roles || []).map((item) => (
           <li key={item.role}>
             <span><strong>{item.label}</strong><small>{item.status_text}</small></span>
-            {item.status !== "current" ? (
-              <label className="monitoring-admission-document-picker">
-                <input
-                  type="file"
-                  accept={
-                    item.role === "ecrf"
-                      ? ".xlsx"
-                      : item.role === "protocol"
-                        ? ".docx"
-                        : ".pdf,.docx"
-                  }
-                  disabled={state.phase === "uploading"}
-                  onChange={(event) => onFile?.(item.role, event.target.files?.[0])}
-                />
-                {state.phase === "uploading"
-                  ? "正在识别…"
-                  : item.required_now
-                    ? "添加文件"
-                    : "添加（可选）"}
-              </label>
-            ) : null}
           </li>
         ))}
       </ul>
+      {!payload.ready ? (
+        <label className="monitoring-admission-document-picker">
+          <input
+            type="file"
+            multiple
+            accept=".docx,.pdf,.xlsx"
+            disabled={["uploading", "analyzing", "reviewing"].includes(state.phase)}
+            onChange={(event) => onFiles?.(event.target.files)}
+          />
+          {["uploading", "analyzing", "reviewing"].includes(state.phase)
+            ? "系统正在识别并交叉核对…"
+            : "一次选择研究文件"}
+        </label>
+      ) : null}
       {state.error ? <p className="monitoring-admission-warning" role="alert">{state.error}</p> : null}
       {state.phase === "failed" ? (
         <button type="button" className="monitoring-admission-secondary" onClick={onRetry}>
@@ -269,7 +262,7 @@ export function MedicalMonitoringAdmissionWizardView({
   onPrimaryAction,
   onSecondaryAction,
   onAnswerCard,
-  onDocumentFile,
+  onDocumentFiles,
   onDocumentRetry,
 }) {
   const phase = state?.phase || "input";
@@ -423,7 +416,7 @@ export function MedicalMonitoringAdmissionWizardView({
           <>
             <DocumentReadinessPanel
               state={documentState}
-              onFile={onDocumentFile}
+              onFiles={onDocumentFiles}
               onRetry={onDocumentRetry}
             />
             {documentState?.payload?.ready ? (
@@ -590,9 +583,9 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     }
   }, [api, state.attemptId, state.projectId]);
 
-  const uploadDocument = useCallback(async (role, file) => {
+  const analyzeDocuments = useCallback(async (files) => {
     if (
-      !file || !state.projectId || !state.attemptId
+      !files?.length || !state.projectId || !state.attemptId
       || documentUploadInFlight.current
     ) return;
     documentUploadInFlight.current = true;
@@ -600,14 +593,13 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     documentRequestGeneration.current = generation;
     setDocumentState((current) => ({ ...current, phase: "uploading", error: null }));
     try {
-      const payload = await api.uploadStudyDocument(
+      const payload = await api.analyzeStudyDocuments(
         state.projectId,
         state.attemptId,
-        role,
-        file,
+        files,
       );
       if (documentRequestGeneration.current === generation) {
-        setDocumentState({ phase: "ready", payload, error: null });
+        setDocumentState({ phase: payload.state || "analyzing", payload, error: null });
       }
     } catch (error) {
       if (documentRequestGeneration.current === generation) {
@@ -621,6 +613,34 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       documentUploadInFlight.current = false;
     }
   }, [api, state.attemptId, state.projectId]);
+
+  useEffect(() => {
+    if (
+      !["analyzing", "reviewing"].includes(documentState.phase)
+      || !documentState.payload?.analysis_token
+    ) return undefined;
+    const timer = setTimeout(async () => {
+      try {
+        const payload = await api.resolveStudyDocuments(
+          state.projectId,
+          state.attemptId,
+          documentState.payload.analysis_token,
+        );
+        setDocumentState({
+          phase: payload.ready ? "ready" : (payload.state || "analyzing"),
+          payload,
+          error: null,
+        });
+      } catch (error) {
+        setDocumentState({
+          phase: "failed",
+          payload: null,
+          error: error?.detail?.message || error?.message || "研究文件核对失败。",
+        });
+      }
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [api, documentState, state.attemptId, state.projectId]);
 
   useEffect(() => {
     if (state.phase !== "reading" || !state.attemptId) return undefined;
@@ -916,7 +936,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onPrimaryAction={onPrimaryAction}
       onSecondaryAction={onSecondaryAction}
       onAnswerCard={onAnswerCard}
-      onDocumentFile={uploadDocument}
+      onDocumentFiles={analyzeDocuments}
       onDocumentRetry={loadDocumentReadiness}
     />
   );

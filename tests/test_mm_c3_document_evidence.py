@@ -42,6 +42,7 @@ from packages.medical_monitoring.runtime.runtime_progress import (
     RUNTIME_DB_NAME,
     RUNTIME_DIR_NAME,
 )
+from packages.medical_monitoring.intelligence.primitives import content_hash
 from services.api.app.listing_file_parser import parse_listing_file
 from services.api.app.protocol_text_extractor import (
     ProtocolTextDocument,
@@ -717,6 +718,118 @@ def _span(entry, index: int):
         locator=f"document:page:{index}",
         text_preview=f"bounded extract {index}",
     )
+
+
+def _promote_entries(*entries) -> None:
+    registrations = [
+        {
+            "role": {
+                "protocol_docx": "protocol",
+                "investigator_brochure": "investigator_brochure",
+                "ecrf_xlsx": "ecrf",
+                "statistical_analysis_plan": "sap",
+            }[entry.source_kind],
+            "candidate_id": f"candidate-{entry.entry_id}",
+            "source_entry_id": entry.entry_id,
+            "content_sha256": entry.content_hash,
+        }
+        for entry in entries
+    ]
+    receipt = {
+        "schema_version": "monitoring-document-authority-promotion-v1",
+        "batch_id": f"mmbatch_{'b' * 24}",
+        "input_sha256": "a" * 64,
+        "analysis_job_ids": ["primary-job", "verifier-job"],
+        "review_job_ids": [],
+        "analysis_run_ids": ["primary-run", "verifier-run"],
+        "review_run_ids": [],
+        "document_identities": [
+            {
+                "role": item["role"],
+                "candidate_id": item["candidate_id"],
+                "document_version": "",
+                "document_date": "",
+            }
+            for item in registrations
+        ],
+        "registrations": registrations,
+    }
+    receipt_sha256 = content_hash(receipt)
+    for entry in entries:
+        entry.metadata.update({
+            "monitoring_authority_status": "promoted",
+            "document_authority_receipt_sha256": receipt_sha256,
+            "document_authority_receipt": receipt,
+        })
+
+
+def test_registry_resolver_rejects_incomplete_promoted_authority_set() -> None:
+    protocol = _entry("protocol", 1)
+    ecrf = _entry("ecrf", 2)
+    _promote_entries(protocol, ecrf)
+    registry = _Registry(
+        [protocol],
+        [_span(protocol, 1), _span(protocol, 2)],
+    )
+
+    packet = MonitoringDocumentEvidenceResolver(registry).resolve(
+        project_id=PROJECT_ID,
+    )
+
+    assert packet.roles[0].status == "missing"
+
+
+def test_registry_resolver_rejects_tampered_promotion_receipt() -> None:
+    protocol = _entry("protocol", 1)
+    _promote_entries(protocol)
+    protocol.metadata["document_authority_receipt"]["batch_id"] = "tampered"
+    registry = _Registry(
+        [protocol],
+        [_span(protocol, 1), _span(protocol, 2)],
+    )
+
+    packet = MonitoringDocumentEvidenceResolver(registry).resolve(
+        project_id=PROJECT_ID,
+    )
+
+    assert packet.roles[0].status == "missing"
+
+
+def test_registry_resolver_rejects_self_hashed_receipt_missing_core_evidence() -> None:
+    protocol = _entry("protocol", 1)
+    _promote_entries(protocol)
+    receipt = protocol.metadata["document_authority_receipt"]
+    receipt.pop("analysis_job_ids")
+    protocol.metadata["document_authority_receipt_sha256"] = content_hash(receipt)
+    registry = _Registry(
+        [protocol],
+        [_span(protocol, 1), _span(protocol, 2)],
+    )
+
+    packet = MonitoringDocumentEvidenceResolver(registry).resolve(
+        project_id=PROJECT_ID,
+    )
+
+    assert packet.roles[0].status == "missing"
+
+
+def test_registry_resolver_accepts_complete_promoted_authority_set() -> None:
+    protocol = _entry("protocol", 1)
+    ecrf = _entry("ecrf", 2)
+    _promote_entries(protocol, ecrf)
+    entries = [protocol, ecrf]
+    registry = _Registry(
+        entries,
+        [_span(entry, index) for entry in entries for index in (1, 2)],
+    )
+
+    packet = MonitoringDocumentEvidenceResolver(registry).resolve(
+        project_id=PROJECT_ID,
+    )
+
+    by_role = {item.role: item for item in packet.roles}
+    assert by_role["protocol"].status == "current"
+    assert by_role["ecrf"].status == "current"
 
 
 def test_registry_resolver_uses_only_monitoring_owned_current_sources() -> None:

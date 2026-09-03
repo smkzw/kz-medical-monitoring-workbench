@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import hashlib
+import json
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -14,6 +15,7 @@ from packages.medical_monitoring.admission.document_authority import (
     DocumentAuthorityError,
     EvidenceReference,
     RoleSelection,
+    build_anonymous_conflict_packet,
     document_authority_batch_sha256,
 )
 from packages.medical_monitoring.admission.mapping_gate import (
@@ -25,7 +27,9 @@ from packages.medical_monitoring.admission.mapping_gate import (
 from services.api.app.monitoring_ai_contracts import (
     MONITORING_AI_SCHEMA_VERSION,
     MonitoringAiInputRevision,
+    MonitoringAiJobStatus,
     MonitoringAiSourceBinding,
+    MonitoringAiTaskType,
 )
 from services.api.app.monitoring_ai_repository import MonitoringAiRepository
 from services.api.app.monitoring_ai_service import (
@@ -37,6 +41,13 @@ from services.api.app.monitoring_document_authority_jobs import (
     promote_document_authority_from_jobs,
     resolve_document_authority_from_jobs,
     submit_document_authority_review_pair,
+    verify_document_authority_promotion_receipt,
+)
+from services.api.app.monitoring_document_authority_workflow import (
+    MonitoringDocumentAuthorityWorkflow,
+)
+from services.api.app.monitoring_document_candidates import (
+    MonitoringDocumentCandidateDecomposer,
 )
 from services.api.app.source_intake import SourceRegistryService, SourceRegistryStore
 from tests.test_source_registry import _minimal_docx_bytes, _minimal_xlsx_bytes
@@ -320,6 +331,206 @@ def test_loader_rejects_role_swap(tmp_path) -> None:
         )
 
 
+def test_matching_analysis_jobs_resolve_without_conflict_reviews(tmp_path) -> None:
+    batch = _batch()
+    analysis = _analysis(batch)
+    repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite")
+    revision = MonitoringAiInputRevision(
+        project_id="project-document-authority",
+        batch_revision=batch["batch_id"],
+        sources=tuple(
+            MonitoringAiSourceBinding(
+                source_entry_id=item["file_id"],
+                source_content_sha256=item["content_sha256"],
+            )
+            for item in batch["candidates"]
+        ),
+    )
+    jobs = []
+    for role, provider, model in (
+        ("primary", MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
+        ("verifier", MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
+    ):
+        service = MonitoringAiService(
+            repository,
+            runtime_resolver=lambda provider=provider, model=model, role=role: _runtime(
+                provider, model, f"monitoring-document-authority-{role}"
+            ),
+            provider_factory=lambda _env, provider=provider, model=model: _Provider(
+                provider, model, analysis
+            ),
+        )
+        job = service.submit_document_authority_analysis(
+            project_id=revision.project_id,
+            input_revision=revision,
+            candidate_batch=batch,
+            role=role,
+        )
+        service.run_next(
+            f"{role}-analysis-worker", claim_identity=service.claim_identity()
+        )
+        jobs.append(job)
+
+    result = resolve_document_authority_from_jobs(
+        repository,
+        project_id=revision.project_id,
+        candidate_batch=batch,
+        primary_analysis_job_id=jobs[0].job_id,
+        verifier_analysis_job_id=jobs[1].job_id,
+    )
+
+    assert result["state"] == "resolved"
+    assert result["review_run_ids"] == []
+    assert {item["role"] for item in result["document_identities"]} == {
+        "protocol",
+        "ecrf",
+    }
+
+
+def test_product_workflow_starts_both_models_and_promotes_direct_agreement(
+    tmp_path,
+) -> None:
+    protocol = _minimal_docx_bytes()
+    ecrf = _minimal_xlsx_bytes()
+    expected_batch = MonitoringDocumentCandidateDecomposer(
+        tmp_path / "preview"
+    ).decompose_many([
+        ("protocol.docx", protocol),
+        ("ecrf.xlsx", ecrf),
+    ]).to_dict()
+    candidate_ids = {
+        item["filename"]: item["candidate_id"]
+        for item in expected_batch["candidates"]
+    }
+    analysis = DocumentAuthorityAnalysis(
+        schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+        batch_id=expected_batch["batch_id"],
+        input_sha256=document_authority_batch_sha256(expected_batch),
+        candidate_assessments=(
+            CandidateAssessment(
+                candidate_id=candidate_ids["protocol.docx"],
+                inferred_role="protocol",
+                usable=True,
+                confidence=0.99,
+                evidence_locators=tuple(
+                    item["locator"]
+                    for item in next(
+                        candidate
+                        for candidate in expected_batch["candidates"]
+                        if candidate["filename"] == "protocol.docx"
+                    )["excerpts"][:1]
+                ),
+            ),
+            CandidateAssessment(
+                candidate_id=candidate_ids["ecrf.xlsx"],
+                inferred_role="ecrf",
+                usable=True,
+                confidence=0.99,
+                evidence_locators=tuple(
+                    item["locator"]
+                    for item in next(
+                        candidate
+                        for candidate in expected_batch["candidates"]
+                        if candidate["filename"] == "ecrf.xlsx"
+                    )["sheets"][:1]
+                ),
+            ),
+        ),
+        role_selections=(
+            RoleSelection(
+                role="protocol",
+                decision="selected",
+                selected_candidate_id=candidate_ids["protocol.docx"],
+                confidence=0.99,
+                evidence_locators=tuple(
+                    item["locator"]
+                    for item in next(
+                        candidate
+                        for candidate in expected_batch["candidates"]
+                        if candidate["filename"] == "protocol.docx"
+                    )["excerpts"][:1]
+                ),
+            ),
+            RoleSelection(
+                role="investigator_brochure", decision="missing", confidence=0.99
+            ),
+            RoleSelection(
+                role="ecrf",
+                decision="selected",
+                selected_candidate_id=candidate_ids["ecrf.xlsx"],
+                confidence=0.99,
+                evidence_locators=tuple(
+                    item["locator"]
+                    for item in next(
+                        candidate
+                        for candidate in expected_batch["candidates"]
+                        if candidate["filename"] == "ecrf.xlsx"
+                    )["sheets"][:1]
+                ),
+            ),
+            RoleSelection(role="sap", decision="missing", confidence=0.99),
+        ),
+    )
+    repository = MonitoringAiRepository(tmp_path / "workflow.sqlite")
+    services = []
+    for role, provider, model in (
+        ("primary", MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
+        ("verifier", MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
+    ):
+        services.append(MonitoringAiService(
+            repository,
+            runtime_resolver=lambda provider=provider, model=model, role=role: _runtime(
+                provider, model, f"monitoring-document-authority-{role}"
+            ),
+            provider_factory=lambda _env, provider=provider, model=model: _Provider(
+                provider, model, analysis
+            ),
+        ))
+    wake_calls = []
+    registry = SourceRegistryService(SourceRegistryStore(tmp_path / "registry.jsonl"))
+    workflow = MonitoringDocumentAuthorityWorkflow(
+        repository,
+        services[0],
+        services[1],
+        registry,
+        worker_wake=lambda: wake_calls.append(True),
+    )
+
+    started = workflow.start(
+        project_id="project-document-authority",
+        workspace_dir=tmp_path / "workspace",
+        files=[("protocol.docx", protocol), ("ecrf.xlsx", ecrf)],
+    )
+    assert started == {"state": "analyzing", "batch_id": expected_batch["batch_id"]}
+    for index, service in enumerate(services):
+        service.run_next(
+            f"workflow-{index}", claim_identity=service.claim_identity()
+        )
+    promoted = workflow.advance(
+        project_id="project-document-authority",
+        workspace_dir=tmp_path / "workspace",
+        batch_id=started["batch_id"],
+    )
+
+    assert promoted["authority_status"] == "promoted"
+    assert len(registry.list_entries("project-document-authority")) == 2
+    assert wake_calls == [True]
+    receipt = registry.list_entries("project-document-authority")[0].metadata[
+        "document_authority_receipt"
+    ]
+    assert verify_document_authority_promotion_receipt(
+        repository,
+        project_id="project-document-authority",
+        receipt=receipt,
+    ) is True
+    forged = {**receipt, "analysis_job_ids": ["missing-primary", "missing-verifier"]}
+    assert verify_document_authority_promotion_receipt(
+        repository,
+        project_id="project-document-authority",
+        receipt=forged,
+    ) is False
+
+
 def test_worker_rejects_downstream_medical_conclusion_hidden_in_output(
     tmp_path,
 ) -> None:
@@ -367,6 +578,164 @@ def test_worker_rejects_downstream_medical_conclusion_hidden_in_output(
 
     assert result.job is not None and result.job.status.value == "failed"
     assert repository.candidates(revision.project_id, job.job_id) == ()
+
+
+def test_product_workflow_starts_blind_conflict_review_without_user_choice(
+    tmp_path,
+) -> None:
+    batch = _batch()
+    project_id = "project-document-authority"
+    workspace = tmp_path / "workspace"
+    batch_dir = workspace / "document_authority_candidates" / "batches"
+    batch_dir.mkdir(parents=True)
+    (batch_dir / f"{batch['batch_id']}.json").write_text(
+        json.dumps(batch, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    repository = MonitoringAiRepository(tmp_path / "workflow-conflict.sqlite")
+    revision = MonitoringAiInputRevision(
+        project_id=project_id,
+        batch_revision=batch["batch_id"],
+        sources=tuple(
+            MonitoringAiSourceBinding(
+                source_entry_id=item["file_id"],
+                source_content_sha256=item["content_sha256"],
+            )
+            for item in batch["candidates"]
+        ),
+    )
+    services = []
+    for role, provider, model, analysis in (
+        (
+            "primary",
+            MONITORING_C3_MAPPING_PROVIDER,
+            MONITORING_C3_MAPPING_MODEL,
+            _analysis(batch, select_ecrf=False),
+        ),
+        (
+            "verifier",
+            MONITORING_C3_VERIFIER_PROVIDER,
+            MONITORING_C3_VERIFIER_MODEL,
+            _analysis(batch),
+        ),
+    ):
+        service = MonitoringAiService(
+            repository,
+            runtime_resolver=lambda provider=provider, model=model, role=role: _runtime(
+                provider, model, f"monitoring-document-authority-{role}"
+            ),
+            provider_factory=lambda _env, provider=provider, model=model, analysis=analysis: _Provider(
+                provider, model, analysis
+            ),
+        )
+        service.submit_document_authority_analysis(
+            project_id=project_id,
+            input_revision=revision,
+            candidate_batch=batch,
+            role=role,
+        )
+        service.run_next(role, claim_identity=service.claim_identity())
+        services.append(service)
+    wake_calls = []
+    workflow = MonitoringDocumentAuthorityWorkflow(
+        repository,
+        services[0],
+        services[1],
+        SourceRegistryService(SourceRegistryStore(tmp_path / "registry.jsonl")),
+        worker_wake=lambda: wake_calls.append(True),
+    )
+
+    primary_job = repository.list_jobs(
+        project_id,
+        task_type=MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS.value,
+        business_key_prefix="document-authority-analysis:primary:",
+    )[0]
+    verifier_job = repository.list_jobs(
+        project_id,
+        task_type=MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS.value,
+        business_key_prefix="document-authority-analysis:verifier:",
+    )[0]
+    primary_run = load_document_authority_analysis_run(
+        repository,
+        project_id=project_id,
+        job_id=primary_job.job_id,
+        candidate_batch=batch,
+        role="primary",
+    )
+    verifier_run = load_document_authority_analysis_run(
+        repository,
+        project_id=project_id,
+        job_id=verifier_job.job_id,
+        candidate_batch=batch,
+        role="verifier",
+    )
+    packet = build_anonymous_conflict_packet(batch, primary_run, verifier_run)
+    services[0].submit_document_authority_review(
+        project_id=project_id,
+        input_revision=revision,
+        conflict_packet=packet,
+        source_bindings=[
+            {
+                "candidate_id": item["candidate_id"],
+                "source_entry_id": item["file_id"],
+                "source_content_sha256": item["content_sha256"],
+            }
+            for item in batch["candidates"]
+        ],
+        role="primary",
+    )
+
+    result = workflow.advance(
+        project_id=project_id,
+        workspace_dir=workspace,
+        batch_id=batch["batch_id"],
+    )
+
+    reviews = repository.list_jobs(
+        project_id,
+        task_type=MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW.value,
+    )
+    assert result == {"state": "reviewing", "batch_id": batch["batch_id"]}
+    assert len(reviews) == 2
+    assert {job.provider for job in reviews} == {
+        MONITORING_C3_MAPPING_PROVIDER,
+        MONITORING_C3_VERIFIER_PROVIDER,
+    }
+    assert wake_calls == [True]
+
+
+def test_product_workflow_retries_one_terminal_failure_once() -> None:
+    retries = []
+    wakes = []
+    workflow = object.__new__(MonitoringDocumentAuthorityWorkflow)
+    workflow.repository = SimpleNamespace(
+        retry_terminal=lambda project_id, job_id, **kwargs: retries.append(
+            (project_id, job_id, kwargs["current_input_revision_sha256"])
+        )
+    )
+    workflow.worker_wake = lambda: wakes.append(True)
+    failed = SimpleNamespace(
+        project_id="project",
+        job_id="failed-job",
+        status=MonitoringAiJobStatus.FAILED,
+        max_attempts=2,
+        contract_retirement_code="",
+        input_revision_sha256="a" * 64,
+    )
+    complete = SimpleNamespace(
+        project_id="project",
+        job_id="complete-job",
+        status=MonitoringAiJobStatus.COMPLETED,
+        max_attempts=2,
+        contract_retirement_code="",
+        input_revision_sha256="a" * 64,
+    )
+
+    assert workflow._recover_failed_once((failed, complete)) is True
+    assert retries == [("project", "failed-job", "a" * 64)]
+    assert wakes == [True]
+    failed.max_attempts = 4
+    assert workflow._recover_failed_once((failed, complete)) is False
 
 
 def test_worker_rejects_downstream_medical_conclusion_in_outer_copy(
@@ -547,7 +916,6 @@ def test_repository_jobs_drive_blind_second_review_and_final_resolution(
         candidate_batch=batch,
         primary_analysis_job_id=primary_job.job_id,
         verifier_analysis_job_id=verifier_job.job_id,
-        conflict_packet=packet,
         primary_review_job_id=primary_review_job.job_id,
         verifier_review_job_id=verifier_review_job.job_id,
     )
@@ -570,32 +938,55 @@ def test_resolved_authority_promotes_selected_documents_atomically(
 ) -> None:
     protocol = _minimal_docx_bytes()
     ecrf = _minimal_xlsx_bytes()
-    batch = _batch()
-    for candidate, content in zip(batch["candidates"], (protocol, ecrf)):
-        digest = hashlib.sha256(content).hexdigest()
-        candidate["content_sha256"] = digest
-        candidate["file_id"] = f"mmfile_{digest}"
-        path = tmp_path / "candidates" / "files" / (
-            digest + (".docx" if candidate["candidate_id"] == "candidate_protocol" else ".xlsx")
-        )
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content)
+    candidate_root = tmp_path / "candidates"
+    batch = MonitoringDocumentCandidateDecomposer(candidate_root).decompose_many([
+        ("protocol.docx", protocol),
+        ("ecrf.xlsx", ecrf),
+    ]).to_dict()
+    candidate_ids = {
+        candidate["filename"]: candidate["candidate_id"]
+        for candidate in batch["candidates"]
+    }
     monkeypatch.setattr(
         "services.api.app.monitoring_document_authority_jobs."
         "resolve_document_authority_from_jobs",
         lambda *_args, **_kwargs: {
             "schema_version": DOCUMENT_AUTHORITY_SCHEMA_VERSION,
             "batch_id": batch["batch_id"],
+            "input_sha256": document_authority_batch_sha256(batch),
             "state": "resolved",
             "resolved_roles": [
-                {"role": "protocol", "status": "selected", "candidate_id": "candidate_protocol"},
+                {
+                    "role": "protocol",
+                    "status": "selected",
+                    "candidate_id": candidate_ids["protocol.docx"],
+                },
                 {"role": "investigator_brochure", "status": "missing", "candidate_id": ""},
-                {"role": "ecrf", "status": "selected", "candidate_id": "candidate_ecrf"},
+                {
+                    "role": "ecrf",
+                    "status": "selected",
+                    "candidate_id": candidate_ids["ecrf.xlsx"],
+                },
                 {"role": "sap", "status": "missing", "candidate_id": ""},
             ],
             "unresolved_roles": [],
             "user_question": "",
             "review_run_ids": ["run_primary", "run_verifier"],
+            "analysis_run_ids": ["analysis_run_primary", "analysis_run_verifier"],
+            "document_identities": [
+                {
+                    "role": "protocol",
+                    "candidate_id": candidate_ids["protocol.docx"],
+                    "document_version": "V1.0",
+                    "document_date": "2026-09-03",
+                },
+                {
+                    "role": "ecrf",
+                    "candidate_id": candidate_ids["ecrf.xlsx"],
+                    "document_version": "V1.0",
+                    "document_date": "2026-09-03",
+                },
+            ],
         },
     )
     registry = SourceRegistryService(
@@ -606,7 +997,7 @@ def test_resolved_authority_promotes_selected_documents_atomically(
         MonitoringAiRepository(tmp_path / "jobs.sqlite"),
         project_id="project-document-authority",
         candidate_batch=batch,
-        candidate_root=tmp_path / "candidates",
+        candidate_root=candidate_root,
         source_registry=registry,
         primary_analysis_job_id="analysis-primary",
         verifier_analysis_job_id="analysis-verifier",
@@ -617,10 +1008,50 @@ def test_resolved_authority_promotes_selected_documents_atomically(
 
     assert result["authority_status"] == "promoted"
     assert {item["role"] for item in result["registrations"]} == {"protocol", "ecrf"}
-    assert {entry.source_kind for entry in registry.list_entries("project-document-authority")} == {
+    entries = registry.list_entries("project-document-authority")
+    assert {entry.source_kind for entry in entries} == {
         "protocol_docx",
         "ecrf",
     }
+    assert all(
+        entry.metadata["document_authority_receipt_sha256"]
+        == result["promotion_receipt_sha256"]
+        for entry in entries
+    )
+    replay = promote_document_authority_from_jobs(
+        MonitoringAiRepository(tmp_path / "jobs.sqlite"),
+        project_id="project-document-authority",
+        candidate_batch=batch,
+        candidate_root=candidate_root,
+        source_registry=registry,
+        primary_analysis_job_id="analysis-primary",
+        verifier_analysis_job_id="analysis-verifier",
+        conflict_packet={},
+        primary_review_job_id="review-primary",
+        verifier_review_job_id="review-verifier",
+    )
+    assert replay["promotion_receipt_sha256"] == result["promotion_receipt_sha256"]
+    assert len(registry.list_entries("project-document-authority")) == 2
+    re_adjudicated = promote_document_authority_from_jobs(
+        MonitoringAiRepository(tmp_path / "jobs.sqlite"),
+        project_id="project-document-authority",
+        candidate_batch=batch,
+        candidate_root=candidate_root,
+        source_registry=registry,
+        primary_analysis_job_id="analysis-primary-2",
+        verifier_analysis_job_id="analysis-verifier-2",
+        conflict_packet={},
+        primary_review_job_id="review-primary-2",
+        verifier_review_job_id="review-verifier-2",
+    )
+    assert re_adjudicated["promotion_receipt_sha256"] != (
+        result["promotion_receipt_sha256"]
+    )
+    assert all(
+        entry.metadata["document_authority_receipt_sha256"]
+        == re_adjudicated["promotion_receipt_sha256"]
+        for entry in registry.list_entries("project-document-authority")
+    )
 
     rollback_registry = SourceRegistryService(
         SourceRegistryStore(tmp_path / "rollback-registry.jsonl")
@@ -642,7 +1073,7 @@ def test_resolved_authority_promotes_selected_documents_atomically(
             MonitoringAiRepository(tmp_path / "rollback-jobs.sqlite"),
             project_id="project-document-authority",
             candidate_batch=batch,
-            candidate_root=tmp_path / "candidates",
+            candidate_root=candidate_root,
             source_registry=rollback_registry,
             primary_analysis_job_id="analysis-primary",
             verifier_analysis_job_id="analysis-verifier",
@@ -651,3 +1082,45 @@ def test_resolved_authority_promotes_selected_documents_atomically(
             verifier_review_job_id="review-verifier",
         )
     assert rollback_registry.list_entries("project-document-authority") == []
+
+    batch_manifest = candidate_root / "batches" / f"{batch['batch_id']}.json"
+    batch_manifest.unlink()
+    missing_batch_registry = SourceRegistryService(
+        SourceRegistryStore(tmp_path / "missing-batch-registry.jsonl")
+    )
+    with pytest.raises(DocumentAuthorityError, match="batch_manifest_missing"):
+        promote_document_authority_from_jobs(
+            MonitoringAiRepository(tmp_path / "missing-batch-jobs.sqlite"),
+            project_id="project-document-authority",
+            candidate_batch=batch,
+            candidate_root=candidate_root,
+            source_registry=missing_batch_registry,
+            primary_analysis_job_id="analysis-primary",
+            verifier_analysis_job_id="analysis-verifier",
+        )
+    assert missing_batch_registry.list_entries("project-document-authority") == []
+
+    MonitoringDocumentCandidateDecomposer(candidate_root).decompose_many([
+        ("protocol.docx", protocol),
+        ("ecrf.xlsx", ecrf),
+    ])
+    candidate_manifest = (
+        candidate_root
+        / "manifests"
+        / f"{candidate_ids['protocol.docx']}.json"
+    )
+    candidate_manifest.unlink()
+    missing_candidate_registry = SourceRegistryService(
+        SourceRegistryStore(tmp_path / "missing-candidate-registry.jsonl")
+    )
+    with pytest.raises(DocumentAuthorityError, match="candidate_manifest_missing"):
+        promote_document_authority_from_jobs(
+            MonitoringAiRepository(tmp_path / "missing-candidate-jobs.sqlite"),
+            project_id="project-document-authority",
+            candidate_batch=batch,
+            candidate_root=candidate_root,
+            source_registry=missing_candidate_registry,
+            primary_analysis_job_id="analysis-primary",
+            verifier_analysis_job_id="analysis-verifier",
+        )
+    assert missing_candidate_registry.list_entries("project-document-authority") == []

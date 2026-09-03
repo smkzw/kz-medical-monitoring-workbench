@@ -539,6 +539,12 @@ from .source_intake import SourceRegistryService, SourceRegistryStore
 from .monitoring_document_evidence import (
     MonitoringDocumentEvidenceResolver,
 )
+from .monitoring_document_authority_workflow import (
+    MonitoringDocumentAuthorityWorkflow,
+)
+from .monitoring_document_authority_jobs import (
+    verify_document_authority_promotion_receipt,
+)
 from .source_content_projection import (
     SOURCE_CONTENT_PROJECTION_VERSION,
     SourceContentProjectionService,
@@ -993,9 +999,6 @@ source_registry = SourceRegistryService(
     content_validation_service=source_content_validation_service,
     expected_context_resolver=_expected_source_context,
 )
-monitoring_document_evidence_resolver = MonitoringDocumentEvidenceResolver(
-    source_registry
-)
 source_content_projection_service = SourceContentProjectionService(
     source_registry.store
 )
@@ -1013,6 +1016,16 @@ monitoring_metric_configuration_service = MonitoringMetricConfigurationService(
 )
 monitoring_ai_repository = MonitoringAiRepository(
     RUNTIME_DIR / "medical_monitoring_ai.sqlite3"
+)
+source_registry.monitoring_authority_receipt_verifier = (
+    lambda project_id, receipt: verify_document_authority_promotion_receipt(
+        monitoring_ai_repository,
+        project_id=project_id,
+        receipt=receipt,
+    )
+)
+monitoring_document_evidence_resolver = MonitoringDocumentEvidenceResolver(
+    source_registry
 )
 monitoring_mapping_draft_repository = MonitoringMappingDraftRepository(
     RUNTIME_DIR / "medical_monitoring_ai.sqlite3"
@@ -1257,6 +1270,15 @@ monitoring_ai_verifier_worker = MonitoringAiWorker(
 def _wake_monitoring_mapping_workers() -> None:
     monitoring_ai_worker.wake()
     monitoring_ai_verifier_worker.wake()
+
+
+monitoring_document_authority_workflow = MonitoringDocumentAuthorityWorkflow(
+    monitoring_ai_repository,
+    monitoring_ai_service,
+    monitoring_ai_verifier_service,
+    source_registry,
+    worker_wake=_wake_monitoring_mapping_workers,
+)
 
 
 monitoring_protocol_preparation_service = MonitoringProtocolPreparationService(
@@ -3604,6 +3626,32 @@ def _register_r7_monitoring_mapping_document(
     }
 
 
+def _start_r7_monitoring_document_authority(
+    *,
+    project_id: str,
+    workspace_dir: Path,
+    files: list[tuple[str, bytes]],
+) -> dict[str, object]:
+    return monitoring_document_authority_workflow.start(
+        project_id=project_id,
+        workspace_dir=workspace_dir,
+        files=files,
+    )
+
+
+def _promote_r7_monitoring_document_authority(
+    *,
+    project_id: str,
+    workspace_dir: Path,
+    batch_id: str,
+) -> dict[str, object]:
+    return monitoring_document_authority_workflow.advance(
+        project_id=project_id,
+        workspace_dir=workspace_dir,
+        batch_id=batch_id,
+    )
+
+
 app.include_router(
     create_medical_monitoring_r7_product_router(
         runtime_dir=RUNTIME_DIR,
@@ -3617,6 +3665,12 @@ app.include_router(
         admission_mapping_confirmation=_r7_admission_mapping_confirmation,
         monitoring_document_registrar=(
             _register_r7_monitoring_mapping_document
+        ),
+        monitoring_document_authority_starter=(
+            _start_r7_monitoring_document_authority
+        ),
+        monitoring_document_authority_promoter=(
+            _promote_r7_monitoring_document_authority
         ),
         admission_fact_materializer=_r7_admission_fact_materializer,
         synthetic_fixture_mode=_r5_s7_fixture_mode,
