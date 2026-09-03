@@ -3384,6 +3384,7 @@ def test_field_mapping_rejects_english_only_user_facing_guidance(
         not in {
             MonitoringAiTaskType.RULE_TEMPLATE_RECOMMENDATION,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
         }
     ],
 )

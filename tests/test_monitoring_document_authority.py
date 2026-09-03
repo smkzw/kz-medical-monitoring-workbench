@@ -140,6 +140,7 @@ def _run(
         model=MONITORING_C3_MAPPING_MODEL if primary else MONITORING_C3_VERIFIER_MODEL,
         prompt_version=PRIMARY_PROMPT_VERSION if primary else VERIFIER_PROMPT_VERSION,
         input_sha256=analysis.input_sha256,
+        job_input_revision_sha256="f" * 64,
         output_sha256=_digest(analysis.model_dump(mode="json")),
         analysis=analysis,
     )
@@ -173,6 +174,7 @@ def _review_run(
             if primary else VERIFIER_REVIEW_PROMPT_VERSION
         ),
         conflict_packet_sha256=review.conflict_packet_sha256,
+        job_input_revision_sha256="f" * 64,
         output_sha256=_digest(review.model_dump(mode="json")),
         review=review,
     )
@@ -222,6 +224,48 @@ def test_same_run_identity_cannot_satisfy_dual_analysis() -> None:
 
     with pytest.raises(DocumentAuthorityError, match="runs_not_independent"):
         reconcile_document_authority(batch, primary, forged_verifier)
+
+
+def test_dual_analysis_requires_one_job_input_revision() -> None:
+    batch = _batch()
+    primary = _run(_analysis(batch), "primary")
+    verifier = _run(_analysis(batch), "verifier").model_copy(
+        update={"job_input_revision_sha256": "e" * 64}
+    )
+
+    with pytest.raises(DocumentAuthorityError, match="input_revision_mismatch"):
+        reconcile_document_authority(batch, primary, verifier)
+
+
+@pytest.mark.parametrize(
+    "field_update",
+    (
+        {"uncertainty": "该受试者事件确定为CTCAE 3级，应立即生成Query。"},
+        {"document_version": "V2.0 高风险信号"},
+        {"uncertainty": "风险判定为高。"},
+        {"uncertainty": "该患者不良反应判定为3级，应向研究中心发出质疑。"},
+        {"uncertainty": "该病例存在严重毒性，需要立即干预。"},
+    ),
+)
+def test_document_authority_text_rejects_uncontrolled_free_text(
+    field_update: dict,
+) -> None:
+    with pytest.raises(ValueError):
+        CandidateAssessment(
+            candidate_id="candidate_protocol",
+            inferred_role="protocol",
+            usable=True,
+            confidence=0.98,
+            evidence_locators=("doc:p1",),
+            **field_update,
+        )
+    with pytest.raises(ValueError):
+        ConflictDecision(
+            role="protocol",
+            decision="unresolved",
+            confidence=0.4,
+            uncertainty="发现安全性信号，应生成Query。",
+        )
 
 
 def test_missing_candidate_coverage_and_unknown_evidence_fail_closed() -> None:
@@ -305,7 +349,7 @@ def test_different_locator_or_material_uncertainty_cannot_auto_resolve() -> None
     batch = _batch()
     primary = _analysis(batch)
     changed_selection = primary.role_selections[0].model_copy(
-        update={"evidence_locators": ("doc:p2",), "uncertainty": "版本仍不明确"}
+        update={"evidence_locators": ("doc:p2",), "uncertainty": "version_unclear"}
     )
     verifier = primary.model_copy(
         update={"role_selections": (changed_selection, *primary.role_selections[1:])}
@@ -436,6 +480,19 @@ def test_dual_conflict_review_resolves_or_asks_one_plain_question() -> None:
     )
     assert resolved["state"] == "resolved"
     assert resolved["user_question"] == ""
+
+    mismatched_review = _review_run(accepted, "verifier").model_copy(
+        update={"job_input_revision_sha256": "e" * 64}
+    )
+    with pytest.raises(DocumentAuthorityError, match="input_revision_mismatch"):
+        resolve_document_authority_conflicts(
+            batch,
+            analysis_primary,
+            analysis_verifier,
+            packet,
+            _review_run(accepted, "primary"),
+            mismatched_review,
+        )
 
     unresolved = DocumentAuthorityConflictReview(
         schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
@@ -688,7 +745,7 @@ def test_unreadable_batch_can_reach_one_user_question_without_fake_evidence() ->
         inferred_role="uncertain",
         usable=False,
         confidence=0.2,
-        uncertainty="无法提取内容",
+        uncertainty="content_unreadable",
     )
     analysis = DocumentAuthorityAnalysis(
         schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
@@ -700,7 +757,7 @@ def test_unreadable_batch_can_reach_one_user_question_without_fake_evidence() ->
                 role=role,
                 decision="unresolved" if role in {"protocol", "ecrf"} else "missing",
                 confidence=0.2 if role in {"protocol", "ecrf"} else 0.95,
-                uncertainty="无法提取内容",
+                uncertainty="content_unreadable",
             )
             for role in ("protocol", "investigator_brochure", "ecrf", "sap")
         ),
@@ -717,7 +774,7 @@ def test_unreadable_batch_can_reach_one_user_question_without_fake_evidence() ->
                 decision="unresolved",
                 confidence=0.2,
                 considered_candidate_ids=("candidate_unreadable",),
-                uncertainty="没有可核对的正文",
+                uncertainty="evidence_insufficient",
             )
             for role in ("protocol", "ecrf")
         ),

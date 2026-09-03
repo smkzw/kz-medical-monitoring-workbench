@@ -212,6 +212,9 @@ from packages.medical_monitoring.admission import (
 from packages.medical_monitoring.admission.fact_materialization import (
     FactMaterializationService,
 )
+from packages.medical_monitoring.admission.document_authority import (
+    DocumentAuthorityError,
+)
 from .medical_writing import MedicalWritingRevisionService
 from .medical_writing_durable_jobs import (
     DurableJobNotFound,
@@ -1124,6 +1127,24 @@ def _current_monitoring_ai_revision(job):
                 .current_input_revision_sha256(job)
             )
         except (NameError, ValueError):
+            return ""
+    if job.task_type in {
+        MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+        MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+    }:
+        try:
+            payload = monitoring_ai_repository.input_payload(
+                job.project_id,
+                job.job_id,
+            )
+            MonitoringAiService._validate_input_payload(
+                job.task_type,
+                job.project_id,
+                job.input_revision,
+                payload,
+            )
+            return job.input_revision_sha256
+        except (DocumentAuthorityError, KeyError, ValueError):
             return ""
     if job.task_type != MonitoringAiTaskType.LISTING_FIELD_MAPPING:
         payload = monitoring_ai_repository.input_payload(

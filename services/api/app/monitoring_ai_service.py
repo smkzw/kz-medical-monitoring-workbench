@@ -91,11 +91,16 @@ from packages.medical_monitoring.admission.document_evidence import (
 )
 from packages.medical_monitoring.admission.document_authority import (
     PRIMARY_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_PROMPT_VERSION,
+    PRIMARY_REVIEW_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_REVIEW_PROMPT_VERSION,
     VERIFIER_PROMPT_VERSION as DOCUMENT_AUTHORITY_VERIFIER_PROMPT_VERSION,
+    VERIFIER_REVIEW_PROMPT_VERSION as DOCUMENT_AUTHORITY_VERIFIER_REVIEW_PROMPT_VERSION,
     DocumentAuthorityAnalysis,
+    DocumentAuthorityConflictReview,
     DocumentAuthorityError,
     document_authority_batch_sha256,
     validate_document_authority_analysis,
+    validate_document_authority_conflict_packet,
+    validate_document_authority_conflict_review,
 )
 from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_MAPPING_MODEL,
@@ -132,6 +137,9 @@ PROMPT_VERSION_BY_TASK: Dict[MonitoringAiTaskType, str] = {
     MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS: (
         DOCUMENT_AUTHORITY_PRIMARY_PROMPT_VERSION
     ),
+    MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW: (
+        DOCUMENT_AUTHORITY_PRIMARY_REVIEW_PROMPT_VERSION
+    ),
     MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING: (
         "monitoring-protocol-clause-structuring-v12"
     ),
@@ -152,6 +160,9 @@ _C3_VERIFIER_PROMPT_VERSION = "monitoring-listing-field-mapping-verifier-v1"
 AI_TASK_TYPE_BY_MONITORING_TASK: Dict[MonitoringAiTaskType, AiTaskType] = {
     MonitoringAiTaskType.LISTING_FIELD_MAPPING: (AiTaskType.LISTING_SEMANTIC_MAPPING),
     MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS: (
+        AiTaskType.DOCUMENT_SECTION_EXTRACTION
+    ),
+    MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW: (
         AiTaskType.DOCUMENT_SECTION_EXTRACTION
     ),
     MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING: (
@@ -187,6 +198,12 @@ TASK_CONTRACTS: Dict[MonitoringAiTaskType, str] = {
         "四类文件角色，每个结论只能引用同一候选内提供的定位符；不能根据"
         "文件名、上传顺序或另一模型的结论直接决定。此阶段只判断文件权威，"
         "不得生成CTCAE等级、风险、Query或确认任何医学事实。"
+    ),
+    MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW: (
+        "独立复核匿名冲突包中的全部候选文件，并为每个冲突角色给出选择、"
+        "缺失或未决判断。必须逐候选核对内容证据，证据引用同时绑定候选ID"
+        "和该候选内的定位符；不得猜测另一复核者或首轮结论来源。只裁决文件"
+        "类别与当前版本，不得生成CTCAE等级、风险、Query或医学事实。"
     ),
     MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING: (
         "把方案原文条款拆解为可追溯的适用对象、条件、时间窗、阈值、例外和动作候选。"
@@ -339,6 +356,9 @@ TASK_CANDIDATE_TYPES: Dict[MonitoringAiTaskType, Tuple[str, ...]] = {
     MonitoringAiTaskType.LISTING_FIELD_MAPPING: ("listing_field_mapping_set",),
     MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS: (
         "document_authority_analysis",
+    ),
+    MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW: (
+        "document_authority_review",
     ),
     MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING: ("protocol_clause_structure",),
     MonitoringAiTaskType.RULE_TEMPLATE_RECOMMENDATION: (
@@ -1365,6 +1385,7 @@ STRUCTURED_PAYLOAD_MODEL_BY_TASK: Dict[
 ] = {
     MonitoringAiTaskType.LISTING_FIELD_MAPPING: _ListingFieldMappingPayload,
     MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS: DocumentAuthorityAnalysis,
+    MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW: DocumentAuthorityConflictReview,
     MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING: _ProtocolClausePayload,
     MonitoringAiTaskType.RULE_TEMPLATE_RECOMMENDATION: (
         _RuleTemplateRecommendationPayload
@@ -1519,9 +1540,12 @@ class MonitoringAiService:
         prompt_version: str = "",
         max_attempts: int = 2,
     ) -> MonitoringAiJob:
-        if task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS:
+        if task_type in {
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+        }:
             raise ValueError(
-                "document authority analysis requires its identity-bound submit method"
+                "document authority tasks require their identity-bound submit methods"
             )
         self._validate_input_payload(
             task_type,
@@ -1596,6 +1620,63 @@ class MonitoringAiService:
                 business_key=(
                     f"document-authority-analysis:{role}:"
                     f"{candidate_batch['batch_id']}"
+                ),
+            )
+        )
+
+    def submit_document_authority_review(
+        self,
+        *,
+        project_id: str,
+        input_revision: MonitoringAiInputRevision,
+        conflict_packet: Dict[str, Any],
+        source_bindings: List[Dict[str, str]],
+        role: Literal["primary", "verifier"],
+        max_attempts: int = 2,
+    ) -> MonitoringAiJob:
+        packet_sha256 = validate_document_authority_conflict_packet(
+            conflict_packet
+        )
+        prompt_version = (
+            DOCUMENT_AUTHORITY_PRIMARY_REVIEW_PROMPT_VERSION
+            if role == "primary"
+            else DOCUMENT_AUTHORITY_VERIFIER_REVIEW_PROMPT_VERSION
+        )
+        expected_identity = (
+            (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL)
+            if role == "primary"
+            else (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL)
+        )
+        runtime = self.runtime_resolver()
+        if (runtime.provider, runtime.model) != expected_identity:
+            raise MonitoringAiRuntimeUnavailableError(
+                "document authority review runtime identity does not match its role"
+            )
+        input_payload = {
+            "document_authority_conflict_packet": deepcopy(conflict_packet),
+            "document_authority_conflict_packet_sha256": packet_sha256,
+            "document_authority_role": role,
+            "document_authority_source_bindings": deepcopy(source_bindings),
+        }
+        self._validate_input_payload(
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+            project_id,
+            input_revision,
+            input_payload,
+        )
+        return self._create_job(
+            MonitoringAiJobCreate(
+                project_id=project_id,
+                task_type=MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+                input_revision=input_revision,
+                input_payload=input_payload,
+                prompt_version=prompt_version,
+                profile_id=runtime.profile_id,
+                provider=runtime.provider,
+                requested_model=runtime.model,
+                max_attempts=max_attempts,
+                business_key=(
+                    f"document-authority-review:{role}:{packet_sha256}"
                 ),
             )
         )
@@ -2270,6 +2351,25 @@ class MonitoringAiService:
                 ValidationError,
                 ValueError,
             ) as first_error:
+                if job.task_type in {
+                    MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+                    MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+                }:
+                    return self._fail_claimed_job(
+                        job,
+                        owner=owner,
+                        request_payload={"envelope": envelope.payload},
+                        response_payload={"provider_outputs": outputs},
+                        failure_code="invalid_ai_output",
+                        failure_message=(
+                            "document authority provider output failed its "
+                            "fail-closed contract: "
+                            + self._controlled_validation_error_text(first_error)
+                        ),
+                        retryable=False,
+                        outcome="invalid_output",
+                        response_model=self._response_model(provider, job),
+                    )
                 repaired = True
                 validation_errors = self._controlled_validation_error_text(
                     first_error
@@ -2479,6 +2579,7 @@ class MonitoringAiService:
         if job.task_type not in {
             MonitoringAiTaskType.LISTING_FIELD_MAPPING,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
         }:
             return False
         field_profile = input_payload.get("field_profile")
@@ -2567,6 +2668,10 @@ class MonitoringAiService:
         job: MonitoringAiJob,
         input_payload: Dict[str, Any],
     ) -> Dict[str, Any]:
+        if job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
+            result = deepcopy(input_payload)
+            result.pop("document_authority_source_bindings", None)
+            return result
         if (
             job.task_type
             == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING
@@ -2899,6 +3004,8 @@ class MonitoringAiService:
             )
         elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS:
             candidate_count = "必须恰好输出1个完整的文档权威分析候选。"
+        elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
+            candidate_count = "必须恰好输出1个完整的文档权威冲突复核候选。"
         elif job.task_type == MonitoringAiTaskType.QUERY_EXPLANATION_CANDIDATES:
             candidate_count = "必须恰好输出2至3个候选。"
         elif job.task_type == MonitoringAiTaskType.RULE_TEMPLATE_RECOMMENDATION:
@@ -3102,7 +3209,18 @@ class MonitoringAiService:
                 "document_authority_role只约束运行身份，不提供另一模型结论。"
                 "不得输出claims或evidence对象；只在structured_payload中引用"
                 "候选自身已提供的locator。不得推断CTCAE等级、风险、Query、"
-                "AE/MH/CM/IP/PD事实或疗效安全性结论。"
+                "AE/MH/CM/IP/PD事实或疗效安全性结论。外层title必须严格为"
+                "“研究文件识别结果”，text必须严格为“基于冻结文件完成识别。”"
+            )
+        elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
+            system_prompt += (
+                " 这是文件权威冲突的全量盲复核。必须独立检查匿名冲突包中"
+                "每个候选，为每个冲突角色给出一项决定；不得推测首轮或另一"
+                "复核者的答案。不得输出claims或evidence对象；证据必须在"
+                "structured_payload中用candidate_id与该文件locator成对引用。"
+                "不得按顺序、文件名、票数或置信度机械选边，也不得生成CTCAE"
+                "等级、风险、Query或AE/MH/CM/IP/PD医学事实。外层title必须严格为"
+                "“研究文件冲突复核”，text必须严格为“基于匿名冻结证据完成复核。”"
             )
         elif (
             job.task_type
@@ -3468,6 +3586,8 @@ class MonitoringAiService:
     ) -> Dict[str, Any]:
         if task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS:
             return DocumentAuthorityAnalysis.model_json_schema()
+        if task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
+            return DocumentAuthorityConflictReview.model_json_schema()
         if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING:
             return {
                 "field_mappings": [
@@ -3644,6 +3764,30 @@ class MonitoringAiService:
                 "document authority analysis requires exactly one candidate"
             )
         if (
+            job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW
+            and len(parsed.candidates) != 1
+        ):
+            raise MonitoringAiOutputValidationError(
+                "document authority review requires exactly one candidate"
+            )
+        authority_copy = {
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS: (
+                "研究文件识别结果",
+                "基于冻结文件完成识别。",
+            ),
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW: (
+                "研究文件冲突复核",
+                "基于匿名冻结证据完成复核。",
+            ),
+        }.get(job.task_type)
+        if authority_copy is not None and any(
+            (candidate.title, candidate.text) != authority_copy
+            for candidate in parsed.candidates
+        ):
+            raise MonitoringAiOutputValidationError(
+                "document authority outer copy must match the controlled task copy"
+            )
+        if (
             job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
             and len(parsed.candidates) != 1
         ):
@@ -3799,6 +3943,18 @@ class MonitoringAiService:
                                 str(exc),
                                 blocked=True,
                             )
+                    elif isinstance(structured, DocumentAuthorityConflictReview):
+                        try:
+                            validate_document_authority_conflict_review(
+                                input_payload["document_authority_conflict_packet"],
+                                structured,
+                            )
+                        except (DocumentAuthorityError, KeyError, ValueError) as exc:
+                            _candidate_error(
+                                candidate_state,
+                                str(exc),
+                                blocked=True,
+                            )
             if (
                 not candidate_state["blocked"]
                 and job.task_type
@@ -3891,7 +4047,10 @@ class MonitoringAiService:
             elif (
                 not candidate_state["blocked"]
                 and job.task_type
-                == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS
+                in {
+                    MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+                    MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+                }
             ):
                 try:
                     self._materialize_document_authority_evidence(
@@ -3952,6 +4111,7 @@ class MonitoringAiService:
                 and job.task_type not in {
                     MonitoringAiTaskType.LISTING_FIELD_MAPPING,
                     MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+                    MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
                 }
                 and (not candidate.claims or not candidate.evidence)
             ):
@@ -3998,7 +4158,10 @@ class MonitoringAiService:
             if (
                 not candidate_state["blocked"]
                 and job.task_type
-                != MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS
+                not in {
+                    MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+                    MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+                }
             ):
                 evidence_ids = {item.evidence_id for item in candidate.evidence}
                 referenced_ids = self._structured_evidence_ids(
@@ -5956,28 +6119,54 @@ class MonitoringAiService:
     def _materialize_document_authority_evidence(
         job: MonitoringAiJob,
         candidate: _ProviderCandidate,
-        analysis: DocumentAuthorityAnalysis,
+        analysis: Union[DocumentAuthorityAnalysis, DocumentAuthorityConflictReview],
         input_payload: Dict[str, Any],
     ) -> None:
         if candidate.claims or candidate.evidence:
             raise MonitoringAiOutputValidationError(
                 "document authority provider must not generate claims or evidence"
             )
-        batch = input_payload["document_authority_batch"]
-        raw_by_id = {
-            str(item["candidate_id"]): item for item in batch["candidates"]
-        }
-        referenced = {
-            (item.candidate_id, locator)
-            for item in analysis.candidate_assessments
-            for locator in item.evidence_locators
-        }
-        referenced.update(
-            (item.selected_candidate_id, locator)
-            for item in analysis.role_selections
-            if item.selected_candidate_id
-            for locator in item.evidence_locators
-        )
+        if isinstance(analysis, DocumentAuthorityAnalysis):
+            batch = input_payload["document_authority_batch"]
+            raw_by_id = {
+                str(item["candidate_id"]): item for item in batch["candidates"]
+            }
+            referenced = {
+                (item.candidate_id, locator)
+                for item in analysis.candidate_assessments
+                for locator in item.evidence_locators
+            }
+            referenced.update(
+                (item.selected_candidate_id, locator)
+                for item in analysis.role_selections
+                if item.selected_candidate_id
+                for locator in item.evidence_locators
+            )
+            confidence_values = [
+                item.confidence for item in analysis.candidate_assessments
+            ]
+        else:
+            packet = input_payload["document_authority_conflict_packet"]
+            bindings = {
+                str(item["candidate_id"]): item
+                for item in input_payload["document_authority_source_bindings"]
+            }
+            raw_by_id = {
+                str(item["candidate_id"]): {
+                    **item,
+                    "file_id": bindings[str(item["candidate_id"])]["source_entry_id"],
+                    "content_sha256": bindings[str(item["candidate_id"])][
+                        "source_content_sha256"
+                    ],
+                }
+                for item in packet["candidates"]
+            }
+            referenced = {
+                (reference.candidate_id, reference.locator)
+                for decision in analysis.decisions
+                for reference in decision.evidence_references
+            }
+            confidence_values = [item.confidence for item in analysis.decisions]
         evidence_rows: List[_ProviderEvidence] = []
         for candidate_id, raw in raw_by_id.items():
             locators = sorted(
@@ -6023,10 +6212,7 @@ class MonitoringAiService:
                 claim_id=f"document-authority-{index // 20 + 1}",
                 kind=MonitoringAiClaimKind.INFERENCE,
                 text="文件类别与版本判断来自本次冻结文件证据。",
-                confidence=min(
-                    (item.confidence for item in analysis.candidate_assessments),
-                    default=0.0,
-                ),
+                confidence=min(confidence_values, default=0.0),
                 uncertainty="具体冲突由独立复核流程继续裁决。",
                 user_action="",
                 evidence_ids=evidence_ids[index : index + 20],
@@ -7212,6 +7398,56 @@ class MonitoringAiService:
                 "monitoring AI input revision requires at least one exact "
                 "source binding"
             )
+        if task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
+            packet = input_payload.get("document_authority_conflict_packet")
+            if not isinstance(packet, dict):
+                raise ValueError("document authority review requires a conflict packet")
+            try:
+                packet_sha256 = validate_document_authority_conflict_packet(packet)
+            except DocumentAuthorityError as exc:
+                raise ValueError("document authority conflict packet is invalid") from exc
+            if input_payload.get("document_authority_conflict_packet_sha256") != packet_sha256:
+                raise ValueError("document authority conflict packet hash mismatch")
+            if input_payload.get("document_authority_role") not in {
+                "primary",
+                "verifier",
+            }:
+                raise ValueError("document authority role is invalid")
+            bindings = input_payload.get("document_authority_source_bindings")
+            if (
+                not isinstance(bindings, list)
+                or len(bindings) != len(packet["candidate_coverage"])
+                or any(
+                    not isinstance(item, dict)
+                    or set(item)
+                    != {
+                        "candidate_id",
+                        "source_entry_id",
+                        "source_content_sha256",
+                    }
+                    for item in bindings
+                )
+                or {
+                str(item.get("candidate_id") or "")
+                for item in bindings
+                if isinstance(item, dict)
+                }
+                != set(packet["candidate_coverage"])
+            ):
+                raise ValueError("document authority source bindings are incomplete")
+            binding_pairs = {
+                (
+                    str(item.get("source_entry_id") or ""),
+                    str(item.get("source_content_sha256") or ""),
+                )
+                for item in bindings
+                if isinstance(item, dict)
+            }
+            if len(binding_pairs) != len(bindings) or binding_pairs != input_revision.source_pairs:
+                raise ValueError(
+                    "document authority sources do not match the exact input revision"
+                )
+            return
         if task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS:
             batch = input_payload.get("document_authority_batch")
             if not isinstance(batch, dict):
