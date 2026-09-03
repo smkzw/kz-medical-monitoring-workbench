@@ -13,8 +13,8 @@ from cryptography.fernet import Fernet, InvalidToken
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from packages.medical_monitoring.admission.mapping_gate import (
-    MONITORING_C3_MAPPING_MODEL,
-    MONITORING_C3_MAPPING_PROVIDER,
+    MONITORING_C3_VERIFIER_MODEL,
+    MONITORING_C3_VERIFIER_PROVIDER,
     ZHIPU_CODING_PLAN_API_KEY_ENV,
     ZHIPU_CODING_PLAN_API_KEY_ENV_ALIASES,
     ZHIPU_CODING_PLAN_BASE_URL,
@@ -168,10 +168,10 @@ PROVIDER_PRESETS: tuple[AiProviderPreset, ...] = (
     ),
     AiProviderPreset(
         preset_id=ZHIPU_CODING_PLAN_PRESET_ID,
-        provider=MONITORING_C3_MAPPING_PROVIDER,
+        provider=MONITORING_C3_VERIFIER_PROVIDER,
         label="智谱 Coding Plan 直连",
         base_url=ZHIPU_CODING_PLAN_BASE_URL,
-        default_model=MONITORING_C3_MAPPING_MODEL,
+        default_model=MONITORING_C3_VERIFIER_MODEL,
         api_key_env=ZHIPU_CODING_PLAN_API_KEY_ENV,
         deployment_scope="cloud",
         discovery_mode="manual_plus_probe",
@@ -342,7 +342,7 @@ class AiRuntimeSettingsStore:
         names = [profile.api_key_env]
         if profile.provider == "alibaba_token_plan":
             names.extend(ALIBABA_TOKEN_PLAN_API_KEY_ENV_ALIASES)
-        elif profile.provider == MONITORING_C3_MAPPING_PROVIDER:
+        elif profile.provider == MONITORING_C3_VERIFIER_PROVIDER:
             names.extend(ZHIPU_CODING_PLAN_API_KEY_ENV_ALIASES)
         return tuple(dict.fromkeys(name for name in names if name))
 

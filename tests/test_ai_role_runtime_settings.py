@@ -92,11 +92,11 @@ class AiRoleRuntimeSettingsTests(unittest.TestCase):
         self.assertEqual("enabled", roles[INDEPENDENT_AI_ROLE]["thinking"])
         self.assertEqual("max", roles[INDEPENDENT_AI_ROLE]["reasoning_effort"])
         self.assertEqual(
-            "independent_ai__zhipu_coding_plan_glm_flash",
+            "medical_monitoring_ai__cms_smk_minimax_m3",
             roles[MEDICAL_MONITORING_AI_ROLE]["profile_id"],
         )
         self.assertEqual(
-            "glm-5.3-flash",
+            "MiniMax-M3",
             roles[MEDICAL_MONITORING_AI_ROLE]["model"],
         )
         self.assertEqual("disabled", roles[MEDICAL_MONITORING_AI_ROLE]["thinking"])

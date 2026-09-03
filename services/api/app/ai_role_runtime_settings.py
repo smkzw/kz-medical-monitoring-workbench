@@ -15,6 +15,7 @@ from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_MAPPING_PROVIDER,
     ZHIPU_CODING_PLAN_API_KEY_ENV,
     ZHIPU_CODING_PLAN_BASE_URL,
+    MONITORING_C3_VERIFIER_PROFILE_ID,
 )
 
 from .ai_runtime_settings import (
@@ -41,6 +42,8 @@ OCR_PADDLE_PROFILE_ID = "ocr_paddle_official"
 TRANSLATION_BODY_OMLX_PROFILE_ID = "translation_body_local_omlx"
 TRANSLATION_SUPPORT_PROFILE_ID = "deepseek_translation_support"
 INDEPENDENT_AI_DEEPSEEK_FLASH_PROFILE_ID = "independent_ai__deepseek_v4_flash"
+CMS_SMK_BASE_URL = "https://new-api.mediportal.com.cn/v1"
+CMS_SMK_API_KEY_ENV = "CMS_SMK_API_KEY"
 DEFAULT_OCR_MODEL = "GLM-OCR-bf16"
 PADDLE_OCR_MODEL = "PaddleOCR-VL-1.6"
 GATE_TRANSLATION_BODY_MODEL = "dawncr0w--Hy-MT2-30B-A3B-oQ8-MLX"
@@ -141,7 +144,7 @@ ROLE_DEFINITIONS: tuple[AiRoleDefinition, ...] = (
         label="医学监查AI",
         description="字段对应建议、医学风险候选、受试者历程与医学解释。",
         recommendation=(
-            "默认使用智谱 GLM-5.3 Flash（高推理），MiniMax M3 为直连备选；"
+            "默认由 MiniMax M3 直连主分析、智谱 GLM-5.3 Flash 独立核对；"
             "仅在两条远程路线均不可用时使用本地 MTPLX Qwen3.8 Flash Next。"
         ),
         default_model=MONITORING_C3_MAPPING_MODEL,
@@ -274,10 +277,22 @@ def _builtin_profiles() -> tuple[AiProviderProfile, ...]:
         AiProviderProfile(
             profile_id=MONITORING_C3_MAPPING_PROFILE_ID,
             provider=MONITORING_C3_MAPPING_PROVIDER,
-            label="智谱 Coding Plan 字段映射",
-            base_url=ZHIPU_CODING_PLAN_BASE_URL,
+            label="MiniMax M3 医学监查主分析",
+            base_url=CMS_SMK_BASE_URL,
             model=MONITORING_C3_MAPPING_MODEL,
             expected_response_model=MONITORING_C3_MAPPING_MODEL,
+            api_key_env=CMS_SMK_API_KEY_ENV,
+            deployment_scope="cloud",
+            discovery_mode="manual_plus_probe",
+            enabled=True,
+        ),
+        AiProviderProfile(
+            profile_id=MONITORING_C3_VERIFIER_PROFILE_ID,
+            provider="zhipu-coding-plan",
+            label="GLM-5.3 Flash 医学监查独立核对",
+            base_url=ZHIPU_CODING_PLAN_BASE_URL,
+            model="glm-5.3-flash",
+            expected_response_model="glm-5.3-flash",
             api_key_env=ZHIPU_CODING_PLAN_API_KEY_ENV,
             deployment_scope="cloud",
             discovery_mode="manual_plus_probe",
@@ -289,11 +304,11 @@ def _builtin_profiles() -> tuple[AiProviderProfile, ...]:
 _BUILTIN_ROLE_PROFILE_IDS = {
     INDEPENDENT_AI_ROLE: {
         INDEPENDENT_AI_DEEPSEEK_FLASH_PROFILE_ID,
-        MONITORING_C3_MAPPING_PROFILE_ID,
+        MONITORING_C3_VERIFIER_PROFILE_ID,
     },
     MEDICAL_MONITORING_AI_ROLE: {
         MONITORING_C3_MAPPING_PROFILE_ID,
-        INDEPENDENT_AI_DEEPSEEK_FLASH_PROFILE_ID,
+        MONITORING_C3_VERIFIER_PROFILE_ID,
     },
     OCR_ROLE: {OCR_OMLX_PROFILE_ID, OCR_PADDLE_PROFILE_ID},
     TRANSLATION_BODY_ROLE: {TRANSLATION_BODY_OMLX_PROFILE_ID},
