@@ -156,6 +156,28 @@ class SourceRegistryTests(unittest.TestCase):
             self.assertIn("SUBJID", listing_result.spans[0].text_preview)
             self.assertIn("sample_rows", listing_result.spans[0].text_preview)
 
+    def test_registry_transaction_rolls_back_staged_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = SourceRegistryStore(Path(tmp) / "sources.jsonl")
+            service = SourceRegistryService(store)
+
+            with self.assertRaises(ValueError):
+                with store.transaction():
+                    service.register_listing_file(
+                        "proj_transaction",
+                        "forms.xlsx",
+                        _minimal_xlsx_bytes(),
+                        module="medical_monitoring",
+                    )
+                    service.register_monitoring_mapping_document(
+                        "proj_transaction",
+                        "invalid.txt",
+                        b"invalid",
+                        document_role="sap",
+                    )
+
+            self.assertEqual([], service.list_entries("proj_transaction"))
+
     def test_raw_subject_bundle_registry_is_metadata_only_and_sanitized(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "0316-SA07007-T-SPOT阳性导致筛败"

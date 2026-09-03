@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import tempfile
+import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from dataclasses import replace
@@ -194,17 +198,68 @@ def file_bundle_inventory_to_ai_sources(
 class SourceRegistryStore:
     def __init__(self, jsonl_path: Path):
         self.jsonl_path = jsonl_path
+        self._lock = threading.RLock()
+        self._pending: List[SourceRegistrationResult] | None = None
 
     def append(self, result: SourceRegistrationResult) -> None:
-        self.jsonl_path.parent.mkdir(parents=True, exist_ok=True)
-        incoming_identity = _registration_identity(result)
-        for existing in self._read_all():
-            if existing.entry.entry_id != result.entry.entry_id:
-                continue
-            if _registration_identity(existing) == incoming_identity:
+        with self._lock:
+            if self._pending is not None:
+                self._pending.append(result)
                 return
-        with self.jsonl_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(result.model_dump(mode="json"), ensure_ascii=False) + "\n")
+            self._commit((result,))
+
+    @contextmanager
+    def transaction(self):
+        """Stage registry entries and publish them as one filesystem replace."""
+
+        with self._lock:
+            if self._pending is not None:
+                raise RuntimeError("nested source registry transaction is not supported")
+            self._pending = []
+            try:
+                yield
+            except Exception:
+                self._pending = None
+                raise
+            pending = tuple(self._pending)
+            self._pending = None
+            self._commit(pending)
+
+    def _commit(self, incoming: Sequence[SourceRegistrationResult]) -> None:
+        existing = self._read_all()
+        identities = {
+            (item.entry.entry_id, _registration_identity(item)) for item in existing
+        }
+        additions = []
+        for result in incoming:
+            identity = (result.entry.entry_id, _registration_identity(result))
+            if identity in identities:
+                continue
+            identities.add(identity)
+            additions.append(result)
+        if not additions:
+            return
+        self.jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+        rows = [*existing, *additions]
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=self.jsonl_path.parent,
+            prefix=f".{self.jsonl_path.name}.",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            for result in rows:
+                handle.write(
+                    json.dumps(result.model_dump(mode="json"), ensure_ascii=False)
+                    + "\n"
+                )
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.replace(temporary_path, self.jsonl_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
     def list_results(self, project_id: str) -> List[SourceRegistrationResult]:
         return [result for result in self._read_all() if result.entry.project_id == project_id]
