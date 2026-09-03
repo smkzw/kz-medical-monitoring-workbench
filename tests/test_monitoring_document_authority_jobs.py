@@ -238,6 +238,16 @@ class _RepairingProvider(_Provider):
         return output
 
 
+class _StaleIdentityThenCorrectProvider(_Provider):
+    def run(self, envelope):
+        output = super().run(envelope)
+        if len(self.envelopes) == 1:
+            output["candidates"][0]["structured_payload"][
+                "input_sha256"
+            ] = envelope.payload["input_revision_sha256"]
+        return output
+
+
 def _runtime(provider: str, model: str, profile: str) -> MonitoringAiRuntimeBinding:
     return MonitoringAiRuntimeBinding(
         profile_id=profile,
@@ -323,6 +333,12 @@ def test_direct_job_history_builds_server_owned_run_envelope(
     assert "system_generated_evidence" not in candidate_schema
     assert "document_version只能填写简短版本标识" in fake.envelopes[0].system_prompt
     assert "document_date只能填写单一日期" in fake.envelopes[0].system_prompt
+    identity = fake.envelopes[0].payload[
+        "document_authority_output_identity"
+    ]
+    assert identity["structured_payload_field"] == "input_sha256"
+    assert identity["required_value"] == document_authority_batch_sha256(batch)
+    assert identity["required_value"] != queued.input_revision_sha256
 
 
 def test_document_authority_gets_one_schema_only_repair(tmp_path) -> None:
@@ -373,6 +389,51 @@ def test_document_authority_gets_one_schema_only_repair(tmp_path) -> None:
     attempts = repository.attempts(revision.project_id, queued.job_id)
     assert len(attempts) == 1
     assert attempts[0]["outcome"] == "success_repaired"
+
+
+def test_document_authority_repair_uses_frozen_batch_identity(tmp_path) -> None:
+    batch = _batch()
+    repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite")
+    runtime = _runtime(
+        MONITORING_C3_MAPPING_PROVIDER,
+        MONITORING_C3_MAPPING_MODEL,
+        "monitoring-document-authority-primary",
+    )
+    provider = _StaleIdentityThenCorrectProvider(
+        MONITORING_C3_MAPPING_PROVIDER,
+        MONITORING_C3_MAPPING_MODEL,
+        _analysis(batch),
+    )
+    service = MonitoringAiService(
+        repository,
+        runtime_resolver=lambda: runtime,
+        provider_factory=lambda _env: provider,
+    )
+    revision = MonitoringAiInputRevision(
+        project_id="project-document-authority",
+        batch_revision=batch["batch_id"],
+        sources=tuple(
+            MonitoringAiSourceBinding(
+                source_entry_id=item["file_id"],
+                source_content_sha256=item["content_sha256"],
+            )
+            for item in batch["candidates"]
+        ),
+    )
+    service.submit_document_authority_analysis(
+        project_id=revision.project_id,
+        input_revision=revision,
+        candidate_batch=batch,
+        role="primary",
+    )
+
+    result = service.run_next("synthetic-worker", claim_identity=service.claim_identity())
+
+    assert result.job is not None and result.job.status.value == "completed"
+    assert len(provider.envelopes) == 2
+    repair = provider.envelopes[1].payload["repair_contract"]["instruction"]
+    assert "document_authority_batch_sha256" in repair
+    assert "绝不能使用外层input_revision_sha256" in repair
 
 
 def test_loader_rejects_role_swap(tmp_path) -> None:
