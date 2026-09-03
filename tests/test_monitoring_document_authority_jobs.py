@@ -182,11 +182,14 @@ class _Provider:
 
     def run(self, envelope):
         self.envelopes.append(envelope)
+        input_revision_sha256 = envelope.payload.get(
+            "input_revision_sha256"
+        ) or envelope.payload["original_task"]["input_revision_sha256"]
         return {
             "schema_version": MONITORING_AI_SCHEMA_VERSION,
             "task_id": envelope.task_id,
             "task_type": "document_authority_analysis",
-            "input_revision_sha256": envelope.payload["input_revision_sha256"],
+            "input_revision_sha256": input_revision_sha256,
             "candidates": [{
                 "candidate_type": "document_authority_analysis",
                 "title": self.title,
@@ -225,6 +228,14 @@ class _ReviewProvider:
                 "structured_payload": self.review.model_dump(mode="json"),
             }],
         }
+
+
+class _RepairingProvider(_Provider):
+    def run(self, envelope):
+        output = super().run(envelope)
+        if len(self.envelopes) == 1:
+            output["claims"] = []
+        return output
 
 
 def _runtime(provider: str, model: str, profile: str) -> MonitoringAiRuntimeBinding:
@@ -307,6 +318,61 @@ def test_direct_job_history_builds_server_owned_run_envelope(
     assert run.analysis == analysis
     assert fake.envelopes[0].payload["input_payload"]["document_authority_role"] == role
     assert "另一模型" not in str(fake.envelopes[0].payload["input_payload"])
+    candidate_schema = fake.envelopes[0].payload["output_schema"]["candidates"][0]
+    assert "claims" not in candidate_schema
+    assert "system_generated_evidence" not in candidate_schema
+    assert "document_version只能填写简短版本标识" in fake.envelopes[0].system_prompt
+    assert "document_date只能填写单一日期" in fake.envelopes[0].system_prompt
+
+
+def test_document_authority_gets_one_schema_only_repair(tmp_path) -> None:
+    batch = _batch()
+    analysis = _analysis(batch)
+    repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite")
+    runtime = _runtime(
+        MONITORING_C3_MAPPING_PROVIDER,
+        MONITORING_C3_MAPPING_MODEL,
+        "monitoring-document-authority-primary",
+    )
+    provider = _RepairingProvider(
+        MONITORING_C3_MAPPING_PROVIDER,
+        MONITORING_C3_MAPPING_MODEL,
+        analysis,
+    )
+    service = MonitoringAiService(
+        repository,
+        runtime_resolver=lambda: runtime,
+        provider_factory=lambda _env: provider,
+    )
+    revision = MonitoringAiInputRevision(
+        project_id="project-document-authority",
+        batch_revision=batch["batch_id"],
+        sources=tuple(
+            MonitoringAiSourceBinding(
+                source_entry_id=item["file_id"],
+                source_content_sha256=item["content_sha256"],
+            )
+            for item in batch["candidates"]
+        ),
+    )
+    queued = service.submit_document_authority_analysis(
+        project_id=revision.project_id,
+        input_revision=revision,
+        candidate_batch=batch,
+        role="primary",
+    )
+
+    result = service.run_next("synthetic-worker", claim_identity=service.claim_identity())
+
+    assert result.job is not None and result.job.status.value == "completed"
+    assert len(provider.envelopes) == 2
+    assert provider.envelopes[1].prompt_version.endswith(":json-repair-1")
+    repair = provider.envelopes[1].payload["repair_contract"]
+    assert repair["maximum_repairs"] == 1
+    assert "不得改变文件选择" in repair["instruction"]
+    attempts = repository.attempts(revision.project_id, queued.job_id)
+    assert len(attempts) == 1
+    assert attempts[0]["outcome"] == "success_repaired"
 
 
 def test_loader_rejects_role_swap(tmp_path) -> None:

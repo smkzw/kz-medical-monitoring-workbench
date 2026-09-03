@@ -146,7 +146,12 @@ def test_docx_candidate_is_deterministic_and_redacts_local_paths(tmp_path: Path)
     second = decomposer.decompose("protocol.docx", content)
 
     assert first == second
-    assert first.role_hypotheses == ("protocol", "investigator_brochure", "sap")
+    assert first.role_hypotheses == (
+        "protocol",
+        "investigator_brochure",
+        "ecrf",
+        "sap",
+    )
     assert first.extraction_status == "parsed"
     assert first.locator_count == 6
     assert "[local_path_redacted]" in json.dumps(first.to_dict(), ensure_ascii=False)
@@ -171,6 +176,12 @@ def test_pdf_candidate_distinguishes_native_text_from_ocr_need(tmp_path: Path) -
     scanned = decomposer.decompose("sap.pdf", _pdf_bytes())
 
     assert native.extraction_status == "parsed"
+    assert native.role_hypotheses == (
+        "protocol",
+        "investigator_brochure",
+        "ecrf",
+        "sap",
+    )
     assert native.locator_count == 1
     assert scanned.extraction_status == "needs_ocr"
     assert scanned.technical_status == "ready"
