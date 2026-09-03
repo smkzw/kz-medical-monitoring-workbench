@@ -85,6 +85,10 @@ from .monitoring_mapping_contract import (
 from packages.medical_monitoring.admission.mapping_reconciliation import (
     mapping_conclusion_violations,
 )
+from packages.medical_monitoring.admission.document_evidence import (
+    DocumentEvidenceError,
+    validate_document_evidence_packet,
+)
 from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROVIDER,
@@ -2941,6 +2945,12 @@ class MonitoringAiService:
                 "source_label已明确含义时再要求用户重复确认。"
                 " source_field必须逐字等于对应field的值；source_label仅作"
                 "判断依据，不得替代字段身份。"
+                " document_evidence只证明当前监查文档的版本、内容摘要、"
+                "解析完整性和定位索引；locator_samples不是文档正文，也不"
+                "证明任何具体医学规则。不得从该索引直接推断CTCAE分级、"
+                "预期风险、方案适用性、跨域事实或Query。只有后续经同一"
+                "source_entry_id、content_sha256和locator精确检索到的文档"
+                "正文，才可作为相应下游harness的来源证据。"
                 " read_only_cross_table_context提供同一冻结listing内其他表中"
                 "同名字段的脱敏分布。若同名字段跨表呈现一致分布且角色家族"
                 "一致，应由系统形成一个稳定判断并保留不确定性，不得在每张"
@@ -7092,7 +7102,31 @@ class MonitoringAiService:
         table_identity: dict[str, tuple[str, int, str]] = {}
         stable_identity_required = field_profile.get(
             "bridge_schema_version"
-        ) == "mm-c3-mapping-profile-bridge-v7"
+        ) in {
+            "mm-c3-mapping-profile-bridge-v7",
+            "mm-c3-mapping-profile-bridge-v8",
+        }
+        document_evidence = field_profile.get("document_evidence")
+        if (
+            field_profile.get("bridge_schema_version")
+            == "mm-c3-mapping-profile-bridge-v8"
+            and not document_evidence
+        ):
+            raise ValueError(
+                "listing field profile document evidence is required"
+            )
+        if document_evidence:
+            try:
+                validate_document_evidence_packet(
+                    document_evidence,
+                    project_id=project_id,
+                    require_mapping_context=True,
+                )
+            except DocumentEvidenceError as exc:
+                raise ValueError(
+                    "listing field profile document evidence is invalid: "
+                    f"{exc.code}"
+                ) from exc
         for binding in table_bindings:
             if not isinstance(binding, dict):
                 raise ValueError("listing field profile table binding is malformed")

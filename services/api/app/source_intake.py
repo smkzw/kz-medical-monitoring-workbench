@@ -42,6 +42,8 @@ SOURCE_ID_NAMESPACE = "workbench_source_registry_v0_1"
 MAX_PROTOCOL_REGISTRY_SPANS = 10_000
 MAX_EVIDENCE_SPAN_SEARCH_RESULTS = 200
 MAX_EVIDENCE_SPAN_SEARCH_TERMS = 32
+MONITORING_MAPPING_DOCUMENT_ROLES = frozenset({"protocol", "ecrf"})
+MONITORING_LOCATOR_MANIFEST_REVISION = "monitoring-locator-manifest-v1"
 
 
 def protocol_document_to_ai_sources(
@@ -547,6 +549,45 @@ class SourceRegistryService:
         )
         return result
 
+    def register_monitoring_mapping_document(
+        self,
+        project_id: str,
+        filename: str,
+        content: bytes,
+        *,
+        document_role: str,
+    ) -> SourceRegistrationResult:
+        """Register one mapping prerequisite in the monitoring namespace."""
+
+        role = str(document_role or "").strip()
+        if role not in MONITORING_MAPPING_DOCUMENT_ROLES:
+            raise ValueError("unsupported monitoring mapping document role")
+        if role == "protocol":
+            if Path(filename).suffix.lower() != ".docx":
+                raise ValueError("research protocol must be a DOCX file")
+            return self.register_protocol_docx(
+                project_id,
+                filename,
+                content,
+                module="medical_monitoring",
+                expected_file_role="protocol",
+            )
+        if Path(filename).suffix.lower() != ".xlsx":
+            raise ValueError("electronic case report form must be an XLSX file")
+        sheets = parse_listing_file(filename, content)
+        if len(sheets) > 80:
+            raise ValueError(
+                "electronic case report form exceeds the complete locator limit"
+            )
+        return self.register_listing_file(
+            project_id,
+            filename,
+            content,
+            module="medical_monitoring",
+            expected_file_role="ecrf",
+            parsed_sheets=sheets,
+        )
+
     def register_raw_subject_bundle(
         self,
         project_id: str,
@@ -911,6 +952,15 @@ class SourceRegistryService:
                     f"{span.entry_id}/{validation.use_status}"
                 )
 
+    def assert_operational_sources_usable(
+        self,
+        project_id: str,
+        source_ids: Sequence[str],
+    ) -> None:
+        """Public freshness gate for operational module consumers."""
+
+        self._assert_registered_sources_usable(project_id, source_ids)
+
     def _entry(
         self,
         project_id: str,
@@ -924,9 +974,19 @@ class SourceRegistryService:
         server_path: str = "",
     ) -> SourceRegistryEntry:
         now = datetime.now(timezone.utc)
+        identity_source_kind = source_kind
+        if module == "medical_monitoring" and source_kind in {
+            "protocol_docx",
+            "ecrf",
+            "ecrf_document",
+            "ecrf_xlsx",
+        }:
+            identity_source_kind = (
+                f"{source_kind}:{MONITORING_LOCATOR_MANIFEST_REVISION}"
+            )
         entry_id = (
             f"src_{_slug(project_id)}_{source_kind}_"
-            f"{_opaque_source_token(project_id, module, source_kind, content_hash)}"
+            f"{_opaque_source_token(project_id, module, identity_source_kind, content_hash)}"
         )
         return SourceRegistryEntry(
             entry_id=entry_id,
@@ -1026,6 +1086,39 @@ class SourceRegistryService:
 
     def _result_from_refs(self, entry: SourceRegistryEntry, refs: Sequence[AiSourceRef]) -> SourceRegistrationResult:
         now = datetime.now(timezone.utc)
+        locator_manifest = sorted(
+            (
+                {"source_id": ref.source_id, "locator": ref.locator}
+                for ref in refs
+            ),
+            key=lambda item: (item["locator"], item["source_id"]),
+        )
+        if entry.module == "medical_monitoring" and entry.source_kind in {
+            "protocol_docx",
+            "ecrf",
+            "ecrf_document",
+            "ecrf_xlsx",
+        }:
+            entry = entry.model_copy(
+                update={
+                    "metadata": {
+                        **dict(entry.metadata or {}),
+                        "expected_locator_count": len(locator_manifest),
+                        "expected_locator_index_sha256": _sha256_text(
+                            json.dumps(
+                                locator_manifest,
+                                ensure_ascii=False,
+                                sort_keys=True,
+                                separators=(",", ":"),
+                            )
+                        ),
+                        "locator_manifest_complete": True,
+                        "locator_manifest_revision": (
+                            MONITORING_LOCATOR_MANIFEST_REVISION
+                        ),
+                    }
+                }
+            )
         spans = [
             SourceRegistrySpan(
                 source_id=ref.source_id,

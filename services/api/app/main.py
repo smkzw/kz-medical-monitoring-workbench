@@ -533,6 +533,9 @@ from .safety_pv_manifest import (
 from .safety_pv_review_workbench import SqliteSafetyReviewStore, SafetyReviewWorkbenchService
 from .source_admission import SourceAdmissionRequired
 from .source_intake import SourceRegistryService, SourceRegistryStore
+from .monitoring_document_evidence import (
+    MonitoringDocumentEvidenceResolver,
+)
 from .source_content_projection import (
     SOURCE_CONTENT_PROJECTION_VERSION,
     SourceContentProjectionService,
@@ -987,6 +990,9 @@ source_registry = SourceRegistryService(
     content_validation_service=source_content_validation_service,
     expected_context_resolver=_expected_source_context,
 )
+monitoring_document_evidence_resolver = MonitoringDocumentEvidenceResolver(
+    source_registry
+)
 source_content_projection_service = SourceContentProjectionService(
     source_registry.store
 )
@@ -1186,6 +1192,9 @@ def _current_monitoring_ai_revision(job):
             job,
             workspace_dir=(
                 RUNTIME_DIR / "medical_monitoring_r7" / str(job.project_id)
+            ),
+            document_evidence_resolver=(
+                monitoring_document_evidence_resolver.resolve
             ),
         )
         if admission_revision is not None:
@@ -3519,6 +3528,8 @@ _r7_admission_mapping_pipeline = AdmissionMappingPipeline(
     task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
     worker_wake=_wake_monitoring_mapping_workers,
     verifier_ai_service=monitoring_ai_verifier_service,
+    require_document_evidence=True,
+    document_evidence_resolver=monitoring_document_evidence_resolver.resolve,
 )
 _r7_admission_mapping_confirmation = AdmissionMappingConfirmationService(
     mapping_pipeline=_r7_admission_mapping_pipeline,
@@ -3540,6 +3551,38 @@ _r7_admission_mapping_confirmation = AdmissionMappingConfirmationService(
 _r7_admission_fact_materializer = FactMaterializationService(
     mapping_repository=monitoring_mapping_draft_repository,
 )
+
+
+def _register_r7_monitoring_mapping_document(
+    *,
+    project_id: str,
+    role: str,
+    filename: str,
+    content: bytes,
+) -> dict[str, object]:
+    result = source_registry.register_monitoring_mapping_document(
+        project_id,
+        filename,
+        content,
+        document_role=role,
+    )
+    validation = source_registry.current_content_validation(
+        project_id,
+        result.entry.entry_id,
+    )
+    return {
+        "source_entry_id": result.entry.entry_id,
+        "document_role": role,
+        "filename": Path(filename).name,
+        "content_status": (
+            validation.content_status if validation is not None else "pending"
+        ),
+        "use_status": (
+            validation.use_status if validation is not None else "pending"
+        ),
+    }
+
+
 app.include_router(
     create_medical_monitoring_r7_product_router(
         runtime_dir=RUNTIME_DIR,
@@ -3551,6 +3594,9 @@ app.include_router(
         admission_pipeline=DataAdmissionPipeline(parse_listing_file),
         admission_mapping_pipeline=_r7_admission_mapping_pipeline,
         admission_mapping_confirmation=_r7_admission_mapping_confirmation,
+        monitoring_document_registrar=(
+            _register_r7_monitoring_mapping_document
+        ),
         admission_fact_materializer=_r7_admission_fact_materializer,
         synthetic_fixture_mode=_r5_s7_fixture_mode,
     )
@@ -3632,6 +3678,7 @@ app.include_router(
         ),
         principal_resolver=resolve_monitoring_principal_from_request,
         require_server_principal=True,
+        allow_legacy_field_mapping=False,
     )
 )
 safety_review_workbench_service.monitoring_collaboration_resolver = (

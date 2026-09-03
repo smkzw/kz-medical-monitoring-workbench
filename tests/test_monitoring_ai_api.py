@@ -981,6 +981,35 @@ def test_monitoring_ai_api_does_not_cross_project_boundary(tmp_path: Path) -> No
     )
 
     assert response.status_code == 404
+
+
+def test_deployed_router_can_retire_legacy_single_model_mapping(
+    tmp_path: Path,
+) -> None:
+    batch_repository = FakeBatchRepository()
+    repository, service = _service(tmp_path, batch_repository)
+    app = FastAPI()
+    app.include_router(
+        create_monitoring_ai_router(
+            repository=repository,
+            service=service,
+            batch_repository=batch_repository,
+            require_server_principal=False,
+            allow_legacy_field_mapping=False,
+        )
+    )
+
+    response = TestClient(app).post(
+        "/api/projects/project-api/modules/medical-monitoring/ai/"
+        "field-mapping-jobs",
+        json={"batch_id": "batch-api"},
+    )
+
+    assert response.status_code == 410
+    assert response.json()["detail"]["code"] == (
+        "monitoring_ai_legacy_mapping_retired"
+    )
+    assert repository.list_jobs("project-api") == ()
     assert repository.list_jobs("another-project") == ()
 
 

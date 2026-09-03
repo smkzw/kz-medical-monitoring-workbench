@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional, Protocol
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
@@ -32,6 +32,15 @@ _MAPPING_STATUS_CODES = {
     "mapping_reconciliation_required": 409,
     "mapping_draft_unconfigured": 503,
     "mapping_bridge_failed": 500,
+    "mapping_document_evidence_resolver_unavailable": 503,
+    "mapping_document_evidence_missing": 409,
+    "mapping_document_evidence_incomplete": 422,
+    "document_packet_project_mismatch": 409,
+    "mapping_document_selection_invalid": 422,
+    "mapping_document_selection_not_found_or_role_mismatch": 404,
+    "mapping_document_selection_unusable": 409,
+    "mapping_document_registration_unavailable": 503,
+    "mapping_document_registration_invalid": 422,
     "mapping_attempt_id_invalid": 422,
     "mapping_focus_invalid": 422,
     "mapping_run_incomplete": 409,
@@ -58,6 +67,35 @@ _MAPPING_MESSAGES = {
     "mapping_reconciliation_required": "两次独立分析仍有实质差异，系统将先继续核实；当前不需要您逐项确认。",
     "mapping_draft_unconfigured": "字段对应确认服务尚未配置，暂时无法进入修订。请联系管理员完成配置后再试。",
     "mapping_bridge_failed": "生成字段对应建议时出现问题，本次结果未保存。请重试；如再次失败请联系管理员。",
+    "mapping_document_evidence_resolver_unavailable": (
+        "研究文档识别服务尚未就绪，本次未发送数据。请稍后重试。"
+    ),
+    "mapping_document_evidence_missing": (
+        "系统还没有完成研究方案和电子病例报告表的识别。"
+        "请先补充这两类文件，系统会自行核对，无需逐字段确认。"
+    ),
+    "mapping_document_evidence_incomplete": (
+        "研究方案或电子病例报告表尚未通过完整性核对。"
+        "请按页面提示补充或更换文件，系统会自动重新识别。"
+    ),
+    "document_packet_project_mismatch": (
+        "研究文档与当前项目不一致，本次未发送数据。请返回项目首页重新选择文件。"
+    ),
+    "mapping_document_selection_invalid": (
+        "所选研究文档无效或已更新。请重新选择对应文件。"
+    ),
+    "mapping_document_selection_not_found_or_role_mismatch": (
+        "未找到该文件，或文件类型与所选位置不符。请重新选择。"
+    ),
+    "mapping_document_selection_unusable": (
+        "该文件已过期、不完整或未通过内容核对，暂时不能使用。"
+    ),
+    "mapping_document_registration_unavailable": (
+        "研究文档导入服务尚未就绪，请稍后重试。"
+    ),
+    "mapping_document_registration_invalid": (
+        "文件无法识别为研究方案或电子病例报告表，请更换文件。"
+    ),
     "mapping_attempt_id_invalid": "数据导入记录标识无效。请返回上一步重新进入。",
     "mapping_focus_invalid": "筛选条件无效。请使用“重点优先”或“全部建议”。",
     "mapping_run_incomplete": "字段对应建议尚未完整完成，暂时不能进入确认。请等待生成完成或只重试失败部分。",
@@ -76,6 +114,14 @@ _MAPPING_MESSAGES = {
 
 
 class AdmissionMappingPipeline(Protocol):
+    def generate_dual_candidates(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Any,
+    ) -> Mapping[str, Any]: ...
+
     def generate_candidates(
         self,
         *,
@@ -94,12 +140,29 @@ class AdmissionMappingPipeline(Protocol):
         cohort: str = "primary",
     ) -> Mapping[str, Any]: ...
 
+    def select_document(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Any,
+        role: str,
+        source_entry_id: str,
+    ) -> Mapping[str, Any]: ...
+
 
 class MappingDraftAdoptRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reason: str = Field(min_length=1, max_length=2_000)
     actor: str = Field(default="medical_manager", min_length=2, max_length=160)
+
+
+class MappingDocumentSelectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: str = Field(min_length=2, max_length=80)
+    source_entry_id: str = Field(min_length=2, max_length=240)
 
 
 class MappingDraftFieldEditRequest(BaseModel):
@@ -145,6 +208,7 @@ class MappingCandidateRouteContext:
     monitoring_action: Any
     admission_mapping_pipeline: Any
     admission_mapping_confirmation: Any = None
+    monitoring_document_registrar: Any = None
 
 
 def _mapping_error(code: str) -> JSONResponse:
@@ -202,12 +266,102 @@ def register_mapping_candidate_routes(
             return _mapping_error("mapping_draft_unconfigured")
         return service
 
+    @router.post("/study-documents", status_code=201)
+    async def register_mapping_document(
+        project_id: str,
+        request: Request,
+        role: str = Query(...),
+        file: UploadFile = File(...),
+    ) -> Any:
+        canonical = context.resolve_project(project_id)
+        if isinstance(canonical, JSONResponse):
+            return canonical
+        auth = context.authorize(
+            request,
+            project_id=canonical,
+            action=context.monitoring_action.INTAKE_BATCH,
+        )
+        if isinstance(auth, JSONResponse):
+            return auth
+        if context.monitoring_document_registrar is None:
+            return _mapping_error("mapping_document_registration_unavailable")
+        try:
+            write_permit = context.acquire_product_write_gate(canonical)
+        except pb.ProjectBackupError as exc:
+            await file.close()
+            return _run_entry_error_response(exc)
+        try:
+            content = await file.read(50 * 1024 * 1024 + 1)
+            if not content or len(content) > 50 * 1024 * 1024:
+                return _mapping_error("mapping_document_registration_invalid")
+            result = context.monitoring_document_registrar(
+                project_id=canonical,
+                role=role,
+                filename=file.filename or "",
+                content=content,
+            )
+            return {"project_id": canonical, **dict(result)}
+        except Exception:
+            return _mapping_error("mapping_document_registration_invalid")
+        finally:
+            await file.close()
+            write_permit.release()
+
+    @router.post(
+        "/data-admissions/{attempt_id}/document-selection",
+        status_code=201,
+    )
+    async def select_mapping_document(
+        project_id: str,
+        attempt_id: str,
+        payload: MappingDocumentSelectionRequest,
+        request: Request,
+    ) -> Any:
+        canonical = context.resolve_project(project_id)
+        if isinstance(canonical, JSONResponse):
+            return canonical
+        auth = context.authorize(
+            request,
+            project_id=canonical,
+            action=context.monitoring_action.INTAKE_BATCH,
+        )
+        if isinstance(auth, JSONResponse):
+            return auth
+        validated_attempt = _validated_attempt_id(attempt_id)
+        if validated_attempt is None:
+            return _mapping_error("mapping_attempt_id_invalid")
+        pipeline = _pipeline_or_error()
+        if isinstance(pipeline, JSONResponse):
+            return pipeline
+        try:
+            write_permit = context.acquire_product_write_gate(canonical)
+        except pb.ProjectBackupError as exc:
+            return _run_entry_error_response(exc)
+        try:
+            workspace = context.workspace_dir(context.root, canonical)
+            result = pipeline.select_document(
+                project_id=canonical,
+                attempt_id=validated_attempt,
+                workspace_dir=workspace,
+                role=payload.role,
+                source_entry_id=payload.source_entry_id,
+            )
+        except AdmissionMappingPipelineError as exc:
+            return _mapping_error(exc.code)
+        except Exception:
+            return _mapping_error("mapping_document_selection_unusable")
+        finally:
+            write_permit.release()
+        return {
+            "project_id": canonical,
+            **dict(result),
+        }
+
     @router.post("/data-admissions/{attempt_id}/mapping-candidates", status_code=201)
     async def generate_mapping_candidates(
         project_id: str,
         attempt_id: str,
         request: Request,
-        cohort: str = Query(default="dual"),
     ) -> Any:
         canonical = context.resolve_project(project_id)
         if isinstance(canonical, JSONResponse):
@@ -231,33 +385,11 @@ def register_mapping_candidate_routes(
             return _run_entry_error_response(exc)
         try:
             workspace = context.workspace_dir(context.root, canonical)
-            if cohort == "dual":
-                primary = pipeline.generate_candidates(
-                    project_id=canonical,
-                    attempt_id=validated_attempt,
-                    workspace_dir=workspace,
-                    cohort="primary",
-                )
-                verifier = pipeline.generate_candidates(
-                    project_id=canonical,
-                    attempt_id=validated_attempt,
-                    workspace_dir=workspace,
-                    cohort="verifier",
-                )
-                result = {
-                    **dict(primary),
-                    "verification": {
-                        "state": verifier.get("state"),
-                        "summary": verifier.get("summary"),
-                    },
-                }
-            else:
-                result = pipeline.generate_candidates(
-                    project_id=canonical,
-                    attempt_id=validated_attempt,
-                    workspace_dir=workspace,
-                    cohort=cohort,
-                )
+            result = pipeline.generate_dual_candidates(
+                project_id=canonical,
+                attempt_id=validated_attempt,
+                workspace_dir=workspace,
+            )
             public = _public_mapping_projection(result)
             if isinstance(public, JSONResponse):
                 return public

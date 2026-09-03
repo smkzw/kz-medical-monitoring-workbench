@@ -26,6 +26,16 @@ from .pipeline import (
     AdmissionPipelineError,
     DataAdmissionPipeline,
 )
+from .document_evidence import (
+    DOCUMENT_EVIDENCE_SCHEMA_VERSION,
+    DOCUMENT_ROLES,
+    MAPPING_REQUIRED_DOCUMENT_ROLES,
+    CurrentDocumentBinding,
+    DocumentEvidenceError,
+    DocumentRoleEvidence,
+    MonitoringDocumentEvidencePacket,
+    validate_document_evidence_packet,
+)
 from .mapping_bridge import (
     MAPPING_BRIDGE_SCHEMA_VERSION,
     MappingBridgeError,
@@ -122,6 +132,14 @@ __all__ = [
     "LOCATOR_INDEX_KIND",
     "AdmissionPipelineError",
     "DataAdmissionPipeline",
+    "DOCUMENT_EVIDENCE_SCHEMA_VERSION",
+    "DOCUMENT_ROLES",
+    "MAPPING_REQUIRED_DOCUMENT_ROLES",
+    "CurrentDocumentBinding",
+    "DocumentEvidenceError",
+    "DocumentRoleEvidence",
+    "MonitoringDocumentEvidencePacket",
+    "validate_document_evidence_packet",
     "MAPPING_BRIDGE_SCHEMA_VERSION",
     "MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX",
     "MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX",

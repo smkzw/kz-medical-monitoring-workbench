@@ -15,12 +15,10 @@ proves the integration never writes into the source directory.
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
@@ -189,6 +187,8 @@ def _make_app(
     principal: MonitoringAuthenticatedPrincipal,
     admission_pipeline: Any = None,
     fact_materializer: Any = None,
+    mapping_pipeline: Any = None,
+    document_registrar: Any = None,
 ) -> FastAPI:
     app = FastAPI()
 
@@ -207,6 +207,8 @@ def _make_app(
             require_server_principal=True,
             admission_pipeline=admission_pipeline,
             admission_fact_materializer=fact_materializer,
+            admission_mapping_pipeline=mapping_pipeline,
+            monitoring_document_registrar=document_registrar,
         )
     )
     return app
@@ -221,6 +223,8 @@ def _client(
     principal: Any = _SENTINEL,
     admission_pipeline: Any = None,
     fact_materializer: Any = None,
+    mapping_pipeline: Any = None,
+    document_registrar: Any = None,
 ) -> TestClient:
     if principal is _SENTINEL:
         principal = _principal(PROJECT_A)
@@ -230,8 +234,70 @@ def _client(
             principal=principal,
             admission_pipeline=admission_pipeline,
             fact_materializer=fact_materializer,
+            mapping_pipeline=mapping_pipeline,
+            document_registrar=document_registrar,
         )
     )
+
+
+class FakeMappingPipeline:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    def generate_dual_candidates(self, **kwargs: Any) -> Mapping[str, Any]:
+        self.calls.append(("generate_dual_candidates", kwargs))
+        return {
+            "attempt_id": kwargs["attempt_id"],
+            "verification": {"state": "generating"},
+        }
+
+    def generate_candidates(self, **kwargs: Any) -> Mapping[str, Any]:
+        self.calls.append(("generate_candidates", kwargs))
+        raise AssertionError("product route must not submit one cohort")
+
+
+def test_product_mapping_start_is_always_dual_and_document_upload_is_reachable(
+    tmp_path: Path,
+) -> None:
+    mapping = FakeMappingPipeline()
+    registrations: list[dict[str, Any]] = []
+
+    def register_document(**kwargs: Any) -> Mapping[str, Any]:
+        registrations.append(kwargs)
+        return {
+            "source_entry_id": "source-ecrf-001",
+            "document_role": kwargs["role"],
+            "filename": kwargs["filename"],
+            "content_status": "matched",
+            "use_status": "allowed",
+        }
+
+    client = _client(
+        tmp_path / "runtime",
+        mapping_pipeline=mapping,
+        document_registrar=register_document,
+    )
+    uploaded = client.post(
+        f"{_base()}/study-documents?role=ecrf",
+        files={
+            "file": (
+                "forms.xlsx",
+                b"generated-xlsx-fixture",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+    assert uploaded.status_code == 201
+    assert uploaded.json()["source_entry_id"] == "source-ecrf-001"
+    assert registrations[0]["project_id"] == PROJECT_A
+
+    started = client.post(
+        f"{_base()}/data-admissions/attempt-0001/mapping-candidates?cohort=primary"
+    )
+    assert started.status_code == 201
+    assert [name for name, _ in mapping.calls] == [
+        "generate_dual_candidates"
+    ]
 
 
 def test_fact_routes_are_project_scoped_and_use_plain_chinese_results(tmp_path: Path) -> None:
@@ -308,7 +374,8 @@ def test_admission_registration_is_additive_and_r7_scoped(tmp_path: Path) -> Non
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/upload",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/latest",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}",
-        "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/facts",
+            "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/facts",
+            "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/document-selection",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-candidates",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft/adjudicate",
@@ -319,6 +386,10 @@ def test_admission_registration_is_additive_and_r7_scoped(tmp_path: Path) -> Non
     assert all(
         path.startswith("/api/projects/{project_id}/modules/medical-monitoring/r7")
         for path in r7_paths
+    )
+    assert (
+        "/api/projects/{project_id}/modules/medical-monitoring/r7/study-documents"
+        in r7_paths
     )
     non_r7 = paths - r7_paths
     assert non_r7 == {"/__sentinel_non_r7", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
