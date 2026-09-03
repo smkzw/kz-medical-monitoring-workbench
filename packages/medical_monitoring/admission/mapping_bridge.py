@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Mapping, Optional, Sequence
 
 from ..intelligence.primitives import content_hash
+from .mapping_gate import MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION
 
 
 MAPPING_BRIDGE_SCHEMA_VERSION = "mm-c3-mapping-profile-bridge-v4"
@@ -287,6 +288,7 @@ def admission_record_to_harness_input(
     domains = list(dict.fromkeys(item["domain"] for item in fields))
     source_sha256s = [item["source_content_sha256"] for item in source_bindings]
     input_sha256 = content_hash({
+        "mapping_cohort_schema_version": MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION,
         "project_id": project_id,
         "attempt_id": attempt_id,
         "sources": source_bindings,
@@ -296,6 +298,7 @@ def admission_record_to_harness_input(
     profile: dict[str, Any] = {
         "schema_version": PROFILE_SCHEMA_VERSION,
         "bridge_schema_version": MAPPING_BRIDGE_SCHEMA_VERSION,
+        "mapping_cohort_schema_version": MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION,
         "batch_id": attempt_id,
         "project_id": project_id,
         "batch_revision": 1,

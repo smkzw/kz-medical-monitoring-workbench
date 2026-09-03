@@ -12,12 +12,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Iterable, Mapping, Optional
 
+from .mapping_gate import (
+    MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY,
+    MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY_FALLBACK,
+    MONITORING_C3_MAPPING_EXECUTION_ROUTE_SYSTEM_ONLY,
+    MONITORING_C3_MAPPING_EXECUTION_ROUTE_UNRECOGNIZED,
+    MONITORING_C3_MAPPING_EXECUTION_ROUTE_VERIFIER,
+    MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX,
+    MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX,
+    MONITORING_C3_VERIFIER_PROMPT_VERSION,
+    monitoring_mapping_cohort_dual_model_eligible,
+    monitoring_mapping_execution_route,
+    normalize_monitoring_mapping_model,
+)
 from .mapping_pipeline import (
     AdmissionMappingPipelineError,
     _latest_job_cohort,
     current_admission_mapping_revision,
+)
+from .mapping_reconciliation import (
+    cohort_payload_from_candidates,
+    reconcile_mapping_cohorts,
 )
 
 
@@ -49,6 +66,14 @@ _SYSTEM_ADJUDICATION_PREFIX = "系统复核："
 
 _TRIAGE_QUESTION = "user_question"
 _TRIAGE_ADOPTED = "system_adopted"
+
+# Executed routes that may never assemble or back a draft: a verifier
+# identity inside the primary namespace is the pre-dual-cohort (legacy
+# GLM-primary) execution shape, and anything unrecognized is unverifiable.
+_OFFENDING_EXECUTION_ROUTES = frozenset({
+    MONITORING_C3_MAPPING_EXECUTION_ROUTE_VERIFIER,
+    MONITORING_C3_MAPPING_EXECUTION_ROUTE_UNRECOGNIZED,
+})
 
 
 def _confidence(item: Mapping[str, Any]) -> float:
@@ -230,6 +255,76 @@ class AdmissionMappingConfirmationService:
     proposed_status: Any
     task_type: Any = None
     current_revision_resolver: Optional[Callable[..., str]] = None
+    # (provider, model) identities of deterministic system-owned executions
+    # (for example metadata-only mapping) allowed inside the primary job
+    # namespace. They are route-neutral: they neither block nor satisfy the
+    # dual-model contract. Empty keeps the gate fail-closed.
+    system_routes: tuple[tuple[str, str], ...] = ()
+    require_dual_reconciliation: bool = False
+
+    def __post_init__(self) -> None:
+        self._system_route_set = {
+            (
+                str(provider or "").strip(),
+                normalize_monitoring_mapping_model(str(model or "")).strip(),
+            )
+            for provider, model in (self.system_routes or ())
+        }
+
+    def _first_pass_execution(
+        self,
+        identities: Iterable[Any],
+        *,
+        block: bool,
+    ) -> dict[str, Any]:
+        """Classify the executed routes of one primary-namespace job cohort.
+
+        With ``block`` the migration gate raises on verifier/unrecognized
+        executions (a legacy single-verifier cohort shape) so they can never
+        assemble a draft. Read-only projections use ``block=False`` and
+        surface the offending route instead.
+        """
+
+        routes: list[str] = []
+        providers: set[str] = set()
+        offending: list[str] = []
+        for provider, model in identities:
+            cleaned = (
+                str(provider or "").strip(),
+                normalize_monitoring_mapping_model(str(model or "")).strip(),
+            )
+            if cleaned in self._system_route_set:
+                continue
+            executed = monitoring_mapping_execution_route(*cleaned)
+            providers.add(cleaned[0])
+            if executed in _OFFENDING_EXECUTION_ROUTES:
+                offending.append(executed)
+                continue
+            routes.append(executed)
+        if offending and block:
+            raise AdmissionMappingPipelineError("mapping_cohort_legacy_route")
+        if offending:
+            route = (
+                MONITORING_C3_MAPPING_EXECUTION_ROUTE_VERIFIER
+                if MONITORING_C3_MAPPING_EXECUTION_ROUTE_VERIFIER in offending
+                else MONITORING_C3_MAPPING_EXECUTION_ROUTE_UNRECOGNIZED
+            )
+        elif not routes:
+            route = MONITORING_C3_MAPPING_EXECUTION_ROUTE_SYSTEM_ONLY
+        elif (
+            MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY_FALLBACK in routes
+        ):
+            route = MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY_FALLBACK
+        else:
+            route = MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY
+        return {
+            "route": route,
+            "adoptable": not offending,
+            "dual_model_eligible": monitoring_mapping_cohort_dual_model_eligible(
+                routes
+            ),
+            "providers": sorted(providers),
+        }
 
     def list_for_review(
         self,
@@ -245,6 +340,15 @@ class AdmissionMappingConfirmationService:
             workspace_dir=workspace_dir,
         )
         projected = enrich_candidates(payload, focus=focus)
+        # Read-only execution-route projection: a legacy or fallback cohort
+        # stays visible but is marked not adoptable / not dual-model eligible.
+        projected["first_pass_execution"] = self._first_pass_execution(
+            (
+                (row.get("provider"), row.get("requested_model"))
+                for row in payload.get("jobs") or ()
+            ),
+            block=False,
+        )
         if self.mapping_repository is None:
             return projected
         draft = self.mapping_repository.find_draft_for_batch(
@@ -288,11 +392,21 @@ class AdmissionMappingConfirmationService:
         jobs = self.ai_repository.list_jobs(
             project_id,
             task_type=str(_value(task_type)),
-            business_key_prefix=f"listing-field-mapping:{attempt_id}:",
+            business_key_prefix=(
+                f"{MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX}:{attempt_id}:"
+            ),
         )
         if not jobs:
             raise AdmissionMappingPipelineError("mapping_candidates_not_found")
         jobs = _latest_job_cohort(jobs)
+        # Migration gate: the durable draft may only be assembled from the
+        # new dual-cohort execution shapes. A verifier identity inside the
+        # primary namespace is a legacy single-verifier cohort and must never
+        # enter a new draft.
+        first_pass_execution = self._first_pass_execution(
+            ((job.provider, job.requested_model) for job in jobs),
+            block=True,
+        )
         profile_sha = ""
         profile_shas: dict[str, str] = {}
         current_revisions: dict[str, str] = {}
@@ -346,7 +460,12 @@ class AdmissionMappingConfirmationService:
             profile_sha,
             prompt_version=self.prompt_version,
         )
-        return self._draft_payload(draft)
+        payload = self._draft_payload(draft)
+        # Durable record of how the first pass actually ran: downstream
+        # reconciliation reads this instead of re-deriving it, so a local
+        # fallback run can never be presented as dual-model agreement.
+        payload["first_pass_execution"] = first_pass_execution
+        return payload
 
     def edit_field(
         self,
@@ -519,6 +638,160 @@ class AdmissionMappingConfirmationService:
         }
         return projected
 
+    def reconcile_with_verifier(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        draft_id: str,
+        verifier_candidates: Any = None,
+        primary_execution_route: str = "",
+        workspace_dir: Any = None,
+    ) -> Mapping[str, Any]:
+        """Run the deterministic dual-cohort reconciliation gate (read-only).
+
+        The current draft carries the primary cohort's adopted verdicts; the
+        verifier cohort arrives as its own completed candidates from the
+        independent blind re-check. Coverage, evidence closure, agreement and
+        the mapping-stage conclusion boundary are evaluated deterministically;
+        divergences are preserved verbatim for focused system review. Nothing
+        here edits the draft, adopts a winner, or materializes facts.
+
+        Callers that know how the primary cohort actually executed must pass
+        ``primary_execution_route`` (from ``first_pass_execution``); an empty
+        value keeps the idealized remote-primary assumption of the contract
+        default and is only acceptable where no fallback route exists.
+        """
+
+        draft = self._require_attempt_draft(project_id, attempt_id, draft_id)
+        payload = (
+            draft.model_dump(mode="json")
+            if hasattr(draft, "model_dump")
+            else dict(draft)
+        )
+        draft_fields = list(payload.get("fields") or [])
+        profile_fields = [
+            {
+                "domain": str(field.get("domain") or ""),
+                "field": str(field.get("source_field") or ""),
+            }
+            for field in draft_fields
+        ]
+        primary_mappings = [
+            {
+                "domain": field.get("domain"),
+                "source_field": field.get("source_field"),
+                "recommended_role": field.get("recommended_role"),
+                "field_kind": field.get("field_kind"),
+                "confidence": field.get("confidence"),
+                "evidence_ids": list(field.get("evidence_ids") or []),
+            }
+            for field in draft_fields
+        ]
+        can_load_cohorts = all(
+            hasattr(self.ai_repository, name)
+            for name in ("list_jobs", "candidates")
+        )
+        if can_load_cohorts:
+            primary_jobs = self._mapping_jobs(
+                project_id,
+                attempt_id,
+                MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX,
+            )
+            primary_candidates = self._completed_candidates(
+                project_id,
+                primary_jobs,
+                workspace_dir=workspace_dir,
+            )
+            primary = cohort_payload_from_candidates(primary_candidates)
+            primary_evidence_ids = primary["evidence_ids"]
+            if not primary_execution_route:
+                primary_execution_route = self._first_pass_execution(
+                    ((job.provider, job.requested_model) for job in primary_jobs),
+                    block=True,
+                )["route"]
+        elif verifier_candidates is not None:
+            # Small injected unit doubles can exercise the pure comparator;
+            # the product service always uses repository-backed evidence.
+            primary_evidence_ids = {
+                evidence_id
+                for field in primary_mappings
+                for evidence_id in field["evidence_ids"]
+            }
+        else:
+            raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
+        if verifier_candidates is None:
+            verifier_jobs = self._mapping_jobs(
+                project_id,
+                attempt_id,
+                MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX,
+            )
+            if any(
+                str(job.prompt_version) != MONITORING_C3_VERIFIER_PROMPT_VERSION
+                for job in verifier_jobs
+            ):
+                raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
+            verifier_candidates = self._completed_candidates(
+                project_id,
+                verifier_jobs,
+                workspace_dir=workspace_dir,
+            )
+        verifier = cohort_payload_from_candidates(verifier_candidates or ())
+        report = reconcile_mapping_cohorts(
+            profile_fields=profile_fields,
+            primary_mappings=primary_mappings,
+            verifier_mappings=verifier["mappings"],
+            primary_evidence_ids=primary_evidence_ids,
+            verifier_evidence_ids=verifier["evidence_ids"],
+            primary_execution_route=(
+                str(primary_execution_route).strip()
+                or MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY
+            ),
+        )
+        projected = self._draft_payload(draft)
+        projected["reconciliation"] = dict(report)
+        return projected
+
+    def _mapping_jobs(
+        self,
+        project_id: str,
+        attempt_id: str,
+        prefix: str,
+    ) -> tuple[Any, ...]:
+        if self.ai_repository is None:
+            raise AdmissionMappingPipelineError("mapping_draft_unconfigured")
+        task_type = self.task_type or getattr(self.mapping_pipeline, "_task_type", "")
+        jobs = self.ai_repository.list_jobs(
+            project_id,
+            task_type=str(_value(task_type)),
+            business_key_prefix=f"{prefix}:{attempt_id}:",
+        )
+        if not jobs:
+            raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
+        return _latest_job_cohort(jobs)
+
+    def _completed_candidates(
+        self,
+        project_id: str,
+        jobs: Iterable[Any],
+        *,
+        workspace_dir: Any = None,
+    ) -> tuple[Any, ...]:
+        candidates: list[Any] = []
+        for job in jobs:
+            if str(_value(job.status)) != "completed":
+                raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
+            if workspace_dir is not None and self._revision_for_job(
+                job,
+                workspace_dir=workspace_dir,
+            ) != str(job.input_revision_sha256):
+                raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
+            rows = self.ai_repository.candidates(project_id, job.job_id)
+            if len(rows) != 1:
+                raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
+            candidates.extend(rows)
+        return tuple(candidates)
+
     def confirm_draft(
         self,
         *,
@@ -529,6 +802,7 @@ class AdmissionMappingConfirmationService:
         confirmed_by: str,
         confirmation_reason: str,
         idempotency_key: str,
+        workspace_dir: Any = None,
     ) -> Mapping[str, Any]:
         if self.mapping_repository is None:
             raise AdmissionMappingPipelineError("mapping_draft_unconfigured")
@@ -538,6 +812,17 @@ class AdmissionMappingConfirmationService:
             # Only medically substantive ambiguities block durable
             # confirmation; system-adopted candidates never do.
             raise AdmissionMappingPipelineError("mapping_questions_unresolved")
+        if self.require_dual_reconciliation:
+            reconciliation = self.reconcile_with_verifier(
+                project_id=project_id,
+                attempt_id=attempt_id,
+                draft_id=draft_id,
+                workspace_dir=workspace_dir,
+            )["reconciliation"]
+            if not reconciliation["auto_pass"]:
+                raise AdmissionMappingPipelineError(
+                    "mapping_reconciliation_required"
+                )
         revision = self.mapping_repository.confirm(
             project_id,
             draft_id,

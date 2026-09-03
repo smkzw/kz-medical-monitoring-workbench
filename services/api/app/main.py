@@ -429,9 +429,18 @@ from .monitoring_ai_service import (
     PROMPT_VERSION_BY_TASK,
     MonitoringAiService,
     resolve_monitoring_ai_runtime,
+    resolve_monitoring_verifier_ai_runtime,
 )
 from .monitoring_ai_source_packet import MonitoringAiSourcePacketResolver
 from .monitoring_ai_worker import MonitoringAiWorker
+from packages.medical_monitoring.admission.mapping_gate import (
+    MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX,
+    MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX,
+)
+from .monitoring_deterministic_metadata_mapping import (
+    DETERMINISTIC_METADATA_MODEL,
+    DETERMINISTIC_METADATA_PROVIDER,
+)
 from .monitoring_mapping_draft_repository import MonitoringMappingDraftRepository
 from .monitoring_mapping_activation import MonitoringMappingActivationService
 from .monitoring_mapping_batch_lifecycle import (
@@ -1168,7 +1177,8 @@ def _current_monitoring_ai_revision(job):
             return ""
     business_key = str(getattr(job, "business_key", ""))
     if business_key.startswith((
-        "listing-field-mapping:",
+        f"{MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX}:",
+        f"{MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX}:",
         "listing-field-mapping-adjudication:",
     )):
         admission_revision = current_admission_mapping_revision(
@@ -1196,7 +1206,29 @@ monitoring_ai_worker = MonitoringAiWorker(
     parallelism=int(
         os.environ.get("WORKBENCH_MONITORING_AI_PARALLELISM", "4")
     ),
+    identity_bound=True,
 )
+# Independent verifier cohort: same repository and queue, its own runtime
+# binding, and its own worker so neither cohort can claim the other's jobs.
+monitoring_ai_verifier_service = MonitoringAiService(
+    monitoring_ai_repository,
+    runtime_resolver=resolve_monitoring_verifier_ai_runtime,
+    current_revision_resolver=_current_monitoring_ai_revision,
+)
+monitoring_ai_verifier_worker = MonitoringAiWorker(
+    monitoring_ai_verifier_service,
+    parallelism=int(
+        os.environ.get("WORKBENCH_MONITORING_AI_VERIFIER_PARALLELISM", "2")
+    ),
+    identity_bound=True,
+)
+
+
+def _wake_monitoring_mapping_workers() -> None:
+    monitoring_ai_worker.wake()
+    monitoring_ai_verifier_worker.wake()
+
+
 monitoring_protocol_preparation_service = MonitoringProtocolPreparationService(
     protocol_repository=monitoring_protocol_rule_repository,
     ai_repository=monitoring_ai_repository,
@@ -3485,7 +3517,8 @@ _r7_admission_mapping_pipeline = AdmissionMappingPipeline(
     ai_repository=monitoring_ai_repository,
     input_revision_factory=MonitoringAiInputRevision.model_validate,
     task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
-    worker_wake=monitoring_ai_worker.wake,
+    worker_wake=_wake_monitoring_mapping_workers,
+    verifier_ai_service=monitoring_ai_verifier_service,
 )
 _r7_admission_mapping_confirmation = AdmissionMappingConfirmationService(
     mapping_pipeline=_r7_admission_mapping_pipeline,
@@ -3497,6 +3530,12 @@ _r7_admission_mapping_confirmation = AdmissionMappingConfirmationService(
     accepted_status=MonitoringAiCandidateStatus.ACCEPTED,
     proposed_status=MonitoringAiCandidateStatus.PROPOSED,
     task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+    # Deterministic metadata-only jobs share the primary job namespace but
+    # run without any model; the draft migration gate must not reject them.
+    system_routes=(
+        (DETERMINISTIC_METADATA_PROVIDER, DETERMINISTIC_METADATA_MODEL),
+    ),
+    require_dual_reconciliation=True,
 )
 _r7_admission_fact_materializer = FactMaterializationService(
     mapping_repository=monitoring_mapping_draft_repository,

@@ -13,6 +13,7 @@ from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROFILE_ID,
     MONITORING_C3_MAPPING_PROVIDER,
+    MONITORING_C3_VERIFIER_MODEL,
     ZHIPU_CODING_PLAN_API_KEY_ENV,
     ZHIPU_CODING_PLAN_BASE_URL,
     MONITORING_C3_VERIFIER_PROFILE_ID,
@@ -31,6 +32,7 @@ ROLE_SETTINGS_SCHEMA_VERSION = "ai_role_bindings_v2"
 LEGACY_ROLE_SETTINGS_SCHEMA_VERSION = "ai_role_bindings_v1"
 INDEPENDENT_AI_ROLE = "independent_ai"
 MEDICAL_MONITORING_AI_ROLE = "medical_monitoring_ai"
+MEDICAL_MONITORING_VERIFIER_AI_ROLE = "medical_monitoring_verifier_ai"
 OCR_ROLE = "ocr"
 TRANSLATION_BODY_ROLE = "translation_body"
 TRANSLATION_SUPPORT_ROLE = "translation_support"
@@ -55,7 +57,12 @@ REASONING_EFFORTS: frozenset[str] = frozenset(
     {"low", "medium", "high", "xhigh", "max"}
 )
 THINKING_CONFIGURABLE_ROLES: frozenset[str] = frozenset(
-    {INDEPENDENT_AI_ROLE, MEDICAL_MONITORING_AI_ROLE, TRANSLATION_SUPPORT_ROLE}
+    {
+        INDEPENDENT_AI_ROLE,
+        MEDICAL_MONITORING_AI_ROLE,
+        MEDICAL_MONITORING_VERIFIER_AI_ROLE,
+        TRANSLATION_SUPPORT_ROLE,
+    }
 )
 
 # The gate is deliberately not a model owner. This empty compatibility
@@ -148,6 +155,16 @@ ROLE_DEFINITIONS: tuple[AiRoleDefinition, ...] = (
             "仅在两条远程路线均不可用时使用本地 MTPLX Qwen3.8 Flash Next。"
         ),
         default_model=MONITORING_C3_MAPPING_MODEL,
+    ),
+    AiRoleDefinition(
+        role_id=MEDICAL_MONITORING_VERIFIER_AI_ROLE,
+        label="医学监查独立核对AI",
+        description="对主分析 cohort 的字段对应建议执行独立、盲态的全量核对。",
+        recommendation=(
+            "独立核对必须使用与主分析不同的模型路线："
+            "默认智谱 GLM-5.3 Flash；不得回退到本地模型或与主分析同源。"
+        ),
+        default_model=MONITORING_C3_VERIFIER_MODEL,
     ),
     AiRoleDefinition(
         role_id=OCR_ROLE,
@@ -310,6 +327,9 @@ _BUILTIN_ROLE_PROFILE_IDS = {
         MONITORING_C3_MAPPING_PROFILE_ID,
         MONITORING_C3_VERIFIER_PROFILE_ID,
     },
+    MEDICAL_MONITORING_VERIFIER_AI_ROLE: {
+        MONITORING_C3_VERIFIER_PROFILE_ID,
+    },
     OCR_ROLE: {OCR_OMLX_PROFILE_ID, OCR_PADDLE_PROFILE_ID},
     TRANSLATION_BODY_ROLE: {TRANSLATION_BODY_OMLX_PROFILE_ID},
     TRANSLATION_SUPPORT_ROLE: {TRANSLATION_SUPPORT_PROFILE_ID},
@@ -427,11 +447,19 @@ class AiRoleRuntimeSettingsStore:
             ),
             MEDICAL_MONITORING_AI_ROLE: AiRoleBinding(
                 role_id=MEDICAL_MONITORING_AI_ROLE,
-            profile_id=MONITORING_C3_MAPPING_PROFILE_ID,
-            model=MONITORING_C3_MAPPING_MODEL,
-            enabled=True,
-            thinking=THINKING_DISABLED,
-            reasoning_effort="high",
+                profile_id=MONITORING_C3_MAPPING_PROFILE_ID,
+                model=MONITORING_C3_MAPPING_MODEL,
+                enabled=True,
+                thinking=THINKING_DISABLED,
+                reasoning_effort="high",
+            ),
+            MEDICAL_MONITORING_VERIFIER_AI_ROLE: AiRoleBinding(
+                role_id=MEDICAL_MONITORING_VERIFIER_AI_ROLE,
+                profile_id=MONITORING_C3_VERIFIER_PROFILE_ID,
+                model=MONITORING_C3_VERIFIER_MODEL,
+                enabled=True,
+                thinking=THINKING_DISABLED,
+                reasoning_effort="high",
             ),
             OCR_ROLE: AiRoleBinding(
                 role_id=OCR_ROLE,

@@ -42,6 +42,7 @@ from .ai_gateway import (
 )
 from .ai_role_runtime_settings import (
     MEDICAL_MONITORING_AI_ROLE,
+    MEDICAL_MONITORING_VERIFIER_AI_ROLE,
     runtime_ai_role_settings_store,
 )
 from .monitoring_ai_contracts import (
@@ -80,6 +81,9 @@ from .monitoring_deterministic_metadata_mapping import (
 from .monitoring_mapping_contract import (
     MonitoringFieldKind,
     validate_monitoring_mapping_semantics,
+)
+from packages.medical_monitoring.admission.mapping_reconciliation import (
+    mapping_conclusion_violations,
 )
 from .monitoring_mapping_semantic_quality import (
     ROLE_CATALOG_VERSION,
@@ -1091,6 +1095,18 @@ class _FieldMappingItem(BaseModel):
 
     @model_validator(mode="after")
     def validate_scientific_boundary(self) -> "_FieldMappingItem":
+        conclusion_violations = mapping_conclusion_violations(
+            self.model_dump(mode="json")
+        )
+        if conclusion_violations:
+            detail = ", ".join(
+                f"{item['code']}({item['detail']})"
+                for item in conclusion_violations
+            )
+            raise ValueError(
+                "mapping-stage output must not contain CTCAE grade, risk "
+                f"or Query conclusions: {detail}"
+            )
         if len(self.evidence_ids) != len(set(self.evidence_ids)):
             raise ValueError("field mapping evidence_ids must be unique")
         if len(self.object_identity_evidence_fields) != len(
@@ -1317,11 +1333,25 @@ STRUCTURED_PAYLOAD_MODEL_BY_TASK: Dict[
 
 
 def resolve_monitoring_ai_runtime() -> MonitoringAiRuntimeBinding:
+    """Primary analysis cohort runtime (medical_monitoring_ai role)."""
+
+    return _resolve_monitoring_role_runtime(MEDICAL_MONITORING_AI_ROLE)
+
+
+def resolve_monitoring_verifier_ai_runtime() -> MonitoringAiRuntimeBinding:
+    """Independent verifier cohort runtime (medical_monitoring_verifier_ai role)."""
+
+    return _resolve_monitoring_role_runtime(MEDICAL_MONITORING_VERIFIER_AI_ROLE)
+
+
+def _resolve_monitoring_role_runtime(
+    role_id: str,
+) -> MonitoringAiRuntimeBinding:
     try:
         store = runtime_ai_role_settings_store()
-        binding = store.binding(MEDICAL_MONITORING_AI_ROLE)
+        binding = store.binding(role_id)
         profile = store.provider_store.profile(binding.profile_id)
-        env = store.role_env(MEDICAL_MONITORING_AI_ROLE)
+        env = store.role_env(role_id)
         provider = env.get("WORKBENCH_AI_PROVIDER", "").strip()
         model = env.get("WORKBENCH_AI_MODEL", "").strip()
         transport = (
@@ -2022,8 +2052,37 @@ class MonitoringAiService:
             repair=repair,
         )
 
-    def run_next(self, owner: str) -> MonitoringAiRunResult:
-        job = self.repository.claim_next(owner)
+    def claim_identity(self) -> tuple[str, str, str] | None:
+        """Runtime identity this service's worker should claim, if runnable.
+
+        Dual-cohort workers (primary analysis and independent verifier) share
+        one durable queue. Each worker resolves its own identity once per
+        drain so the repository only hands it jobs stamped with that identity.
+        ``None`` keeps the historical unfiltered claim.
+        """
+
+        runtime = self.runtime_resolver()
+        if not runtime.available:
+            return None
+        return (runtime.profile_id, runtime.provider, runtime.model)
+
+    def run_next(
+        self,
+        owner: str,
+        *,
+        claim_identity: tuple[str, str, str] | None = None,
+    ) -> MonitoringAiRunResult:
+        if claim_identity is not None:
+            job = self.repository.claim_next(
+                owner,
+                profile_id=claim_identity[0],
+                provider=claim_identity[1],
+                requested_model=claim_identity[2],
+            )
+        else:
+            # Unfiltered claim: deterministic-only jobs never touch the
+            # runtime, and this keeps the historical single-runtime behavior.
+            job = self.repository.claim_next(owner)
         if job is None:
             return MonitoringAiRunResult(job=None, processed=False)
 

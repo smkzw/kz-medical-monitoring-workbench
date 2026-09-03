@@ -45,6 +45,18 @@ class LeaseLostService:
         return SimpleNamespace(processed=False, lease_lost=False)
 
 
+class UnavailableIdentityService:
+    def __init__(self):
+        self.run_calls = 0
+
+    def claim_identity(self):
+        return None
+
+    def run_next(self, owner: str, **kwargs):
+        self.run_calls += 1
+        return SimpleNamespace(processed=False)
+
+
 def test_worker_drains_durable_queue_with_bounded_parallelism() -> None:
     service = FakeService(25)
     worker = MonitoringAiWorker(service, parallelism=4)
@@ -66,6 +78,17 @@ def test_worker_continues_after_superseded_inflight_job_loses_lease() -> None:
 
     assert service.done.wait(timeout=2)
     assert service.calls >= 2
+
+
+def test_identity_bound_worker_does_not_claim_when_runtime_is_unavailable() -> None:
+    service = UnavailableIdentityService()
+    worker = MonitoringAiWorker(service, parallelism=1, identity_bound=True)
+
+    worker.wake()
+
+    for thread in worker._threads:
+        thread.join(timeout=1)
+    assert service.run_calls == 0
 
 
 @pytest.mark.parametrize("parallelism", [0, 17])

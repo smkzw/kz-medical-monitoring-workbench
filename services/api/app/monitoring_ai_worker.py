@@ -14,11 +14,13 @@ class MonitoringAiWorker:
         service: MonitoringAiService,
         *,
         parallelism: int = 4,
+        identity_bound: bool = False,
     ):
         if not 1 <= parallelism <= 16:
             raise ValueError("monitoring AI worker parallelism must be 1 to 16")
         self.service = service
         self.parallelism = parallelism
+        self.identity_bound = identity_bound
         self._lock = Lock()
         self._threads: list[Thread] = []
 
@@ -44,8 +46,22 @@ class MonitoringAiWorker:
 
     def _drain(self) -> None:
         owner = f"local-monitoring-ai-{uuid4().hex}"
+        # Resolve this worker's cohort identity once per drain: dual-cohort
+        # queues (primary analysis + independent verifier) share one durable
+        # repository, and each worker must only claim its own runtime's jobs.
+        claim_identity = None
+        if self.identity_bound:
+            try:
+                claim_identity = self.service.claim_identity()
+            except Exception:
+                return
+            if claim_identity is None:
+                return
         while True:
-            result = self.service.run_next(owner)
+            if self.identity_bound:
+                result = self.service.run_next(owner, claim_identity=claim_identity)
+            else:
+                result = self.service.run_next(owner)
             if getattr(result, "lease_lost", False):
                 # A newer prompt/input can supersede an in-flight job while
                 # the provider call is still returning. That lost lease is

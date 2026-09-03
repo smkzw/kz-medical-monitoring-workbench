@@ -20,6 +20,12 @@ from .mapping_bridge import (
 from .mapping_gate import (
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROVIDER,
+    MONITORING_C3_VERIFIER_MODEL,
+    MONITORING_C3_VERIFIER_PROVIDER,
+    MONITORING_MAPPING_COHORT_PRIMARY,
+    MONITORING_MAPPING_COHORT_VERIFIER,
+    MonitoringMappingCohortContract,
+    monitoring_mapping_cohort_contract,
     monitoring_mapping_runtime_matches,
 )
 from .pipeline import ADMISSION_RECORD_KIND
@@ -107,6 +113,9 @@ class AdmissionMappingPipeline:
         worker_wake: Callable[[], Any] = lambda: None,
         required_provider: str = MONITORING_C3_MAPPING_PROVIDER,
         required_model: str = MONITORING_C3_MAPPING_MODEL,
+        verifier_ai_service: Any = None,
+        verifier_required_provider: str = MONITORING_C3_VERIFIER_PROVIDER,
+        verifier_required_model: str = MONITORING_C3_VERIFIER_MODEL,
     ) -> None:
         self._service = ai_service
         self._repository = ai_repository
@@ -115,6 +124,40 @@ class AdmissionMappingPipeline:
         self._worker_wake = worker_wake
         self._required_provider = required_provider
         self._required_model = required_model
+        self._verifier_service = verifier_ai_service
+        self._verifier_required_provider = verifier_required_provider
+        self._verifier_required_model = verifier_required_model
+
+    def _cohort_contract(self, cohort: str) -> MonitoringMappingCohortContract:
+        try:
+            return monitoring_mapping_cohort_contract(cohort)
+        except ValueError as exc:
+            raise AdmissionMappingPipelineError("mapping_cohort_invalid") from exc
+
+    def _cohort_service(self, cohort: str) -> Any:
+        if cohort == MONITORING_MAPPING_COHORT_VERIFIER:
+            if self._verifier_service is None:
+                raise AdmissionMappingPipelineError("mapping_verifier_unconfigured")
+            return self._verifier_service
+        return self._service
+
+    def _cohort_runtime_ready(
+        self,
+        service: Any,
+        contract: MonitoringMappingCohortContract,
+    ) -> bool:
+        runtime = service.runtime_resolver()
+        if contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY:
+            return monitoring_mapping_runtime_matches(
+                runtime,
+                required_provider=self._required_provider,
+                required_model=self._required_model,
+            )
+        return monitoring_mapping_runtime_matches(
+            runtime,
+            required_provider=self._verifier_required_provider,
+            required_model=self._verifier_required_model,
+        )
 
     def _load_record(
         self, *, project_id: str, attempt_id: str, workspace_dir: Path
@@ -153,30 +196,39 @@ class AdmissionMappingPipeline:
         finally:
             store.close()
 
-    def _configured(self) -> bool:
+    def _configured(self, service: Any = None) -> bool:
         return all((
-            self._service is not None,
+            (self._service if service is None else service) is not None,
             self._repository is not None,
             self._revision_factory is not None,
             self._task_type is not None,
         ))
 
     def generate_candidates(
-        self, *, project_id: str, attempt_id: str, workspace_dir: Path
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Path,
+        cohort: str = MONITORING_MAPPING_COHORT_PRIMARY,
     ) -> Mapping[str, Any]:
-        if not self._configured():
+        """Submit blind candidate jobs for one mapping cohort.
+
+        Both cohorts receive the identical deterministic field profile built
+        from the admitted record — the verifier input never carries primary
+        analysis results, adjudication context, or draft decisions.
+        """
+
+        contract = self._cohort_contract(cohort)
+        service = self._cohort_service(contract.cohort)
+        if not self._configured(service):
             raise AdmissionMappingPipelineError("mapping_bridge_unconfigured")
         record = self._load_record(
             project_id=project_id, attempt_id=attempt_id, workspace_dir=workspace_dir
         )
         if record.get("state") != "profile_ready":
             raise AdmissionMappingPipelineError("mapping_profile_not_ready")
-        runtime = self._service.runtime_resolver()
-        if not monitoring_mapping_runtime_matches(
-            runtime,
-            required_provider=self._required_provider,
-            required_model=self._required_model,
-        ):
+        if not self._cohort_runtime_ready(service, contract):
             raise AdmissionMappingPipelineError("mapping_model_not_configured")
         try:
             harness_input = admission_record_to_harness_input(
@@ -189,21 +241,29 @@ class AdmissionMappingPipeline:
                 ),
             )
             revision = self._revision_factory(harness_input.input_revision)
-            jobs = self._service.submit_listing_field_mapping_chunks(
+            jobs = service.submit_listing_field_mapping_chunks(
                 project_id=project_id,
                 input_revision=revision,
                 field_profile=harness_input.field_profile,
                 chunk_size=12,
+                prompt_version=contract.prompt_version,
+                business_key_prefix=contract.business_key_prefix,
             )
         except (MappingBridgeError, ValueError) as exc:
             raise AdmissionMappingPipelineError("mapping_bridge_failed") from exc
         self._worker_wake()
-        return self._project(jobs, attempt_id=attempt_id)
+        return self._project(jobs, attempt_id=attempt_id, cohort=contract.cohort)
 
     def list_candidates(
-        self, *, project_id: str, attempt_id: str, workspace_dir: Path
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Path,
+        cohort: str = MONITORING_MAPPING_COHORT_PRIMARY,
     ) -> Mapping[str, Any]:
-        if not self._configured():
+        contract = self._cohort_contract(cohort)
+        if not self._configured(self._cohort_service(contract.cohort)):
             raise AdmissionMappingPipelineError("mapping_bridge_unconfigured")
         self._load_record(
             project_id=project_id, attempt_id=attempt_id, workspace_dir=workspace_dir
@@ -211,11 +271,15 @@ class AdmissionMappingPipeline:
         jobs = self._repository.list_jobs(
             project_id,
             task_type=str(_value(self._task_type)),
-            business_key_prefix=f"listing-field-mapping:{attempt_id}:",
+            business_key_prefix=contract.job_business_key_prefix(attempt_id),
         )
         if not jobs:
             raise AdmissionMappingPipelineError("mapping_candidates_not_found")
-        return self._project(_latest_job_cohort(jobs), attempt_id=attempt_id)
+        return self._project(
+            _latest_job_cohort(jobs),
+            attempt_id=attempt_id,
+            cohort=contract.cohort,
+        )
 
     def adjudicate_candidates(
         self,
@@ -226,7 +290,12 @@ class AdmissionMappingPipeline:
         draft_fields: Sequence[Mapping[str, Any]],
         workspace_dir: Path,
     ) -> Mapping[str, Any]:
-        """Run a focused, auditable second pass over unresolved fields only."""
+        """Run a focused, auditable second pass over unresolved fields only.
+
+        Adjudication is a primary-cohort feature: it feeds first-pass draft
+        decisions back to the primary model. The verifier cohort stays blind
+        by construction and can never receive this pass.
+        """
 
         if not self._configured():
             raise AdmissionMappingPipelineError("mapping_bridge_unconfigured")
@@ -456,7 +525,13 @@ class AdmissionMappingPipeline:
                     })
         return mappings
 
-    def _project(self, jobs: Any, *, attempt_id: str) -> dict[str, Any]:
+    def _project(
+        self,
+        jobs: Any,
+        *,
+        attempt_id: str,
+        cohort: str = MONITORING_MAPPING_COHORT_PRIMARY,
+    ) -> dict[str, Any]:
         job_rows = []
         mappings = []
         for job in jobs:
@@ -504,6 +579,7 @@ class AdmissionMappingPipeline:
         )
         return {
             "attempt_id": attempt_id,
+            "cohort": cohort,
             "state": state,
             "confirmation_status": "pending_confirmation",
             "summary": {
