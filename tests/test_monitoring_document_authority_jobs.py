@@ -8,10 +8,12 @@ from typing import Any
 import pytest
 
 from packages.medical_monitoring.admission.document_authority import (
+    AdjudicationDecision,
     DOCUMENT_AUTHORITY_SCHEMA_VERSION,
     CandidateAssessment,
     ConflictDecision,
     DocumentAuthorityAnalysis,
+    DocumentAuthorityAdjudicationReview,
     DocumentAuthorityConflictReview,
     DocumentAuthorityError,
     EvidenceReference,
@@ -1113,11 +1115,25 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
     )
     assert initial["state"] == "needs_user_input"
 
+    adjudication_review = DocumentAuthorityAdjudicationReview(
+        schema_version=review.schema_version,
+        conflict_packet_sha256=review.conflict_packet_sha256,
+        decisions=(
+            AdjudicationDecision(
+                **review.decisions[0].model_dump(mode="python"),
+                excluded_candidate_ids=("candidate_protocol",),
+            ),
+        ),
+    )
     primary_review_provider["value"] = _ReviewProvider(
-        MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL, review
+        MONITORING_C3_MAPPING_PROVIDER,
+        MONITORING_C3_MAPPING_MODEL,
+        adjudication_review,
     )
     verifier_review_provider["value"] = _ReviewProvider(
-        MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL, review
+        MONITORING_C3_VERIFIER_PROVIDER,
+        MONITORING_C3_VERIFIER_MODEL,
+        adjudication_review,
     )
     workspace = tmp_path / "workflow-workspace"
     batch_dir = workspace / "document_authority_candidates" / "batches"

@@ -7,12 +7,15 @@ from typing import TYPE_CHECKING, Any, Literal, Mapping
 
 from packages.medical_monitoring.admission.document_authority import (
     PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
     PRIMARY_PROMPT_VERSION,
     PRIMARY_REVIEW_PROMPT_VERSION,
     VERIFIER_PROMPT_VERSION,
     VERIFIER_ADJUDICATION_PROMPT_VERSION,
     VERIFIER_REVIEW_PROMPT_VERSION,
     DocumentAuthorityAnalysis,
+    DocumentAuthorityAdjudicationReview,
     DocumentAuthorityConflictRunEnvelope,
     DocumentAuthorityConflictReview,
     DocumentAuthorityError,
@@ -26,6 +29,7 @@ from packages.medical_monitoring.admission.document_authority import (
     validate_document_authority_analysis,
     validate_document_authority_conflict_review,
     validate_document_authority_adjudication_context,
+    validate_document_authority_adjudication_review,
 )
 from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_MAPPING_MODEL,
@@ -289,17 +293,30 @@ def load_document_authority_review_run(
     adjudication_context: Mapping[str, Any] | None = None,
 ) -> DocumentAuthorityConflictRunEnvelope:
     job = repository.get(project_id, job_id)
+    legacy_adjudication = (
+        adjudication_context is not None
+        and adjudication_context.get("schema_version")
+        == "monitoring-document-authority-adjudication-v1"
+    )
     expected = (
         (
             MONITORING_C3_MAPPING_PROVIDER,
             MONITORING_C3_MAPPING_MODEL,
-            PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            (
+                LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION
+                if legacy_adjudication
+                else PRIMARY_ADJUDICATION_PROMPT_VERSION
+            ),
         )
         if role == "primary" and adjudication_context is not None
         else (
             MONITORING_C3_VERIFIER_PROVIDER,
             MONITORING_C3_VERIFIER_MODEL,
-            VERIFIER_ADJUDICATION_PROMPT_VERSION,
+            (
+                LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION
+                if legacy_adjudication
+                else VERIFIER_ADJUDICATION_PROMPT_VERSION
+            ),
         )
         if adjudication_context is not None
         else
@@ -357,10 +374,20 @@ def load_document_authority_review_run(
     ):
         raise DocumentAuthorityError("document_authority_review_job_output_invalid")
     try:
-        review = DocumentAuthorityConflictReview.model_validate(
-            candidates[0].structured_payload
+        review_model = (
+            DocumentAuthorityAdjudicationReview
+            if adjudication_context is not None
+            and adjudication_context.get("schema_version")
+            == "monitoring-document-authority-adjudication-v2"
+            else DocumentAuthorityConflictReview
         )
-        validate_document_authority_conflict_review(conflict_packet, review)
+        review = review_model.model_validate(candidates[0].structured_payload)
+        if adjudication_context is not None:
+            validate_document_authority_adjudication_review(
+                conflict_packet, adjudication_context, review
+            )
+        else:
+            validate_document_authority_conflict_review(conflict_packet, review)
     except (ValueError, DocumentAuthorityError) as exc:
         raise DocumentAuthorityError(
             "document_authority_review_job_output_invalid"
@@ -469,6 +496,20 @@ def resolve_document_authority_from_jobs(
             raise DocumentAuthorityError(
                 "document_authority_adjudication_jobs_required"
             )
+        primary_adjudication_job = repository.get(
+            project_id, primary_adjudication_job_id
+        )
+        verifier_adjudication_job = repository.get(
+            project_id, verifier_adjudication_job_id
+        )
+        adjudication_prompt_versions = {
+            primary_adjudication_job.prompt_version,
+            verifier_adjudication_job.prompt_version,
+        }
+        legacy_v1 = adjudication_prompt_versions == {
+            LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+        }
         adjudication_context = build_anonymous_adjudication_context(
             candidate_batch,
             primary_analysis,
@@ -476,6 +517,7 @@ def resolve_document_authority_from_jobs(
             expected_packet,
             primary_review,
             verifier_review,
+            legacy_v1=legacy_v1,
         )
         primary_adjudication = load_document_authority_review_run(
             repository,
@@ -1016,7 +1058,8 @@ def _output_contains_analysis(
 
 
 def _output_contains_review(
-    output: Any, review: DocumentAuthorityConflictReview
+    output: Any,
+    review: DocumentAuthorityConflictReview | DocumentAuthorityAdjudicationReview,
 ) -> bool:
     if not isinstance(output, dict):
         return False
@@ -1027,7 +1070,12 @@ def _output_contains_review(
     if not isinstance(candidate, dict):
         return False
     try:
-        raw = DocumentAuthorityConflictReview.model_validate(
+        model = (
+            DocumentAuthorityAdjudicationReview
+            if isinstance(review, DocumentAuthorityAdjudicationReview)
+            else DocumentAuthorityConflictReview
+        )
+        raw = model.model_validate(
             candidate.get("structured_payload")
         )
     except ValueError:

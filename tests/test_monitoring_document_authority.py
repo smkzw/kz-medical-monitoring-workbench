@@ -6,10 +6,14 @@ import json
 import pytest
 
 from packages.medical_monitoring.admission.document_authority import (
+    AdjudicationDecision,
     DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+    LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
     CandidateAssessment,
     ConflictDecision,
     DocumentAuthorityAnalysis,
+    DocumentAuthorityAdjudicationReview,
     DocumentAuthorityConflictRunEnvelope,
     DocumentAuthorityConflictReview,
     DocumentAuthorityError,
@@ -1125,6 +1129,12 @@ def _ecrf_composite_review(
     supplements: tuple[str, ...] = ("candidate_ecrf_addendum",),
     references: tuple[EvidenceReference, ...] | None = None,
 ) -> DocumentAuthorityConflictReview:
+    considered = (
+        "candidate_protocol",
+        "candidate_protocol_erratum",
+        "candidate_ecrf",
+        "candidate_ecrf_addendum",
+    )
     return DocumentAuthorityConflictReview(
         schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
         conflict_packet_sha256=packet["conflict_packet_sha256"],
@@ -1135,16 +1145,32 @@ def _ecrf_composite_review(
                 selected_candidate_id="candidate_ecrf",
                 document_version="V1.0",
                 confidence=0.97,
-                considered_candidate_ids=(
-                    "candidate_protocol",
-                    "candidate_protocol_erratum",
-                    "candidate_ecrf",
-                    "candidate_ecrf_addendum",
-                ),
+                considered_candidate_ids=considered,
                 supplementary_candidate_ids=supplements,
                 evidence_references=(
                     _composite_references() if references is None else references
                 ),
+            ),
+        ),
+    )
+
+
+def _ecrf_adjudication_review(
+    packet: dict,
+    *,
+    supplements: tuple[str, ...] = ("candidate_ecrf_addendum",),
+) -> DocumentAuthorityAdjudicationReview:
+    base = _ecrf_composite_review(packet, supplements=supplements)
+    decision = base.decisions[0]
+    considered = set(decision.considered_candidate_ids)
+    bound = {decision.selected_candidate_id, *decision.supplementary_candidate_ids}
+    return DocumentAuthorityAdjudicationReview(
+        schema_version=base.schema_version,
+        conflict_packet_sha256=base.conflict_packet_sha256,
+        decisions=(
+            AdjudicationDecision(
+                **decision.model_dump(mode="python"),
+                excluded_candidate_ids=tuple(sorted(considered - bound)),
             ),
         ),
     )
@@ -1390,6 +1416,9 @@ def test_internal_adjudication_resolves_material_supplement_disagreement() -> No
 
     assert context["unresolved_roles"] == ["ecrf"]
     assert len(context["options_by_role"]["ecrf"]) == 2
+    assert context["disputed_candidate_ids_by_role"] == {
+        "ecrf": ["candidate_ecrf_addendum"]
+    }
     validate_document_authority_adjudication_context(packet, context)
 
     result = resolve_document_authority_adjudication(
@@ -1400,8 +1429,8 @@ def test_internal_adjudication_resolves_material_supplement_disagreement() -> No
         primary_review,
         verifier_review,
         context,
-        _review_run(with_supplement, "primary", adjudication=True),
-        _review_run(with_supplement, "verifier", adjudication=True),
+        _review_run(_ecrf_adjudication_review(packet), "primary", adjudication=True),
+        _review_run(_ecrf_adjudication_review(packet), "verifier", adjudication=True),
     )
 
     assert result["state"] == "resolved"
@@ -1411,6 +1440,76 @@ def test_internal_adjudication_resolves_material_supplement_disagreement() -> No
         "primary-adjudication-run",
         "verifier-adjudication-run",
     ]
+
+
+def test_adjudication_context_allows_metadata_only_dispute() -> None:
+    batch = _composite_batch()
+    primary, verifier, packet = _composite_conflict_context(batch)
+    first = _ecrf_composite_review(packet)
+    second = first.model_copy(
+        update={
+            "decisions": (
+                first.decisions[0].model_copy(
+                    update={"document_version": "V2.0"}
+                ),
+            )
+        }
+    )
+
+    context = build_anonymous_adjudication_context(
+        batch,
+        primary,
+        verifier,
+        packet,
+        _review_run(first, "primary"),
+        _review_run(second, "verifier"),
+    )
+
+    assert context["unresolved_roles"] == ["ecrf"]
+    assert context["disputed_candidate_ids_by_role"] == {"ecrf": []}
+    validate_document_authority_adjudication_context(packet, context)
+
+
+def test_legacy_v1_adjudication_context_remains_replayable() -> None:
+    batch = _composite_batch()
+    primary, verifier, packet = _composite_conflict_context(batch)
+    with_supplement = _ecrf_composite_review(packet)
+    without_supplement = _ecrf_composite_review(packet, supplements=())
+    primary_review = _review_run(with_supplement, "primary")
+    verifier_review = _review_run(without_supplement, "verifier")
+    context = build_anonymous_adjudication_context(
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+        legacy_v1=True,
+    )
+    primary_adjudication = _review_run(with_supplement, "primary", adjudication=True)
+    verifier_adjudication = _review_run(with_supplement, "verifier", adjudication=True)
+    primary_adjudication = primary_adjudication.model_copy(
+        update={"prompt_version": LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION}
+    )
+    verifier_adjudication = verifier_adjudication.model_copy(
+        update={"prompt_version": LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION}
+    )
+
+    result = resolve_document_authority_adjudication(
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+        context,
+        primary_adjudication,
+        verifier_adjudication,
+    )
+
+    assert context["schema_version"] == "monitoring-document-authority-adjudication-v1"
+    assert "disputed_candidate_ids_by_role" not in context
+    assert result["state"] == "resolved"
 
 
 def test_internal_adjudication_remains_fail_closed_and_context_bound() -> None:
@@ -1437,11 +1536,20 @@ def test_internal_adjudication_remains_fail_closed_and_context_bound() -> None:
         primary_review,
         verifier_review,
         context,
-        _review_run(with_supplement, "primary", adjudication=True),
-        _review_run(without_supplement, "verifier", adjudication=True),
+        _review_run(_ecrf_adjudication_review(packet), "primary", adjudication=True),
+        _review_run(
+            _ecrf_adjudication_review(packet, supplements=()),
+            "verifier",
+            adjudication=True,
+        ),
     )
     assert result["state"] == "needs_user_input"
     assert result["unresolved_roles"] == ["ecrf"]
+
+    with pytest.raises(ValueError):
+        DocumentAuthorityAdjudicationReview.model_validate(
+            with_supplement.model_dump(mode="json")
+        )
 
     tampered = json.loads(json.dumps(context))
     tampered["options_by_role"]["ecrf"][0]["confidence"] = 0.99
@@ -1454,8 +1562,8 @@ def test_internal_adjudication_remains_fail_closed_and_context_bound() -> None:
             primary_review,
             verifier_review,
             tampered,
-            _review_run(with_supplement, "primary", adjudication=True),
-            _review_run(with_supplement, "verifier", adjudication=True),
+            _review_run(_ecrf_adjudication_review(packet), "primary", adjudication=True),
+            _review_run(_ecrf_adjudication_review(packet), "verifier", adjudication=True),
         )
 
 

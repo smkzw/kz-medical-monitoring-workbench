@@ -105,7 +105,7 @@ _MAPPING_MESSAGES = {
         "研究文件自动核对服务暂不可用，请稍后重试。"
     ),
     "mapping_document_authority_incomplete": (
-        "两次独立核对尚未形成一致结论，系统会继续核实；当前无需您逐项确认。"
+        "研究文件核对未能完成，请重新选择完整研究文件；无需逐项确认。"
     ),
     "mapping_document_batch_required": (
         "请一次选择需要使用的研究文件，系统会自动识别文件类型并交叉核对。"

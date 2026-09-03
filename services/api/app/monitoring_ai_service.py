@@ -97,10 +97,12 @@ from packages.medical_monitoring.admission.document_authority import (
     VERIFIER_ADJUDICATION_PROMPT_VERSION as DOCUMENT_AUTHORITY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
     VERIFIER_REVIEW_PROMPT_VERSION as DOCUMENT_AUTHORITY_VERIFIER_REVIEW_PROMPT_VERSION,
     DocumentAuthorityAnalysis,
+    DocumentAuthorityAdjudicationReview,
     DocumentAuthorityConflictReview,
     DocumentAuthorityError,
     document_authority_batch_sha256,
     validate_document_authority_analysis,
+    validate_document_authority_adjudication_review,
     validate_document_authority_adjudication_context,
     validate_document_authority_conflict_packet,
     validate_document_authority_conflict_review,
@@ -1695,7 +1697,9 @@ class MonitoringAiService:
                 business_key=(
                     f"document-authority-"
                     f"{'adjudication' if adjudication_context is not None else 'review'}:"
-                    f"{role}:{packet_sha256}"
+                    f"{role}:"
+                    f"{'v2:' if adjudication_context is not None else ''}"
+                    f"{packet_sha256}"
                 ),
             )
         )
@@ -2977,7 +2981,12 @@ class MonitoringAiService:
             ),
             "title": "string",
             "text": "string",
-            "structured_payload": self._structured_payload_schema(job.task_type),
+            "structured_payload": (
+                DocumentAuthorityAdjudicationReview.model_json_schema()
+                if job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW
+                and "document_authority_adjudication_context" in provider_input_payload
+                else self._structured_payload_schema(job.task_type)
+            ),
         }
         if job.task_type not in {
             MonitoringAiTaskType.LISTING_FIELD_MAPPING,
@@ -3301,6 +3310,15 @@ class MonitoringAiService:
                 "evidence_required_candidate_id至少引用一条该候选已提供的"
                 "locator，包括未入选候选；零locator候选不引用证据。"
             )
+            if "document_authority_adjudication_context" in input_payload:
+                system_prompt += (
+                    " 本轮只重新裁决adjudication_context.unresolved_roles，且重点"
+                    "逐项核对disputed_candidate_ids_by_role列出的真实分歧候选。"
+                    "对每个未收敛角色，excluded_candidate_ids必须列出所有未选为"
+                    "主文件或补充材料的授权候选；主文件、补充材料与明确排除三组"
+                    "必须恰好覆盖该角色全部required_considered_candidate_ids，"
+                    "不得遗漏、重叠或借候选顺序推断结论。"
+                )
         elif (
             job.task_type
             == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING
@@ -4030,7 +4048,12 @@ class MonitoringAiService:
             )
 
         normalized_payloads: List[Dict[str, Any]] = []
-        model_type = STRUCTURED_PAYLOAD_MODEL_BY_TASK[job.task_type]
+        model_type = (
+            DocumentAuthorityAdjudicationReview
+            if job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW
+            and "document_authority_adjudication_context" in input_payload
+            else STRUCTURED_PAYLOAD_MODEL_BY_TASK[job.task_type]
+        )
         allowed_candidate_types = TASK_CANDIDATE_TYPES[job.task_type]
         is_protocol_task = (
             job.task_type == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING
@@ -4136,12 +4159,29 @@ class MonitoringAiService:
                                 str(exc),
                                 blocked=True,
                             )
-                    elif isinstance(structured, DocumentAuthorityConflictReview):
+                    elif isinstance(
+                        structured,
+                        (DocumentAuthorityConflictReview, DocumentAuthorityAdjudicationReview),
+                    ):
                         try:
-                            validate_document_authority_conflict_review(
-                                input_payload["document_authority_conflict_packet"],
-                                structured,
+                            adjudication_context = input_payload.get(
+                                "document_authority_adjudication_context"
                             )
+                            if isinstance(adjudication_context, Mapping):
+                                validate_document_authority_adjudication_review(
+                                    input_payload[
+                                        "document_authority_conflict_packet"
+                                    ],
+                                    adjudication_context,
+                                    structured,
+                                )
+                            else:
+                                validate_document_authority_conflict_review(
+                                    input_payload[
+                                        "document_authority_conflict_packet"
+                                    ],
+                                    structured,
+                                )
                         except (DocumentAuthorityError, KeyError, ValueError) as exc:
                             _candidate_error(
                                 candidate_state,

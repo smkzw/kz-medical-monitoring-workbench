@@ -196,12 +196,12 @@ class MonitoringDocumentAuthorityWorkflow:
         primary_adjudication = self._optional_job(
             project_id,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
-            f"document-authority-adjudication:primary:{packet_sha256}",
+            f"document-authority-adjudication:primary:v2:{packet_sha256}",
         )
         verifier_adjudication = self._optional_job(
             project_id,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
-            f"document-authority-adjudication:verifier:{packet_sha256}",
+            f"document-authority-adjudication:verifier:v2:{packet_sha256}",
         )
         if primary_adjudication is None or verifier_adjudication is None:
             revision = self._input_revision(project_id, batch)
