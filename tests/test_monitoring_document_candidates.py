@@ -251,3 +251,12 @@ def test_candidate_batch_identity_does_not_depend_on_upload_order(tmp_path: Path
     assert [candidate.candidate_id for candidate in first.candidates] == sorted(
         candidate.candidate_id for candidate in first.candidates
     )
+    persisted = json.loads(
+        (
+            tmp_path
+            / "candidates"
+            / "batches"
+            / f"{first.batch_id}.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert persisted == json.loads(json.dumps(first.to_dict(), ensure_ascii=False))

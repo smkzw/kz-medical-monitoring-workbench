@@ -41,6 +41,9 @@ _MAPPING_STATUS_CODES = {
     "mapping_document_selection_unusable": 409,
     "mapping_document_registration_unavailable": 503,
     "mapping_document_registration_invalid": 422,
+    "mapping_document_authority_unavailable": 503,
+    "mapping_document_authority_incomplete": 409,
+    "mapping_document_batch_required": 409,
     "mapping_document_selection_pending": 409,
     "mapping_document_refresh_pending": 409,
     "mapping_attempt_id_invalid": 422,
@@ -97,6 +100,15 @@ _MAPPING_MESSAGES = {
     ),
     "mapping_document_registration_invalid": (
         "系统无法识别所选研究文件，请确认文件类型后重新添加。"
+    ),
+    "mapping_document_authority_unavailable": (
+        "研究文件自动核对服务暂不可用，请稍后重试。"
+    ),
+    "mapping_document_authority_incomplete": (
+        "两次独立核对尚未形成一致结论，系统会继续核实；当前无需您逐项确认。"
+    ),
+    "mapping_document_batch_required": (
+        "请一次选择需要使用的研究文件，系统会自动识别文件类型并交叉核对。"
     ),
     "mapping_document_selection_pending": (
         "文件已保存，但系统暂未完成关联。请稍后重新添加该文件。"
@@ -207,6 +219,12 @@ class MappingDraftConfirmRequest(BaseModel):
     automatic: bool = False
 
 
+class DocumentAuthorityPromotionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    batch_id: str = Field(pattern=r"^mmbatch_[a-f0-9]{24}$")
+
+
 @dataclass(frozen=True)
 class MappingCandidateRouteContext:
     root: Any
@@ -218,6 +236,8 @@ class MappingCandidateRouteContext:
     admission_mapping_pipeline: Any
     admission_mapping_confirmation: Any = None
     monitoring_document_registrar: Any = None
+    monitoring_document_authority_starter: Any = None
+    monitoring_document_authority_promoter: Any = None
 
 
 def _mapping_error(code: str) -> JSONResponse:
@@ -455,6 +475,9 @@ def register_mapping_candidate_routes(
         )
         if isinstance(auth, JSONResponse):
             return auth
+        if context.monitoring_document_authority_starter is not None:
+            await file.close()
+            return _mapping_error("mapping_document_batch_required")
         if context.monitoring_document_registrar is None:
             return _mapping_error("mapping_document_registration_unavailable")
         validated_attempt = _validated_attempt_id(attempt_id)
@@ -544,6 +567,127 @@ def register_mapping_candidate_routes(
             return _mapping_error(exc.code)
         except Exception:
             return _mapping_error("mapping_document_evidence_incomplete")
+
+    @router.post(
+        "/data-admissions/{attempt_id}/study-documents/analyze",
+        status_code=202,
+    )
+    async def analyze_mapping_documents(
+        project_id: str,
+        attempt_id: str,
+        request: Request,
+        files: list[UploadFile] = File(...),
+    ) -> Any:
+        canonical = context.resolve_project(project_id)
+        if isinstance(canonical, JSONResponse):
+            return canonical
+        auth = context.authorize(
+            request,
+            project_id=canonical,
+            action=context.monitoring_action.INTAKE_BATCH,
+        )
+        if isinstance(auth, JSONResponse):
+            return auth
+        if _validated_attempt_id(attempt_id) is None:
+            return _mapping_error("mapping_attempt_id_invalid")
+        if context.monitoring_document_authority_starter is None:
+            return _mapping_error("mapping_document_authority_unavailable")
+        try:
+            write_permit = context.acquire_product_write_gate(canonical)
+        except pb.ProjectBackupError as exc:
+            return _run_entry_error_response(exc)
+        try:
+            captured = []
+            for upload in files:
+                content = await upload.read(50 * 1024 * 1024 + 1)
+                if not content or len(content) > 50 * 1024 * 1024:
+                    return _mapping_error("mapping_document_registration_invalid")
+                captured.append((upload.filename or "", content))
+            result = context.monitoring_document_authority_starter(
+                project_id=canonical,
+                workspace_dir=context.workspace_dir(context.root, canonical),
+                files=captured,
+            )
+            return {
+                "project_id": canonical,
+                "state": str(result["state"]),
+                "analysis_token": str(result["batch_id"]),
+                "headline": "系统正在独立识别并交叉核对研究文件",
+                "guidance": "当前无需逐项确认，完成后会自动更新研究文件状态。",
+            }
+        except Exception:
+            return _mapping_error("mapping_document_registration_invalid")
+        finally:
+            for upload in files:
+                await upload.close()
+            write_permit.release()
+
+    @router.post(
+        "/data-admissions/{attempt_id}/study-documents/resolve",
+        status_code=200,
+    )
+    def resolve_mapping_documents(
+        project_id: str,
+        attempt_id: str,
+        payload: DocumentAuthorityPromotionRequest,
+        request: Request,
+    ) -> Any:
+        canonical = context.resolve_project(project_id)
+        if isinstance(canonical, JSONResponse):
+            return canonical
+        auth = context.authorize(
+            request,
+            project_id=canonical,
+            action=context.monitoring_action.INTAKE_BATCH,
+        )
+        if isinstance(auth, JSONResponse):
+            return auth
+        validated_attempt = _validated_attempt_id(attempt_id)
+        if validated_attempt is None:
+            return _mapping_error("mapping_attempt_id_invalid")
+        pipeline = _pipeline_or_error()
+        if isinstance(pipeline, JSONResponse):
+            return pipeline
+        if context.monitoring_document_authority_promoter is None:
+            return _mapping_error("mapping_document_authority_unavailable")
+        try:
+            write_permit = context.acquire_product_write_gate(canonical)
+        except pb.ProjectBackupError as exc:
+            return _run_entry_error_response(exc)
+        try:
+            result = context.monitoring_document_authority_promoter(
+                project_id=canonical,
+                workspace_dir=context.workspace_dir(context.root, canonical),
+                **payload.model_dump(),
+            )
+            if result.get("state") == "failed":
+                return _mapping_error("mapping_document_authority_incomplete")
+            if result.get("authority_status") != "promoted":
+                return {
+                    "project_id": canonical,
+                    "state": str(result.get("state") or "analyzing"),
+                    "analysis_token": payload.batch_id,
+                    "headline": "系统仍在独立核对研究文件",
+                    "guidance": "当前无需逐项确认，请稍后查看结果。",
+                }
+            for registration in result.get("registrations", ()):
+                pipeline.select_document(
+                    project_id=canonical,
+                    attempt_id=validated_attempt,
+                    workspace_dir=context.workspace_dir(context.root, canonical),
+                    role=str(registration["role"]),
+                    source_entry_id=str(registration["source_entry_id"]),
+                )
+            readiness = pipeline.document_readiness(
+                project_id=canonical,
+                attempt_id=validated_attempt,
+                workspace_dir=context.workspace_dir(context.root, canonical),
+            )
+            return {"project_id": canonical, **dict(readiness)}
+        except Exception:
+            return _mapping_error("mapping_document_authority_incomplete")
+        finally:
+            write_permit.release()
 
     @router.post("/data-admissions/{attempt_id}/mapping-candidates", status_code=201)
     async def generate_mapping_candidates(
@@ -913,6 +1057,7 @@ __all__ = [
     "MAPPING_CANDIDATE_SCHEMA_VERSION",
     "MAPPING_CONFIRMATION_SCHEMA_VERSION",
     "MappingCandidateRouteContext",
+    "DocumentAuthorityPromotionRequest",
     "MappingDraftAdjudicateRequest",
     "MappingDraftAdoptRequest",
     "MappingDraftConfirmRequest",

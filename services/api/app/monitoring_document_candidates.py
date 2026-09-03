@@ -120,11 +120,13 @@ class MonitoringDocumentCandidateDecomposer:
         batch_digest = hashlib.sha256(
             _stable_json([candidate.candidate_id for candidate in candidates])
         ).hexdigest()
-        return MonitoringDocumentCandidateBatch(
+        batch = MonitoringDocumentCandidateBatch(
             manifest_version=CANDIDATE_MANIFEST_VERSION,
             batch_id=f"mmbatch_{batch_digest[:24]}",
             candidates=candidates,
         )
+        self._persist_batch(batch)
+        return batch
 
     def decompose(self, filename: str, content: bytes) -> MonitoringDocumentCandidate:
         safe_name = Path(str(filename).replace("\\", "/")).name
@@ -350,6 +352,16 @@ class MonitoringDocumentCandidateDecomposer:
         if path.exists():
             if path.read_bytes() != payload:
                 raise RuntimeError("immutable candidate manifest mismatch")
+            return
+        path.write_bytes(payload)
+
+    def _persist_batch(self, batch: MonitoringDocumentCandidateBatch) -> None:
+        path = self.candidate_root / "batches" / f"{batch.batch_id}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = _stable_json(batch.to_dict()) + b"\n"
+        if path.exists():
+            if path.read_bytes() != payload:
+                raise RuntimeError("immutable candidate batch mismatch")
             return
         path.write_bytes(payload)
 

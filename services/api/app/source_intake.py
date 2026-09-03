@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
@@ -10,7 +11,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from dataclasses import replace
-from typing import Any, Callable, Dict, List, Sequence
+from typing import Any, Callable, Dict, List, Mapping, Sequence
 
 from packages.contracts.workbench_contracts import (
     AiTaskFromRegistryRequest,
@@ -68,6 +69,160 @@ def _monitoring_validation_role(source_kind: str) -> str:
         "ecrf_xlsx": "ecrf",
         "statistical_analysis_plan": "sap",
     }.get(source_kind, source_kind)
+
+
+def monitoring_authority_receipt_is_complete(
+    entry: SourceRegistryEntry,
+    entries: Sequence[SourceRegistryEntry],
+) -> bool:
+    """Fail closed when an automatically promoted authority set is incomplete."""
+
+    metadata = dict(entry.metadata or {})
+    if metadata.get("monitoring_authority_status") != "promoted":
+        return True
+    receipt = metadata.get("document_authority_receipt")
+    receipt_sha256 = str(
+        metadata.get("document_authority_receipt_sha256") or ""
+    )
+    if not isinstance(receipt, Mapping) or not receipt_sha256:
+        return False
+    try:
+        actual_sha256 = _sha256_text(
+            json.dumps(
+                receipt,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+        )
+    except (TypeError, ValueError):
+        return False
+    if actual_sha256 != receipt_sha256:
+        return False
+    if receipt.get("schema_version") != (
+        "monitoring-document-authority-promotion-v1"
+    ):
+        return False
+    required_keys = {
+        "schema_version",
+        "batch_id",
+        "input_sha256",
+        "analysis_job_ids",
+        "review_job_ids",
+        "analysis_run_ids",
+        "review_run_ids",
+        "document_identities",
+        "registrations",
+    }
+    if set(receipt) != required_keys:
+        return False
+    batch_id = str(receipt.get("batch_id") or "")
+    input_sha256 = str(receipt.get("input_sha256") or "")
+    analysis_job_ids = receipt.get("analysis_job_ids")
+    analysis_run_ids = receipt.get("analysis_run_ids")
+    review_job_ids = receipt.get("review_job_ids")
+    review_run_ids = receipt.get("review_run_ids")
+    document_identities = receipt.get("document_identities")
+    if (
+        not re.fullmatch(r"mmbatch_[a-f0-9]{24}", batch_id)
+        or not re.fullmatch(r"[a-f0-9]{64}", input_sha256)
+        or not _two_unique_strings(analysis_job_ids)
+        or not _two_unique_strings(analysis_run_ids)
+        or not _zero_or_two_unique_strings(review_job_ids)
+        or not _zero_or_two_unique_strings(review_run_ids)
+        or len(review_job_ids) != len(review_run_ids)
+        or not isinstance(document_identities, list)
+    ):
+        return False
+    registrations = receipt.get("registrations")
+    if not isinstance(registrations, list) or not registrations:
+        return False
+    entry_by_id = {
+        item.entry_id: item
+        for item in entries
+        if item.project_id == entry.project_id
+        and item.module == "medical_monitoring"
+    }
+    seen_entry_ids: set[str] = set()
+    seen_roles: set[str] = set()
+    registered_candidate_roles: set[tuple[str, str]] = set()
+    own_registration_found = False
+    for registration in registrations:
+        if not isinstance(registration, Mapping):
+            return False
+        source_entry_id = str(registration.get("source_entry_id") or "")
+        role = str(registration.get("role") or "")
+        candidate_id = str(registration.get("candidate_id") or "")
+        content_sha256 = str(registration.get("content_sha256") or "")
+        peer = entry_by_id.get(source_entry_id)
+        if (
+            not candidate_id
+            or role not in MONITORING_MAPPING_DOCUMENT_ROLES
+            or source_entry_id in seen_entry_ids
+            or role in seen_roles
+            or peer is None
+            or peer.content_hash != content_sha256
+            or _monitoring_validation_role(peer.source_kind) != role
+        ):
+            return False
+        peer_metadata = dict(peer.metadata or {})
+        if (
+            peer_metadata.get("monitoring_authority_status") != "promoted"
+            or peer_metadata.get("document_authority_receipt_sha256")
+            != receipt_sha256
+            or peer_metadata.get("document_authority_receipt") != receipt
+        ):
+            return False
+        seen_entry_ids.add(source_entry_id)
+        seen_roles.add(role)
+        registered_candidate_roles.add((candidate_id, role))
+        own_registration_found = own_registration_found or (
+            source_entry_id == entry.entry_id
+        )
+    identity_candidate_roles: set[tuple[str, str]] = set()
+    for identity in document_identities:
+        if not isinstance(identity, Mapping):
+            return False
+        if set(identity) != {
+            "role",
+            "candidate_id",
+            "document_version",
+            "document_date",
+        }:
+            return False
+        candidate_role = (
+            str(identity.get("candidate_id") or ""),
+            str(identity.get("role") or ""),
+        )
+        if (
+            not candidate_role[0]
+            or candidate_role in identity_candidate_roles
+            or not isinstance(identity.get("document_version"), str)
+            or not isinstance(identity.get("document_date"), str)
+        ):
+            return False
+        identity_candidate_roles.add(candidate_role)
+    return bool(
+        own_registration_found
+        and identity_candidate_roles == registered_candidate_roles
+    )
+
+
+def _two_unique_strings(value: Any) -> bool:
+    return bool(
+        isinstance(value, list)
+        and len(value) == 2
+        and len(set(value)) == 2
+        and all(isinstance(item, str) and item.strip() for item in value)
+    )
+
+
+def _zero_or_two_unique_strings(value: Any) -> bool:
+    return bool(
+        isinstance(value, list)
+        and (not value or _two_unique_strings(value))
+    )
 
 
 def protocol_document_to_ai_sources(
@@ -225,41 +380,101 @@ class SourceRegistryStore:
             self._pending = None
             self._commit(pending)
 
+    def annotate_pending_entry(
+        self,
+        entry_id: str,
+        metadata: Mapping[str, Any],
+    ) -> None:
+        """Attach server-owned provenance before a staged batch is published."""
+
+        with self._lock:
+            if self._pending is None:
+                raise RuntimeError("source registry annotation requires a transaction")
+            matches = [
+                index
+                for index, result in enumerate(self._pending)
+                if result.entry.entry_id == entry_id
+            ]
+            if len(matches) != 1:
+                raise RuntimeError("staged source registry entry is not unique")
+            index = matches[0]
+            result = self._pending[index]
+            entry = result.entry.model_copy(
+                update={"metadata": {**result.entry.metadata, **dict(metadata)}}
+            )
+            self._pending[index] = result.model_copy(update={"entry": entry})
+
     def _commit(self, incoming: Sequence[SourceRegistrationResult]) -> None:
-        existing = self._read_all()
-        identities = {
-            (item.entry.entry_id, _registration_identity(item)) for item in existing
-        }
-        additions = []
-        for result in incoming:
-            identity = (result.entry.entry_id, _registration_identity(result))
-            if identity in identities:
-                continue
-            identities.add(identity)
-            additions.append(result)
-        if not additions:
-            return
         self.jsonl_path.parent.mkdir(parents=True, exist_ok=True)
-        rows = [*existing, *additions]
-        with tempfile.NamedTemporaryFile(
-            "w",
-            encoding="utf-8",
-            dir=self.jsonl_path.parent,
-            prefix=f".{self.jsonl_path.name}.",
-            delete=False,
-        ) as handle:
-            temporary_path = Path(handle.name)
-            for result in rows:
-                handle.write(
-                    json.dumps(result.model_dump(mode="json"), ensure_ascii=False)
-                    + "\n"
-                )
-            handle.flush()
-            os.fsync(handle.fileno())
-        try:
-            os.replace(temporary_path, self.jsonl_path)
-        finally:
-            temporary_path.unlink(missing_ok=True)
+        lock_path = self.jsonl_path.with_name(f".{self.jsonl_path.name}.lock")
+        with lock_path.open("a+") as lock_handle:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            try:
+                existing = self._read_all()
+                identities = {
+                    (item.entry.entry_id, _registration_identity(item))
+                    for item in existing
+                }
+                additions = []
+                replacements: dict[int, SourceRegistrationResult] = {}
+                identity_index = {
+                    (item.entry.entry_id, _registration_identity(item)): index
+                    for index, item in enumerate(existing)
+                }
+                for result in incoming:
+                    identity = (result.entry.entry_id, _registration_identity(result))
+                    if identity in identities:
+                        incoming_metadata = dict(result.entry.metadata or {})
+                        if incoming_metadata.get("monitoring_authority_status") == (
+                            "promoted"
+                        ):
+                            index = identity_index[identity]
+                            current = existing[index]
+                            if current.entry.metadata != incoming_metadata:
+                                replacements[index] = current.model_copy(
+                                    update={
+                                        "entry": current.entry.model_copy(
+                                            update={"metadata": incoming_metadata}
+                                        )
+                                    }
+                                )
+                        continue
+                    identities.add(identity)
+                    additions.append(result)
+                if not additions and not replacements:
+                    return
+                rows = [
+                    replacements.get(index, result)
+                    for index, result in enumerate(existing)
+                ] + additions
+                with tempfile.NamedTemporaryFile(
+                    "w",
+                    encoding="utf-8",
+                    dir=self.jsonl_path.parent,
+                    prefix=f".{self.jsonl_path.name}.",
+                    delete=False,
+                ) as handle:
+                    temporary_path = Path(handle.name)
+                    for result in rows:
+                        handle.write(
+                            json.dumps(
+                                result.model_dump(mode="json"), ensure_ascii=False
+                            )
+                            + "\n"
+                        )
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                try:
+                    os.replace(temporary_path, self.jsonl_path)
+                    directory_fd = os.open(self.jsonl_path.parent, os.O_RDONLY)
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
+                finally:
+                    temporary_path.unlink(missing_ok=True)
+            finally:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
 
     def list_results(self, project_id: str) -> List[SourceRegistrationResult]:
         return [result for result in self._read_all() if result.entry.project_id == project_id]
@@ -322,6 +537,7 @@ class SourceRegistryService:
         artifact_root: Path | None = None,
         content_validation_service: SourceContentValidationService | None = None,
         expected_context_resolver: Callable[[str, str, str], SourceExpectedContext] | None = None,
+        monitoring_authority_receipt_verifier: Callable[[str, Mapping[str, Any]], bool] | None = None,
     ):
         self.store = store
         self.allowed_roots = [root.expanduser().resolve() for root in (allowed_roots or [])]
@@ -330,6 +546,28 @@ class SourceRegistryService:
             self.artifact_root.mkdir(parents=True, exist_ok=True)
         self.content_validation_service = content_validation_service
         self.expected_context_resolver = expected_context_resolver
+        self.monitoring_authority_receipt_verifier = (
+            monitoring_authority_receipt_verifier
+        )
+
+    def monitoring_authority_entry_is_verified(
+        self,
+        entry: SourceRegistryEntry,
+    ) -> bool:
+        entries = self.list_entries(entry.project_id)
+        if not monitoring_authority_receipt_is_complete(entry, entries):
+            return False
+        metadata = dict(entry.metadata or {})
+        if metadata.get("monitoring_authority_status") != "promoted":
+            return True
+        verifier = self.monitoring_authority_receipt_verifier
+        return bool(
+            verifier is not None
+            and verifier(
+                entry.project_id,
+                metadata["document_authority_receipt"],
+            )
+        )
 
     def register_protocol_docx(
         self,
@@ -1220,6 +1458,26 @@ class SourceRegistryService:
                 )
 
     def _monitoring_entry_is_usable(
+        self,
+        entry: SourceRegistryEntry,
+    ) -> bool:
+        entries = self.list_entries(entry.project_id)
+        if not self.monitoring_authority_entry_is_verified(entry):
+            return False
+        metadata = dict(entry.metadata or {})
+        if metadata.get("monitoring_authority_status") == "promoted":
+            peer_by_id = {item.entry_id: item for item in entries}
+            receipt = metadata["document_authority_receipt"]
+            if any(
+                not self._monitoring_entry_validation_is_usable(
+                    peer_by_id[str(item["source_entry_id"])]
+                )
+                for item in receipt["registrations"]
+            ):
+                return False
+        return self._monitoring_entry_validation_is_usable(entry)
+
+    def _monitoring_entry_validation_is_usable(
         self,
         entry: SourceRegistryEntry,
     ) -> bool:

@@ -16,6 +16,8 @@ from packages.medical_monitoring.admission.document_evidence import (
 )
 from packages.medical_monitoring.intelligence.primitives import content_hash
 
+from .source_intake import monitoring_authority_receipt_is_complete
+
 
 _SOURCE_KINDS_BY_ROLE = {
     "protocol": frozenset({"protocol_docx"}),
@@ -50,13 +52,25 @@ class MonitoringDocumentEvidenceResolver:
         listing_admission_date: str | None = None,
         selected_entry_ids: Mapping[str, str] | None = None,
     ) -> MonitoringDocumentEvidencePacket:
+        project_entries = self.source_registry.list_entries(project_id)
         entries = [
             entry
-            for entry in self.source_registry.list_entries(project_id)
+            for entry in project_entries
             if entry.module == "medical_monitoring"
             and any(
                 entry.source_kind in source_kinds
                 for source_kinds in _SOURCE_KINDS_BY_ROLE.values()
+            )
+            and (
+                self.source_registry.monitoring_authority_entry_is_verified(entry)
+                if hasattr(
+                    self.source_registry,
+                    "monitoring_authority_entry_is_verified",
+                )
+                else monitoring_authority_receipt_is_complete(
+                    entry,
+                    project_entries,
+                )
             )
         ]
         spans = self.source_registry.list_spans(project_id)

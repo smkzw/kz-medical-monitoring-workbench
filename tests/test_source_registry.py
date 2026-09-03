@@ -5,6 +5,7 @@ import json
 import sys
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -177,6 +178,27 @@ class SourceRegistryTests(unittest.TestCase):
                     )
 
             self.assertEqual([], service.list_entries("proj_transaction"))
+
+    def test_registry_separate_instances_do_not_lose_concurrent_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sources.jsonl"
+
+            def register(index: int) -> None:
+                SourceRegistryService(SourceRegistryStore(path)).register_listing_file(
+                    f"proj_concurrent_{index}",
+                    "forms.xlsx",
+                    _minimal_xlsx_bytes(),
+                    module="medical_monitoring",
+                )
+
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                list(executor.map(register, range(24)))
+
+            store = SourceRegistryStore(path)
+            self.assertTrue(all(
+                len(store.list_entries(f"proj_concurrent_{index}")) == 1
+                for index in range(24)
+            ))
 
     def test_raw_subject_bundle_registry_is_metadata_only_and_sanitized(self):
         with tempfile.TemporaryDirectory() as tmp:

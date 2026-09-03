@@ -201,6 +201,12 @@ export const MEDICAL_MONITORING_PRODUCT_PATHS = Object.freeze({
   dataAdmissionStudyDocuments: (projectId, attemptId) => (
     `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/study-documents`
   ),
+  dataAdmissionStudyDocumentsAnalyze: (projectId, attemptId) => (
+    `${MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStudyDocuments(projectId, attemptId)}/analyze`
+  ),
+  dataAdmissionStudyDocumentsResolve: (projectId, attemptId) => (
+    `${MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStudyDocuments(projectId, attemptId)}/resolve`
+  ),
   dataAdmissionMappingCandidates: (projectId, attemptId, options = {}) => appendQuery(
     `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/mapping-candidates`,
     { focus: options?.focus },
@@ -442,6 +448,34 @@ export function createMedicalMonitoringProductApi({
         ),
         { role: cleanRole },
       ), form, { signal });
+    },
+
+    analyzeStudyDocuments(projectId, attemptId, files, { signal } = {}) {
+      const selected = Array.from(files || []);
+      if (!selected.length || selected.some((file) => !file?.name)) {
+        throw new TypeError("study document files are required");
+      }
+      const form = new FormData();
+      for (const file of selected) form.append("files", file, file.name);
+      return postForm(
+        MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStudyDocumentsAnalyze(
+          requireId(projectId, "projectId"),
+          requireId(attemptId, "attemptId"),
+        ),
+        form,
+        { signal },
+      );
+    },
+
+    resolveStudyDocuments(projectId, attemptId, analysisToken, { signal } = {}) {
+      return post(
+        MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStudyDocumentsResolve(
+          requireId(projectId, "projectId"),
+          requireId(attemptId, "attemptId"),
+        ),
+        { batch_id: requireId(analysisToken, "analysisToken") },
+        { signal },
+      );
     },
 
     startDataAdmissionMappingCandidates(projectId, attemptId, { signal } = {}) {

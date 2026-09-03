@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping
 
@@ -16,6 +17,7 @@ from packages.medical_monitoring.admission.document_authority import (
     DocumentAuthorityRunEnvelope,
     build_anonymous_conflict_packet,
     document_authority_batch_sha256,
+    reconcile_document_authority,
     resolve_document_authority_conflicts,
     validate_document_authority_analysis,
     validate_document_authority_conflict_review,
@@ -256,9 +258,9 @@ def resolve_document_authority_from_jobs(
     candidate_batch: Mapping[str, Any],
     primary_analysis_job_id: str,
     verifier_analysis_job_id: str,
-    conflict_packet: Mapping[str, Any],
-    primary_review_job_id: str,
-    verifier_review_job_id: str,
+    conflict_packet: Mapping[str, Any] | None = None,
+    primary_review_job_id: str = "",
+    verifier_review_job_id: str = "",
 ) -> dict[str, Any]:
     primary_analysis = load_document_authority_analysis_run(
         repository,
@@ -274,10 +276,30 @@ def resolve_document_authority_from_jobs(
         candidate_batch=candidate_batch,
         role="verifier",
     )
+    reconciliation = reconcile_document_authority(
+        candidate_batch, primary_analysis, verifier_analysis
+    )
+    if reconciliation["state"] == "resolved":
+        return {
+            "schema_version": reconciliation["schema_version"],
+            "batch_id": reconciliation["batch_id"],
+            "input_sha256": reconciliation["input_sha256"],
+            "state": "resolved",
+            "resolved_roles": reconciliation["resolved_roles"],
+            "unresolved_roles": [],
+            "user_question": "",
+            "analysis_run_ids": reconciliation["run_ids"],
+            "review_run_ids": [],
+            "document_identities": _analysis_document_identities(
+                primary_analysis, reconciliation["resolved_roles"]
+            ),
+        }
+    if not primary_review_job_id or not verifier_review_job_id:
+        raise DocumentAuthorityError("document_authority_review_jobs_required")
     expected_packet = build_anonymous_conflict_packet(
         candidate_batch, primary_analysis, verifier_analysis
     )
-    if conflict_packet != expected_packet:
+    if conflict_packet is not None and conflict_packet != expected_packet:
         raise DocumentAuthorityError("document_authority_conflict_packet_tampered")
     primary_review = load_document_authority_review_run(
         repository,
@@ -295,7 +317,7 @@ def resolve_document_authority_from_jobs(
         conflict_packet=expected_packet,
         role="verifier",
     )
-    return resolve_document_authority_conflicts(
+    resolved = resolve_document_authority_conflicts(
         candidate_batch,
         primary_analysis,
         verifier_analysis,
@@ -303,6 +325,30 @@ def resolve_document_authority_from_jobs(
         primary_review,
         verifier_review,
     )
+    document_identities = _analysis_document_identities(
+        primary_analysis, resolved["resolved_roles"]
+    )
+    review_by_role = {
+        decision.role: decision for decision in primary_review.review.decisions
+    }
+    document_identities = [
+        (
+            {
+                **identity,
+                "document_version": review_by_role[identity["role"]].document_version,
+                "document_date": review_by_role[identity["role"]].document_date,
+            }
+            if identity["role"] in review_by_role
+            else identity
+        )
+        for identity in document_identities
+    ]
+    return {
+        **resolved,
+        "input_sha256": reconciliation["input_sha256"],
+        "analysis_run_ids": reconciliation["run_ids"],
+        "document_identities": document_identities,
+    }
 
 
 def promote_document_authority_from_jobs(
@@ -314,10 +360,17 @@ def promote_document_authority_from_jobs(
     source_registry: "SourceRegistryService",
     primary_analysis_job_id: str,
     verifier_analysis_job_id: str,
-    conflict_packet: Mapping[str, Any],
-    primary_review_job_id: str,
-    verifier_review_job_id: str,
+    conflict_packet: Mapping[str, Any] | None = None,
+    primary_review_job_id: str = "",
+    verifier_review_job_id: str = "",
 ) -> dict[str, Any]:
+    candidate_root = Path(candidate_root)
+    frozen_batch = _load_json(
+        candidate_root / "batches" / f"{candidate_batch['batch_id']}.json",
+        "document_authority_batch_manifest_missing",
+    )
+    if frozen_batch != _json_value(candidate_batch):
+        raise DocumentAuthorityError("document_authority_batch_manifest_mismatch")
     resolution = resolve_document_authority_from_jobs(
         repository,
         project_id=project_id,
@@ -345,10 +398,18 @@ def promote_document_authority_from_jobs(
     for item in selected:
         role = str(item["role"])
         candidate = candidates[str(item["candidate_id"])]
+        manifest = _load_json(
+            candidate_root / "manifests" / f"{candidate['candidate_id']}.json",
+            "document_authority_candidate_manifest_missing",
+        )
+        if manifest != _json_value(candidate):
+            raise DocumentAuthorityError("document_authority_candidate_manifest_mismatch")
         if (
             candidate.get("technical_status") != "ready"
             or candidate.get("extraction_status") != "parsed"
             or role not in candidate.get("role_hypotheses", ())
+            or candidate.get("file_id")
+            != f"mmfile_{candidate.get('content_sha256', '')}"
         ):
             raise DocumentAuthorityError("document_authority_candidate_not_promotable")
         suffix = Path(str(candidate["filename"])).suffix.lower()
@@ -359,6 +420,8 @@ def promote_document_authority_from_jobs(
             raise DocumentAuthorityError("document_authority_isolated_file_missing") from exc
         if hashlib.sha256(content).hexdigest() != candidate["content_sha256"]:
             raise DocumentAuthorityError("document_authority_isolated_file_hash_mismatch")
+        if len(content) != candidate.get("size_bytes"):
+            raise DocumentAuthorityError("document_authority_isolated_file_size_mismatch")
         prepared.append((role, candidate, content))
 
     registrations = []
@@ -390,11 +453,172 @@ def promote_document_authority_from_jobs(
                 "source_entry_id": registration.entry.entry_id,
                 "content_sha256": registration.entry.content_hash,
             })
+        receipt = {
+            "schema_version": "monitoring-document-authority-promotion-v1",
+            "batch_id": resolution["batch_id"],
+            "input_sha256": resolution["input_sha256"],
+            "analysis_job_ids": sorted(
+                (primary_analysis_job_id, verifier_analysis_job_id)
+            ),
+            "review_job_ids": sorted(
+                job_id
+                for job_id in (primary_review_job_id, verifier_review_job_id)
+                if job_id
+            ),
+            "analysis_run_ids": resolution["analysis_run_ids"],
+            "review_run_ids": resolution["review_run_ids"],
+            "document_identities": resolution["document_identities"],
+            "registrations": registrations,
+        }
+        receipt_sha256 = content_sha256(receipt)
+        for registration in registrations:
+            source_registry.store.annotate_pending_entry(
+                registration["source_entry_id"],
+                {
+                    "monitoring_authority_status": "promoted",
+                    "document_authority_receipt_sha256": receipt_sha256,
+                    "document_authority_receipt": receipt,
+                },
+            )
     return {
         **resolution,
         "authority_status": "promoted",
+        "promotion_receipt_sha256": receipt_sha256,
         "registrations": registrations,
     }
+
+
+def verify_document_authority_promotion_receipt(
+    repository: MonitoringAiRepository,
+    *,
+    project_id: str,
+    receipt: Mapping[str, Any],
+) -> bool:
+    """Rebuild a promotion decision from immutable job evidence."""
+
+    try:
+        analysis_jobs = [
+            repository.get(project_id, str(job_id))
+            for job_id in receipt["analysis_job_ids"]
+        ]
+        analysis_by_role = {
+            (
+                "primary"
+                if job.provider == MONITORING_C3_MAPPING_PROVIDER
+                and job.requested_model == MONITORING_C3_MAPPING_MODEL
+                else "verifier"
+                if job.provider == MONITORING_C3_VERIFIER_PROVIDER
+                and job.requested_model == MONITORING_C3_VERIFIER_MODEL
+                else ""
+            ): job
+            for job in analysis_jobs
+        }
+        if set(analysis_by_role) != {"primary", "verifier"}:
+            return False
+        primary_payload = repository.input_payload(
+            project_id,
+            analysis_by_role["primary"].job_id,
+        )
+        candidate_batch = primary_payload["document_authority_batch"]
+        if not isinstance(candidate_batch, Mapping):
+            return False
+        review_jobs = [
+            repository.get(project_id, str(job_id))
+            for job_id in receipt["review_job_ids"]
+        ]
+        review_by_role = {
+            (
+                "primary"
+                if job.provider == MONITORING_C3_MAPPING_PROVIDER
+                and job.requested_model == MONITORING_C3_MAPPING_MODEL
+                else "verifier"
+                if job.provider == MONITORING_C3_VERIFIER_PROVIDER
+                and job.requested_model == MONITORING_C3_VERIFIER_MODEL
+                else ""
+            ): job
+            for job in review_jobs
+        }
+        if review_jobs and set(review_by_role) != {"primary", "verifier"}:
+            return False
+        resolution = resolve_document_authority_from_jobs(
+            repository,
+            project_id=project_id,
+            candidate_batch=candidate_batch,
+            primary_analysis_job_id=analysis_by_role["primary"].job_id,
+            verifier_analysis_job_id=analysis_by_role["verifier"].job_id,
+            primary_review_job_id=(
+                review_by_role["primary"].job_id if review_by_role else ""
+            ),
+            verifier_review_job_id=(
+                review_by_role["verifier"].job_id if review_by_role else ""
+            ),
+        )
+        selected = {
+            (str(item["candidate_id"]), str(item["role"]))
+            for item in resolution["resolved_roles"]
+            if item["status"] == "selected"
+        }
+        candidates = {
+            str(item["candidate_id"]): item
+            for item in candidate_batch["candidates"]
+        }
+        registrations = list(receipt["registrations"])
+        return bool(
+            resolution["state"] == "resolved"
+            and receipt["batch_id"] == resolution["batch_id"]
+            and receipt["input_sha256"] == resolution["input_sha256"]
+            and sorted(receipt["analysis_job_ids"])
+            == sorted(job.job_id for job in analysis_jobs)
+            and sorted(receipt["review_job_ids"])
+            == sorted(job.job_id for job in review_jobs)
+            and sorted(receipt["analysis_run_ids"])
+            == sorted(resolution["analysis_run_ids"])
+            and sorted(receipt["review_run_ids"])
+            == sorted(resolution["review_run_ids"])
+            and receipt["document_identities"] == resolution["document_identities"]
+            and {
+                (str(item["candidate_id"]), str(item["role"]))
+                for item in registrations
+            }
+            == selected
+            and all(
+                candidates[str(item["candidate_id"])]["content_sha256"]
+                == item["content_sha256"]
+                for item in registrations
+            )
+        )
+    except (KeyError, RuntimeError, TypeError, ValueError):
+        return False
+
+
+def _load_json(path: Path, error_code: str) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise DocumentAuthorityError(error_code) from exc
+
+
+def _json_value(value: Any) -> Any:
+    return json.loads(json.dumps(value, ensure_ascii=False))
+
+
+def _analysis_document_identities(
+    run: DocumentAuthorityRunEnvelope,
+    resolved_roles: Any,
+) -> list[dict[str, str]]:
+    assessments = {
+        item.candidate_id: item for item in run.analysis.candidate_assessments
+    }
+    return [
+        {
+            "role": str(item["role"]),
+            "candidate_id": str(item["candidate_id"]),
+            "document_version": assessments[str(item["candidate_id"])].document_version,
+            "document_date": assessments[str(item["candidate_id"])].document_date,
+        }
+        for item in resolved_roles
+        if item["status"] == "selected"
+    ]
 
 
 def _output_contains_analysis(
