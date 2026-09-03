@@ -10,12 +10,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-MONITORING_C3_MAPPING_GATE_SCHEMA_VERSION = "mm-c3-mapping-gate-v3"
-MONITORING_C3_MAPPING_PROVIDER = "zhipu-coding-plan"
-MONITORING_C3_MAPPING_MODEL = "glm-5.3-flash"
-MONITORING_C3_MAPPING_PROFILE_ID = "independent_ai__zhipu_coding_plan_glm_flash"
+MONITORING_C3_MAPPING_GATE_SCHEMA_VERSION = "mm-c3-dual-mapping-gate-v1"
+# The primary route is the direct CMS endpoint.  ``cms-router`` remains a
+# supported transport identity for installations that expose the same route
+# through the local CMS router, but it is not an OMP invocation.
+MONITORING_C3_MAPPING_PROVIDER = "cms-smk"
+MONITORING_C3_MAPPING_MODEL = "MiniMax-M3"
+MONITORING_C3_MAPPING_PROFILE_ID = "medical_monitoring_ai__cms_smk_minimax_m3"
 MONITORING_C3_ALTERNATE_PROVIDER = "cms-router"
 MONITORING_C3_ALTERNATE_MODEL = "minimax-m3"
+MONITORING_C3_VERIFIER_PROVIDER = "zhipu-coding-plan"
+MONITORING_C3_VERIFIER_MODEL = "glm-5.3-flash"
+MONITORING_C3_VERIFIER_PROFILE_ID = "independent_ai__zhipu_coding_plan_glm_flash"
 MONITORING_C3_LOCAL_FALLBACK_PROVIDER = "mtplx"
 MONITORING_C3_LOCAL_FALLBACK_MODEL = "mtplx-flash-next-optimized-speed"
 MONITORING_C3_REMOTE_UNAVAILABLE_ENV = (
@@ -24,6 +30,7 @@ MONITORING_C3_REMOTE_UNAVAILABLE_ENV = (
 MONITORING_C3_SUPPORTED_RUNTIMES = frozenset({
     (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
     (MONITORING_C3_ALTERNATE_PROVIDER, MONITORING_C3_ALTERNATE_MODEL),
+    (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
     (
         MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
         MONITORING_C3_LOCAL_FALLBACK_MODEL,
@@ -44,6 +51,8 @@ def normalize_monitoring_mapping_model(model: str) -> str:
     cleaned = str(model or "").strip()
     if cleaned.casefold() == MONITORING_C3_MAPPING_MODEL.casefold():
         return MONITORING_C3_MAPPING_MODEL
+    if cleaned.casefold() == MONITORING_C3_VERIFIER_MODEL.casefold():
+        return MONITORING_C3_VERIFIER_MODEL
     return cleaned
 
 
@@ -69,10 +78,7 @@ def monitoring_mapping_runtime_matches(
     required_model = normalize_monitoring_mapping_model(required_model)
     requested = (required_provider, required_model.casefold())
     actual = (provider, model.casefold())
-    if requested == (
-        MONITORING_C3_MAPPING_PROVIDER,
-        MONITORING_C3_MAPPING_MODEL.casefold(),
-    ):
+    if requested == (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL.casefold()):
         if actual == (
             MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
             MONITORING_C3_LOCAL_FALLBACK_MODEL.casefold(),
@@ -86,11 +92,11 @@ def monitoring_mapping_runtime_matches(
                 in {"1", "true", "yes"}
             )
             return available and fallback_admitted
-        supported = {
-            (item_provider, item_model.casefold())
-            for item_provider, item_model in MONITORING_C3_SUPPORTED_RUNTIMES
+        primary_routes = {
+            (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL.casefold()),
+            (MONITORING_C3_ALTERNATE_PROVIDER, MONITORING_C3_ALTERNATE_MODEL.casefold()),
         }
-        return available and actual in supported
+        return available and actual in primary_routes
     return available and actual == requested
 
 
@@ -116,6 +122,18 @@ class MonitoringC3MappingGateContract:
             api_key_env=ZHIPU_CODING_PLAN_API_KEY_ENV,
         )
 
+    @classmethod
+    def verifier(cls) -> "MonitoringC3MappingGateContract":
+        return cls(
+            schema_version=MONITORING_C3_MAPPING_GATE_SCHEMA_VERSION,
+            provider=MONITORING_C3_VERIFIER_PROVIDER,
+            model=MONITORING_C3_VERIFIER_MODEL,
+            profile_id=MONITORING_C3_VERIFIER_PROFILE_ID,
+            preset_id=ZHIPU_CODING_PLAN_PRESET_ID,
+            base_url=ZHIPU_CODING_PLAN_BASE_URL,
+            api_key_env=ZHIPU_CODING_PLAN_API_KEY_ENV,
+        )
+
 
 __all__ = [
     "MONITORING_C3_MAPPING_GATE_SCHEMA_VERSION",
@@ -124,6 +142,9 @@ __all__ = [
     "MONITORING_C3_MAPPING_MODEL",
     "MONITORING_C3_MAPPING_PROFILE_ID",
     "MONITORING_C3_MAPPING_PROVIDER",
+    "MONITORING_C3_VERIFIER_MODEL",
+    "MONITORING_C3_VERIFIER_PROFILE_ID",
+    "MONITORING_C3_VERIFIER_PROVIDER",
     "MONITORING_C3_LOCAL_FALLBACK_MODEL",
     "MONITORING_C3_LOCAL_FALLBACK_PROVIDER",
     "MONITORING_C3_REMOTE_UNAVAILABLE_ENV",
