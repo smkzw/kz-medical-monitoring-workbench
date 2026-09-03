@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from types import SimpleNamespace
 from typing import Any
@@ -15,6 +16,7 @@ from packages.medical_monitoring.admission.document_authority import (
     DocumentAuthorityError,
     EvidenceReference,
     RoleSelection,
+    RoleSupplementaryBinding,
     build_anonymous_conflict_packet,
     document_authority_batch_sha256,
 )
@@ -37,6 +39,7 @@ from services.api.app.monitoring_ai_service import (
     MonitoringAiService,
 )
 from services.api.app.monitoring_document_authority_jobs import (
+    PROMOTION_RECEIPT_SCHEMA_VERSION,
     load_document_authority_analysis_run,
     promote_document_authority_from_jobs,
     resolve_document_authority_from_jobs,
@@ -49,7 +52,19 @@ from services.api.app.monitoring_document_authority_workflow import (
 from services.api.app.monitoring_document_candidates import (
     MonitoringDocumentCandidateDecomposer,
 )
-from services.api.app.source_intake import SourceRegistryService, SourceRegistryStore
+from services.api.app.monitoring_document_evidence import (
+    MonitoringDocumentEvidenceResolver,
+)
+from services.api.app.source_intake import (
+    SourceRegistryService,
+    SourceRegistryStore,
+    monitoring_authority_receipt_is_complete,
+)
+from services.api.app.source_content_validation import (
+    SourceContentValidationService,
+    SourceContentValidationStore,
+    SourceExpectedContext,
+)
 from tests.test_source_registry import _minimal_docx_bytes, _minimal_xlsx_bytes
 
 
@@ -118,9 +133,13 @@ def _analysis(
                 selected_candidate_id="candidate_protocol",
                 confidence=0.98,
                 evidence_locators=("doc:p1",),
+                supplementary_bindings=(),
             ),
             RoleSelection(
-                role="investigator_brochure", decision="missing", confidence=0.95
+                role="investigator_brochure",
+                decision="missing",
+                confidence=0.95,
+                supplementary_bindings=(),
             ),
             RoleSelection(
                 role="ecrf",
@@ -128,8 +147,14 @@ def _analysis(
                 selected_candidate_id=("candidate_ecrf" if select_ecrf else ""),
                 confidence=0.97 if select_ecrf else 0.5,
                 evidence_locators=("xlsx:sheet:1",) if select_ecrf else (),
+                supplementary_bindings=(),
             ),
-            RoleSelection(role="sap", decision="missing", confidence=0.95),
+            RoleSelection(
+                role="sap",
+                decision="missing",
+                confidence=0.95,
+                supplementary_bindings=(),
+            ),
         ),
     )
 
@@ -450,9 +475,13 @@ def test_product_workflow_starts_both_models_and_promotes_direct_agreement(
                         if candidate["filename"] == "protocol.docx"
                     )["excerpts"][:1]
                 ),
+                supplementary_bindings=(),
             ),
             RoleSelection(
-                role="investigator_brochure", decision="missing", confidence=0.99
+                role="investigator_brochure",
+                decision="missing",
+                confidence=0.99,
+                supplementary_bindings=(),
             ),
             RoleSelection(
                 role="ecrf",
@@ -467,8 +496,14 @@ def test_product_workflow_starts_both_models_and_promotes_direct_agreement(
                         if candidate["filename"] == "ecrf.xlsx"
                     )["sheets"][:1]
                 ),
+                supplementary_bindings=(),
             ),
-            RoleSelection(role="sap", decision="missing", confidence=0.99),
+            RoleSelection(
+                role="sap",
+                decision="missing",
+                confidence=0.99,
+                supplementary_bindings=(),
+            ),
         ),
     )
     repository = MonitoringAiRepository(tmp_path / "workflow.sqlite")
@@ -886,6 +921,7 @@ def test_repository_jobs_drive_blind_second_review_and_final_resolution(
                 document_version="V1.0",
                 confidence=0.97,
                 considered_candidate_ids=("candidate_protocol", "candidate_ecrf"),
+                supplementary_candidate_ids=(),
                 evidence_references=(
                     EvidenceReference(
                         candidate_id="candidate_protocol", locator="doc:p1"
@@ -1124,3 +1160,650 @@ def test_resolved_authority_promotes_selected_documents_atomically(
             verifier_analysis_job_id="analysis-verifier",
         )
     assert missing_candidate_registry.list_entries("project-document-authority") == []
+
+
+def _supplement_pdf_bytes(title: str, detail: str) -> bytes:
+    pymupdf = pytest.importorskip("pymupdf")
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), title)
+    page.insert_text((72, 96), detail)
+    payload = document.tobytes()
+    document.close()
+    return payload
+
+
+def _composite_protocol_docx_bytes() -> bytes:
+    import io
+
+    import docx
+
+    document = docx.Document()
+    document.add_paragraph("CMS-D001 研究方案 V2.0")
+    document.add_paragraph("入选标准")
+    document.add_paragraph("IN-01 受试者需签署知情同意。")
+    document.add_paragraph("排除标准")
+    document.add_paragraph("EX-01 活动性感染者不得入组。")
+    output = io.BytesIO()
+    document.save(output)
+    return output.getvalue()
+
+
+def _composite_files() -> list[tuple[str, bytes]]:
+    return [
+        ("protocol.docx", _composite_protocol_docx_bytes()),
+        (
+            "protocol_errata.pdf",
+            _supplement_pdf_bytes(
+                "CMS-D001 Protocol Errata V2.0",
+                "2026-09-03 inclusion criterion IN-01 correction",
+            ),
+        ),
+        (
+            "protocol_amendment.pdf",
+            _supplement_pdf_bytes(
+                "CMS-D001 Protocol Amendment V2.0",
+                "2026-09-03 exclusion criterion EX-01 clarification",
+            ),
+        ),
+        ("ecrf.xlsx", _minimal_xlsx_bytes()),
+    ]
+
+
+def _composite_analysis(batch: dict[str, Any]) -> DocumentAuthorityAnalysis:
+    candidate_ids = {
+        candidate["filename"]: candidate["candidate_id"]
+        for candidate in batch["candidates"]
+    }
+    excerpts = {
+        candidate["filename"]: [
+            item["locator"] for item in candidate.get("excerpts", ())
+        ]
+        + [item["locator"] for item in candidate.get("sheets", ())]
+        for candidate in batch["candidates"]
+    }
+    return DocumentAuthorityAnalysis(
+        schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+        batch_id=batch["batch_id"],
+        input_sha256=document_authority_batch_sha256(batch),
+        candidate_assessments=(
+            CandidateAssessment(
+                candidate_id=candidate_ids["protocol.docx"],
+                inferred_role="protocol",
+                usable=True,
+                confidence=0.98,
+                document_version="V2.0",
+                evidence_locators=tuple(excerpts["protocol.docx"][:1]),
+            ),
+            CandidateAssessment(
+                candidate_id=candidate_ids["protocol_errata.pdf"],
+                inferred_role="protocol",
+                usable=True,
+                confidence=0.96,
+                document_version="V2.0",
+                evidence_locators=tuple(excerpts["protocol_errata.pdf"][:1]),
+            ),
+            CandidateAssessment(
+                candidate_id=candidate_ids["protocol_amendment.pdf"],
+                inferred_role="protocol",
+                usable=True,
+                confidence=0.95,
+                document_version="V2.0",
+                evidence_locators=tuple(excerpts["protocol_amendment.pdf"][:1]),
+            ),
+            CandidateAssessment(
+                candidate_id=candidate_ids["ecrf.xlsx"],
+                inferred_role="ecrf",
+                usable=True,
+                confidence=0.97,
+                evidence_locators=tuple(excerpts["ecrf.xlsx"][:1]),
+            ),
+        ),
+        role_selections=(
+            RoleSelection(
+                role="protocol",
+                decision="selected",
+                selected_candidate_id=candidate_ids["protocol.docx"],
+                confidence=0.98,
+                evidence_locators=tuple(excerpts["protocol.docx"][:1]),
+                supplementary_bindings=(
+                    RoleSupplementaryBinding(
+                        candidate_id=candidate_ids["protocol_errata.pdf"],
+                        evidence_locators=tuple(excerpts["protocol_errata.pdf"][:1]),
+                    ),
+                    RoleSupplementaryBinding(
+                        candidate_id=candidate_ids["protocol_amendment.pdf"],
+                        evidence_locators=tuple(excerpts["protocol_amendment.pdf"][:1]),
+                    ),
+                ),
+            ),
+            RoleSelection(
+                role="investigator_brochure",
+                decision="missing",
+                confidence=0.95,
+                supplementary_bindings=(),
+            ),
+            RoleSelection(
+                role="ecrf",
+                decision="selected",
+                selected_candidate_id=candidate_ids["ecrf.xlsx"],
+                confidence=0.97,
+                evidence_locators=tuple(excerpts["ecrf.xlsx"][:1]),
+                supplementary_bindings=(),
+            ),
+            RoleSelection(
+                role="sap",
+                decision="missing",
+                confidence=0.95,
+                supplementary_bindings=(),
+            ),
+        ),
+    )
+
+
+def _run_composite_analysis_jobs(
+    tmp_path, batch: dict[str, Any]
+) -> tuple[MonitoringAiRepository, list[str]]:
+    analysis = _composite_analysis(batch)
+    repository = MonitoringAiRepository(tmp_path / "composite-jobs.sqlite")
+    job_ids = []
+    for role, provider, model in (
+        ("primary", MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
+        ("verifier", MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
+    ):
+        service = MonitoringAiService(
+            repository,
+            runtime_resolver=lambda provider=provider, model=model, role=role: _runtime(
+                provider, model, f"monitoring-document-authority-{role}"
+            ),
+            provider_factory=lambda _env, provider=provider, model=model: _Provider(
+                provider, model, analysis
+            ),
+        )
+        revision = MonitoringAiInputRevision(
+            project_id="project-document-authority",
+            batch_revision=batch["batch_id"],
+            sources=tuple(
+                MonitoringAiSourceBinding(
+                    source_entry_id=item["file_id"],
+                    source_content_sha256=item["content_sha256"],
+                )
+                for item in batch["candidates"]
+            ),
+        )
+        service.submit_document_authority_analysis(
+            project_id=revision.project_id,
+            input_revision=revision,
+            candidate_batch=batch,
+            role=role,
+        )
+        service.run_next(f"{role}-worker", claim_identity=service.claim_identity())
+        job_ids.append(
+            repository.list_jobs(
+                revision.project_id,
+                task_type=MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS.value,
+                business_key_prefix=f"document-authority-analysis:{role}:",
+            )[0].job_id
+        )
+    return repository, job_ids
+
+
+def test_composite_authority_promotes_main_and_supplementary_files_atomically(
+    tmp_path,
+) -> None:
+    candidate_root = tmp_path / "candidates"
+    batch = MonitoringDocumentCandidateDecomposer(candidate_root).decompose_many(
+        _composite_files()
+    ).to_dict()
+    batch = json.loads(
+        (candidate_root / "batches" / f"{batch['batch_id']}.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    candidate_ids = {
+        candidate["filename"]: candidate["candidate_id"]
+        for candidate in batch["candidates"]
+    }
+    repository, job_ids = _run_composite_analysis_jobs(tmp_path, batch)
+    registry = SourceRegistryService(
+        SourceRegistryStore(tmp_path / "registry.jsonl"),
+        content_validation_service=SourceContentValidationService(
+            SourceContentValidationStore(tmp_path / "validations.sqlite3")
+        ),
+        expected_context_resolver=lambda *_args: SourceExpectedContext(),
+    )
+
+    result = promote_document_authority_from_jobs(
+        repository,
+        project_id="project-document-authority",
+        candidate_batch=batch,
+        candidate_root=candidate_root,
+        source_registry=registry,
+        primary_analysis_job_id=job_ids[0],
+        verifier_analysis_job_id=job_ids[1],
+    )
+
+    assert result["authority_status"] == "promoted"
+    assert set(result["resolved_roles"][0]["supplementary_candidate_ids"]) == {
+        candidate_ids["protocol_errata.pdf"],
+        candidate_ids["protocol_amendment.pdf"],
+    }
+    entries = registry.list_entries("project-document-authority")
+    assert len(entries) == 4
+    entry_id_by_filename = {
+        entry.metadata["filename"]: entry.entry_id for entry in entries
+    }
+    receipt = entries[0].metadata["document_authority_receipt"]
+    assert receipt["schema_version"] == PROMOTION_RECEIPT_SCHEMA_VERSION
+    protocol_primary = next(
+        item
+        for item in receipt["registrations"]
+        if item["role"] == "protocol" and item["binding_kind"] == "primary"
+    )
+    protocol_supplements = [
+        item
+        for item in receipt["registrations"]
+        if item["role"] == "protocol" and item["binding_kind"] == "supplementary"
+    ]
+    ecrf_primary = next(
+        item
+        for item in receipt["registrations"]
+        if item["role"] == "ecrf" and item["binding_kind"] == "primary"
+    )
+    assert len(protocol_supplements) == 2
+    assert protocol_primary["candidate_id"] == candidate_ids["protocol.docx"]
+    assert set(protocol_primary["supplementary_source_entry_ids"]) == {
+        entry_id_by_filename["protocol_errata.pdf"],
+        entry_id_by_filename["protocol_amendment.pdf"],
+    }
+    assert {item["candidate_id"] for item in protocol_supplements} == {
+        candidate_ids["protocol_errata.pdf"],
+        candidate_ids["protocol_amendment.pdf"],
+    }
+    assert all(
+        item["primary_candidate_id"] == candidate_ids["protocol.docx"]
+        and item["supplementary_of"] == protocol_primary["source_entry_id"]
+        for item in protocol_supplements
+    )
+    assert ecrf_primary["supplementary_source_entry_ids"] == []
+    assert verify_document_authority_promotion_receipt(
+        repository,
+        project_id="project-document-authority",
+        receipt=receipt,
+    ) is True
+    registry.monitoring_authority_receipt_verifier = (
+        lambda project_id, candidate_receipt: (
+            verify_document_authority_promotion_receipt(
+                repository,
+                project_id=project_id,
+                receipt=candidate_receipt,
+            )
+        )
+    )
+    assert all(
+        registry.monitoring_authority_entry_is_verified(entry)
+        for entry in entries
+    )
+    supplement_id = entry_id_by_filename["protocol_errata.pdf"]
+    for malformed_ids in (
+        supplement_id,
+        [supplement_id, supplement_id],
+        [{"source_entry_id": supplement_id}],
+    ):
+        malformed_receipt = json.loads(json.dumps(receipt))
+        protocol_row = next(
+            item
+            for item in malformed_receipt["registrations"]
+            if item["role"] == "protocol" and item["binding_kind"] == "primary"
+        )
+        protocol_row["supplementary_source_entry_ids"] = malformed_ids
+        receipt_sha256 = hashlib.sha256(
+            json.dumps(
+                malformed_receipt,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        malformed_entries = [
+            item.model_copy(
+                update={
+                    "metadata": {
+                        **item.metadata,
+                        "document_authority_receipt": malformed_receipt,
+                        "document_authority_receipt_sha256": receipt_sha256,
+                    }
+                }
+            )
+            for item in entries
+        ]
+        assert monitoring_authority_receipt_is_complete(
+            malformed_entries[0], malformed_entries
+        ) is False
+    evidence = MonitoringDocumentEvidenceResolver(registry).resolve(
+        project_id="project-document-authority",
+        listing_admission_date="2026-09-03",
+    )
+    protocol = next(item for item in evidence.roles if item.role == "protocol")
+    ecrf = next(item for item in evidence.roles if item.role == "ecrf")
+    assert protocol.status == "current", protocol
+    assert protocol.binding is not None
+    assert {
+        item.source_entry_id for item in protocol.supplementary_bindings
+    } == {
+        entry_id_by_filename["protocol_errata.pdf"],
+        entry_id_by_filename["protocol_amendment.pdf"],
+    }
+    assert ecrf.status == "current"
+    resolver = MonitoringDocumentEvidenceResolver(registry)
+    for filename, term in (
+        ("protocol_errata.pdf", "inclusion"),
+        ("protocol_amendment.pdf", "exclusion"),
+    ):
+        binding = next(
+            item
+            for item in protocol.supplementary_bindings
+            if item.source_entry_id == entry_id_by_filename[filename]
+        )
+        retrieval = resolver.retrieve_current_excerpts(
+            project_id="project-document-authority",
+            binding=binding,
+            query_terms=(term,),
+        )
+        assert retrieval["binding_kind"] == "supplementary"
+        assert retrieval["excerpts"]
+
+    replay = promote_document_authority_from_jobs(
+        repository,
+        project_id="project-document-authority",
+        candidate_batch=batch,
+        candidate_root=candidate_root,
+        source_registry=registry,
+        primary_analysis_job_id=job_ids[0],
+        verifier_analysis_job_id=job_ids[1],
+    )
+    assert replay["promotion_receipt_sha256"] == result["promotion_receipt_sha256"]
+    assert len(registry.list_entries("project-document-authority")) == 4
+
+    def _mutated_receipt(mutation) -> dict[str, Any]:
+        mutated = json.loads(json.dumps(receipt))
+        for item in mutated["registrations"]:
+            mutation(item)
+        return mutated
+
+    def _swap_supplement_primary(item: dict[str, Any]) -> None:
+        if item["binding_kind"] == "supplementary":
+            item["supplementary_of"] = entry_id_by_filename["ecrf.xlsx"]
+
+    def _detach_supplement(item: dict[str, Any]) -> None:
+        if item["binding_kind"] == "primary" and item["role"] == "protocol":
+            item["supplementary_source_entry_ids"] = []
+
+    def _relabel_supplement_as_primary(item: dict[str, Any]) -> None:
+        if item["binding_kind"] == "supplementary":
+            item.pop("primary_candidate_id")
+            item.pop("supplementary_of")
+            item["binding_kind"] = "primary"
+            item["supplementary_source_entry_ids"] = []
+
+    def _drop_supplement_row(item: dict[str, Any]) -> None:
+        if item["binding_kind"] == "supplementary":
+            item["candidate_id"] = candidate_ids["protocol.docx"]
+
+    for mutation in (
+        _swap_supplement_primary,
+        _detach_supplement,
+        _relabel_supplement_as_primary,
+        _drop_supplement_row,
+    ):
+        assert verify_document_authority_promotion_receipt(
+            repository,
+            project_id="project-document-authority",
+            receipt=_mutated_receipt(mutation),
+        ) is False, mutation.__name__
+
+
+def test_composite_authority_rejects_candidate_claimed_by_two_roles(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    candidate_root = tmp_path / "candidates"
+    batch = MonitoringDocumentCandidateDecomposer(candidate_root).decompose_many(
+        _composite_files()
+    ).to_dict()
+    candidate_ids = {
+        candidate["filename"]: candidate["candidate_id"]
+        for candidate in batch["candidates"]
+    }
+    resolution = {
+        "schema_version": DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+        "batch_id": batch["batch_id"],
+        "input_sha256": document_authority_batch_sha256(batch),
+        "state": "resolved",
+        "resolved_roles": [
+            {
+                "role": "protocol",
+                "status": "selected",
+                "candidate_id": candidate_ids["protocol.docx"],
+                "supplementary_candidate_ids": [
+                    candidate_ids["protocol_errata.pdf"]
+                ],
+            },
+            {
+                "role": "investigator_brochure",
+                "status": "missing",
+                "candidate_id": "",
+                "supplementary_candidate_ids": [],
+            },
+            {
+                "role": "ecrf",
+                "status": "selected",
+                "candidate_id": candidate_ids["protocol_errata.pdf"],
+                "supplementary_candidate_ids": [],
+            },
+            {
+                "role": "sap",
+                "status": "missing",
+                "candidate_id": "",
+                "supplementary_candidate_ids": [],
+            },
+        ],
+        "unresolved_roles": [],
+        "user_question": "",
+        "review_run_ids": [],
+        "analysis_run_ids": ["analysis_run_primary", "analysis_run_verifier"],
+        "document_identities": [],
+    }
+    monkeypatch.setattr(
+        "services.api.app.monitoring_document_authority_jobs."
+        "resolve_document_authority_from_jobs",
+        lambda *_args, **_kwargs: resolution,
+    )
+    registry = SourceRegistryService(
+        SourceRegistryStore(tmp_path / "registry.jsonl")
+    )
+
+    with pytest.raises(
+        DocumentAuthorityError, match="candidate_role_collision"
+    ):
+        promote_document_authority_from_jobs(
+            MonitoringAiRepository(tmp_path / "jobs.sqlite"),
+            project_id="project-document-authority",
+            candidate_batch=batch,
+            candidate_root=candidate_root,
+            source_registry=registry,
+            primary_analysis_job_id="analysis-primary",
+            verifier_analysis_job_id="analysis-verifier",
+        )
+    assert registry.list_entries("project-document-authority") == []
+
+
+def test_composite_authority_rejects_unknown_supplementary_candidate(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    candidate_root = tmp_path / "candidates"
+    batch = MonitoringDocumentCandidateDecomposer(candidate_root).decompose_many(
+        _composite_files()
+    ).to_dict()
+    candidate_ids = {
+        candidate["filename"]: candidate["candidate_id"]
+        for candidate in batch["candidates"]
+    }
+    resolution = {
+        "schema_version": DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+        "batch_id": batch["batch_id"],
+        "input_sha256": document_authority_batch_sha256(batch),
+        "state": "resolved",
+        "resolved_roles": [
+            {
+                "role": "protocol",
+                "status": "selected",
+                "candidate_id": candidate_ids["protocol.docx"],
+                "supplementary_candidate_ids": ["candidate_missing"],
+            },
+            {
+                "role": "investigator_brochure",
+                "status": "missing",
+                "candidate_id": "",
+                "supplementary_candidate_ids": [],
+            },
+            {
+                "role": "ecrf",
+                "status": "selected",
+                "candidate_id": candidate_ids["ecrf.xlsx"],
+                "supplementary_candidate_ids": [],
+            },
+            {
+                "role": "sap",
+                "status": "missing",
+                "candidate_id": "",
+                "supplementary_candidate_ids": [],
+            },
+        ],
+        "unresolved_roles": [],
+        "user_question": "",
+        "review_run_ids": [],
+        "analysis_run_ids": ["analysis_run_primary", "analysis_run_verifier"],
+        "document_identities": [],
+    }
+    monkeypatch.setattr(
+        "services.api.app.monitoring_document_authority_jobs."
+        "resolve_document_authority_from_jobs",
+        lambda *_args, **_kwargs: resolution,
+    )
+    registry = SourceRegistryService(
+        SourceRegistryStore(tmp_path / "registry.jsonl")
+    )
+
+    with pytest.raises(
+        DocumentAuthorityError, match="supplementary_candidate_unknown"
+    ):
+        promote_document_authority_from_jobs(
+            MonitoringAiRepository(tmp_path / "jobs.sqlite"),
+            project_id="project-document-authority",
+            candidate_batch=batch,
+            candidate_root=candidate_root,
+            source_registry=registry,
+            primary_analysis_job_id="analysis-primary",
+            verifier_analysis_job_id="analysis-verifier",
+        )
+    assert registry.list_entries("project-document-authority") == []
+
+
+def test_composite_authority_rolls_back_main_when_supplement_registration_fails(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    candidate_root = tmp_path / "candidates"
+    batch = MonitoringDocumentCandidateDecomposer(candidate_root).decompose_many(
+        _composite_files()
+    ).to_dict()
+    candidate_ids = {
+        candidate["filename"]: candidate["candidate_id"]
+        for candidate in batch["candidates"]
+    }
+    resolution = {
+        "schema_version": DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+        "batch_id": batch["batch_id"],
+        "input_sha256": document_authority_batch_sha256(batch),
+        "state": "resolved",
+        "resolved_roles": [
+            {
+                "role": "protocol",
+                "status": "selected",
+                "candidate_id": candidate_ids["protocol.docx"],
+                "supplementary_candidate_ids": [
+                    candidate_ids["protocol_errata.pdf"]
+                ],
+            },
+            {
+                "role": "investigator_brochure",
+                "status": "missing",
+                "candidate_id": "",
+                "supplementary_candidate_ids": [],
+            },
+            {
+                "role": "ecrf",
+                "status": "selected",
+                "candidate_id": candidate_ids["ecrf.xlsx"],
+                "supplementary_candidate_ids": [],
+            },
+            {
+                "role": "sap",
+                "status": "missing",
+                "candidate_id": "",
+                "supplementary_candidate_ids": [],
+            },
+        ],
+        "unresolved_roles": [],
+        "user_question": "",
+        "review_run_ids": [],
+        "analysis_run_ids": ["analysis_run_primary", "analysis_run_verifier"],
+        "document_identities": [],
+    }
+    monkeypatch.setattr(
+        "services.api.app.monitoring_document_authority_jobs."
+        "resolve_document_authority_from_jobs",
+        lambda *_args, **_kwargs: resolution,
+    )
+    registry = SourceRegistryService(
+        SourceRegistryStore(tmp_path / "rollback-registry.jsonl")
+    )
+    register = registry.register_monitoring_mapping_document
+
+    def fail_errata_registration(
+        project_id,
+        filename,
+        content,
+        *,
+        document_role,
+        document_relation="primary",
+    ):
+        if filename == "protocol_errata.pdf":
+            raise RuntimeError("synthetic supplement registration failure")
+        return register(
+            project_id,
+            filename,
+            content,
+            document_role=document_role,
+            document_relation=document_relation,
+        )
+
+    monkeypatch.setattr(
+        registry,
+        "register_monitoring_mapping_document",
+        fail_errata_registration,
+    )
+
+    with pytest.raises(RuntimeError, match="supplement registration failure"):
+        promote_document_authority_from_jobs(
+            MonitoringAiRepository(tmp_path / "rollback-jobs.sqlite"),
+            project_id="project-document-authority",
+            candidate_batch=batch,
+            candidate_root=candidate_root,
+            source_registry=registry,
+            primary_analysis_job_id="analysis-primary",
+            verifier_analysis_job_id="analysis-verifier",
+        )
+    assert registry.list_entries("project-document-authority") == []

@@ -17,7 +17,9 @@ from packages.medical_monitoring.admission.document_authority import (
     EvidenceReference,
     PRIMARY_PROMPT_VERSION,
     PRIMARY_REVIEW_PROMPT_VERSION,
+    ResolvedRole,
     RoleSelection,
+    RoleSupplementaryBinding,
     VERIFIER_PROMPT_VERSION,
     VERIFIER_REVIEW_PROMPT_VERSION,
     build_anonymous_conflict_packet,
@@ -107,11 +109,13 @@ def _analysis(batch: dict, *, ecrf: str = "candidate_ecrf") -> DocumentAuthority
                 selected_candidate_id="candidate_protocol",
                 confidence=0.98,
                 evidence_locators=("doc:p1",),
+                supplementary_bindings=(),
             ),
             RoleSelection(
                 role="investigator_brochure",
                 decision="missing",
                 confidence=0.95,
+                supplementary_bindings=(),
             ),
             RoleSelection(
                 role="ecrf",
@@ -119,8 +123,14 @@ def _analysis(batch: dict, *, ecrf: str = "candidate_ecrf") -> DocumentAuthority
                 selected_candidate_id=ecrf,
                 confidence=0.98 if ecrf else 0.5,
                 evidence_locators=("xlsx:sheet:1",) if ecrf else (),
+                supplementary_bindings=(),
             ),
-            RoleSelection(role="sap", decision="missing", confidence=0.95),
+            RoleSelection(
+                role="sap",
+                decision="missing",
+                confidence=0.95,
+                supplementary_bindings=(),
+            ),
         ),
     )
 
@@ -264,6 +274,7 @@ def test_document_authority_text_rejects_uncontrolled_free_text(
             role="protocol",
             decision="unresolved",
             confidence=0.4,
+            supplementary_candidate_ids=(),
             uncertainty="发现安全性信号，应生成Query。",
         )
 
@@ -463,6 +474,7 @@ def test_dual_conflict_review_resolves_or_asks_one_plain_question() -> None:
                 document_version="V1.0",
                 confidence=0.97,
                 considered_candidate_ids=("candidate_protocol", "candidate_ecrf"),
+                supplementary_candidate_ids=(),
                 evidence_references=_refs(
                     ("candidate_protocol", "doc:p1"),
                     ("candidate_ecrf", "xlsx:sheet:1"),
@@ -503,6 +515,7 @@ def test_dual_conflict_review_resolves_or_asks_one_plain_question() -> None:
                 decision="unresolved",
                 confidence=0.4,
                 considered_candidate_ids=("candidate_protocol", "candidate_ecrf"),
+                supplementary_candidate_ids=(),
                 evidence_references=_refs(
                     ("candidate_protocol", "doc:p1"),
                     ("candidate_ecrf", "xlsx:sheet:1"),
@@ -553,6 +566,7 @@ def test_tampered_conflict_packet_is_rejected() -> None:
                 decision="unresolved",
                 confidence=0.5,
                 considered_candidate_ids=("candidate_protocol", "candidate_ecrf"),
+                supplementary_candidate_ids=(),
                 evidence_references=_refs(
                     ("candidate_protocol", "doc:p1"),
                     ("candidate_ecrf", "xlsx:sheet:1"),
@@ -592,6 +606,7 @@ def test_rehashed_packet_with_omitted_candidate_is_rebuilt_and_rejected() -> Non
                 decision="unresolved",
                 confidence=0.5,
                 considered_candidate_ids=("candidate_protocol",),
+                supplementary_candidate_ids=(),
                 evidence_references=_refs(("candidate_protocol", "doc:p1")),
             ),
         ),
@@ -626,6 +641,7 @@ def test_review_candidate_and_evidence_must_close_to_role_options() -> None:
                     document_version="V1.0",
                     confidence=0.99,
                     considered_candidate_ids=("candidate_protocol", "candidate_ecrf"),
+                    supplementary_candidate_ids=(),
                     evidence_references=references,
                 ),
             ),
@@ -708,6 +724,7 @@ def test_duplicate_locator_strings_remain_candidate_bound() -> None:
                 document_version="V1.0",
                 confidence=0.99,
                 considered_candidate_ids=("candidate_protocol", "candidate_ecrf"),
+                supplementary_candidate_ids=(),
                 evidence_references=_refs(("candidate_protocol", "shared:1")),
             ),
         ),
@@ -757,6 +774,7 @@ def test_unreadable_batch_can_reach_one_user_question_without_fake_evidence() ->
                 role=role,
                 decision="unresolved" if role in {"protocol", "ecrf"} else "missing",
                 confidence=0.2 if role in {"protocol", "ecrf"} else 0.95,
+                supplementary_bindings=(),
                 uncertainty="content_unreadable",
             )
             for role in ("protocol", "investigator_brochure", "ecrf", "sap")
@@ -774,6 +792,7 @@ def test_unreadable_batch_can_reach_one_user_question_without_fake_evidence() ->
                 decision="unresolved",
                 confidence=0.2,
                 considered_candidate_ids=("candidate_unreadable",),
+                supplementary_candidate_ids=(),
                 uncertainty="evidence_insufficient",
             )
             for role in ("protocol", "ecrf")
@@ -791,3 +810,440 @@ def test_unreadable_batch_can_reach_one_user_question_without_fake_evidence() ->
 
     assert result["state"] == "needs_user_input"
     assert result["user_question"]
+
+
+def _composite_batch() -> dict:
+    batch = _batch()
+    batch["candidates"].extend([
+        {
+            "candidate_id": "candidate_protocol_erratum",
+            "filename": "protocol_erratum.docx",
+            "role_hypotheses": ["protocol"],
+            "technical_status": "ready",
+            "extraction_status": "parsed",
+            "locator_count": 1,
+            "excerpts": [{"locator": "erratum:p1", "text": "方案 V2.0 勘误说明"}],
+            "sheets": [],
+        },
+        {
+            "candidate_id": "candidate_ecrf_addendum",
+            "filename": "ecrf_addendum.xlsx",
+            "role_hypotheses": ["ecrf"],
+            "technical_status": "ready",
+            "extraction_status": "parsed",
+            "locator_count": 1,
+            "excerpts": [],
+            "sheets": [{"locator": "xlsx:sheet:2", "sheet_name": "AE_Addendum"}],
+        },
+    ])
+    return batch
+
+
+def _composite_analysis(
+    batch: dict,
+    *,
+    ecrf: str = "candidate_ecrf",
+    bind_erratum: bool = False,
+) -> DocumentAuthorityAnalysis:
+    assessments = (
+        CandidateAssessment(
+            candidate_id="candidate_protocol",
+            inferred_role="protocol",
+            usable=True,
+            confidence=0.98,
+            evidence_locators=("doc:p1",),
+        ),
+        CandidateAssessment(
+            candidate_id="candidate_protocol_erratum",
+            inferred_role="protocol",
+            usable=True,
+            confidence=0.97,
+            document_version="V1.1",
+            evidence_locators=("erratum:p1",),
+        ),
+        CandidateAssessment(
+            candidate_id="candidate_ecrf",
+            inferred_role="ecrf",
+            usable=True,
+            confidence=0.98,
+            evidence_locators=("xlsx:sheet:1",),
+        ),
+        CandidateAssessment(
+            candidate_id="candidate_ecrf_addendum",
+            inferred_role="ecrf",
+            usable=True,
+            confidence=0.96,
+            evidence_locators=("xlsx:sheet:2",),
+        ),
+    )
+    erratum_binding = (
+        RoleSupplementaryBinding(
+            candidate_id="candidate_protocol_erratum",
+            evidence_locators=("erratum:p1",),
+        ),
+    ) if bind_erratum else ()
+    return DocumentAuthorityAnalysis(
+        schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+        batch_id=batch["batch_id"],
+        input_sha256=_digest(batch),
+        candidate_assessments=assessments,
+        role_selections=(
+            RoleSelection(
+                role="protocol",
+                decision="selected",
+                selected_candidate_id="candidate_protocol",
+                confidence=0.98,
+                evidence_locators=("doc:p1",),
+                supplementary_bindings=erratum_binding,
+            ),
+            RoleSelection(
+                role="investigator_brochure",
+                decision="missing",
+                confidence=0.95,
+                supplementary_bindings=(),
+            ),
+            RoleSelection(
+                role="ecrf",
+                decision="selected" if ecrf else "unresolved",
+                selected_candidate_id=ecrf,
+                confidence=0.98 if ecrf else 0.5,
+                evidence_locators=("xlsx:sheet:1",) if ecrf else (),
+                supplementary_bindings=(),
+            ),
+            RoleSelection(
+                role="sap",
+                decision="missing",
+                confidence=0.95,
+                supplementary_bindings=(),
+            ),
+        ),
+    )
+
+
+def _composite_references() -> tuple[EvidenceReference, ...]:
+    return _refs(
+        ("candidate_protocol", "doc:p1"),
+        ("candidate_protocol_erratum", "erratum:p1"),
+        ("candidate_ecrf", "xlsx:sheet:1"),
+        ("candidate_ecrf_addendum", "xlsx:sheet:2"),
+    )
+
+
+def _composite_conflict_context(
+    batch: dict,
+) -> tuple[DocumentAuthorityRunEnvelope, DocumentAuthorityRunEnvelope, dict]:
+    primary = _run(_composite_analysis(batch, ecrf=""), "primary")
+    verifier = _run(_composite_analysis(batch), "verifier")
+    packet = build_anonymous_conflict_packet(batch, primary, verifier)
+    return primary, verifier, packet
+
+
+def _ecrf_composite_review(
+    packet: dict,
+    *,
+    supplements: tuple[str, ...] = ("candidate_ecrf_addendum",),
+    references: tuple[EvidenceReference, ...] | None = None,
+) -> DocumentAuthorityConflictReview:
+    return DocumentAuthorityConflictReview(
+        schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+        conflict_packet_sha256=packet["conflict_packet_sha256"],
+        decisions=(
+            ConflictDecision(
+                role="ecrf",
+                decision="selected",
+                selected_candidate_id="candidate_ecrf",
+                document_version="V1.0",
+                confidence=0.97,
+                considered_candidate_ids=(
+                    "candidate_protocol",
+                    "candidate_protocol_erratum",
+                    "candidate_ecrf",
+                    "candidate_ecrf_addendum",
+                ),
+                supplementary_candidate_ids=supplements,
+                evidence_references=(
+                    _composite_references() if references is None else references
+                ),
+            ),
+        ),
+    )
+
+
+def test_primary_with_agreed_supplement_resolves_as_composite_authority() -> None:
+    batch = _composite_batch()
+
+    result = _reconcile(
+        batch,
+        _composite_analysis(batch, bind_erratum=True),
+        _composite_analysis(batch, bind_erratum=True),
+    )
+
+    assert result["state"] == "resolved"
+    protocol_row = next(
+        item for item in result["resolved_roles"] if item["role"] == "protocol"
+    )
+    assert protocol_row["candidate_id"] == "candidate_protocol"
+    assert protocol_row["supplementary_candidate_ids"] == [
+        "candidate_protocol_erratum"
+    ]
+
+
+def test_supplement_disagreement_between_models_blocks_auto_resolution() -> None:
+    batch = _composite_batch()
+
+    result = _reconcile(
+        batch,
+        _composite_analysis(batch, bind_erratum=True),
+        _composite_analysis(batch),
+    )
+
+    assert result["state"] == "needs_dual_review"
+    protocol_conflict = next(
+        item for item in result["conflicts"] if item["role"] == "protocol"
+    )
+    assert protocol_conflict["candidate_options"] == [
+        "candidate_protocol",
+        "candidate_protocol_erratum",
+    ]
+
+
+def test_supplement_assessment_disagreement_blocks_auto_resolution() -> None:
+    batch = _composite_batch()
+    primary = _composite_analysis(batch, bind_erratum=True)
+    shifted = primary.candidate_assessments[1].model_copy(
+        update={"document_version": "V1.2"}
+    )
+    verifier = primary.model_copy(update={
+        "candidate_assessments": (
+            primary.candidate_assessments[0],
+            shifted,
+            *primary.candidate_assessments[2:],
+        )
+    })
+
+    result = _reconcile(batch, primary, verifier)
+
+    assert result["state"] == "needs_dual_review"
+    assert any(item["role"] == "protocol" for item in result["conflicts"])
+
+
+def test_supplementary_binding_requires_locator_closure() -> None:
+    batch = _composite_batch()
+    analysis = _composite_analysis(batch, bind_erratum=True)
+    unclosed_binding = RoleSupplementaryBinding(
+        candidate_id="candidate_protocol_erratum",
+        evidence_locators=("invented",),
+    )
+    bad_selection = analysis.role_selections[0].model_copy(
+        update={"supplementary_bindings": (unclosed_binding,)}
+    )
+    unclosed = analysis.model_copy(
+        update={"role_selections": (bad_selection, *analysis.role_selections[1:])}
+    )
+
+    with pytest.raises(DocumentAuthorityError, match="evidence_not_closed"):
+        _reconcile(batch, unclosed, unclosed)
+
+
+def test_supplementary_candidate_must_be_usable_same_role() -> None:
+    batch = _composite_batch()
+    analysis = _composite_analysis(batch, bind_erratum=True)
+    unusable = analysis.candidate_assessments[1].model_copy(update={"usable": False})
+    unusable_analysis = analysis.model_copy(update={
+        "candidate_assessments": (
+            analysis.candidate_assessments[0],
+            unusable,
+            *analysis.candidate_assessments[2:],
+        )
+    })
+    with pytest.raises(DocumentAuthorityError, match="selection_inconsistent"):
+        _reconcile(batch, unusable_analysis, unusable_analysis)
+
+    role_shift = analysis.candidate_assessments[1].model_copy(
+        update={"inferred_role": "sap"}
+    )
+    shifted_analysis = analysis.model_copy(update={
+        "candidate_assessments": (
+            analysis.candidate_assessments[0],
+            role_shift,
+            *analysis.candidate_assessments[2:],
+        )
+    })
+    with pytest.raises(DocumentAuthorityError, match="selection_inconsistent"):
+        _reconcile(batch, shifted_analysis, shifted_analysis)
+
+
+def test_supplementary_binding_model_guards() -> None:
+    analysis_payload = _analysis(_batch()).model_dump(mode="json")
+    analysis_payload["role_selections"][0].pop("supplementary_bindings")
+    with pytest.raises(ValueError):
+        DocumentAuthorityAnalysis.model_validate(analysis_payload)
+
+    with pytest.raises(ValueError):
+        RoleSelection(
+            role="protocol",
+            decision="missing",
+            confidence=0.95,
+            supplementary_bindings=(
+                RoleSupplementaryBinding(
+                    candidate_id="candidate_protocol_erratum",
+                    evidence_locators=("erratum:p1",),
+                ),
+            ),
+        )
+
+
+def test_conflict_review_requires_explicit_supplement_accounting() -> None:
+    batch = _composite_batch()
+    _primary, _verifier, packet = _composite_conflict_context(batch)
+    payload = _ecrf_composite_review(packet).model_dump(mode="json")
+    payload["decisions"][0].pop("supplementary_candidate_ids")
+
+    with pytest.raises(ValueError):
+        DocumentAuthorityConflictReview.model_validate(payload)
+    with pytest.raises(ValueError):
+        RoleSupplementaryBinding(
+            candidate_id="candidate_protocol_erratum",
+            evidence_locators=(),
+        )
+    with pytest.raises(ValueError):
+        RoleSelection(
+            role="protocol",
+            decision="selected",
+            selected_candidate_id="candidate_protocol",
+            confidence=0.98,
+            evidence_locators=("doc:p1",),
+            supplementary_bindings=(
+                RoleSupplementaryBinding(
+                    candidate_id="candidate_protocol_erratum",
+                    evidence_locators=("erratum:p1",),
+                ),
+                RoleSupplementaryBinding(
+                    candidate_id="candidate_protocol_erratum",
+                    evidence_locators=("erratum:p1",),
+                ),
+            ),
+        )
+    with pytest.raises(ValueError):
+        RoleSelection(
+            role="protocol",
+            decision="selected",
+            selected_candidate_id="candidate_protocol",
+            confidence=0.98,
+            evidence_locators=("doc:p1",),
+            supplementary_bindings=(
+                RoleSupplementaryBinding(
+                    candidate_id="candidate_protocol",
+                    evidence_locators=("doc:p1",),
+                ),
+            ),
+        )
+    with pytest.raises(ValueError):
+        ResolvedRole(
+            role="sap",
+            status="missing",
+            supplementary_candidate_ids=("candidate_sap_note",),
+        )
+    with pytest.raises(ValueError):
+        ResolvedRole(
+            role="protocol",
+            status="selected",
+            candidate_id="candidate_protocol",
+            supplementary_candidate_ids=("candidate_protocol",),
+        )
+
+
+def test_conflict_review_resolves_composite_selection_with_supplements() -> None:
+    batch = _composite_batch()
+    primary, verifier, packet = _composite_conflict_context(batch)
+    review = _ecrf_composite_review(packet)
+
+    result = resolve_document_authority_conflicts(
+        batch,
+        primary,
+        verifier,
+        packet,
+        _review_run(review, "primary"),
+        _review_run(review, "verifier"),
+    )
+
+    assert result["state"] == "resolved"
+    ecrf_row = next(item for item in result["resolved_roles"] if item["role"] == "ecrf")
+    assert ecrf_row["candidate_id"] == "candidate_ecrf"
+    assert ecrf_row["supplementary_candidate_ids"] == ["candidate_ecrf_addendum"]
+
+
+def test_conflict_review_supplement_disagreement_requires_user() -> None:
+    batch = _composite_batch()
+    primary, verifier, packet = _composite_conflict_context(batch)
+    accepted = _ecrf_composite_review(packet)
+    without_supplement = _ecrf_composite_review(packet, supplements=())
+
+    result = resolve_document_authority_conflicts(
+        batch,
+        primary,
+        verifier,
+        packet,
+        _review_run(accepted, "primary"),
+        _review_run(without_supplement, "verifier"),
+    )
+
+    assert result["state"] == "needs_user_input"
+
+
+def test_conflict_review_supplement_must_be_allowed_and_evidence_bound() -> None:
+    batch = _composite_batch()
+    primary, verifier, packet = _composite_conflict_context(batch)
+    unknown_supplement = _ecrf_composite_review(
+        packet, supplements=("unknown_candidate",)
+    )
+
+    with pytest.raises(DocumentAuthorityError, match="candidate_unknown"):
+        resolve_document_authority_conflicts(
+            batch,
+            primary,
+            verifier,
+            packet,
+            _review_run(unknown_supplement, "primary"),
+            _review_run(unknown_supplement, "verifier"),
+        )
+
+
+def test_conflict_review_supplement_requires_direct_evidence() -> None:
+    batch = _composite_batch()
+    batch["candidates"][3]["locator_count"] = 0
+    batch["candidates"][3]["sheets"] = []
+
+    def zero_locator_analysis(ecrf: str) -> DocumentAuthorityAnalysis:
+        analysis = _composite_analysis(batch, ecrf=ecrf)
+        fixed = analysis.candidate_assessments[3].model_copy(
+            update={"evidence_locators": ()}
+        )
+        return analysis.model_copy(update={
+            "candidate_assessments": (
+                *analysis.candidate_assessments[:3],
+                fixed,
+            )
+        })
+
+    primary = _run(zero_locator_analysis(ecrf=""), "primary")
+    verifier = _run(zero_locator_analysis(ecrf="candidate_ecrf"), "verifier")
+    packet = build_anonymous_conflict_packet(batch, primary, verifier)
+    review = _ecrf_composite_review(
+        packet,
+        references=_refs(
+            ("candidate_protocol", "doc:p1"),
+            ("candidate_protocol_erratum", "erratum:p1"),
+            ("candidate_ecrf", "xlsx:sheet:1"),
+        ),
+    )
+
+    with pytest.raises(DocumentAuthorityError, match="evidence_not_closed"):
+        resolve_document_authority_conflicts(
+            batch,
+            primary,
+            verifier,
+            packet,
+            _review_run(review, "primary"),
+            _review_run(review, "verifier"),
+        )

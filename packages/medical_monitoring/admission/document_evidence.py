@@ -15,7 +15,7 @@ from typing import Any, Mapping, Sequence
 from ..intelligence.primitives import content_hash
 
 
-DOCUMENT_EVIDENCE_SCHEMA_VERSION = "mm-c3-document-evidence-v1"
+DOCUMENT_EVIDENCE_SCHEMA_VERSION = "mm-c3-document-evidence-v2"
 DOCUMENT_ROLES = (
     "protocol",
     "investigator_brochure",
@@ -106,6 +106,7 @@ class CurrentDocumentBinding:
     operational_effective_from: str = ""
     operational_effective_to: str = ""
     clinical_applicability_resolved: bool = False
+    main_source_entry_id: str = ""
 
     def __post_init__(self) -> None:
         role = _required(self.role, "document_role")
@@ -213,6 +214,21 @@ class CurrentDocumentBinding:
             "clinical_applicability_resolved",
             bool(self.clinical_applicability_resolved),
         )
+        main_source_entry_id = str(self.main_source_entry_id or "").strip()
+        if main_source_entry_id:
+            if main_source_entry_id == self.source_entry_id:
+                raise DocumentEvidenceError(
+                    "document_supplementary_relation_invalid"
+                )
+            main_source_entry_id = _identifier(
+                main_source_entry_id,
+                "main_source_entry_id",
+            )
+        object.__setattr__(
+            self,
+            "main_source_entry_id",
+            main_source_entry_id,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
@@ -222,11 +238,18 @@ class CurrentDocumentBinding:
 
 @dataclass(frozen=True)
 class DocumentRoleEvidence:
-    """One accounted role: current evidence or an explicit limitation."""
+    """One accounted role: current evidence or an explicit limitation.
+
+    A current role binds one main document plus zero or more effective
+    supplementary documents (errata, revision notes).  Every supplementary
+    binding must anchor to the main binding so the composite authority
+    stays closed and per-file retrieval stays resolvable.
+    """
 
     role: str
     status: str
     binding: CurrentDocumentBinding | None = None
+    supplementary_bindings: tuple[CurrentDocumentBinding, ...] = ()
     limitation_codes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -235,27 +258,105 @@ class DocumentRoleEvidence:
             raise DocumentEvidenceError("document_role_invalid")
         status = _required(self.status, "document_status")
         limitations = _text_tuple(self.limitation_codes, "limitation_codes")
+        supplementary = tuple(self.supplementary_bindings)
+        if any(
+            not isinstance(item, CurrentDocumentBinding)
+            for item in supplementary
+        ):
+            raise DocumentEvidenceError(
+                "document_supplementary_binding_invalid"
+            )
         if status == _CURRENT_STATUS:
             if self.binding is None or self.binding.role != role:
                 raise DocumentEvidenceError("current_document_binding_invalid")
             if limitations:
                 raise DocumentEvidenceError("current_document_has_limitation")
+            if self.binding.main_source_entry_id:
+                raise DocumentEvidenceError(
+                    "document_supplementary_relation_invalid"
+                )
+            bound_ids = [self.binding.source_entry_id]
+            for item in supplementary:
+                if item.role != role:
+                    raise DocumentEvidenceError(
+                        "document_supplementary_role_invalid"
+                    )
+                if item.main_source_entry_id != self.binding.source_entry_id:
+                    raise DocumentEvidenceError(
+                        "document_supplementary_relation_invalid"
+                    )
+                bound_ids.append(item.source_entry_id)
+            if len(bound_ids) != len(set(bound_ids)):
+                raise DocumentEvidenceError(
+                    "document_supplementary_duplicated"
+                )
         elif status in _NON_CURRENT_STATUSES:
             if self.binding is not None or not limitations:
+                raise DocumentEvidenceError("limited_document_role_invalid")
+            if supplementary:
                 raise DocumentEvidenceError("limited_document_role_invalid")
         else:
             raise DocumentEvidenceError("document_status_invalid")
         object.__setattr__(self, "role", role)
         object.__setattr__(self, "status", status)
         object.__setattr__(self, "limitation_codes", limitations)
+        object.__setattr__(self, "supplementary_bindings", supplementary)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "role": self.role,
             "status": self.status,
             "binding": self.binding.to_dict() if self.binding else None,
+            "supplementary_bindings": [
+                item.to_dict() for item in self.supplementary_bindings
+            ],
             "limitation_codes": list(self.limitation_codes),
         }
+
+
+def _binding_from_dict(payload: Mapping[str, Any]) -> CurrentDocumentBinding:
+    if not isinstance(payload, Mapping):
+        raise DocumentEvidenceError("document_binding_invalid")
+    return CurrentDocumentBinding(
+        role=payload.get("role", ""),
+        source_entry_id=payload.get("source_entry_id", ""),
+        source_revision=payload.get("source_revision", ""),
+        content_sha256=payload.get("content_sha256", ""),
+        media_type=payload.get("media_type", ""),
+        parser_name=payload.get("parser_name", ""),
+        parser_version=payload.get("parser_version", ""),
+        validation_id=payload.get("validation_id", ""),
+        validation_revision=payload.get("validation_revision", 0),
+        validator_version=payload.get("validator_version", ""),
+        validation_context_sha256=payload.get(
+            "validation_context_sha256", ""
+        ),
+        locator_index_sha256=payload.get("locator_index_sha256", ""),
+        locator_count=payload.get("locator_count", 0),
+        locator_samples=tuple(payload.get("locator_samples") or ()),
+        selection_basis=payload.get("selection_basis", ""),
+        operational_effective_from=payload.get(
+            "operational_effective_from", ""
+        ),
+        operational_effective_to=payload.get("operational_effective_to", ""),
+        clinical_applicability_resolved=payload.get(
+            "clinical_applicability_resolved", False
+        ),
+        main_source_entry_id=payload.get("main_source_entry_id", ""),
+    )
+
+
+def _supplementary_bindings_from_dict(
+    raw_items: Any,
+) -> tuple[CurrentDocumentBinding, ...]:
+    if not isinstance(raw_items, Sequence) or isinstance(
+        raw_items, (str, bytes)
+    ):
+        raise DocumentEvidenceError("document_supplementary_binding_invalid")
+    return tuple(
+        _binding_from_dict(item)
+        for item in raw_items
+    )
 
 
 @dataclass(frozen=True)
@@ -344,51 +445,17 @@ class MonitoringDocumentEvidencePacket:
             binding_payload = raw.get("binding")
             binding = None
             if binding_payload is not None:
-                if not isinstance(binding_payload, Mapping):
-                    raise DocumentEvidenceError("document_binding_invalid")
-                binding = CurrentDocumentBinding(
-                    role=binding_payload.get("role", ""),
-                    source_entry_id=binding_payload.get("source_entry_id", ""),
-                    source_revision=binding_payload.get("source_revision", ""),
-                    content_sha256=binding_payload.get("content_sha256", ""),
-                    media_type=binding_payload.get("media_type", ""),
-                    parser_name=binding_payload.get("parser_name", ""),
-                    parser_version=binding_payload.get("parser_version", ""),
-                    validation_id=binding_payload.get("validation_id", ""),
-                    validation_revision=binding_payload.get(
-                        "validation_revision", 0
-                    ),
-                    validator_version=binding_payload.get(
-                        "validator_version", ""
-                    ),
-                    validation_context_sha256=binding_payload.get(
-                        "validation_context_sha256", ""
-                    ),
-                    locator_index_sha256=binding_payload.get(
-                        "locator_index_sha256", ""
-                    ),
-                    locator_count=binding_payload.get("locator_count", 0),
-                    locator_samples=tuple(
-                        binding_payload.get("locator_samples") or ()
-                    ),
-                    selection_basis=binding_payload.get(
-                        "selection_basis", ""
-                    ),
-                    operational_effective_from=binding_payload.get(
-                        "operational_effective_from", ""
-                    ),
-                    operational_effective_to=binding_payload.get(
-                        "operational_effective_to", ""
-                    ),
-                    clinical_applicability_resolved=binding_payload.get(
-                        "clinical_applicability_resolved", False
-                    ),
-                )
+                binding = _binding_from_dict(binding_payload)
             roles.append(
                 DocumentRoleEvidence(
                     role=raw.get("role", ""),
                     status=raw.get("status", ""),
                     binding=binding,
+                    supplementary_bindings=(
+                        _supplementary_bindings_from_dict(
+                            raw.get("supplementary_bindings", ())
+                        )
+                    ),
                     limitation_codes=tuple(raw.get("limitation_codes") or ()),
                 )
             )

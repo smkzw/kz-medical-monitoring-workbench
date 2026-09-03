@@ -20,10 +20,18 @@ from .source_intake import monitoring_authority_receipt_is_complete
 
 
 _SOURCE_KINDS_BY_ROLE = {
-    "protocol": frozenset({"protocol_docx"}),
-    "investigator_brochure": frozenset({"investigator_brochure"}),
-    "ecrf": frozenset({"ecrf", "ecrf_document", "ecrf_xlsx"}),
-    "sap": frozenset({"sap", "statistical_analysis_plan"}),
+    "protocol": frozenset({
+        "protocol_docx", "protocol_document", "protocol_supplement",
+    }),
+    "investigator_brochure": frozenset({
+        "investigator_brochure", "investigator_brochure_supplement",
+    }),
+    "ecrf": frozenset({
+        "ecrf", "ecrf_document", "ecrf_xlsx", "ecrf_supplement",
+    }),
+    "sap": frozenset({
+        "sap", "statistical_analysis_plan", "sap_supplement",
+    }),
 }
 _MEDIA_TYPE_BY_SUFFIX = {
     ".pdf": "application/pdf",
@@ -121,25 +129,44 @@ class MonitoringDocumentEvidenceResolver:
         query_terms: Sequence[str],
         limit: int = 24,
     ) -> dict[str, Any]:
-        """Retrieve locator-bound excerpts from one still-current document."""
+        """Retrieve locator-bound excerpts from one still-current file.
+
+        Works per file: ``binding`` may be the role's main binding or any
+        supplementary binding of the current composite authority.  The full
+        composite must still resolve, so a broken supplementary fails the
+        retrieval for every file in the set.
+        """
 
         if binding.role not in DOCUMENT_ROLES:
             raise ValueError("monitoring document role is unsupported")
+        binding_kind = (
+            "supplementary" if binding.main_source_entry_id else "main"
+        )
         packet = self.resolve(
             project_id=project_id,
             selected_entry_ids={
-                binding.role: binding.source_entry_id,
+                binding.role: (
+                    binding.main_source_entry_id
+                    if binding_kind == "supplementary"
+                    else binding.source_entry_id
+                ),
             },
         )
         evidence = next(
             item for item in packet.roles if item.role == binding.role
         )
-        current = evidence.binding
-        if (
-            evidence.status != "current"
-            or current is None
-            or current != binding
-        ):
+        still_current = (
+            evidence.status == "current"
+            and (
+                evidence.binding == binding
+                if binding_kind == "main"
+                else any(
+                    item == binding
+                    for item in evidence.supplementary_bindings
+                )
+            )
+        )
+        if not still_current:
             raise ValueError("monitoring document binding is no longer current")
         matches = self.source_registry.search_document_spans(
             project_id,
@@ -163,6 +190,7 @@ class MonitoringDocumentEvidenceResolver:
             "schema_version": _RETRIEVAL_SCHEMA_VERSION,
             "project_id": project_id,
             "role": binding.role,
+            "binding_kind": binding_kind,
             "source_entry_id": binding.source_entry_id,
             "content_sha256": binding.content_sha256,
             "locator_index_sha256": binding.locator_index_sha256,
@@ -196,13 +224,24 @@ class MonitoringDocumentEvidenceResolver:
                 status="missing",
                 limitation_codes=(f"{role}_not_registered",),
             )
+        relations = self._declared_binding_relations(candidates)
+        mains = [
+            entry
+            for entry in candidates
+            if entry.entry_id not in relations
+        ]
+        supplementaries = [
+            entry
+            for entry in candidates
+            if entry.entry_id in relations
+        ]
         if selected_entry_id:
-            candidates = [
+            mains = [
                 entry
-                for entry in candidates
+                for entry in mains
                 if entry.entry_id == selected_entry_id
             ]
-            if not candidates:
+            if not mains:
                 return DocumentRoleEvidence(
                     role=role,
                     status="incomplete",
@@ -210,7 +249,7 @@ class MonitoringDocumentEvidenceResolver:
                 )
         current = [
             binding
-            for entry in candidates
+            for entry in mains
             if (binding := self._current_binding(role, entry, spans))
             is not None
         ]
@@ -228,17 +267,102 @@ class MonitoringDocumentEvidenceResolver:
                 status="ambiguous",
                 limitation_codes=(f"{role}_current_source_ambiguous",),
             )
+        main_binding = current[0]
+        bound_supplementaries = []
+        for entry in sorted(
+            supplementaries,
+            key=lambda item: item.entry_id,
+        ):
+            declared_main = relations[entry.entry_id][1]
+            if declared_main != main_binding.source_entry_id:
+                # Declared against a superseded main: not part of the
+                # current composite authority.
+                continue
+            binding = self._current_binding(
+                role,
+                entry,
+                spans,
+                main_source_entry_id=main_binding.source_entry_id,
+            )
+            if binding is None:
+                return DocumentRoleEvidence(
+                    role=role,
+                    status="incomplete",
+                    limitation_codes=(
+                        f"{role}_supplementary_unresolved",
+                    ),
+                )
+            bound_supplementaries.append(binding)
         return DocumentRoleEvidence(
             role=role,
             status="current",
-            binding=current[0],
+            binding=main_binding,
+            supplementary_bindings=tuple(
+                sorted(
+                    bound_supplementaries,
+                    key=lambda item: item.source_entry_id,
+                )
+            ),
         )
+
+    def _declared_binding_relations(
+        self,
+        entries: list[Any],
+    ) -> dict[str, tuple[str, str]]:
+        """Read declared main/supplementary relations from authority receipts.
+
+        Each promoted entry embeds the hash-bound promotion receipt that
+        registered it.  A registration row may declare itself a
+        supplementary binding with ``binding_kind: "supplementary"`` and an
+        anchor ``supplementary_of`` entry id; rows without such a
+        declaration remain main candidates.  Relations are only trusted
+        when they are self-consistent; the registry remains the authority
+        on whether the receipt itself verifies.
+        """
+
+        relations: dict[str, tuple[str, str]] = {}
+        for entry in entries:
+            metadata = dict(entry.metadata or {})
+            if metadata.get("monitoring_authority_status") != "promoted":
+                continue
+            receipt = metadata.get("document_authority_receipt")
+            if not isinstance(receipt, Mapping):
+                continue
+            registrations = receipt.get("registrations")
+            if not isinstance(registrations, Sequence) or isinstance(
+                registrations, (str, bytes)
+            ):
+                continue
+            for registration in registrations:
+                if not isinstance(registration, Mapping):
+                    continue
+                if (
+                    str(registration.get("source_entry_id") or "")
+                    != entry.entry_id
+                ):
+                    continue
+                if (
+                    str(registration.get("binding_kind") or "").strip()
+                    != "supplementary"
+                ):
+                    continue
+                main_entry_id = str(
+                    registration.get("supplementary_of") or ""
+                ).strip()
+                if main_entry_id and main_entry_id != entry.entry_id:
+                    relations[entry.entry_id] = (
+                        "supplementary",
+                        main_entry_id,
+                    )
+        return relations
 
     def _current_binding(
         self,
         role: str,
         entry: Any,
         spans: list[Any],
+        *,
+        main_source_entry_id: str = "",
     ) -> CurrentDocumentBinding | None:
         entry_spans = [
             span
@@ -363,6 +487,7 @@ class MonitoringDocumentEvidenceResolver:
             ),
             selection_basis="registry_current",
             clinical_applicability_resolved=False,
+            main_source_entry_id=main_source_entry_id,
         )
 
 

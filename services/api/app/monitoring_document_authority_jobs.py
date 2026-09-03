@@ -37,6 +37,25 @@ from .monitoring_ai_contracts import (
 )
 from .monitoring_ai_repository import MonitoringAiRepository
 
+PROMOTION_RECEIPT_SCHEMA_VERSION = "monitoring-document-authority-promotion-v2"
+_PRIMARY_REGISTRATION_KEYS = frozenset({
+    "role",
+    "candidate_id",
+    "source_entry_id",
+    "content_sha256",
+    "binding_kind",
+    "supplementary_source_entry_ids",
+})
+_SUPPLEMENTARY_REGISTRATION_KEYS = frozenset({
+    "role",
+    "candidate_id",
+    "source_entry_id",
+    "content_sha256",
+    "binding_kind",
+    "primary_candidate_id",
+    "supplementary_of",
+})
+
 if TYPE_CHECKING:
     from .monitoring_ai_contracts import MonitoringAiInputRevision, MonitoringAiJob
     from .monitoring_ai_service import MonitoringAiService
@@ -387,31 +406,34 @@ def promote_document_authority_from_jobs(
     candidates = {
         str(item["candidate_id"]): item for item in candidate_batch["candidates"]
     }
-    selected = [
-        item for item in resolution["resolved_roles"] if item["status"] == "selected"
-    ]
-    selected_ids = [str(item["candidate_id"]) for item in selected]
-    if len(selected_ids) != len(set(selected_ids)):
-        raise DocumentAuthorityError("document_authority_candidate_role_collision")
+    claims, main_candidate_by_role = _resolved_authority_claims(resolution)
 
-    prepared: list[tuple[str, Mapping[str, Any], bytes]] = []
-    for item in selected:
-        role = str(item["role"])
-        candidate = candidates[str(item["candidate_id"])]
+    prepared: list[tuple[str, str, Mapping[str, Any], bytes]] = []
+    for role, binding_kind, candidate_id in claims:
+        candidate = candidates.get(candidate_id)
+        if candidate is None:
+            raise DocumentAuthorityError(
+                "document_authority_supplementary_candidate_unknown"
+                if binding_kind == "supplementary"
+                else "document_authority_candidate_not_promotable"
+            )
+        if (
+            candidate.get("technical_status") != "ready"
+            or candidate.get("extraction_status") != "parsed"
+            or candidate.get("file_id")
+            != f"mmfile_{candidate.get('content_sha256', '')}"
+            or (
+                binding_kind == "primary"
+                and role not in candidate.get("role_hypotheses", ())
+            )
+        ):
+            raise DocumentAuthorityError("document_authority_candidate_not_promotable")
         manifest = _load_json(
             candidate_root / "manifests" / f"{candidate['candidate_id']}.json",
             "document_authority_candidate_manifest_missing",
         )
         if manifest != _json_value(candidate):
             raise DocumentAuthorityError("document_authority_candidate_manifest_mismatch")
-        if (
-            candidate.get("technical_status") != "ready"
-            or candidate.get("extraction_status") != "parsed"
-            or role not in candidate.get("role_hypotheses", ())
-            or candidate.get("file_id")
-            != f"mmfile_{candidate.get('content_sha256', '')}"
-        ):
-            raise DocumentAuthorityError("document_authority_candidate_not_promotable")
         suffix = Path(str(candidate["filename"])).suffix.lower()
         path = Path(candidate_root) / "files" / f"{candidate['content_sha256']}{suffix}"
         try:
@@ -422,16 +444,18 @@ def promote_document_authority_from_jobs(
             raise DocumentAuthorityError("document_authority_isolated_file_hash_mismatch")
         if len(content) != candidate.get("size_bytes"):
             raise DocumentAuthorityError("document_authority_isolated_file_size_mismatch")
-        prepared.append((role, candidate, content))
+        prepared.append((role, binding_kind, candidate, content))
 
     registrations = []
+    entry_id_by_claim: dict[tuple[str, str, str], str] = {}
     with source_registry.store.transaction():
-        for role, candidate, content in prepared:
+        for role, binding_kind, candidate, content in prepared:
             registration = source_registry.register_monitoring_mapping_document(
                 project_id,
                 str(candidate["filename"]),
                 content,
                 document_role=role,
+                document_relation=binding_kind,
             )
             if registration.entry.content_hash != candidate["content_sha256"]:
                 raise DocumentAuthorityError("document_authority_registration_hash_mismatch")
@@ -447,14 +471,34 @@ def promote_document_authority_from_jobs(
                     raise DocumentAuthorityError(
                         "document_authority_registration_validation_blocked"
                     )
-            registrations.append({
+            claim = (role, binding_kind, str(candidate["candidate_id"]))
+            item = {
                 "role": role,
-                "candidate_id": str(candidate["candidate_id"]),
+                "candidate_id": claim[2],
                 "source_entry_id": registration.entry.entry_id,
                 "content_sha256": registration.entry.content_hash,
-            })
+                "binding_kind": binding_kind,
+            }
+            if binding_kind == "supplementary":
+                item["primary_candidate_id"] = main_candidate_by_role[role]
+                item["supplementary_of"] = entry_id_by_claim[
+                    (role, "primary", main_candidate_by_role[role])
+                ]
+            registrations.append(item)
+            entry_id_by_claim[claim] = registration.entry.entry_id
+        supplement_entry_ids_by_role: dict[str, list[str]] = {}
+        for item in registrations:
+            if item["binding_kind"] == "supplementary":
+                supplement_entry_ids_by_role.setdefault(item["role"], []).append(
+                    item["source_entry_id"]
+                )
+        for item in registrations:
+            if item["binding_kind"] == "primary":
+                item["supplementary_source_entry_ids"] = (
+                    supplement_entry_ids_by_role.get(item["role"], [])
+                )
         receipt = {
-            "schema_version": "monitoring-document-authority-promotion-v1",
+            "schema_version": PROMOTION_RECEIPT_SCHEMA_VERSION,
             "batch_id": resolution["batch_id"],
             "input_sha256": resolution["input_sha256"],
             "analysis_job_ids": sorted(
@@ -553,18 +597,15 @@ def verify_document_authority_promotion_receipt(
                 review_by_role["verifier"].job_id if review_by_role else ""
             ),
         )
-        selected = {
-            (str(item["candidate_id"]), str(item["role"]))
-            for item in resolution["resolved_roles"]
-            if item["status"] == "selected"
-        }
         candidates = {
             str(item["candidate_id"]): item
             for item in candidate_batch["candidates"]
         }
+        claims, _main_by_role = _resolved_authority_claims(resolution)
         registrations = list(receipt["registrations"])
         return bool(
             resolution["state"] == "resolved"
+            and receipt["schema_version"] == PROMOTION_RECEIPT_SCHEMA_VERSION
             and receipt["batch_id"] == resolution["batch_id"]
             and receipt["input_sha256"] == resolution["input_sha256"]
             and sorted(receipt["analysis_job_ids"])
@@ -576,19 +617,129 @@ def verify_document_authority_promotion_receipt(
             and sorted(receipt["review_run_ids"])
             == sorted(resolution["review_run_ids"])
             and receipt["document_identities"] == resolution["document_identities"]
-            and {
-                (str(item["candidate_id"]), str(item["role"]))
-                for item in registrations
-            }
-            == selected
-            and all(
-                candidates[str(item["candidate_id"])]["content_sha256"]
-                == item["content_sha256"]
-                for item in registrations
-            )
+            and _registrations_bind_resolution(registrations, claims, candidates)
         )
     except (KeyError, RuntimeError, TypeError, ValueError):
         return False
+
+
+def _resolved_supplementary_ids(item: Mapping[str, Any]) -> list[str]:
+    """Read one resolved role's supplementary candidate IDs fail-closed."""
+
+    raw = item.get("supplementary_candidate_ids")
+    if raw is None:
+        return []
+    if isinstance(raw, str) or not isinstance(raw, (list, tuple)):
+        raise DocumentAuthorityError(
+            "document_authority_supplementary_selection_invalid"
+        )
+    ids = [str(value) for value in raw]
+    if any(not value.strip() for value in ids) or len(ids) != len(set(ids)):
+        raise DocumentAuthorityError(
+            "document_authority_supplementary_selection_invalid"
+        )
+    return ids
+
+
+def _resolved_authority_claims(
+    resolution: Mapping[str, Any],
+) -> tuple[list[tuple[str, str, str]], dict[str, str]]:
+    """Flatten resolved roles into (role, binding_kind, candidate_id) claims.
+
+    Every selected role contributes exactly one primary claim followed by its
+    supplementary claims; a candidate claimed twice, by any combination of
+    bindings or roles, is a collision.
+    """
+
+    claims: list[tuple[str, str, str]] = []
+    main_candidate_by_role: dict[str, str] = {}
+    for item in resolution["resolved_roles"]:
+        if item["status"] != "selected":
+            continue
+        role = str(item["role"])
+        main_candidate_id = str(item["candidate_id"])
+        if role in main_candidate_by_role:
+            raise DocumentAuthorityError("document_authority_candidate_role_collision")
+        main_candidate_by_role[role] = main_candidate_id
+        claims.append((role, "primary", main_candidate_id))
+        for candidate_id in _resolved_supplementary_ids(item):
+            claims.append((role, "supplementary", candidate_id))
+    owner_by_candidate: dict[str, tuple[str, str]] = {}
+    for role, binding_kind, candidate_id in claims:
+        owner = owner_by_candidate.setdefault(candidate_id, (role, binding_kind))
+        if owner != (role, binding_kind):
+            raise DocumentAuthorityError("document_authority_candidate_role_collision")
+    return claims, main_candidate_by_role
+
+
+def _registrations_bind_resolution(
+    registrations: Any,
+    claims: list[tuple[str, str, str]],
+    candidates: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    """Check receipt registrations bind every resolved file and relationship."""
+
+    if not isinstance(registrations, list):
+        return False
+    claim_keys = set(claims)
+    registration_items: dict[tuple[str, str, str], Mapping[str, Any]] = {}
+    entry_id_by_claim: dict[tuple[str, str, str], str] = {}
+    for item in registrations:
+        if not isinstance(item, Mapping):
+            return False
+        claim = (
+            str(item.get("role") or ""),
+            str(item.get("binding_kind") or ""),
+            str(item.get("candidate_id") or ""),
+        )
+        source_entry_id = str(item.get("source_entry_id") or "")
+        if (
+            claim not in claim_keys
+            or claim in registration_items
+            or not source_entry_id
+            or candidates.get(claim[2], {}).get("content_sha256")
+            != item.get("content_sha256")
+        ):
+            return False
+        registration_items[claim] = item
+        entry_id_by_claim[claim] = source_entry_id
+    if set(registration_items) != claim_keys:
+        return False
+    main_candidate_by_role = {
+        claim[0]: claim[2] for claim in claims if claim[1] == "primary"
+    }
+    for role, binding_kind, candidate_id in claims:
+        item = registration_items[(role, binding_kind, candidate_id)]
+        expected_keys = (
+            _PRIMARY_REGISTRATION_KEYS
+            if binding_kind == "primary"
+            else _SUPPLEMENTARY_REGISTRATION_KEYS
+        )
+        if set(item) != expected_keys:
+            return False
+        if binding_kind == "primary":
+            expected_supplement_entry_ids = sorted(
+                entry_id_by_claim[claim]
+                for claim in claims
+                if claim[0] == role and claim[1] == "supplementary"
+            )
+            if (
+                sorted(
+                    str(value) for value in item["supplementary_source_entry_ids"]
+                )
+                != expected_supplement_entry_ids
+            ):
+                return False
+        else:
+            main_candidate_id = main_candidate_by_role.get(role)
+            if (
+                main_candidate_id is None
+                or item["primary_candidate_id"] != main_candidate_id
+                or item["supplementary_of"]
+                != entry_id_by_claim.get((role, "primary", main_candidate_id))
+            ):
+                return False
+    return True
 
 
 def _load_json(path: Path, error_code: str) -> Any:
