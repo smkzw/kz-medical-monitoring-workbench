@@ -59,6 +59,8 @@ function DocumentReadinessPanel({ state, onFiles, onRetry }) {
     return <p className="monitoring-admission-loading" role="status">正在核对研究文档…</p>;
   }
   const payload = state.payload || {};
+  const processing = ["uploading", "analyzing", "reviewing", "adjudicating"]
+    .includes(state.phase);
   return (
     <section className="monitoring-admission-documents" aria-label="研究文档准备情况">
       <header>
@@ -78,12 +80,14 @@ function DocumentReadinessPanel({ state, onFiles, onRetry }) {
             type="file"
             multiple
             accept=".docx,.pdf,.xlsx"
-            disabled={["uploading", "analyzing", "reviewing"].includes(state.phase)}
+            disabled={processing}
             onChange={(event) => onFiles?.(event.target.files)}
           />
-          {["uploading", "analyzing", "reviewing"].includes(state.phase)
+          {processing
             ? "系统正在识别并交叉核对…"
-            : "一次选择研究文件"}
+            : state.phase === "needs_user_input"
+              ? "重新选择完整研究文件"
+              : "一次选择研究文件"}
         </label>
       ) : null}
       {state.error ? <p className="monitoring-admission-warning" role="alert">{state.error}</p> : null}
@@ -616,7 +620,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
 
   useEffect(() => {
     if (
-      !["analyzing", "reviewing"].includes(documentState.phase)
+      !["analyzing", "reviewing", "adjudicating"].includes(documentState.phase)
       || !documentState.payload?.analysis_token
     ) return undefined;
     const timer = setTimeout(async () => {

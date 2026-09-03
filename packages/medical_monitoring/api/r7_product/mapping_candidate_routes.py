@@ -663,12 +663,25 @@ def register_mapping_candidate_routes(
             if result.get("state") == "failed":
                 return _mapping_error("mapping_document_authority_incomplete")
             if result.get("authority_status") != "promoted":
+                state = str(result.get("state") or "analyzing")
+                if state == "needs_user_input":
+                    headline = "还差一项关键信息"
+                    guidance = str(result.get("user_question") or "").strip() or (
+                        "现有文件不足以可靠确定当前版本，请一次重新选择完整"
+                        "研究文件。"
+                    )
+                elif state == "adjudicating":
+                    headline = "系统正在完成最后一次核对"
+                    guidance = "无需操作，系统会自行处理两次判断中的差异。"
+                else:
+                    headline = "系统仍在独立核对研究文件"
+                    guidance = "当前无需逐项确认，请稍后查看结果。"
                 return {
                     "project_id": canonical,
-                    "state": str(result.get("state") or "analyzing"),
+                    "state": state,
                     "analysis_token": payload.batch_id,
-                    "headline": "系统仍在独立核对研究文件",
-                    "guidance": "当前无需逐项确认，请稍后查看结果。",
+                    "headline": headline,
+                    "guidance": guidance,
                 }
             for registration in result.get("registrations", ()):
                 pipeline.select_document(

@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
@@ -508,6 +509,51 @@ def test_document_authority_promotion_is_server_wired_and_publicly_plain(
         if name == "select_document"
     ]
     assert [item["role"] for item in selections] == ["protocol", "ecrf"]
+
+
+@pytest.mark.parametrize(
+    ("result", "headline", "guidance"),
+    (
+        (
+            {"state": "adjudicating", "authority_status": "not_promoted"},
+            "系统正在完成最后一次核对",
+            "无需操作",
+        ),
+        (
+            {
+                "state": "needs_user_input",
+                "authority_status": "not_promoted",
+                "user_question": "请一次重新选择完整研究文件。",
+            },
+            "还差一项关键信息",
+            "请一次重新选择完整研究文件。",
+        ),
+    ),
+)
+def test_document_authority_public_state_hides_internal_adjudication(
+    tmp_path: Path,
+    result: dict[str, Any],
+    headline: str,
+    guidance: str,
+) -> None:
+    client = _client(
+        tmp_path / "runtime",
+        mapping_pipeline=FakeMappingPipeline(),
+        document_authority_promoter=lambda **_kwargs: result,
+    )
+
+    response = client.post(
+        f"{_base()}/data-admissions/attempt-0001/study-documents/resolve",
+        json={"batch_id": f"mmbatch_{'a' * 24}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["headline"] == headline
+    assert guidance in response.json()["guidance"]
+    public_blob = json.dumps(response.json(), ensure_ascii=False)
+    assert "模型" not in public_blob
+    assert "provider" not in public_blob
+    assert "job_id" not in public_blob
 
 
 def test_document_authority_analysis_starts_both_models_without_user_review(

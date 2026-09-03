@@ -687,6 +687,17 @@ def test_product_workflow_starts_both_models_and_promotes_direct_agreement(
         project_id="project-document-authority",
         receipt=receipt,
     ) is True
+    previous_receipt = json.loads(json.dumps(receipt))
+    previous_receipt["schema_version"] = (
+        "monitoring-document-authority-promotion-v2"
+    )
+    previous_receipt.pop("adjudication_job_ids")
+    previous_receipt.pop("adjudication_run_ids")
+    assert verify_document_authority_promotion_receipt(
+        repository,
+        project_id="project-document-authority",
+        receipt=previous_receipt,
+    ) is True
     forged = {**receipt, "analysis_job_ids": ["missing-primary", "missing-verifier"]}
     assert verify_document_authority_promotion_receipt(
         repository,
@@ -954,7 +965,7 @@ def test_worker_rejects_downstream_medical_conclusion_in_outer_copy(
     assert len(attempts[0]["response"]["provider_outputs"]) == 1
 
 
-def test_repository_jobs_drive_blind_second_review_and_final_resolution(
+def test_repository_jobs_drive_blind_review_and_internal_adjudication(
     tmp_path,
 ) -> None:
     batch = _batch()
@@ -1065,14 +1076,92 @@ def test_repository_jobs_drive_blind_second_review_and_final_resolution(
     primary_review_provider["value"] = _ReviewProvider(
         MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL, review
     )
+    unresolved_review = DocumentAuthorityConflictReview(
+        schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+        conflict_packet_sha256=packet["conflict_packet_sha256"],
+        decisions=(
+            review.decisions[0].model_copy(
+                update={
+                    "decision": "unresolved",
+                    "selected_candidate_id": "",
+                    "document_version": "",
+                    "confidence": 0.4,
+                }
+            ),
+        ),
+    )
     verifier_review_provider["value"] = _ReviewProvider(
-        MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL, review
+        MONITORING_C3_VERIFIER_PROVIDER,
+        MONITORING_C3_VERIFIER_MODEL,
+        unresolved_review,
     )
     primary_review_service.run_next(
         "primary-review-worker", claim_identity=primary_review_service.claim_identity()
     )
     verifier_review_service.run_next(
         "verifier-review-worker", claim_identity=verifier_review_service.claim_identity()
+    )
+
+    initial = resolve_document_authority_from_jobs(
+        repository,
+        project_id=revision.project_id,
+        candidate_batch=batch,
+        primary_analysis_job_id=primary_job.job_id,
+        verifier_analysis_job_id=verifier_job.job_id,
+        primary_review_job_id=primary_review_job.job_id,
+        verifier_review_job_id=verifier_review_job.job_id,
+    )
+    assert initial["state"] == "needs_user_input"
+
+    primary_review_provider["value"] = _ReviewProvider(
+        MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL, review
+    )
+    verifier_review_provider["value"] = _ReviewProvider(
+        MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL, review
+    )
+    workspace = tmp_path / "workflow-workspace"
+    batch_dir = workspace / "document_authority_candidates" / "batches"
+    batch_dir.mkdir(parents=True)
+    (batch_dir / f"{batch['batch_id']}.json").write_text(
+        json.dumps(batch, ensure_ascii=False), encoding="utf-8"
+    )
+    wakes: list[bool] = []
+    workflow = MonitoringDocumentAuthorityWorkflow(
+        repository,
+        primary_review_service,
+        verifier_review_service,
+        SourceRegistryService(SourceRegistryStore(tmp_path / "adjudication-registry.jsonl")),
+        worker_wake=lambda: wakes.append(True),
+    )
+    state = workflow.advance(
+        project_id=revision.project_id,
+        workspace_dir=workspace,
+        batch_id=batch["batch_id"],
+    )
+    assert state == {"state": "adjudicating", "batch_id": batch["batch_id"]}
+    assert wakes == [True]
+    adjudication_jobs = repository.list_jobs(
+        revision.project_id,
+        task_type=MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW.value,
+        business_key_prefix="document-authority-adjudication:",
+    )
+    assert len(adjudication_jobs) == 2
+    primary_adjudication_job = next(
+        job for job in adjudication_jobs if ":primary:" in job.business_key
+    )
+    verifier_adjudication_job = next(
+        job for job in adjudication_jobs if ":verifier:" in job.business_key
+    )
+    context = repository.input_payload(
+        revision.project_id, primary_adjudication_job.job_id
+    )["document_authority_adjudication_context"]
+    primary_review_service.run_next(
+        "primary-adjudication-worker",
+        claim_identity=primary_review_service.claim_identity(),
+    )
+    verifier_review_service.run_next(
+        "verifier-adjudication-worker",
+        claim_identity=verifier_review_service.claim_identity(),
     )
 
     result = resolve_document_authority_from_jobs(
@@ -1083,10 +1172,14 @@ def test_repository_jobs_drive_blind_second_review_and_final_resolution(
         verifier_analysis_job_id=verifier_job.job_id,
         primary_review_job_id=primary_review_job.job_id,
         verifier_review_job_id=verifier_review_job.job_id,
+        primary_adjudication_job_id=primary_adjudication_job.job_id,
+        verifier_adjudication_job_id=verifier_adjudication_job.job_id,
     )
 
     assert result["state"] == "resolved"
     assert result["user_question"] == ""
+    assert len(result["adjudication_run_ids"]) == 2
+    assert context["unresolved_roles"] == ["ecrf"]
     assert all(
         "document_authority_source_bindings"
         not in provider.envelopes[0].payload["input_payload"]
@@ -1114,6 +1207,10 @@ def test_repository_jobs_drive_blind_second_review_and_final_resolution(
             ]
         ) == {"candidate_protocol", "candidate_ecrf"}
         assert "包括未入选候选" in provider.envelopes[0].system_prompt
+        adjudication_payload = provider.envelopes[0].payload["input_payload"]
+        assert adjudication_payload["document_authority_adjudication_context"] == context
+        assert "document_authority_source_bindings" not in adjudication_payload
+        assert "系统内最终裁决" in provider.envelopes[0].system_prompt
 
 
 def test_resolved_authority_promotes_selected_documents_atomically(

@@ -60,6 +60,7 @@ MONITORING_MAPPING_DOCUMENT_ROLES = frozenset({
 MONITORING_LOCATOR_MANIFEST_REVISION = "monitoring-locator-manifest-v1"
 _AUTHORITY_RECEIPT_V1 = "monitoring-document-authority-promotion-v1"
 _AUTHORITY_RECEIPT_V2 = "monitoring-document-authority-promotion-v2"
+_AUTHORITY_RECEIPT_V3 = "monitoring-document-authority-promotion-v3"
 _AUTHORITY_PRIMARY_KEYS = frozenset({
     "role", "candidate_id", "source_entry_id", "content_sha256",
     "binding_kind", "supplementary_source_entry_ids",
@@ -136,7 +137,11 @@ def monitoring_authority_receipt_is_complete(
     if actual_sha256 != receipt_sha256:
         return False
     schema_version = receipt.get("schema_version")
-    if schema_version not in {_AUTHORITY_RECEIPT_V1, _AUTHORITY_RECEIPT_V2}:
+    if schema_version not in {
+        _AUTHORITY_RECEIPT_V1,
+        _AUTHORITY_RECEIPT_V2,
+        _AUTHORITY_RECEIPT_V3,
+    }:
         return False
     required_keys = {
         "schema_version",
@@ -149,6 +154,8 @@ def monitoring_authority_receipt_is_complete(
         "document_identities",
         "registrations",
     }
+    if schema_version == _AUTHORITY_RECEIPT_V3:
+        required_keys.update({"adjudication_job_ids", "adjudication_run_ids"})
     if set(receipt) != required_keys:
         return False
     batch_id = str(receipt.get("batch_id") or "")
@@ -157,6 +164,8 @@ def monitoring_authority_receipt_is_complete(
     analysis_run_ids = receipt.get("analysis_run_ids")
     review_job_ids = receipt.get("review_job_ids")
     review_run_ids = receipt.get("review_run_ids")
+    adjudication_job_ids = receipt.get("adjudication_job_ids", [])
+    adjudication_run_ids = receipt.get("adjudication_run_ids", [])
     document_identities = receipt.get("document_identities")
     if (
         not re.fullmatch(r"mmbatch_[a-f0-9]{24}", batch_id)
@@ -166,6 +175,9 @@ def monitoring_authority_receipt_is_complete(
         or not _zero_or_two_unique_strings(review_job_ids)
         or not _zero_or_two_unique_strings(review_run_ids)
         or len(review_job_ids) != len(review_run_ids)
+        or not _zero_or_two_unique_strings(adjudication_job_ids)
+        or not _zero_or_two_unique_strings(adjudication_run_ids)
+        or len(adjudication_job_ids) != len(adjudication_run_ids)
         or not isinstance(document_identities, list)
     ):
         return False

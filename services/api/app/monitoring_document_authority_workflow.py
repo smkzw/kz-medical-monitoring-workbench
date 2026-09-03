@@ -20,6 +20,8 @@ from .monitoring_ai_repository import MonitoringAiRepository
 from .monitoring_document_authority_jobs import (
     load_document_authority_analysis_run,
     promote_document_authority_from_jobs,
+    resolve_document_authority_from_jobs,
+    submit_document_authority_adjudication_pair,
     submit_document_authority_review_pair,
 )
 from .monitoring_document_candidates import MonitoringDocumentCandidateDecomposer
@@ -169,6 +171,66 @@ class MonitoringDocumentAuthorityWorkflow:
         )
         if pending is not None:
             return {**pending, "batch_id": batch_id}
+        review_resolution = resolve_document_authority_from_jobs(
+            self.repository,
+            project_id=project_id,
+            candidate_batch=batch,
+            primary_analysis_job_id=primary_job.job_id,
+            verifier_analysis_job_id=verifier_job.job_id,
+            primary_review_job_id=primary_review.job_id,
+            verifier_review_job_id=verifier_review.job_id,
+        )
+        if review_resolution["state"] == "resolved":
+            return promote_document_authority_from_jobs(
+                self.repository,
+                project_id=project_id,
+                candidate_batch=batch,
+                candidate_root=candidate_root,
+                source_registry=self.source_registry,
+                primary_analysis_job_id=primary_job.job_id,
+                verifier_analysis_job_id=verifier_job.job_id,
+                primary_review_job_id=primary_review.job_id,
+                verifier_review_job_id=verifier_review.job_id,
+            )
+
+        primary_adjudication = self._optional_job(
+            project_id,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+            f"document-authority-adjudication:primary:{packet_sha256}",
+        )
+        verifier_adjudication = self._optional_job(
+            project_id,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+            f"document-authority-adjudication:verifier:{packet_sha256}",
+        )
+        if primary_adjudication is None or verifier_adjudication is None:
+            revision = self._input_revision(project_id, batch)
+            _, primary_adjudication, verifier_adjudication = (
+                submit_document_authority_adjudication_pair(
+                    self.primary_service,
+                    self.verifier_service,
+                    input_revision=revision,
+                    candidate_batch=batch,
+                    primary_analysis_job_id=primary_job.job_id,
+                    verifier_analysis_job_id=verifier_job.job_id,
+                    primary_review_job_id=primary_review.job_id,
+                    verifier_review_job_id=verifier_review.job_id,
+                )
+            )
+            self.worker_wake()
+            return {"state": "adjudicating", "batch_id": batch_id}
+        if self._recover_failed_once((primary_adjudication, verifier_adjudication)):
+            return {
+                "state": "adjudicating",
+                "authority_status": "not_promoted",
+                "batch_id": batch_id,
+            }
+        pending = self._pending_state(
+            (primary_adjudication, verifier_adjudication),
+            "adjudicating",
+        )
+        if pending is not None:
+            return {**pending, "batch_id": batch_id}
         return promote_document_authority_from_jobs(
             self.repository,
             project_id=project_id,
@@ -179,6 +241,8 @@ class MonitoringDocumentAuthorityWorkflow:
             verifier_analysis_job_id=verifier_job.job_id,
             primary_review_job_id=primary_review.job_id,
             verifier_review_job_id=verifier_review.job_id,
+            primary_adjudication_job_id=primary_adjudication.job_id,
+            verifier_adjudication_job_id=verifier_adjudication.job_id,
         )
 
     @staticmethod
