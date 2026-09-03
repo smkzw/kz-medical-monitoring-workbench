@@ -15,9 +15,12 @@ from ..runtime.runtime_progress import ARTIFACT_DIR_NAME, RUNTIME_DB_NAME, RUNTI
 from .mapping_bridge import (
     MAPPING_BRIDGE_SCHEMA_VERSION,
     MappingBridgeError,
+    MappingHarnessInput,
     admission_record_to_harness_input,
 )
 from .mapping_gate import (
+    MONITORING_C3_LOCAL_FALLBACK_MODEL,
+    MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROVIDER,
     MONITORING_C3_VERIFIER_MODEL,
@@ -49,6 +52,12 @@ MAPPING_ADJUDICATION_BUSINESS_PREFIX = (
 )
 _ADJUDICATION_GENERATION_RE = re.compile(r":g(\d{2}):")
 _ADJUDICATION_MAX_GENERATIONS = 2
+_REMOTE_UNAVAILABLE_FAILURES = frozenset({
+    "ai_not_configured",
+    "ai_transport_rejected",
+    "ai_configuration_error",
+    "provider_runtime_error",
+})
 
 
 def _anonymous_review_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -267,6 +276,200 @@ class AdmissionMappingPipeline:
             required_model=self._verifier_required_model,
         )
 
+    @staticmethod
+    def _runtime_identity(runtime: Any) -> tuple[str, str]:
+        provider = str(getattr(runtime, "provider", "") or "").strip()
+        model = str(getattr(runtime, "model", "") or "").strip().casefold()
+        return provider, model
+
+    def _remote_unavailability_receipt(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        profile_sha256: str,
+    ) -> dict[str, Any]:
+        """Derive a bounded receipt from immutable job-attempt evidence."""
+
+        routes = (
+            (
+                "primary",
+                MONITORING_C3_MAPPING_PROVIDER,
+                MONITORING_C3_MAPPING_MODEL,
+                f"listing-field-mapping:{attempt_id}:",
+            ),
+            (
+                "verifier",
+                MONITORING_C3_VERIFIER_PROVIDER,
+                MONITORING_C3_VERIFIER_MODEL,
+                f"listing-field-mapping-verifier:{attempt_id}:",
+            ),
+        )
+        evidence = []
+        for cohort, provider, model, prefix in routes:
+            candidates = []
+            for job in self._repository.list_jobs(
+                project_id,
+                task_type=str(_value(self._task_type)),
+                business_key_prefix=prefix,
+            ):
+                if (
+                    str(job.provider) != provider
+                    or str(job.requested_model).casefold() != model.casefold()
+                    or str(_value(job.status)) != "failed"
+                    or job.contract_retirement_code
+                    or job.failure_code not in _REMOTE_UNAVAILABLE_FAILURES
+                ):
+                    continue
+                payload = self._repository.input_payload(project_id, job.job_id)
+                profile = payload.get("field_profile") or {}
+                if profile.get("full_profile_sha256") != profile_sha256:
+                    continue
+                attempts = self._repository.attempts(project_id, job.job_id)
+                if not attempts or attempts[-1]["failure_code"] != job.failure_code:
+                    continue
+                if job.failure_code == "provider_runtime_error" and (
+                    job.attempt_count < job.max_attempts or not job.retryable
+                ):
+                    continue
+                if job.failure_code != "provider_runtime_error" and job.retryable:
+                    continue
+                candidates.append((job, attempts))
+            if not candidates:
+                raise AdmissionMappingPipelineError(
+                    "mapping_fallback_terminal_evidence_missing"
+                )
+            job, attempts = max(
+                candidates, key=lambda item: (item[0].updated_at, item[0].job_id)
+            )
+            evidence.append({
+                "cohort": cohort,
+                "provider": provider,
+                "model": model,
+                "job_id": job.job_id,
+                "input_revision_sha256": job.input_revision_sha256,
+                "prompt_version": job.prompt_version,
+                "failure_code": job.failure_code,
+                "attempt_count": job.attempt_count,
+                "attempt_receipts": [
+                    {
+                        "attempt_id": item["attempt_id"],
+                        "attempt_number": item["attempt_number"],
+                        "outcome": item["outcome"],
+                        "failure_code": item["failure_code"],
+                        "request_sha256": item["request_sha256"],
+                        "response_sha256": item["response_sha256"],
+                    }
+                    for item in attempts
+                ],
+            })
+        receipt = {
+            "schema_version": "mm-c3-remote-unavailability-receipt-v1",
+            "project_id": project_id,
+            "attempt_id": attempt_id,
+            "profile_sha256": profile_sha256,
+            "routes": evidence,
+        }
+        receipt["receipt_sha256"] = hashlib.sha256(
+            json.dumps(
+                receipt, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        ).hexdigest()
+        return receipt
+
+    def _admit_local_fallback(
+        self,
+        harness_input: MappingHarnessInput,
+        *,
+        project_id: str,
+        attempt_id: str,
+    ) -> MappingHarnessInput:
+        receipt = self._remote_unavailability_receipt(
+            project_id=project_id,
+            attempt_id=attempt_id,
+            profile_sha256=harness_input.field_profile["profile_sha256"],
+        )
+        return self._apply_local_fallback_receipt(harness_input, receipt)
+
+    def _apply_local_fallback_receipt(
+        self,
+        harness_input: MappingHarnessInput,
+        receipt: Mapping[str, Any],
+    ) -> MappingHarnessInput:
+        unsigned = {
+            key: value for key, value in receipt.items()
+            if key != "receipt_sha256"
+        }
+        digest = hashlib.sha256(
+            json.dumps(
+                unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        ).hexdigest()
+        if (
+            receipt.get("schema_version")
+            != "mm-c3-remote-unavailability-receipt-v1"
+            or receipt.get("profile_sha256")
+            != harness_input.field_profile["profile_sha256"]
+            or receipt.get("receipt_sha256") != digest
+            or len(receipt.get("routes") or ()) != 2
+        ):
+            raise AdmissionMappingPipelineError(
+                "mapping_fallback_terminal_evidence_invalid"
+            )
+        for route in receipt["routes"]:
+            job = self._repository.get(receipt["project_id"], route["job_id"])
+            attempts = self._repository.attempts(
+                receipt["project_id"], route["job_id"]
+            )
+            projected_attempts = [
+                {
+                    "attempt_id": item["attempt_id"],
+                    "attempt_number": item["attempt_number"],
+                    "outcome": item["outcome"],
+                    "failure_code": item["failure_code"],
+                    "request_sha256": item["request_sha256"],
+                    "response_sha256": item["response_sha256"],
+                }
+                for item in attempts
+            ]
+            if (
+                str(job.provider) != route["provider"]
+                or str(job.requested_model) != route["model"]
+                or job.input_revision_sha256 != route["input_revision_sha256"]
+                or job.prompt_version != route["prompt_version"]
+                or projected_attempts != route["attempt_receipts"]
+                or not attempts
+                or attempts[-1]["failure_code"] != route["failure_code"]
+            ):
+                raise AdmissionMappingPipelineError(
+                    "mapping_fallback_terminal_evidence_invalid"
+                )
+        profile = deepcopy(harness_input.field_profile)
+        profile["fallback_admission"] = receipt
+        profile["input_sha256"] = hashlib.sha256(
+            json.dumps(
+                {
+                    "base_input_sha256": profile["input_sha256"],
+                    "fallback_admission": receipt,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        profile["profile_sha256"] = hashlib.sha256(
+            json.dumps(
+                {key: value for key, value in profile.items() if key != "profile_sha256"},
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        return MappingHarnessInput(
+            field_profile=profile,
+            input_revision=harness_input.input_revision,
+        )
+
     def _load_record(
         self, *, project_id: str, attempt_id: str, workspace_dir: Path
     ) -> dict[str, Any]:
@@ -339,8 +542,6 @@ class AdmissionMappingPipeline:
             attempt_id=attempt_id,
             workspace_dir=workspace_dir,
         )
-        if not self._cohort_runtime_ready(service, contract):
-            raise AdmissionMappingPipelineError("mapping_model_not_configured")
         try:
             harness_input = self._frozen_harness_input(
                 project_id=project_id,
@@ -348,6 +549,35 @@ class AdmissionMappingPipeline:
                 record=record,
                 workspace_dir=workspace_dir,
             )
+            runtime = service.runtime_resolver()
+            runtime_identity = self._runtime_identity(runtime)
+            expected_identity = (
+                (
+                    self._required_provider,
+                    self._required_model.casefold(),
+                )
+                if contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
+                else (
+                    self._verifier_required_provider,
+                    self._verifier_required_model.casefold(),
+                )
+            )
+            if runtime_identity == (
+                MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
+                MONITORING_C3_LOCAL_FALLBACK_MODEL.casefold(),
+            ) and contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY:
+                harness_input = self._admit_local_fallback(
+                    harness_input,
+                    project_id=project_id,
+                    attempt_id=attempt_id,
+                )
+            elif runtime_identity != expected_identity and not (
+                contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
+                and runtime_identity == ("cms-router", "minimax-m3")
+            ):
+                raise AdmissionMappingPipelineError(
+                    "mapping_model_not_configured"
+                )
             revision = self._revision_factory(harness_input.input_revision)
             jobs = service.submit_listing_field_mapping_chunks(
                 project_id=project_id,
@@ -777,6 +1007,8 @@ def current_admission_mapping_revision(
         if not attempt_id:
             return ""
         pipeline = AdmissionMappingPipeline(
+            ai_repository=repository,
+            task_type=job.task_type,
             relationship_profiler=relationship_profiler,
         )
         record = pipeline._load_record(
@@ -790,7 +1022,7 @@ def current_admission_mapping_revision(
         # relationship evidence. When the profiler is unavailable a v6
         # profile (which always carries evidence) cannot be reproduced and
         # the job falls back to the stale branch instead of passing.
-        current = admission_record_to_harness_input(
+        current_input = admission_record_to_harness_input(
             project_id=job.project_id,
             attempt_id=attempt_id,
             record=record,
@@ -799,7 +1031,19 @@ def current_admission_mapping_revision(
                 workspace_dir=workspace_dir,
             ),
             relationship_profiler=pipeline._resolve_relationship_profiler(),
-        ).field_profile
+        )
+        if (
+            str(job.provider) == MONITORING_C3_LOCAL_FALLBACK_PROVIDER
+            and str(job.requested_model).casefold()
+            == MONITORING_C3_LOCAL_FALLBACK_MODEL.casefold()
+        ):
+            stored_receipt = field_profile.get("fallback_admission")
+            if not isinstance(stored_receipt, Mapping):
+                return ""
+            current_input = pipeline._apply_local_fallback_receipt(
+                current_input, stored_receipt
+            )
+        current = current_input.field_profile
         expected = {
             "project_id": job.project_id,
             "batch_id": attempt_id,

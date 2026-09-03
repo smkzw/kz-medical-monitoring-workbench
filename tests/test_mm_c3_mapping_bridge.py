@@ -17,7 +17,6 @@ from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROFILE_ID,
     MONITORING_C3_MAPPING_PROVIDER,
-    MONITORING_C3_REMOTE_UNAVAILABLE_ENV,
     MONITORING_C3_VERIFIER_MODEL,
     MONITORING_C3_VERIFIER_PROVIDER,
     monitoring_mapping_runtime_matches,
@@ -505,7 +504,7 @@ def test_pipeline_accepts_direct_cms_router_minimax_alternate(tmp_path: Path) ->
     }
 
 
-def test_local_mtplx_fallback_requires_both_remote_routes_unavailable() -> None:
+def test_local_mtplx_fallback_rejects_environment_declaration() -> None:
     local = _runtime(
         MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
         MONITORING_C3_LOCAL_FALLBACK_MODEL,
@@ -515,9 +514,159 @@ def test_local_mtplx_fallback_requires_both_remote_routes_unavailable() -> None:
     admitted = _runtime(
         MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
         MONITORING_C3_LOCAL_FALLBACK_MODEL,
-        env={MONITORING_C3_REMOTE_UNAVAILABLE_ENV: "true"},
+        env={"MONITORING_C3_REMOTE_ROUTES_UNAVAILABLE": "true"},
     )
-    assert monitoring_mapping_runtime_matches(admitted) is True
+    assert monitoring_mapping_runtime_matches(admitted) is False
+
+
+def test_pipeline_local_fallback_requires_repository_terminal_receipts(
+    tmp_path: Path,
+) -> None:
+    attempt_id, workspace = _admit(tmp_path)
+    repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
+
+    def unavailable(provider: str, model: str, profile_id: str):
+        return MonitoringAiRuntimeBinding(
+            profile_id=profile_id,
+            provider=provider,
+            model=model,
+            env={},
+            available=False,
+            diagnostic="synthetic route unavailable",
+            failure_code="ai_not_configured",
+        )
+
+    primary_service = MonitoringAiService(
+        repository,
+        runtime_resolver=lambda: unavailable(
+            MONITORING_C3_MAPPING_PROVIDER,
+            MONITORING_C3_MAPPING_MODEL,
+            MONITORING_C3_MAPPING_PROFILE_ID,
+        ),
+    )
+    verifier_service = MonitoringAiService(
+        repository,
+        runtime_resolver=lambda: unavailable(
+            MONITORING_C3_VERIFIER_PROVIDER,
+            MONITORING_C3_VERIFIER_MODEL,
+            "independent_ai__zhipu_coding_plan_glm_flash",
+        ),
+    )
+    remote_pipeline = AdmissionMappingPipeline(
+        ai_service=primary_service,
+        verifier_ai_service=verifier_service,
+        ai_repository=repository,
+        input_revision_factory=MonitoringAiInputRevision.model_validate,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+        relationship_profiler=_stub_profiler,
+    )
+    remote_pipeline.generate_candidates(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        workspace_dir=workspace,
+    )
+    remote_pipeline.generate_candidates(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        workspace_dir=workspace,
+        cohort="verifier",
+    )
+    for service, identity in (
+        (
+            primary_service,
+            (
+                MONITORING_C3_MAPPING_PROFILE_ID,
+                MONITORING_C3_MAPPING_PROVIDER,
+                MONITORING_C3_MAPPING_MODEL,
+            ),
+        ),
+        (
+            verifier_service,
+            (
+                "independent_ai__zhipu_coding_plan_glm_flash",
+                MONITORING_C3_VERIFIER_PROVIDER,
+                MONITORING_C3_VERIFIER_MODEL,
+            ),
+        ),
+    ):
+        for index in range(20):
+            result = service.run_next(
+                f"synthetic-worker-{index}", claim_identity=identity
+            )
+            if result.job is None:
+                break
+
+    local_runtime = _runtime(
+        MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
+        MONITORING_C3_LOCAL_FALLBACK_MODEL,
+    )
+    local_service = MonitoringAiService(
+        repository, runtime_resolver=lambda: local_runtime
+    )
+    local_pipeline = AdmissionMappingPipeline(
+        ai_service=local_service,
+        ai_repository=repository,
+        input_revision_factory=MonitoringAiInputRevision.model_validate,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+        relationship_profiler=_stub_profiler,
+    )
+    local = local_pipeline.generate_candidates(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        workspace_dir=workspace,
+    )
+    assert local["execution"]["providers"] == [
+        MONITORING_C3_LOCAL_FALLBACK_PROVIDER
+    ]
+    local_jobs = [
+        job for job in repository.list_jobs(PROJECT_ID)
+        if job.provider == MONITORING_C3_LOCAL_FALLBACK_PROVIDER
+    ]
+    assert local_jobs
+    profile = repository.input_payload(
+        PROJECT_ID, local_jobs[0].job_id
+    )["field_profile"]
+    receipt = profile["fallback_admission"]
+    assert {item["cohort"] for item in receipt["routes"]} == {
+        "primary", "verifier"
+    }
+    assert current_admission_mapping_revision(
+        repository,
+        local_jobs[0],
+        workspace_dir=workspace,
+        relationship_profiler=_stub_profiler,
+    ) == local_jobs[0].input_revision_sha256
+
+
+def test_pipeline_local_fallback_fails_without_dual_terminal_evidence(
+    tmp_path: Path,
+) -> None:
+    attempt_id, workspace = _admit(tmp_path)
+    repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
+    service = MonitoringAiService(
+        repository,
+        runtime_resolver=lambda: _runtime(
+            MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
+            MONITORING_C3_LOCAL_FALLBACK_MODEL,
+        ),
+    )
+    pipeline = AdmissionMappingPipeline(
+        ai_service=service,
+        ai_repository=repository,
+        input_revision_factory=MonitoringAiInputRevision.model_validate,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+        relationship_profiler=_stub_profiler,
+    )
+
+    with pytest.raises(AdmissionMappingPipelineError) as exc_info:
+        pipeline.generate_candidates(
+            project_id=PROJECT_ID,
+            attempt_id=attempt_id,
+            workspace_dir=workspace,
+        )
+
+    assert exc_info.value.code == "mapping_fallback_terminal_evidence_missing"
+    assert repository.list_jobs(PROJECT_ID) == ()
 
 
 def test_pipeline_rejects_cross_project_attempt(tmp_path: Path) -> None:
