@@ -26,6 +26,10 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence
 
 from ..intelligence.primitives import content_hash
+from .document_evidence import (
+    DocumentEvidenceError,
+    validate_document_evidence_packet,
+)
 from .mapping_gate import MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION
 from .relationship_profile_gate import (
     RELATIONSHIP_PROFILE_SCHEMA_VERSION,
@@ -44,7 +48,8 @@ from .workbook_manifest import (
 )
 
 
-MAPPING_BRIDGE_SCHEMA_VERSION = "mm-c3-mapping-profile-bridge-v7"
+MAPPING_BRIDGE_SCHEMA_VERSION = "mm-c3-mapping-profile-bridge-v8"
+_LEGACY_MAPPING_BRIDGE_SCHEMA_VERSION = "mm-c3-mapping-profile-bridge-v7"
 PROFILE_SCHEMA_VERSION = "monitoring_ai_field_profile_v3"
 _SUBJECT_ROLE = "受试者标识"
 _TYPE_MAP = {
@@ -321,6 +326,7 @@ def admission_record_to_harness_input(
         Mapping[str, Mapping[str, Sequence[Mapping[str, Any]]]]
     ] = None,
     relationship_profiler: Optional[Callable[..., Any]] = None,
+    require_document_evidence: bool = False,
 ) -> MappingHarnessInput:
     """Build the exact input accepted by ``MonitoringAiService``.
 
@@ -404,6 +410,28 @@ def admission_record_to_harness_input(
         raise MappingBridgeError("admission profile table field order is ambiguous")
     domains = list(dict.fromkeys(item["domain"] for item in fields))
     source_sha256s = [item["source_content_sha256"] for item in source_bindings]
+    raw_document_evidence = technical.get("monitoring_document_evidence")
+    document_evidence: dict[str, Any] = {}
+    if raw_document_evidence is not None:
+        try:
+            document_evidence = validate_document_evidence_packet(
+                raw_document_evidence,
+                project_id=project_id,
+                require_mapping_context=require_document_evidence,
+            )
+        except DocumentEvidenceError as exc:
+            error = MappingBridgeError(
+                f"document evidence gate refused the mapping input: {exc.code}"
+            )
+            error.code = exc.code
+            raise error from exc
+    elif require_document_evidence:
+        error = MappingBridgeError(
+            "document evidence gate refused the mapping input: "
+            "mapping_document_evidence_missing"
+        )
+        error.code = "mapping_document_evidence_missing"
+        raise error
     input_completeness = {
         "gate_schema_version": SOURCE_PROFILE_GATE_SCHEMA_VERSION,
         "manifest_schema_version": completeness["manifest_schema_version"],
@@ -475,10 +503,15 @@ def admission_record_to_harness_input(
             "cross_table_relationships",
             [],
         ),
+        "document_evidence": document_evidence,
     })
     profile: dict[str, Any] = {
         "schema_version": PROFILE_SCHEMA_VERSION,
-        "bridge_schema_version": MAPPING_BRIDGE_SCHEMA_VERSION,
+        "bridge_schema_version": (
+            MAPPING_BRIDGE_SCHEMA_VERSION
+            if document_evidence
+            else _LEGACY_MAPPING_BRIDGE_SCHEMA_VERSION
+        ),
         "mapping_cohort_schema_version": MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION,
         "batch_id": attempt_id,
         "project_id": project_id,
@@ -497,6 +530,7 @@ def admission_record_to_harness_input(
             for domain, order in table_field_order.items()
         ],
         "input_completeness": input_completeness,
+        "document_evidence": document_evidence,
         "payload_policy": (
             "bounded_full_column_statistics_source_labels_"
             "redacted_row_context_and_relationship_profile_v4"

@@ -1127,6 +1127,11 @@ class AdmissionMappingConfirmationService:
                 if self.mapping_pipeline is not None
                 else None
             ),
+            document_evidence_resolver=(
+                self.mapping_pipeline._document_evidence_resolver
+                if self.mapping_pipeline is not None
+                else None
+            ),
         )
         if resolved is None:
             return str(job.input_revision_sha256)

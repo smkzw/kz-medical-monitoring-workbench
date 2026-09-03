@@ -8,7 +8,7 @@ import unicodedata
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Sequence
 
 from packages.contracts.workbench_contracts import (
     ListingSheetPayload,
@@ -648,6 +648,10 @@ class SourceContentValidationService:
             outcome = "match" if has_subject else "warning"
         elif expected_role == "edc_data_listing":
             outcome = "match" if has_subject and has_clinical_data else "mismatch"
+        elif expected_role == "ecrf":
+            # The upload role is explicit; detailed form/column semantics are
+            # resolved later by the independent dual-model mapping harness.
+            outcome = "match" if headers else "mismatch"
         elif expected_role == "sdtm_or_adam_dataset":
             outcome = "match" if "STUDYID" in headers and "USUBJID" in headers else "mismatch"
         elif expected_role == "subject_report":

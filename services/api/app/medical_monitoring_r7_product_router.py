@@ -416,6 +416,7 @@ def create_medical_monitoring_r7_product_router(
     admission_pipeline: Any = None,
     admission_mapping_pipeline: Any = None,
     admission_mapping_confirmation: Any = None,
+    monitoring_document_registrar: Any = None,
     admission_fact_materializer: Any = None,
     audit_ledger_factory: Optional[Callable[..., Any]] = None,
 ) -> APIRouter:
@@ -968,6 +969,7 @@ def create_medical_monitoring_r7_product_router(
             monitoring_action=MonitoringAction,
             admission_mapping_pipeline=admission_mapping_pipeline,
             admission_mapping_confirmation=admission_mapping_confirmation,
+            monitoring_document_registrar=monitoring_document_registrar,
         ),
     )
     register_fact_routes(

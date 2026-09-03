@@ -237,6 +237,7 @@ def test_gate_passes_complete_record_and_binds_input_completeness() -> None:
         "relationship_profile": {},
         "relationships": [],
         "cross_table_relationships": [],
+        "document_evidence": {},
     })
     assert profile["input_sha256"] == expected_input_sha256
 

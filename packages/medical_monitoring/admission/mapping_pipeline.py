@@ -18,6 +18,7 @@ from .mapping_bridge import (
     MappingHarnessInput,
     admission_record_to_harness_input,
 )
+from .document_evidence import DOCUMENT_ROLES
 from .mapping_gate import (
     MONITORING_C3_LOCAL_FALLBACK_MODEL,
     MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
@@ -58,6 +59,7 @@ _REMOTE_UNAVAILABLE_FAILURES = frozenset({
     "ai_configuration_error",
     "provider_runtime_error",
 })
+DOCUMENT_SELECTION_KIND = "monitoring_document_selection"
 
 
 def _anonymous_review_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -164,6 +166,8 @@ class AdmissionMappingPipeline:
         verifier_required_provider: str = MONITORING_C3_VERIFIER_PROVIDER,
         verifier_required_model: str = MONITORING_C3_VERIFIER_MODEL,
         relationship_profiler: Optional[Callable[..., Any]] = None,
+        require_document_evidence: bool = False,
+        document_evidence_resolver: Optional[Callable[..., Any]] = None,
     ) -> None:
         self._service = ai_service
         self._repository = ai_repository
@@ -176,6 +180,8 @@ class AdmissionMappingPipeline:
         self._verifier_required_provider = verifier_required_provider
         self._verifier_required_model = verifier_required_model
         self._relationship_profiler_override = relationship_profiler
+        self._require_document_evidence = bool(require_document_evidence)
+        self._document_evidence_resolver = document_evidence_resolver
 
     def _resolve_relationship_profiler(self) -> Optional[Callable[..., Any]]:
         """Return the deterministic relationship profiler for submissions.
@@ -234,16 +240,139 @@ class AdmissionMappingPipeline:
         no submission ever runs on silently empty relationship evidence.
         """
 
+        frozen_record = dict(record)
+        if self._document_evidence_resolver is not None:
+            attempt = load_attempt(
+                Path(workspace_dir) / "admissions",
+                attempt_id,
+                verify_files=False,
+            )
+            technical = dict(record.get("technical_details") or {})
+            resolved = self._document_evidence_resolver(
+                project_id=project_id,
+                listing_admission_date=str(attempt.created_at)[:10],
+                selected_entry_ids=self._document_selection_ids(
+                    workspace_dir
+                ),
+            )
+            technical["monitoring_document_evidence"] = (
+                resolved.to_dict()
+                if hasattr(resolved, "to_dict")
+                else dict(resolved)
+            )
+            frozen_record["technical_details"] = technical
+        elif self._require_document_evidence:
+            raise AdmissionMappingPipelineError(
+                "mapping_document_evidence_resolver_unavailable"
+            )
         return admission_record_to_harness_input(
             project_id=project_id,
             attempt_id=attempt_id,
-            record=record,
+            record=frozen_record,
             table_rows_by_snapshot=self._load_table_rows(
                 record=record,
                 workspace_dir=workspace_dir,
             ),
             relationship_profiler=self._required_relationship_profiler(),
+            require_document_evidence=self._require_document_evidence,
         )
+
+    @staticmethod
+    def _document_selection_ids(workspace_dir: Path) -> dict[str, str]:
+        store = _store(workspace_dir)
+        try:
+            selected = {}
+            for role in DOCUMENT_ROLES:
+                row = store.get_domain_object(
+                    DOCUMENT_SELECTION_KIND,
+                    role,
+                )
+                if row is None or not isinstance(row[1], Mapping):
+                    continue
+                entry_id = str(row[1].get("source_entry_id") or "").strip()
+                if entry_id:
+                    selected[role] = entry_id
+            return selected
+        finally:
+            store.close()
+
+    def select_document(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Path,
+        role: str,
+        source_entry_id: str,
+    ) -> Mapping[str, Any]:
+        """Version one explicit role selection; resolver revalidates its source."""
+
+        role = str(role or "").strip()
+        source_entry_id = str(source_entry_id or "").strip()
+        if role not in DOCUMENT_ROLES or not source_entry_id:
+            raise AdmissionMappingPipelineError(
+                "mapping_document_selection_invalid"
+            )
+        self._ready_record(
+            project_id=project_id,
+            attempt_id=attempt_id,
+            workspace_dir=workspace_dir,
+        )
+        if self._document_evidence_resolver is None:
+            raise AdmissionMappingPipelineError(
+                "mapping_document_evidence_resolver_unavailable"
+            )
+        attempt = load_attempt(
+            Path(workspace_dir) / "admissions",
+            attempt_id,
+            verify_files=False,
+        )
+        selections = self._document_selection_ids(workspace_dir)
+        selections[role] = source_entry_id
+        packet = self._document_evidence_resolver(
+            project_id=project_id,
+            listing_admission_date=str(attempt.created_at)[:10],
+            selected_entry_ids=selections,
+        )
+        selected_role = next(
+            (item for item in packet.roles if item.role == role),
+            None,
+        )
+        if selected_role is None or (
+            selected_role.status == "incomplete"
+            and f"{role}_selection_stale"
+            in selected_role.limitation_codes
+        ):
+            raise AdmissionMappingPipelineError(
+                "mapping_document_selection_not_found_or_role_mismatch"
+            )
+        if (
+            selected_role.status != "current"
+            or selected_role.binding is None
+            or selected_role.binding.source_entry_id != source_entry_id
+        ):
+            raise AdmissionMappingPipelineError(
+                "mapping_document_selection_unusable"
+            )
+        store = _store(workspace_dir)
+        try:
+            version = store.put_domain_object(
+                DOCUMENT_SELECTION_KIND,
+                role,
+                {
+                    "schema_version": "mm-c3-document-selection-v1",
+                    "project_id": project_id,
+                    "role": role,
+                    "source_entry_id": source_entry_id,
+                },
+            )
+        finally:
+            store.close()
+        return {
+            "role": role,
+            "source_entry_id": source_entry_id,
+            "version": version,
+        }
 
     def _cohort_contract(self, cohort: str) -> MonitoringMappingCohortContract:
         try:
@@ -549,48 +678,170 @@ class AdmissionMappingPipeline:
                 record=record,
                 workspace_dir=workspace_dir,
             )
-            runtime = service.runtime_resolver()
-            runtime_identity = self._runtime_identity(runtime)
-            expected_identity = (
-                (
-                    self._required_provider,
-                    self._required_model.casefold(),
-                )
-                if contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
-                else (
-                    self._verifier_required_provider,
-                    self._verifier_required_model.casefold(),
-                )
-            )
-            if runtime_identity == (
-                MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
-                MONITORING_C3_LOCAL_FALLBACK_MODEL.casefold(),
-            ) and contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY:
-                harness_input = self._admit_local_fallback(
-                    harness_input,
-                    project_id=project_id,
-                    attempt_id=attempt_id,
-                )
-            elif runtime_identity != expected_identity and not (
-                contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
-                and runtime_identity == ("cms-router", "minimax-m3")
-            ):
-                raise AdmissionMappingPipelineError(
-                    "mapping_model_not_configured"
-                )
-            revision = self._revision_factory(harness_input.input_revision)
-            jobs = service.submit_listing_field_mapping_chunks(
+            harness_input = self._admit_runtime(
+                service,
+                contract,
+                harness_input,
                 project_id=project_id,
-                input_revision=revision,
-                field_profile=harness_input.field_profile,
-                chunk_size=12,
-                prompt_version=contract.prompt_version,
-                business_key_prefix=contract.business_key_prefix,
+                attempt_id=attempt_id,
+                allow_local_fallback=True,
             )
-        except (MappingBridgeError, ValueError) as exc:
+            jobs = self._submit_harness(
+                service,
+                contract,
+                harness_input,
+                project_id=project_id,
+            )
+        except MappingBridgeError as exc:
+            code = str(getattr(exc, "code", ""))
+            raise AdmissionMappingPipelineError(
+                code
+                if code.startswith(("mapping_document_", "document_packet_"))
+                else "mapping_bridge_failed"
+            ) from exc
+        except ValueError as exc:
             raise AdmissionMappingPipelineError("mapping_bridge_failed") from exc
         self._worker_wake()
         return self._project(jobs, attempt_id=attempt_id, cohort=contract.cohort)
+
+    def generate_dual_candidates(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Path,
+    ) -> Mapping[str, Any]:
+        """Freeze once, preflight both routes, then enqueue both blind cohorts."""
+
+        contracts = tuple(
+            self._cohort_contract(cohort)
+            for cohort in (
+                MONITORING_MAPPING_COHORT_PRIMARY,
+                MONITORING_MAPPING_COHORT_VERIFIER,
+            )
+        )
+        services = tuple(
+            self._cohort_service(contract.cohort)
+            for contract in contracts
+        )
+        if any(not self._configured(service) for service in services):
+            raise AdmissionMappingPipelineError("mapping_bridge_unconfigured")
+        record = self._ready_record(
+            project_id=project_id,
+            attempt_id=attempt_id,
+            workspace_dir=workspace_dir,
+        )
+        try:
+            harness_input = self._frozen_harness_input(
+                project_id=project_id,
+                attempt_id=attempt_id,
+                record=record,
+                workspace_dir=workspace_dir,
+            )
+            for service, contract in zip(services, contracts):
+                self._admit_runtime(
+                    service,
+                    contract,
+                    harness_input,
+                    project_id=project_id,
+                    attempt_id=attempt_id,
+                    allow_local_fallback=False,
+                )
+            submitted = tuple(
+                self._submit_harness(
+                    service,
+                    contract,
+                    harness_input,
+                    project_id=project_id,
+                )
+                for service, contract in zip(services, contracts)
+            )
+        except MappingBridgeError as exc:
+            code = str(getattr(exc, "code", ""))
+            raise AdmissionMappingPipelineError(
+                code
+                if code.startswith(("mapping_document_", "document_packet_"))
+                else "mapping_bridge_failed"
+            ) from exc
+        except ValueError as exc:
+            raise AdmissionMappingPipelineError("mapping_bridge_failed") from exc
+        self._worker_wake()
+        primary = self._project(
+            submitted[0],
+            attempt_id=attempt_id,
+            cohort=contracts[0].cohort,
+        )
+        verifier = self._project(
+            submitted[1],
+            attempt_id=attempt_id,
+            cohort=contracts[1].cohort,
+        )
+        return {
+            **dict(primary),
+            "verification": {
+                "state": verifier.get("state"),
+                "summary": verifier.get("summary"),
+            },
+        }
+
+    def _admit_runtime(
+        self,
+        service: Any,
+        contract: MonitoringMappingCohortContract,
+        harness_input: MappingHarnessInput,
+        *,
+        project_id: str,
+        attempt_id: str,
+        allow_local_fallback: bool,
+    ) -> MappingHarnessInput:
+        runtime_identity = self._runtime_identity(service.runtime_resolver())
+        expected_identity = (
+            (self._required_provider, self._required_model.casefold())
+            if contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
+            else (
+                self._verifier_required_provider,
+                self._verifier_required_model.casefold(),
+            )
+        )
+        local_identity = (
+            MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
+            MONITORING_C3_LOCAL_FALLBACK_MODEL.casefold(),
+        )
+        if (
+            allow_local_fallback
+            and contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
+            and runtime_identity == local_identity
+        ):
+            return self._admit_local_fallback(
+                harness_input,
+                project_id=project_id,
+                attempt_id=attempt_id,
+            )
+        alternate_primary = (
+            contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
+            and runtime_identity == ("cms-router", "minimax-m3")
+        )
+        if runtime_identity != expected_identity and not alternate_primary:
+            raise AdmissionMappingPipelineError("mapping_model_not_configured")
+        return harness_input
+
+    def _submit_harness(
+        self,
+        service: Any,
+        contract: MonitoringMappingCohortContract,
+        harness_input: MappingHarnessInput,
+        *,
+        project_id: str,
+    ) -> tuple[Any, ...]:
+        revision = self._revision_factory(harness_input.input_revision)
+        return service.submit_listing_field_mapping_chunks(
+            project_id=project_id,
+            input_revision=revision,
+            field_profile=harness_input.field_profile,
+            chunk_size=12,
+            prompt_version=contract.prompt_version,
+            business_key_prefix=contract.business_key_prefix,
+        )
 
     def list_candidates(
         self,
@@ -984,6 +1235,7 @@ def current_admission_mapping_revision(
     *,
     workspace_dir: Path,
     relationship_profiler: Optional[Callable[..., Any]] = None,
+    document_evidence_resolver: Optional[Callable[..., Any]] = None,
 ) -> Optional[str]:
     """Resolve a C3 admission job against the current accepted profile.
 
@@ -1001,7 +1253,10 @@ def current_admission_mapping_revision(
         field_profile = payload.get("field_profile")
         if not isinstance(field_profile, Mapping):
             return None
-        if field_profile.get("bridge_schema_version") != MAPPING_BRIDGE_SCHEMA_VERSION:
+        if field_profile.get("bridge_schema_version") not in {
+            "mm-c3-mapping-profile-bridge-v7",
+            MAPPING_BRIDGE_SCHEMA_VERSION,
+        }:
             return None
         attempt_id = str(field_profile.get("batch_id") or "").strip()
         if not attempt_id:
@@ -1010,6 +1265,7 @@ def current_admission_mapping_revision(
             ai_repository=repository,
             task_type=job.task_type,
             relationship_profiler=relationship_profiler,
+            document_evidence_resolver=document_evidence_resolver,
         )
         record = pipeline._load_record(
             project_id=job.project_id,
@@ -1022,15 +1278,11 @@ def current_admission_mapping_revision(
         # relationship evidence. When the profiler is unavailable a v6
         # profile (which always carries evidence) cannot be reproduced and
         # the job falls back to the stale branch instead of passing.
-        current_input = admission_record_to_harness_input(
+        current_input = pipeline._frozen_harness_input(
             project_id=job.project_id,
             attempt_id=attempt_id,
             record=record,
-            table_rows_by_snapshot=pipeline._load_table_rows(
-                record=record,
-                workspace_dir=workspace_dir,
-            ),
-            relationship_profiler=pipeline._resolve_relationship_profiler(),
+            workspace_dir=workspace_dir,
         )
         if (
             str(job.provider) == MONITORING_C3_LOCAL_FALLBACK_PROVIDER

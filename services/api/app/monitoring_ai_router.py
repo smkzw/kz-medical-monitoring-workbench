@@ -352,6 +352,7 @@ def create_monitoring_ai_router(
     principal_resolver: Callable[[Request], MonitoringAuthenticatedPrincipal | None]
     | None = None,
     require_server_principal: bool = True,
+    allow_legacy_field_mapping: bool = True,
 ) -> APIRouter:
     profiler = MonitoringAIFieldProfiler(batch_repository)
     router = APIRouter(
@@ -737,6 +738,17 @@ def create_monitoring_ai_router(
             action=MonitoringAction.REVIEW_AI_CANDIDATE,
             require_write=True,
         )
+        if not allow_legacy_field_mapping:
+            raise HTTPException(
+                status_code=410,
+                detail={
+                    "code": "monitoring_ai_legacy_mapping_retired",
+                    "message": (
+                        "旧版单模型字段识别入口已停用。请从项目的数据接入页"
+                        "启动系统主分析与独立核对。"
+                    ),
+                },
+            )
         try:
             if request.retry_failed:
                 repository.expire_exhausted_leases(project_id=canonical_id)
@@ -761,10 +773,9 @@ def create_monitoring_ai_router(
                     raise MonitoringBatchRepositoryError(
                         "monitoring batch identity changed during field profiling"
                     )
-                identity = current_identity
                 revision = _preferred_field_mapping_revision(
                     repository,
-                    identity,
+                    current_identity,
                     full_profile_sha256=snapshot.profile_sha256,
                     full_input_sha256=snapshot.input_sha256,
                 )
@@ -789,29 +800,23 @@ def create_monitoring_ai_router(
                 chunk_size=request.chunk_size,
             )
             if request.retry_failed:
-                retried_jobs = []
-                for job in jobs:
-                    if job.status.value not in {
-                        "failed",
-                        "blocked",
-                        "stale_input",
-                    }:
-                        retried_jobs.append(job)
-                        continue
-                    retried_jobs.append(
-                        repository.retry_terminal(
-                            canonical_id,
-                            job.job_id,
-                            current_input_revision_sha256=(
-                                current_monitoring_ai_revision(
-                                    repository,
-                                    batch_repository,
-                                    job,
-                                )
-                            ),
-                        )
+                jobs = tuple(
+                    job
+                    if job.status.value
+                    not in {"failed", "blocked", "stale_input"}
+                    else repository.retry_terminal(
+                        canonical_id,
+                        job.job_id,
+                        current_input_revision_sha256=(
+                            current_monitoring_ai_revision(
+                                repository,
+                                batch_repository,
+                                job,
+                            )
+                        ),
                     )
-                jobs = tuple(retried_jobs)
+                    for job in jobs
+                )
             worker_wake()
             return {
                 "project_id": canonical_id,
