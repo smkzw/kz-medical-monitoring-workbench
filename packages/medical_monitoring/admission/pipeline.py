@@ -7,7 +7,7 @@ import shutil
 import tempfile
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, BinaryIO, Callable, Iterable, Mapping, Sequence
+from typing import Any, BinaryIO, Callable, Iterable, Mapping, Optional, Sequence
 
 from ..domain.entities import SourceRevision, content_hash
 from ..graph.store import Store
@@ -27,6 +27,14 @@ from .staging import (
     list_attempt_ids,
     load_attempt,
     stage_copy,
+)
+from .workbook_manifest import (
+    SOURCE_PROFILE_RECONCILIATION_SCHEMA_VERSION,
+    WORKBOOK_MANIFEST_SCHEMA_VERSION,
+    WorkbookManifestError,
+    manifest_unavailable_summary,
+    reconcile_source_to_profile,
+    validate_workbook_manifest_bundle,
 )
 
 ADMISSION_RECORD_KIND = "data_admission"
@@ -111,20 +119,66 @@ def _public_table(
 
 
 class DataAdmissionPipeline:
-    """Compose staging, parsing, profiling and the existing Store authority."""
+    """Compose staging, parsing, profiling and the existing Store authority.
+
+    The workbook physical-integrity manifest comes from the parse authority:
+    every ``ListingSheetPayload`` parsed by a manifest-capable parser carries
+    the file's ``WorkbookPhysicalManifest``, which this pipeline pairs with
+    the staged file digest, validates, reconciles against the profiled tables
+    and persists inside ``technical_details``.  ``manifest_provider``
+    optionally overrides that source (tests, synthetic admissions).  The
+    mapping bridge refuses to run unless the reconciliation is complete; a
+    record admitted without any manifest carries a ``manifest_unavailable``
+    reconciliation so the gate fails closed.
+    """
 
     def __init__(
         self,
         parser: Callable[[str, bytes], Sequence[Any]],
         *,
         supported_suffixes: Iterable[str] = DEFAULT_LISTING_SUFFIXES,
+        manifest_provider: Optional[Callable[[str, bytes], Mapping[str, Any]]] = None,
     ) -> None:
         self._parser = parser
         self._suffixes = frozenset(str(value).lower() for value in supported_suffixes)
+        self._manifest_provider = manifest_provider
 
     @staticmethod
     def _admission_workspace(workspace_dir: Path) -> Path:
         return Path(workspace_dir) / "admissions"
+
+    def _manifest_payload(
+        self,
+        source_file: str,
+        source_bytes: bytes,
+        sheets: Sequence[Any],
+    ) -> Optional[Mapping[str, Any]]:
+        """Resolve the parse authority's manifest for one staged file.
+
+        ``manifest_provider`` overrides the payload-attached manifest so
+        tests and synthetic admissions can inject or mutate the evidence.
+        Without a provider the manifest attached to the parsed sheet payloads
+        by the parse authority is used as-is.
+        """
+
+        if self._manifest_provider is not None:
+            try:
+                return self._manifest_provider(source_file, source_bytes)
+            except Exception as exc:
+                raise AdmissionPipelineError(
+                    "admission_profile_unavailable"
+                ) from exc
+        for sheet in sheets:
+            candidate = getattr(sheet, "workbook_manifest", None)
+            if candidate is None:
+                continue
+            if isinstance(candidate, Mapping):
+                return dict(candidate)
+            dump = getattr(candidate, "model_dump", None)
+            if callable(dump):
+                return dump()
+            return None
+        return None
 
     def create_attempt(
         self, *, project_id: str, source_dir: Path, workspace_dir: Path
@@ -143,6 +197,8 @@ class DataAdmissionPipeline:
         revision_ids: list[str] = []
         snapshot_ids: list[str] = []
         locator_index_ids: list[str] = []
+        manifest_files: list[dict[str, Any]] = []
+        staged_file_payloads: list[dict[str, Any]] = []
         store = _store(workspace_dir)
         try:
             try:
@@ -157,6 +213,11 @@ class DataAdmissionPipeline:
             for staged_file in attempt.files:
                 file_path = attempt.file_path(staged_file.path)
                 source_bytes = file_path.read_bytes()
+                staged_file_payloads.append({
+                    "path": staged_file.path,
+                    "size": staged_file.size,
+                    "sha256": staged_file.sha256,
+                })
                 revision_id = "srcc1_" + content_hash({
                     "project_id": project_id,
                     "relative_path": staged_file.path,
@@ -184,6 +245,15 @@ class DataAdmissionPipeline:
                 )
                 profiles.append(profile)
                 revision_ids.append(revision_id)
+                manifest_payload = self._manifest_payload(
+                    file_path.name, source_bytes, sheets
+                )
+                if manifest_payload is not None:
+                    manifest_files.append({
+                        "source_file": staged_file.path,
+                        "source_file_sha256": staged_file.sha256,
+                        "manifest": manifest_payload,
+                    })
                 if len(profile.tables) != len(sheets):
                     raise AdmissionPipelineError("admission_profile_unavailable")
                 for table, sheet in zip(profile.tables, sheets):
@@ -234,6 +304,27 @@ class DataAdmissionPipeline:
                     snapshot_ids.append(snapshot.snapshot_id)
                     locator_index_ids.append(snapshot.snapshot_id)
 
+            if manifest_files:
+                manifest_bundle = {
+                    "schema_version": WORKBOOK_MANIFEST_SCHEMA_VERSION,
+                    "files": manifest_files,
+                }
+                try:
+                    validated_bundle = validate_workbook_manifest_bundle(
+                        manifest_bundle
+                    )
+                    reconciliation = reconcile_source_to_profile(
+                        validated_bundle,
+                        technical_files=staged_file_payloads,
+                        tables=public_tables,
+                    )
+                except WorkbookManifestError as exc:
+                    raise AdmissionPipelineError(
+                        "admission_profile_unavailable"
+                    ) from exc
+            else:
+                manifest_bundle = None
+                reconciliation = manifest_unavailable_summary()
             summary = {
                 "files": len(attempt.files),
                 "tables": len(public_tables),
@@ -247,14 +338,21 @@ class DataAdmissionPipeline:
                 "tables": public_tables,
                 "technical_details": {
                     "manifest_hash": attempt.manifest_hash,
-                    "files": [
-                        {"path": item.path, "size": item.size, "sha256": item.sha256}
-                        for item in attempt.files
-                    ],
+                    "files": staged_file_payloads,
                     "revision_ids": revision_ids,
                     "snapshot_ids": snapshot_ids,
                     "locator_index_ids": locator_index_ids,
                     "profile_ids": [profile.profile_id for profile in profiles],
+                    "physical_manifest": manifest_bundle,
+                    "source_profile_reconciliation": {
+                        "schema_version": SOURCE_PROFILE_RECONCILIATION_SCHEMA_VERSION,
+                        "status": reconciliation["status"],
+                        "complete": reconciliation["complete"],
+                        "manifest_sha256": reconciliation["manifest_sha256"],
+                        "files": reconciliation["files"],
+                        "blocking_finding_codes": reconciliation["blocking_finding_codes"],
+                        "findings": reconciliation["findings"],
+                    },
                 },
             }
             store.put_domain_object(ADMISSION_RECORD_KIND, attempt.attempt_id, record)

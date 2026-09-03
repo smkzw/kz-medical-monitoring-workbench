@@ -2,6 +2,12 @@
 
 The adapter only reshapes deterministic column statistics. It does not
 interpret clinical meaning, create mapping decisions, or materialize facts.
+
+Entry to the harness is gated: ``admission_record_to_harness_input`` first
+enforces the fail-closed source-to-profile reconciliation
+(:mod:`admission.workbook_manifest`), so the dual models can only run on an
+input whose physical workbook manifest is present, digest-bound to the
+staged files, and fully explained against the admitted tables.
 """
 
 from __future__ import annotations
@@ -12,9 +18,14 @@ from typing import Any, Dict, Mapping, Optional, Sequence
 
 from ..intelligence.primitives import content_hash
 from .mapping_gate import MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION
+from .workbook_manifest import (
+    SOURCE_PROFILE_GATE_SCHEMA_VERSION,
+    WorkbookManifestError,
+    enforce_source_to_profile_gate,
+)
 
 
-MAPPING_BRIDGE_SCHEMA_VERSION = "mm-c3-mapping-profile-bridge-v4"
+MAPPING_BRIDGE_SCHEMA_VERSION = "mm-c3-mapping-profile-bridge-v5"
 PROFILE_SCHEMA_VERSION = "monitoring_ai_field_profile_v3"
 _SUBJECT_ROLE = "受试者标识"
 _TYPE_MAP = {
@@ -241,9 +252,25 @@ def admission_record_to_harness_input(
         Mapping[str, Mapping[str, Sequence[Mapping[str, Any]]]]
     ] = None,
 ) -> MappingHarnessInput:
-    """Build the exact input accepted by ``MonitoringAiService``."""
+    """Build the exact input accepted by ``MonitoringAiService``.
+
+    The record must first pass the fail-closed source-to-profile gate: the
+    dual models never see an input whose physical workbook manifest is
+    missing, mutated after admission, or not fully reconciled with the
+    admitted tables.  The reconciliation summary is bound into the harness
+    profile via ``input_completeness`` and participates in ``input_sha256``.
+    """
     if record.get("project_id") != project_id or record.get("attempt_id") != attempt_id:
         raise MappingBridgeError("admission identity does not match mapping request")
+    try:
+        completeness = enforce_source_to_profile_gate(record)
+    except WorkbookManifestError as exc:
+        error = MappingBridgeError(
+            f"source-to-profile gate refused the mapping input: {exc}"
+        )
+        error.code = exc.code
+        error.findings = exc.findings
+        raise error from exc
     tables = record.get("tables")
     technical = record.get("technical_details")
     if not isinstance(tables, list) or not tables or not isinstance(technical, Mapping):
@@ -287,6 +314,12 @@ def admission_record_to_harness_input(
         raise MappingBridgeError("admission profile table field order is ambiguous")
     domains = list(dict.fromkeys(item["domain"] for item in fields))
     source_sha256s = [item["source_content_sha256"] for item in source_bindings]
+    input_completeness = {
+        "gate_schema_version": SOURCE_PROFILE_GATE_SCHEMA_VERSION,
+        "manifest_schema_version": completeness["manifest_schema_version"],
+        "manifest_sha256": completeness["manifest_sha256"],
+        "reconciliation": completeness,
+    }
     input_sha256 = content_hash({
         "mapping_cohort_schema_version": MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION,
         "project_id": project_id,
@@ -294,6 +327,7 @@ def admission_record_to_harness_input(
         "sources": source_bindings,
         "table_bindings": table_bindings,
         "fields": fields,
+        "input_completeness": input_completeness,
     })
     profile: dict[str, Any] = {
         "schema_version": PROFILE_SCHEMA_VERSION,
@@ -315,6 +349,7 @@ def admission_record_to_harness_input(
             {"domain": domain, "field_order": order}
             for domain, order in table_field_order.items()
         ],
+        "input_completeness": input_completeness,
         "payload_policy": "bounded_full_column_statistics_source_labels_and_redacted_row_context_v3",
     }
     profile["profile_sha256"] = content_hash(profile)

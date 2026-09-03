@@ -81,6 +81,17 @@ from .mapping_reconciliation import (
     normalize_field_kind,
     reconcile_mapping_cohorts,
 )
+from .workbook_manifest import (
+    SOURCE_PROFILE_GATE_SCHEMA_VERSION,
+    SOURCE_PROFILE_RECONCILIATION_SCHEMA_VERSION,
+    WORKBOOK_MANIFEST_SCHEMA_VERSION,
+    WORKBOOK_PHYSICAL_EVIDENCE_VERSION,
+    WorkbookManifestError,
+    enforce_source_to_profile_gate,
+    reconcile_source_to_profile,
+    validate_workbook_manifest_bundle,
+    validate_workbook_manifest_file,
+)
 
 __all__ = [
     "MANIFEST_NAME",
@@ -133,8 +144,17 @@ __all__ = [
     "MappingReconciliationError",
     "cohort_payload_from_candidates",
     "current_admission_mapping_revision",
+    "enforce_source_to_profile_gate",
     "field_identity",
     "mapping_conclusion_violations",
     "normalize_field_kind",
     "reconcile_mapping_cohorts",
+    "reconcile_source_to_profile",
+    "SOURCE_PROFILE_GATE_SCHEMA_VERSION",
+    "SOURCE_PROFILE_RECONCILIATION_SCHEMA_VERSION",
+    "validate_workbook_manifest_bundle",
+    "validate_workbook_manifest_file",
+    "WORKBOOK_MANIFEST_SCHEMA_VERSION",
+    "WORKBOOK_PHYSICAL_EVIDENCE_VERSION",
+    "WorkbookManifestError",
 ]

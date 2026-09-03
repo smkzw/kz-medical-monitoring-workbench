@@ -10400,6 +10400,53 @@ class SubjectMonitoringDrilldown(WorkbenchModel):
     capability_limitations: Dict[str, List[str]] = Field(default_factory=dict)
 
 
+class WorkbookSheetFact(WorkbenchModel):
+    """Physical fact for one worksheet, recorded in workbook order.
+
+    One entry exists for every sheet the parser saw, including sheets that
+    produced no ``ListingSheetPayload`` (empty sheets, or sheets without
+    usable headers), so admission can reconcile "what the file physically
+    contained" against "what was parsed".
+    """
+
+    sheet_index: int = Field(ge=1)
+    sheet_name: str
+    visibility: str = "unknown"
+    used_range: Optional[str] = None
+    used_row_count: Optional[int] = Field(default=None, ge=0)
+    used_column_count: Optional[int] = Field(default=None, ge=0)
+    content_kind: Optional[str] = None
+    emitted: bool = False
+    omission_reason: Optional[str] = None
+    hidden_row_count: int = Field(default=0, ge=0)
+    hidden_column_count: int = Field(default=0, ge=0)
+    merged_region_count: int = Field(default=0, ge=0)
+    named_table_count: int = Field(default=0, ge=0)
+    formula_cell_count: int = Field(default=0, ge=0)
+    uncached_formula_cell_count: Optional[int] = Field(default=None, ge=0)
+    uncached_scan_truncated: bool = False
+
+
+class WorkbookPhysicalManifest(WorkbenchModel):
+    """Reconcilable physical-integrity manifest for one parsed workbook file.
+
+    Produced by the listing parse authority together with the sheet payloads.
+    ``content_sha256`` binds the manifest to the exact uploaded bytes; the
+    sheet list is complete for the workbook, so downstream admission can
+    fail closed when a profile covers fewer sheets than the file contains
+    without a recorded omission reason.
+    """
+
+    evidence_version: str
+    parser_version: str
+    source_format: str
+    content_sha256: str
+    sheet_count: int = Field(ge=0)
+    emitted_sheet_count: int = Field(ge=0)
+    sheets: List[WorkbookSheetFact] = Field(default_factory=list)
+    evidence_limitations: List[str] = Field(default_factory=list)
+
+
 class ListingSheetPayload(WorkbenchModel):
     sheet_name: str
     headers: List[str] = Field(default_factory=list)
@@ -10407,6 +10454,35 @@ class ListingSheetPayload(WorkbenchModel):
     rows: List[Dict[str, Any]] = Field(default_factory=list)
     row_numbers: List[int] = Field(default_factory=list)
     parser_warnings: List[str] = Field(default_factory=list)
+    # Workbook physical evidence (optional; absent for payloads built
+    # outside the parse authority or by older parser versions).
+    parser_version: Optional[str] = None
+    sheet_index: Optional[int] = Field(default=None, ge=1)
+    sheet_visibility: Optional[str] = None
+    sheet_content_kind: Optional[str] = None
+    used_range: Optional[str] = None
+    used_row_count: Optional[int] = Field(default=None, ge=0)
+    used_column_count: Optional[int] = Field(default=None, ge=0)
+    header_row_numbers: Optional[List[int]] = None
+    data_start_row_number: Optional[int] = Field(default=None, ge=1)
+    hidden_rows: Optional[List[int]] = None
+    hidden_row_count: Optional[int] = Field(default=None, ge=0)
+    hidden_rows_truncated: Optional[bool] = None
+    hidden_columns: Optional[List[str]] = None
+    hidden_column_count: Optional[int] = Field(default=None, ge=0)
+    hidden_columns_truncated: Optional[bool] = None
+    merged_regions: Optional[List[str]] = None
+    merged_region_count: Optional[int] = Field(default=None, ge=0)
+    merged_regions_truncated: Optional[bool] = None
+    named_tables: Optional[List[Dict[str, Any]]] = None
+    named_table_count: Optional[int] = Field(default=None, ge=0)
+    autofilter: Optional[Dict[str, Any]] = None
+    formula_evidence: Optional[Dict[str, Any]] = None
+    number_formats: Optional[Dict[str, Any]] = None
+    # Coordinates and hashes only: preserve leading-zero text representation
+    # without persisting subject identifiers or other raw cell values.
+    leading_zero_text_cells: Optional[List[Dict[str, Any]]] = None
+    workbook_manifest: Optional[WorkbookPhysicalManifest] = None
 
 
 class MonitoringIntakeRequest(WorkbenchModel):
