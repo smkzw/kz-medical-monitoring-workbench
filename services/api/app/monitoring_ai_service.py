@@ -518,6 +518,7 @@ _VISIT_TOPIC_STUDY_COMPLETION_RE = re.compile(
 _VISIT_TOPIC_DIAGNOSTIC_SCHEMA_VERSION = (
     "monitoring_visit_topic_boundary_diagnostics_v1"
 )
+_DOCUMENT_AUTHORITY_MAX_OUTPUT_TOKENS = 48_000
 _VISIT_TOPIC_REPAIR_ACTION = "regenerate_entire_user_visible_field"
 _VISIT_TOPIC_FORBIDDEN_FAMILY_PATTERNS = (
     ("medication_action", _VISIT_TOPIC_MEDICATION_ACTION_RE),
@@ -3471,7 +3472,15 @@ class MonitoringAiService:
             max_output_tokens=(
                 12_000
                 if job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
-                else 24_000
+                else (
+                    _DOCUMENT_AUTHORITY_MAX_OUTPUT_TOKENS
+                    if job.task_type
+                    in {
+                        MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+                        MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+                    }
+                    else 24_000
+                )
             ),
         )
 
