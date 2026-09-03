@@ -533,14 +533,18 @@ class SourceContentValidationService:
             self._protocol_role_check(full_text, expected.expected_file_role),
             self._text_project_check(full_text, expected.project_identifiers),
         ]
-        if expected.indication_terms:
+        protocol_role = expected.expected_file_role in {
+            "protocol",
+            "protocol_docx",
+        }
+        if protocol_role and expected.indication_terms:
             checks.append(self._text_term_check(
                 "indication",
                 "适应症",
                 full_text,
                 expected.indication_terms,
             ))
-        if expected.expected_protocol_version:
+        if protocol_role and expected.expected_protocol_version:
             checks.append(self._text_term_check(
                 "protocol_version",
                 "方案版本",

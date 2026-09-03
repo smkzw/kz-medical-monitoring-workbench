@@ -124,10 +124,7 @@ class MonitoringDocumentEvidenceResolver:
         if (
             evidence.status != "current"
             or current is None
-            or current.source_entry_id != binding.source_entry_id
-            or current.content_sha256 != binding.content_sha256
-            or current.locator_index_sha256
-            != binding.locator_index_sha256
+            or current != binding
         ):
             raise ValueError("monitoring document binding is no longer current")
         matches = self.source_registry.search_document_spans(
