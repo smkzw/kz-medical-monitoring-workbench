@@ -1700,7 +1700,7 @@ class MonitoringAiService:
                     f"document-authority-"
                     f"{'adjudication' if adjudication_context is not None else 'review'}:"
                     f"{role}:"
-                    f"{'v3:' if adjudication_context is not None else ''}"
+                    f"{'v4:' if adjudication_context is not None else ''}"
                     f"{packet_sha256}"
                 ),
             )
@@ -3327,6 +3327,14 @@ class MonitoringAiService:
                     "也不属于当前权威补充，必须放入excluded_candidate_ids；这些"
                     "文件仍保留在隔离候选库，不得因排除于权威组合而声称被删除。"
                     "必须依据正文作用和版本关系判断，不能只凭文件名关键词。"
+                    " 同一版本、正文实质一致的文件若只是不同载体，且其中一份有"
+                    "签署或批准证据、另一份只是未签署的可编辑副本，则签署或批准的"
+                    "冻结载体作为当前主文件，可编辑副本属于重复载体并放入"
+                    "excluded_candidate_ids，不得作为补充文件。只有正文证据证明"
+                    "可编辑件包含冻结载体没有的、仍然有效的规范变更时，才可纳入"
+                    "supplementary_candidate_ids；日期只作为辅助证据，缺失或签署日"
+                    "不同不能单独改变分类。正文存在有效差异、修订或增补关系但证据"
+                    "不足时必须保持未决，不得只按PDF、Word或文件名判断。"
                 )
         elif (
             job.task_type

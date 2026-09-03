@@ -11,6 +11,8 @@ from packages.medical_monitoring.admission.document_authority import (
     LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
     PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
     PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+    OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
     PRIMARY_PROMPT_VERSION,
     PRIMARY_REVIEW_PROMPT_VERSION,
     VERIFIER_PROMPT_VERSION,
@@ -315,11 +317,13 @@ def load_document_authority_review_run(
         else {
             PRIMARY_ADJUDICATION_PROMPT_VERSION,
             PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
         }
         if role == "primary" and adjudication_context is not None
         else {
             VERIFIER_ADJUDICATION_PROMPT_VERSION,
             PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+            OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
         }
         if adjudication_context is not None
         else {

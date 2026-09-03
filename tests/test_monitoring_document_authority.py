@@ -12,6 +12,8 @@ from packages.medical_monitoring.admission.document_authority import (
     LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
     PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
     PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+    OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
     CandidateAssessment,
     ConflictDecision,
     DocumentAuthorityAnalysis,
@@ -1514,7 +1516,23 @@ def test_legacy_v1_adjudication_context_remains_replayable() -> None:
     assert result["state"] == "resolved"
 
 
-def test_previous_v2_adjudication_prompt_remains_replayable() -> None:
+@pytest.mark.parametrize(
+    ("primary_prompt", "verifier_prompt"),
+    (
+        (
+            PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+        ),
+        (
+            OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+        ),
+    ),
+)
+def test_previous_adjudication_prompts_remain_replayable(
+    primary_prompt: str,
+    verifier_prompt: str,
+) -> None:
     batch = _composite_batch()
     primary, verifier, packet = _composite_conflict_context(batch)
     with_supplement = _ecrf_composite_review(packet)
@@ -1533,12 +1551,12 @@ def test_previous_v2_adjudication_prompt_remains_replayable() -> None:
     primary_adjudication = _review_run(
         adjudication, "primary", adjudication=True
     ).model_copy(
-        update={"prompt_version": PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION}
+        update={"prompt_version": primary_prompt}
     )
     verifier_adjudication = _review_run(
         adjudication, "verifier", adjudication=True
     ).model_copy(
-        update={"prompt_version": PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION}
+        update={"prompt_version": verifier_prompt}
     )
 
     result = resolve_document_authority_adjudication(
@@ -1567,6 +1585,45 @@ def test_previous_v2_adjudication_prompt_remains_replayable() -> None:
             context,
             primary_adjudication,
             _review_run(adjudication, "verifier", adjudication=True),
+        )
+
+    mixed_primary = primary_adjudication.model_copy(
+        update={"prompt_version": OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION}
+    )
+    mixed_verifier = verifier_adjudication.model_copy(
+        update={"prompt_version": PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION}
+    )
+    with pytest.raises(DocumentAuthorityError, match="run_identity_invalid"):
+        resolve_document_authority_adjudication(
+            batch,
+            primary,
+            verifier,
+            packet,
+            primary_review,
+            verifier_review,
+            context,
+            mixed_primary,
+            mixed_verifier,
+        )
+    with pytest.raises(DocumentAuthorityError, match="run_identity_invalid"):
+        resolve_document_authority_adjudication(
+            batch,
+            primary,
+            verifier,
+            packet,
+            primary_review,
+            verifier_review,
+            context,
+            primary_adjudication.model_copy(
+                update={
+                    "prompt_version": PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION
+                }
+            ),
+            verifier_adjudication.model_copy(
+                update={
+                    "prompt_version": OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION
+                }
+            ),
         )
 
 
