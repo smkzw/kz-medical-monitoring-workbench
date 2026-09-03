@@ -43,6 +43,10 @@ from packages.medical_monitoring.runtime.runtime_progress import (
     RUNTIME_DIR_NAME,
 )
 from services.api.app.listing_file_parser import parse_listing_file
+from services.api.app.protocol_text_extractor import (
+    ProtocolTextDocument,
+    ProtocolTextSpan,
+)
 from services.api.app.monitoring_document_evidence import (
     MonitoringDocumentEvidenceResolver,
 )
@@ -885,20 +889,28 @@ def test_optional_study_document_registration_is_locator_backed_and_current(
     filename: str,
     paragraphs: tuple[str, ...],
 ) -> None:
+    expected_context = SourceExpectedContext(
+        project_identifiers=(PROJECT_ID,),
+        indication_terms=("unrelated-indication-label",),
+        expected_protocol_version="protocol-version-not-required-here",
+    )
     validation_store = SourceContentValidationStore(
         tmp_path / "validations.sqlite3"
     )
+    validation_service = SourceContentValidationService(validation_store)
+    expected_context_holder = [expected_context]
     registry = SourceRegistryService(
         SourceRegistryStore(tmp_path / "registry.jsonl"),
         artifact_root=tmp_path / "artifacts",
-        content_validation_service=SourceContentValidationService(
-            validation_store
+        content_validation_service=validation_service,
+        expected_context_resolver=lambda *_args: (
+            expected_context_holder[0]
         ),
-        expected_context_resolver=lambda *_args: SourceExpectedContext(),
     )
+    document_paragraphs = (PROJECT_ID, *paragraphs)
     if filename.endswith(".docx"):
         document = docx.Document()
-        for paragraph in paragraphs:
+        for paragraph in document_paragraphs:
             document.add_paragraph(paragraph)
         stream = io.BytesIO()
         document.save(stream)
@@ -907,7 +919,7 @@ def test_optional_study_document_registration_is_locator_backed_and_current(
         pymupdf = pytest.importorskip("pymupdf")
         document = pymupdf.open()
         page = document.new_page()
-        page.insert_text((72, 72), "\n".join(paragraphs))
+        page.insert_text((72, 72), "\n".join(document_paragraphs))
         payload = document.tobytes()
         document.close()
 
@@ -963,6 +975,52 @@ def test_optional_study_document_registration_is_locator_backed_and_current(
     assert retrieval["excerpts"]
     assert retrieval["clinical_conclusions"] == []
     assert len(retrieval["packet_sha256"]) == 64
+    expected_context_holder[0] = replace(
+        expected_context,
+        project_identifiers=(PROJECT_ID, "alternate-project-label"),
+    )
+    validation_service.assess_protocol(
+        project_id=PROJECT_ID,
+        source_entry_id=result.entry.entry_id,
+        module="medical_monitoring",
+        filename=filename,
+        file_sha256=result.entry.content_hash,
+        document=ProtocolTextDocument(
+            filename=filename,
+            title=filename,
+            paragraphs=[],
+            tables=[],
+            spans=[
+                ProtocolTextSpan(
+                    span_id=str(index),
+                    kind="reference_text",
+                    text=text,
+                    source_locator=f"document:span:{index}",
+                )
+                for index, text in enumerate(
+                    document_paragraphs,
+                    start=1,
+                )
+            ],
+            source_hash=result.entry.content_hash,
+        ),
+        expected=replace(
+            expected_context_holder[0],
+            expected_file_role=role,
+        ),
+        actor="system_validator",
+    )
+    with pytest.raises(
+        ValueError,
+        match="binding is no longer current",
+    ):
+        MonitoringDocumentEvidenceResolver(
+            registry
+        ).retrieve_current_excerpts(
+            project_id=PROJECT_ID,
+            binding=evidence.binding,
+            query_terms=["Analysis"],
+        )
     with pytest.raises(
         ValueError,
         match="binding is no longer current",
@@ -976,4 +1034,138 @@ def test_optional_study_document_registration_is_locator_backed_and_current(
                 content_sha256="f" * 64,
             ),
             query_terms=["Analysis"],
+        )
+
+
+def test_unusable_optional_replacement_preserves_last_usable_document(
+    tmp_path: Path,
+) -> None:
+    expected_context = SourceExpectedContext(
+        project_identifiers=(PROJECT_ID,),
+    )
+    registry = SourceRegistryService(
+        SourceRegistryStore(tmp_path / "registry.jsonl"),
+        content_validation_service=SourceContentValidationService(
+            SourceContentValidationStore(tmp_path / "validations.sqlite3")
+        ),
+        expected_context_resolver=lambda *_args: expected_context,
+    )
+
+    def ib_bytes(*values: str) -> bytes:
+        document = docx.Document()
+        for value in values:
+            document.add_paragraph(value)
+        stream = io.BytesIO()
+        document.save(stream)
+        return stream.getvalue()
+
+    usable = registry.register_monitoring_mapping_document(
+        PROJECT_ID,
+        "usable-ib.docx",
+        ib_bytes(
+            PROJECT_ID,
+            "Investigator Brochure",
+            "Nonclinical Studies",
+        ),
+        document_role="investigator_brochure",
+    )
+    unusable = registry.register_monitoring_mapping_document(
+        PROJECT_ID,
+        "unusable-ib.docx",
+        ib_bytes(PROJECT_ID, "Administrative cover only"),
+        document_role="investigator_brochure",
+    )
+
+    packet = MonitoringDocumentEvidenceResolver(registry).resolve(
+        project_id=PROJECT_ID,
+    )
+    evidence = next(
+        item
+        for item in packet.roles
+        if item.role == "investigator_brochure"
+    )
+    assert registry.current_content_validation(
+        PROJECT_ID,
+        unusable.entry.entry_id,
+    ).use_status == "requires_confirmation"
+    assert evidence.status == "current"
+    assert evidence.binding is not None
+    assert evidence.binding.source_entry_id == usable.entry.entry_id
+
+
+def test_monitoring_freshness_supersedes_legacy_role_alias(
+    tmp_path: Path,
+) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    expected_context = SourceExpectedContext()
+    validation_service = SourceContentValidationService(
+        SourceContentValidationStore(tmp_path / "validations.sqlite3")
+    )
+    registry = SourceRegistryService(
+        SourceRegistryStore(tmp_path / "registry.jsonl"),
+        content_validation_service=validation_service,
+        expected_context_resolver=lambda *_args: expected_context,
+    )
+
+    def ecrf_bytes(field_name: str) -> bytes:
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        sheet.title = "Form"
+        sheet.append(["字段名", "字段含义"])
+        sheet.append([field_name, "临床数据字段"])
+        stream = io.BytesIO()
+        workbook.save(stream)
+        workbook.close()
+        return stream.getvalue()
+
+    first_payload = ecrf_bytes("FIRST_FIELD")
+    first = registry.register_monitoring_mapping_document(
+        PROJECT_ID,
+        "first-ecrf.xlsx",
+        first_payload,
+        document_role="ecrf",
+    )
+    legacy_entry_id = first.entry.entry_id + "_legacy"
+    legacy_spans = [
+        span.model_copy(
+            update={
+                "source_id": span.source_id + "_legacy",
+                "entry_id": legacy_entry_id,
+            }
+        )
+        for span in first.spans
+    ]
+    legacy = first.model_copy(
+        update={
+            "entry": first.entry.model_copy(
+                update={
+                    "entry_id": legacy_entry_id,
+                    "source_kind": "ecrf_xlsx",
+                }
+            ),
+            "spans": legacy_spans,
+        }
+    )
+    registry.store.append(legacy)
+    validation_service.assess_listing(
+        project_id=PROJECT_ID,
+        source_entry_id=legacy_entry_id,
+        module="medical_monitoring",
+        filename="first-ecrf.xlsx",
+        file_sha256=first.entry.content_hash,
+        sheets=parse_listing_file("first-ecrf.xlsx", first_payload),
+        expected=replace(expected_context, expected_file_role="ecrf"),
+        actor="system_validator",
+    )
+    registry.register_monitoring_mapping_document(
+        PROJECT_ID,
+        "second-ecrf.xlsx",
+        ecrf_bytes("SECOND_FIELD"),
+        document_role="ecrf",
+    )
+
+    with pytest.raises(ValueError, match="superseded registered source"):
+        registry.assert_operational_sources_usable(
+            PROJECT_ID,
+            [legacy_spans[0].source_id],
         )

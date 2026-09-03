@@ -1123,13 +1123,35 @@ class SourceRegistryService:
                         f"{span.entry_id}"
                     )
             if entry.module in operational_modules:
+                logical_source_kind = (
+                    _monitoring_validation_role(entry.source_kind)
+                    if entry.module == "medical_monitoring"
+                    else entry.source_kind
+                )
+                latest_candidates = [
+                    item
+                    for item in entries
+                    if item.module == entry.module
+                    and (
+                        _monitoring_validation_role(item.source_kind)
+                        if item.module == "medical_monitoring"
+                        else item.source_kind
+                    )
+                    == logical_source_kind
+                    and (
+                        item.module != "medical_monitoring"
+                        or self._monitoring_entry_is_usable(item)
+                    )
+                ]
+                if not latest_candidates:
+                    raise ValueError(
+                        "registered source requires content-consistency "
+                        "confirmation before AI use: "
+                        f"{span.entry_id}/{validation.use_status}"
+                    )
                 latest = max(
-                    (
-                        item
-                        for item in entries
-                        if item.module == entry.module and item.source_kind == entry.source_kind
-                    ),
-                    key=lambda item: item.created_at,
+                    latest_candidates,
+                    key=lambda item: (item.created_at, item.entry_id),
                 )
                 if latest.entry_id != entry.entry_id:
                     raise ValueError(
@@ -1141,6 +1163,41 @@ class SourceRegistryService:
                     "registered source requires content-consistency confirmation before AI use: "
                     f"{span.entry_id}/{validation.use_status}"
                 )
+
+    def _monitoring_entry_is_usable(
+        self,
+        entry: SourceRegistryEntry,
+    ) -> bool:
+        validation = self.current_content_validation(
+            entry.project_id,
+            entry.entry_id,
+        )
+        if (
+            validation is None
+            or validation.validator_version != VALIDATOR_VERSION
+            or validation.source_entry_id != entry.entry_id
+            or validation.project_id != entry.project_id
+            or validation.module != "medical_monitoring"
+            or validation.file_sha256 != entry.content_hash
+            or validation.technical_status != "ready"
+            or validation.use_status
+            not in {"allowed", "confirmed_after_warning"}
+        ):
+            return False
+        if self.expected_context_resolver is None:
+            return True
+        expected = self.expected_context_resolver(
+            entry.project_id,
+            entry.module,
+            entry.source_kind,
+        )
+        expected = replace(
+            expected,
+            expected_file_role=_monitoring_validation_role(
+                entry.source_kind
+            ),
+        )
+        return validation.expected_context_hash == expected.context_hash
 
     def assert_operational_sources_usable(
         self,
