@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 from datetime import datetime, timezone
 import hashlib
 import io
@@ -943,3 +944,36 @@ def test_optional_study_document_registration_is_locator_backed_and_current(
     assert evidence.binding is not None
     assert evidence.binding.locator_count == len(result.spans)
     assert packet.mapping_context_ready is False
+    retrieval = MonitoringDocumentEvidenceResolver(
+        registry
+    ).retrieve_current_excerpts(
+        project_id=PROJECT_ID,
+        binding=evidence.binding,
+        query_terms=(
+            ["Nonclinical"]
+            if role == "investigator_brochure"
+            else ["Analysis Population"]
+        ),
+    )
+    assert retrieval["source_entry_id"] == result.entry.entry_id
+    assert retrieval["content_sha256"] == result.entry.content_hash
+    assert retrieval["locator_index_sha256"] == (
+        evidence.binding.locator_index_sha256
+    )
+    assert retrieval["excerpts"]
+    assert retrieval["clinical_conclusions"] == []
+    assert len(retrieval["packet_sha256"]) == 64
+    with pytest.raises(
+        ValueError,
+        match="binding is no longer current",
+    ):
+        MonitoringDocumentEvidenceResolver(
+            registry
+        ).retrieve_current_excerpts(
+            project_id=PROJECT_ID,
+            binding=replace(
+                evidence.binding,
+                content_sha256="f" * 64,
+            ),
+            query_terms=["Analysis"],
+        )
