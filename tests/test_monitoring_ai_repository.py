@@ -1362,21 +1362,27 @@ def test_parallel_current_prompts_survive_while_legacy_only_preserves_terminal(
     tmp_path: Path,
 ) -> None:
     repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
-    legacy_completed = repository.create_or_get(
-        _request(suffix="parallel-3").model_copy(
-            update={"prompt_version": "adjudication-primary-v2"}
+    legacy_generations = ("v1", "v2", "v3")
+    legacy_completed = []
+    for generation in legacy_generations:
+        queued = repository.create_or_get(
+            _request(suffix=f"parallel-terminal-{generation}").model_copy(
+                update={
+                    "prompt_version": f"adjudication-primary-{generation}"
+                }
+            )
         )
-    )
-    claimed = repository.claim_next("legacy-worker")
-    assert claimed is not None
-    candidate = _candidate(claimed, repository.clock)
-    repository.complete(
-        claimed,
-        owner="legacy-worker",
-        response_model="test-model",
-        raw_output={"candidates": [candidate.model_dump(mode="json")]},
-        candidates=(candidate,),
-    )
+        claimed = repository.claim_next(f"legacy-{generation}-worker")
+        assert claimed is not None and claimed.job_id == queued.job_id
+        candidate = _candidate(claimed, repository.clock)
+        repository.complete(
+            claimed,
+            owner=f"legacy-{generation}-worker",
+            response_model="test-model",
+            raw_output={"candidates": [candidate.model_dump(mode="json")]},
+            candidates=(candidate,),
+        )
+        legacy_completed.append(claimed)
     current_primary = repository.create_or_get(
         _request(suffix="parallel-1").model_copy(
             update={"prompt_version": "review-primary-v3"}
@@ -1387,35 +1393,48 @@ def test_parallel_current_prompts_survive_while_legacy_only_preserves_terminal(
             update={"prompt_version": "review-verifier-v3"}
         )
     )
-    legacy_queued = repository.create_or_get(
-        _request(suffix="parallel-4").model_copy(
-            update={"prompt_version": "adjudication-verifier-v2"}
+    legacy_queued = [
+        repository.create_or_get(
+            _request(suffix=f"parallel-queued-{generation}").model_copy(
+                update={
+                    "prompt_version": f"adjudication-verifier-{generation}"
+                }
+            )
         )
-    )
+        for generation in legacy_generations
+    ]
 
     changed = repository.supersede_prompt_versions_except(
         task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
         current_prompt_version="review-primary-v3",
         additional_current_prompt_versions={"review-verifier-v3"},
         legacy_terminal_prompt_versions={
+            "adjudication-primary-v1",
             "adjudication-primary-v2",
+            "adjudication-primary-v3",
+            "adjudication-verifier-v1",
             "adjudication-verifier-v2",
+            "adjudication-verifier-v3",
         },
     )
 
-    assert changed == 1
+    assert changed == 3
     assert repository.get(
         current_primary.project_id, current_primary.job_id
     ).status == MonitoringAiJobStatus.QUEUED
     assert repository.get(
         current_verifier.project_id, current_verifier.job_id
     ).status == MonitoringAiJobStatus.QUEUED
-    assert repository.get(
-        legacy_completed.project_id, legacy_completed.job_id
-    ).status == MonitoringAiJobStatus.COMPLETED
-    assert repository.get(
-        legacy_queued.project_id, legacy_queued.job_id
-    ).status == MonitoringAiJobStatus.STALE_INPUT
+    assert all(
+        repository.get(job.project_id, job.job_id).status
+        == MonitoringAiJobStatus.COMPLETED
+        for job in legacy_completed
+    )
+    assert all(
+        repository.get(job.project_id, job.job_id).status
+        == MonitoringAiJobStatus.STALE_INPUT
+        for job in legacy_queued
+    )
 
 
 def test_legacy_terminal_prompt_versions_empty_default_retires_terminal_jobs(

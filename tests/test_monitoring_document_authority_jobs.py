@@ -19,6 +19,10 @@ from packages.medical_monitoring.admission.document_authority import (
     EvidenceReference,
     RoleSelection,
     RoleSupplementaryBinding,
+    OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+    PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
     build_anonymous_conflict_packet,
     document_authority_batch_sha256,
 )
@@ -31,6 +35,7 @@ from packages.medical_monitoring.admission.mapping_gate import (
 from services.api.app.monitoring_ai_contracts import (
     MONITORING_AI_SCHEMA_VERSION,
     MonitoringAiInputRevision,
+    MonitoringAiJobCreate,
     MonitoringAiJobStatus,
     MonitoringAiSourceBinding,
     MonitoringAiTaskType,
@@ -1162,7 +1167,7 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         business_key_prefix="document-authority-adjudication:",
     )
     assert len(adjudication_jobs) == 2
-    assert all(":v3:" in job.business_key for job in adjudication_jobs)
+    assert all(":v4:" in job.business_key for job in adjudication_jobs)
     primary_adjudication_job = next(
         job for job in adjudication_jobs if ":primary:" in job.business_key
     )
@@ -1197,6 +1202,73 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
     assert result["user_question"] == ""
     assert len(result["adjudication_run_ids"]) == 2
     assert context["unresolved_roles"] == ["ecrf"]
+
+    replay_pairs = []
+    for generation, primary_prompt, verifier_prompt in (
+        (
+            "v3",
+            PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+        ),
+        (
+            "v2",
+            OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+        ),
+    ):
+        replay_jobs = []
+        for original, prompt_version in (
+            (primary_adjudication_job, primary_prompt),
+            (verifier_adjudication_job, verifier_prompt),
+        ):
+            replay_jobs.append(repository.create_or_get(MonitoringAiJobCreate(
+                project_id=original.project_id,
+                task_type=original.task_type,
+                input_revision=original.input_revision,
+                input_payload=repository.input_payload(
+                    original.project_id, original.job_id
+                ),
+                prompt_version=prompt_version,
+                profile_id=original.profile_id,
+                provider=original.provider,
+                requested_model=original.requested_model,
+                max_attempts=original.max_attempts,
+                business_key=f"{original.business_key}:replay:{generation}",
+            )))
+        primary_review_service.run_next(
+            f"primary-{generation}-replay-worker",
+            claim_identity=primary_review_service.claim_identity(),
+        )
+        verifier_review_service.run_next(
+            f"verifier-{generation}-replay-worker",
+            claim_identity=verifier_review_service.claim_identity(),
+        )
+        replay = resolve_document_authority_from_jobs(
+            repository,
+            project_id=revision.project_id,
+            candidate_batch=batch,
+            primary_analysis_job_id=primary_job.job_id,
+            verifier_analysis_job_id=verifier_job.job_id,
+            primary_review_job_id=primary_review_job.job_id,
+            verifier_review_job_id=verifier_review_job.job_id,
+            primary_adjudication_job_id=replay_jobs[0].job_id,
+            verifier_adjudication_job_id=replay_jobs[1].job_id,
+        )
+        assert replay["state"] == "resolved"
+        replay_pairs.append(replay_jobs)
+
+    with pytest.raises(DocumentAuthorityError, match="run_identity_invalid"):
+        resolve_document_authority_from_jobs(
+            repository,
+            project_id=revision.project_id,
+            candidate_batch=batch,
+            primary_analysis_job_id=primary_job.job_id,
+            verifier_analysis_job_id=verifier_job.job_id,
+            primary_review_job_id=primary_review_job.job_id,
+            verifier_review_job_id=verifier_review_job.job_id,
+            primary_adjudication_job_id=replay_pairs[1][0].job_id,
+            verifier_adjudication_job_id=replay_pairs[0][1].job_id,
+        )
     assert all(
         "document_authority_source_bindings"
         not in provider.envelopes[0].payload["input_payload"]
@@ -1229,6 +1301,7 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         assert "document_authority_source_bindings" not in adjudication_payload
         assert "系统内最终裁决" in provider.envelopes[0].system_prompt
         assert "不属于当前权威补充" in provider.envelopes[0].system_prompt
+        assert "重复载体" in provider.envelopes[0].system_prompt
 
 
 def test_resolved_authority_promotes_selected_documents_atomically(

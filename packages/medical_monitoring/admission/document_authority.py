@@ -26,15 +26,21 @@ VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v6"
 PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v6"
 VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v6"
 PRIMARY_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-primary-v3"
+    "monitoring-document-authority-adjudication-primary-v4"
 )
 VERIFIER_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-verifier-v3"
+    "monitoring-document-authority-adjudication-verifier-v4"
 )
 PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-primary-v2"
+    "monitoring-document-authority-adjudication-primary-v3"
 )
 PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION = (
+    "monitoring-document-authority-adjudication-verifier-v3"
+)
+OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION = (
+    "monitoring-document-authority-adjudication-primary-v2"
+)
+OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION = (
     "monitoring-document-authority-adjudication-verifier-v2"
 )
 LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION = (
@@ -62,6 +68,8 @@ LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK = {
         {
             PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
             PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+            OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
             LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
             LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
         }
@@ -875,10 +883,16 @@ def resolve_document_authority_adjudication(
             == "monitoring-document-authority-adjudication-v1"
             else "previous_adjudication"
             if prompt_pair
-            == (
-                PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
-                PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
-            )
+            in {
+                (
+                    PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+                    PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+                ),
+                (
+                    OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+                    OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+                ),
+            }
             else "adjudication"
         ),
     )
@@ -1028,13 +1042,25 @@ def _validate_run_pair(
         raise DocumentAuthorityError("document_authority_runs_not_independent")
     if left.job_input_revision_sha256 != right.job_input_revision_sha256:
         raise DocumentAuthorityError("document_authority_input_revision_mismatch")
+    previous_prompt_pair = (left.prompt_version, right.prompt_version)
+    if stage == "previous_adjudication" and previous_prompt_pair not in {
+        (
+            PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+        ),
+        (
+            OLDER_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            OLDER_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+        ),
+    }:
+        raise DocumentAuthorityError("document_authority_run_identity_invalid")
     expected = (
         (
             "primary", MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL,
             (
                 LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION
                 if stage == "legacy_adjudication"
-                else PREVIOUS_PRIMARY_ADJUDICATION_PROMPT_VERSION
+                else left.prompt_version
                 if stage == "previous_adjudication"
                 else PRIMARY_ADJUDICATION_PROMPT_VERSION
                 if stage == "adjudication"
@@ -1048,7 +1074,7 @@ def _validate_run_pair(
             (
                 LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION
                 if stage == "legacy_adjudication"
-                else PREVIOUS_VERIFIER_ADJUDICATION_PROMPT_VERSION
+                else right.prompt_version
                 if stage == "previous_adjudication"
                 else VERIFIER_ADJUDICATION_PROMPT_VERSION
                 if stage == "adjudication"

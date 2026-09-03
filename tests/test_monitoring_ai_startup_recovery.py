@@ -94,6 +94,37 @@ def test_startup_retires_old_prompt_contracts_before_waking_worker(
     ]
 
 
+def test_document_authority_startup_prompt_sets_are_explicit() -> None:
+    assert DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK == {
+        "document_authority_analysis": frozenset(
+            {
+                "monitoring-document-authority-primary-v6",
+                "monitoring-document-authority-verifier-v6",
+            }
+        ),
+        "document_authority_review": frozenset(
+            {
+                "monitoring-document-authority-review-primary-v6",
+                "monitoring-document-authority-review-verifier-v6",
+                "monitoring-document-authority-adjudication-primary-v4",
+                "monitoring-document-authority-adjudication-verifier-v4",
+            }
+        ),
+    }
+    assert DOCUMENT_AUTHORITY_LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK == {
+        "document_authority_review": frozenset(
+            {
+                "monitoring-document-authority-adjudication-primary-v1",
+                "monitoring-document-authority-adjudication-verifier-v1",
+                "monitoring-document-authority-adjudication-primary-v2",
+                "monitoring-document-authority-adjudication-verifier-v2",
+                "monitoring-document-authority-adjudication-primary-v3",
+                "monitoring-document-authority-adjudication-verifier-v3",
+            }
+        )
+    }
+
+
 def test_source_job_recovery_preserves_pre_fact_revision_hash(
     monkeypatch,
 ) -> None:
