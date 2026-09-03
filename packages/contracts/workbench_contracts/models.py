@@ -10465,6 +10465,7 @@ class ListingSheetPayload(WorkbenchModel):
     used_column_count: Optional[int] = Field(default=None, ge=0)
     header_row_numbers: Optional[List[int]] = None
     data_start_row_number: Optional[int] = Field(default=None, ge=1)
+    header_detection_status: Optional[Literal["detected", "fallback_first_row"]] = None
     hidden_rows: Optional[List[int]] = None
     hidden_row_count: Optional[int] = Field(default=None, ge=0)
     hidden_rows_truncated: Optional[bool] = None
