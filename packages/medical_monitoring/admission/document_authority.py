@@ -19,6 +19,7 @@ DOCUMENT_AUTHORITY_SCHEMA_VERSION = "monitoring-document-authority-v2"
 DOCUMENT_ROLES = ("protocol", "investigator_brochure", "ecrf", "sap")
 REQUIRED_DOCUMENT_ROLES = frozenset({"protocol", "ecrf"})
 AUTO_RESOLVE_CONFIDENCE = 0.9
+REVIEW_CONSENSUS_CONFIDENCE = 0.75
 MAX_DOCUMENT_AUTHORITY_CANDIDATES = 100
 PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v6"
 VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v6"
@@ -817,13 +818,14 @@ def _same_conflict_selection(left: ConflictDecision, right: ConflictDecision) ->
     return bool(
         left.decision == right.decision == "selected"
         and left.selected_candidate_id == right.selected_candidate_id
-        and _normalized(left.document_version) == _normalized(right.document_version)
-        and _normalized(left.document_date) == _normalized(right.document_date)
+        and _normalized_document_version(left.document_version)
+        == _normalized_document_version(right.document_version)
+        and _normalized_document_date(left.document_date)
+        == _normalized_document_date(right.document_date)
         and set(left.considered_candidate_ids) == set(right.considered_candidate_ids)
         and set(left.supplementary_candidate_ids) == set(right.supplementary_candidate_ids)
-        and set(left.evidence_references) == set(right.evidence_references)
         and _normalized(left.uncertainty) == _normalized(right.uncertainty)
-        and min(left.confidence, right.confidence) >= AUTO_RESOLVE_CONFIDENCE
+        and min(left.confidence, right.confidence) >= REVIEW_CONSENSUS_CONFIDENCE
     )
 
 
@@ -862,6 +864,29 @@ def _review_index(
 
 def _normalized(value: str) -> str:
     return " ".join(value.split()).casefold()
+
+
+def _normalized_document_version(value: str) -> str:
+    normalized = re.sub(r"\s+", "", value).casefold()
+    numeric = re.fullmatch(
+        r"(?:v(?:ersion)?|版本(?:号)?|第)?([0-9]+(?:[._-][0-9a-z]+)*)(?:版|版本|稿)?",
+        normalized,
+    )
+    if not numeric:
+        return normalized
+    return numeric.group(1).replace("_", ".").replace("-", ".")
+
+
+def _normalized_document_date(value: str) -> str:
+    normalized = re.sub(r"\s+", "", value).casefold()
+    match = re.fullmatch(
+        r"([0-9]{4})(?:年|[-/.])([0-9]{1,2})(?:月|[-/.])([0-9]{1,2})日?",
+        normalized,
+    )
+    if not match:
+        return normalized
+    year, month, day = match.groups()
+    return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
 
 
 def _digest(value: Any) -> str:
