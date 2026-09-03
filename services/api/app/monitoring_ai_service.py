@@ -2351,10 +2351,16 @@ class MonitoringAiService:
                 ValidationError,
                 ValueError,
             ) as first_error:
-                if job.task_type in {
-                    MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
-                    MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
-                }:
+                if (
+                    job.task_type
+                    in {
+                        MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+                        MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+                    }
+                    and not self._document_authority_error_is_repairable(
+                        first_error
+                    )
+                ):
                     return self._fail_claimed_job(
                         job,
                         owner=owner,
@@ -2668,6 +2674,8 @@ class MonitoringAiService:
         job: MonitoringAiJob,
         input_payload: Dict[str, Any],
     ) -> Dict[str, Any]:
+        if job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS:
+            return deepcopy(input_payload)
         if job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
             result = deepcopy(input_payload)
             result.pop("document_authority_source_bindings", None)
@@ -2952,7 +2960,11 @@ class MonitoringAiService:
             "text": "string",
             "structured_payload": self._structured_payload_schema(job.task_type),
         }
-        if job.task_type != MonitoringAiTaskType.LISTING_FIELD_MAPPING:
+        if job.task_type not in {
+            MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+        }:
             candidate_schema["claims"] = [
                 {
                     "claim_id": "unique string",
@@ -3217,6 +3229,13 @@ class MonitoringAiService:
                 "候选自身已提供的locator。不得推断CTCAE等级、风险、Query、"
                 "AE/MH/CM/IP/PD事实或疗效安全性结论。外层title必须严格为"
                 "“研究文件识别结果”，text必须严格为“基于冻结文件完成识别。”"
+                " 顶层JSON只能包含schema_version、task_id、task_type、"
+                "input_revision_sha256、candidates；候选只能包含candidate_type、"
+                "title、text、structured_payload，任何层级都不得出现claims或"
+                "evidence。document_version只能填写简短版本标识（如V1.3、14、"
+                "第14版）或空字符串，不得填写说明文字、箭头、括号或依据；"
+                "document_date只能填写单一日期（如2024-08-14、2024.8.14或"
+                "2024年8月14日）或空字符串，不得填写日期范围、说明或依据。"
             )
         elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
             system_prompt += (
@@ -3230,6 +3249,12 @@ class MonitoringAiService:
                 "不得按顺序、文件名、票数或置信度机械选边，也不得生成CTCAE"
                 "等级、风险、Query或AE/MH/CM/IP/PD医学事实。外层title必须严格为"
                 "“研究文件冲突复核”，text必须严格为“基于匿名冻结证据完成复核。”"
+                " 顶层JSON只能包含schema_version、task_id、task_type、"
+                "input_revision_sha256、candidates；候选只能包含candidate_type、"
+                "title、text、structured_payload，任何层级都不得出现claims或"
+                "evidence。document_version只能填写简短版本标识（如V1.3、14、"
+                "第14版）或空字符串；document_date只能填写一个无注释日期"
+                "（如2024-08-14、2024.8.14或2024年8月14日）或空字符串。"
             )
         elif (
             job.task_type
@@ -3419,6 +3444,25 @@ class MonitoringAiService:
             ),
         )
 
+    @staticmethod
+    def _document_authority_error_is_repairable(exc: Exception) -> bool:
+        """Allow one retry only for shape or controlled identifier errors."""
+
+        detail = MonitoringAiService._controlled_validation_error_text(exc)
+        error_types = set(re.findall(r'"type":"([^"]+)"', detail))
+        if error_types:
+            if error_types == {"extra_forbidden"}:
+                return True
+            if not error_types.issubset({"value_error"}):
+                return False
+        return any(
+            marker in detail
+            for marker in (
+                "document version must be a controlled version identifier",
+                "document date must be a controlled date identifier",
+            )
+        )
+
     def _build_repair_envelope(
         self,
         job: MonitoringAiJob,
@@ -3512,6 +3556,17 @@ class MonitoringAiService:
         if deterministic_field_constraints is not None:
             repair_payload["deterministic_field_constraints"] = (
                 deterministic_field_constraints
+            )
+        if job.task_type in {
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+        }:
+            repair_payload["repair_contract"]["instruction"] = (
+                "仅修复JSON结构和受控字段格式，不得改变文件选择、补充文件集合、"
+                "可用性判断、置信度或locator引用。删除output_schema未列出的"
+                "claims、evidence及其他键。document_version只保留一个简短版本"
+                "标识或空字符串；document_date只保留一个无注释日期或空字符串。"
+                "不得引入新来源、新判断或新事实。"
             )
         if job.task_type == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING:
             context = input_payload.get("context")

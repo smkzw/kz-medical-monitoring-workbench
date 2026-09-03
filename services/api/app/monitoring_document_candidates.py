@@ -25,8 +25,8 @@ MAX_EXCERPT_CHARS = 500
 MAX_OCR_PAGE_SAMPLES = 100
 ROLE_HYPOTHESES_BY_SUFFIX = {
     ".xlsx": ("ecrf",),
-    ".docx": ("protocol", "investigator_brochure", "sap"),
-    ".pdf": ("investigator_brochure", "sap"),
+    ".docx": ("protocol", "investigator_brochure", "ecrf", "sap"),
+    ".pdf": ("protocol", "investigator_brochure", "ecrf", "sap"),
 }
 MEDIA_TYPE_BY_SUFFIX = {
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
