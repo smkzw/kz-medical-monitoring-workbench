@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import docx
 
 from packages.medical_monitoring.admission.document_evidence import (
     DOCUMENT_ROLES,
@@ -47,6 +48,11 @@ from services.api.app.monitoring_document_evidence import (
 from services.api.app.source_intake import (
     SourceRegistryService,
     SourceRegistryStore,
+)
+from services.api.app.source_content_validation import (
+    SourceContentValidationService,
+    SourceContentValidationStore,
+    SourceExpectedContext,
 )
 from services.api.app.monitoring_ai_contracts import (
     MonitoringAiInputRevision,
@@ -847,3 +853,93 @@ def test_ecrf_registration_persists_independent_locator_manifest(
     )
     assert metadata["expected_locator_count"] == len(result.spans) == 1
     assert len(metadata["expected_locator_index_sha256"]) == 64
+
+
+@pytest.mark.parametrize(
+    ("role", "filename", "paragraphs"),
+    (
+        (
+            "investigator_brochure",
+            "investigator-brochure.docx",
+            (
+                "Investigator Brochure",
+                "Nonclinical Studies",
+                "Effects in Humans",
+            ),
+        ),
+        (
+            "sap",
+            "statistical-analysis-plan.pdf",
+            (
+                "Statistical Analysis Plan",
+                "Analysis Population",
+                "Statistical Methods",
+            ),
+        ),
+    ),
+)
+def test_optional_study_document_registration_is_locator_backed_and_current(
+    tmp_path: Path,
+    role: str,
+    filename: str,
+    paragraphs: tuple[str, ...],
+) -> None:
+    validation_store = SourceContentValidationStore(
+        tmp_path / "validations.sqlite3"
+    )
+    registry = SourceRegistryService(
+        SourceRegistryStore(tmp_path / "registry.jsonl"),
+        artifact_root=tmp_path / "artifacts",
+        content_validation_service=SourceContentValidationService(
+            validation_store
+        ),
+        expected_context_resolver=lambda *_args: SourceExpectedContext(),
+    )
+    if filename.endswith(".docx"):
+        document = docx.Document()
+        for paragraph in paragraphs:
+            document.add_paragraph(paragraph)
+        stream = io.BytesIO()
+        document.save(stream)
+        payload = stream.getvalue()
+    else:
+        pymupdf = pytest.importorskip("pymupdf")
+        document = pymupdf.open()
+        page = document.new_page()
+        page.insert_text((72, 72), "\n".join(paragraphs))
+        payload = document.tobytes()
+        document.close()
+
+    result = registry.register_monitoring_mapping_document(
+        PROJECT_ID,
+        filename,
+        payload,
+        document_role=role,
+    )
+    validation = registry.current_content_validation(
+        PROJECT_ID,
+        result.entry.entry_id,
+    )
+    packet = MonitoringDocumentEvidenceResolver(registry).resolve(
+        project_id=PROJECT_ID,
+        listing_admission_date="2026-09-03",
+    )
+    evidence = next(item for item in packet.roles if item.role == role)
+
+    assert result.entry.module == "medical_monitoring"
+    assert result.entry.source_kind == {
+        "investigator_brochure": "investigator_brochure",
+        "sap": "statistical_analysis_plan",
+    }[role]
+    assert result.entry.metadata["locator_manifest_complete"] is True
+    assert result.entry.metadata["expected_locator_count"] == len(
+        result.spans
+    )
+    assert result.spans
+    assert validation is not None
+    assert validation.content_status == "matched"
+    assert validation.use_status == "allowed"
+    assert evidence.status == "current"
+    assert evidence.binding is not None
+    assert evidence.binding.locator_count == len(result.spans)
+    assert packet.mapping_context_ready is False

@@ -236,7 +236,8 @@ export const renders = {
         roles: [
           { role: "protocol", label: "当前研究方案", required_now: true, status: "missing", status_text: "尚未添加" },
           { role: "ecrf", label: "当前 eCRF", required_now: true, status: "missing", status_text: "尚未添加" },
-          { role: "ib", label: "研究者手册", required_now: false, status: "missing", status_text: "可稍后添加" },
+          { role: "investigator_brochure", label: "研究者手册", required_now: false, status: "missing", status_text: "可稍后添加" },
+          { role: "sap", label: "统计分析计划", required_now: false, status: "missing", status_text: "可稍后添加" },
         ],
       },
     },

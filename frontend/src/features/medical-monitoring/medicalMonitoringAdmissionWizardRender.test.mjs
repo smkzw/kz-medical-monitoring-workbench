@@ -112,7 +112,8 @@ check(renders.review.includes(">下一步：核对系统识别</button>"), "revi
 check(!renders.review.includes('role="alert"'), "clean review raises no alert");
 
 // Before mapping, the system explains missing study evidence in plain Chinese
-// and asks only for the two files it cannot safely infer by itself.
+// and asks only for the two files it cannot safely infer by itself. Optional
+// context stays clearly optional and never blocks mapping.
 check(renders.documentsMissing.includes("还需要 2 份研究文件"), "missing-document purpose is explicit");
 check(
   renders.documentsMissing.includes("通常不需要您逐列核对"),
@@ -124,8 +125,16 @@ check(
   renders.documentsMissing.split(">添加文件</").length - 1 === 2,
   "only currently required documents request an upload",
 );
+check(
+  renders.documentsMissing.split(">添加（可选）</").length - 1 === 2,
+  "optional study context is available without becoming required work",
+);
 check(renders.documentsMissing.includes('accept=".docx"'), "protocol picker accepts DOCX");
 check(renders.documentsMissing.includes('accept=".xlsx"'), "eCRF picker accepts XLSX");
+check(
+  renders.documentsMissing.includes('accept=".pdf,.docx"'),
+  "IB and SAP pickers accept PDF or DOCX",
+);
 check(
   renders.documentsMissing.includes(">请先添加所需文件</button>")
     && renders.documentsMissing.includes('aria-disabled="true"'),

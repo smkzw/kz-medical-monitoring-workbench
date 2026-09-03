@@ -96,7 +96,7 @@ _MAPPING_MESSAGES = {
         "研究文档导入服务尚未就绪，请稍后重试。"
     ),
     "mapping_document_registration_invalid": (
-        "文件无法识别为研究方案或电子病例报告表，请更换文件。"
+        "系统无法识别所选研究文件，请确认文件类型后重新添加。"
     ),
     "mapping_document_selection_pending": (
         "文件已保存，但系统暂未完成关联。请稍后重新添加该文件。"
