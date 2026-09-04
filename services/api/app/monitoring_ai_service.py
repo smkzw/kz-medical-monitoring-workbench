@@ -3820,6 +3820,31 @@ class MonitoringAiService:
             repair_payload["deterministic_field_constraints"] = (
                 deterministic_field_constraints
             )
+            repair_payload["repair_contract"].update(
+                {
+                    "response_shape": (
+                        "complete_outer_object_with_exactly_"
+                        "schema_version_task_id_task_type_"
+                        "input_revision_sha256_candidates"
+                    ),
+                    "standards_reference_policy": (
+                        "use_null_when_no_specific_named_standard_is_supported;"
+                        "never_emit_blank_reference_fields"
+                    ),
+                    "instruction": (
+                        "必须重建完整的最外层JSON对象，且最外层只能包含"
+                        "schema_version、task_id、task_type、"
+                        "input_revision_sha256、candidates；candidates必须恰好"
+                        "包含一个完整候选，字段映射必须放在该候选的"
+                        "structured_payload.field_mappings中。不得只返回单个"
+                        "field_mapping、standards_reference或field_mappings。"
+                        "没有具体且有证据支持的标准名称时，整个"
+                        "standards_reference必须为null，禁止用空字符串填充"
+                        "其内部字段。required_output_pairs中的全空字段必须"
+                        "保持unmapped，不得仅凭字段名赋予含义。"
+                    ),
+                }
+            )
         if job.task_type in {
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
@@ -3900,7 +3925,11 @@ class MonitoringAiService:
         return AiPromptEnvelope(
             task_id=job.job_id,
             task_type=base.task_type,
-            prompt_version=f"{job.prompt_version}:json-repair-1",
+            prompt_version=(
+                f"{job.prompt_version}:json-repair-2"
+                if job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
+                else f"{job.prompt_version}:json-repair-1"
+            ),
             system_prompt=(
                 base.system_prompt
                 + " 这是唯一一次JSON修复机会。只修复结构、枚举、证据绑定、"
