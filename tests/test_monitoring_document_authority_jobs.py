@@ -1279,7 +1279,7 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         business_key_prefix="document-authority-adjudication:",
     )
     assert len(adjudication_jobs) == 2
-    assert all(":v7:" in job.business_key for job in adjudication_jobs)
+    assert all(":v8:" in job.business_key for job in adjudication_jobs)
     primary_adjudication_job = next(
         job for job in adjudication_jobs if ":primary:" in job.business_key
     )
@@ -1379,10 +1379,10 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
     assert "cms-smk" not in serialized_context
     assert "zhipu-coding-plan" not in serialized_context
     assert primary_critique_job.business_key.startswith(
-        "document-authority-critique:primary:v1:"
+        "document-authority-critique:primary:v2:"
     )
     assert verifier_critique_job.business_key.startswith(
-        "document-authority-critique:verifier:v1:"
+        "document-authority-critique:verifier:v2:"
     )
     primary_review_provider["value"] = _ReviewProvider(
         MONITORING_C3_MAPPING_PROVIDER,
@@ -1516,6 +1516,7 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         assert "匿名相互质询" in provider.envelopes[0].system_prompt
         assert "不属于当前权威补充" in provider.envelopes[0].system_prompt
         assert "重复载体" in provider.envelopes[0].system_prompt
+        assert "不论两者是PDF、Word或其他格式" in provider.envelopes[0].system_prompt
         assert "counter_evidence_references" in provider.envelopes[0].system_prompt
 
 
@@ -2336,6 +2337,7 @@ def test_composite_authority_rolls_back_main_when_supplement_registration_fails(
         *,
         document_role,
         document_relation="primary",
+        **kwargs,
     ):
         if filename == "protocol_errata.pdf":
             raise RuntimeError("synthetic supplement registration failure")
@@ -2345,6 +2347,7 @@ def test_composite_authority_rolls_back_main_when_supplement_registration_fails(
             content,
             document_role=document_role,
             document_relation=document_relation,
+            **kwargs,
         )
 
     monkeypatch.setattr(

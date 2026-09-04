@@ -1118,6 +1118,60 @@ def test_ecrf_registration_persists_independent_locator_manifest(
     assert len(metadata["expected_locator_index_sha256"]) == 64
 
 
+def test_scanned_monitoring_reference_uses_complete_verified_ocr_spans(
+    tmp_path: Path,
+) -> None:
+    pymupdf = pytest.importorskip("pymupdf")
+    document = pymupdf.open()
+    document.new_page()
+    document.new_page()
+    payload = document.tobytes()
+    document.close()
+    rows = [
+        {
+            "locator": "candidate:scan:p1:ocr",
+            "text": "方案勘误第一页",
+            "text_sha256": hashlib.sha256("方案勘误第一页".encode()).hexdigest(),
+        },
+        {
+            "locator": "candidate:scan:p2:ocr",
+            "text": "方案勘误第二页",
+            "text_sha256": hashlib.sha256("方案勘误第二页".encode()).hexdigest(),
+        },
+    ]
+    registry = SourceRegistryService(
+        SourceRegistryStore(tmp_path / "registry.jsonl")
+    )
+
+    result = registry.register_monitoring_mapping_document(
+        PROJECT_ID,
+        "stamped-erratum.pdf",
+        payload,
+        document_role="ecrf",
+        verified_text_spans=rows,
+        expected_locator_count=2,
+    )
+
+    assert [span.locator for span in result.spans] == [
+        "candidate:scan:p1:ocr",
+        "candidate:scan:p2:ocr",
+    ]
+    assert result.entry.metadata["parser_name"] == "monitoring_candidate_ocr"
+    assert result.entry.metadata["locator_manifest_complete"] is True
+    assert result.entry.source_kind == "ecrf_document"
+
+    with pytest.raises(ValueError, match="complete text locator set"):
+        registry.register_monitoring_mapping_document(
+            PROJECT_ID,
+            "incomplete-scan.pdf",
+            payload,
+            document_role="protocol",
+            document_relation="supplementary",
+            verified_text_spans=rows[:1],
+            expected_locator_count=2,
+        )
+
+
 @pytest.mark.parametrize(
     ("role", "filename", "paragraphs"),
     (

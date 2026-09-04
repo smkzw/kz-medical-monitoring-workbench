@@ -114,10 +114,10 @@ def test_document_authority_startup_prompt_sets_are_explicit() -> None:
             {
                 "monitoring-document-authority-review-primary-v7",
                 "monitoring-document-authority-review-verifier-v7",
-                "monitoring-document-authority-adjudication-primary-v7",
-                "monitoring-document-authority-adjudication-verifier-v7",
-                "monitoring-document-authority-critique-primary-v1",
-                "monitoring-document-authority-critique-verifier-v1",
+                "monitoring-document-authority-adjudication-primary-v8",
+                "monitoring-document-authority-adjudication-verifier-v8",
+                "monitoring-document-authority-critique-primary-v2",
+                "monitoring-document-authority-critique-verifier-v2",
             }
         ),
     }
@@ -146,6 +146,10 @@ def test_document_authority_startup_prompt_sets_are_explicit() -> None:
                 "monitoring-document-authority-adjudication-verifier-v5",
                 "monitoring-document-authority-adjudication-primary-v6",
                 "monitoring-document-authority-adjudication-verifier-v6",
+                "monitoring-document-authority-adjudication-primary-v7",
+                "monitoring-document-authority-adjudication-verifier-v7",
+                "monitoring-document-authority-critique-primary-v1",
+                "monitoring-document-authority-critique-verifier-v1",
             }
         )
     }

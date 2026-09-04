@@ -42,13 +42,19 @@ LEGACY_REVIEW_PROMPT_PAIRS = frozenset({
     )
 })
 PRIMARY_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-primary-v7"
+    "monitoring-document-authority-adjudication-primary-v8"
 )
 VERIFIER_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-verifier-v7"
+    "monitoring-document-authority-adjudication-verifier-v8"
 )
-PRIMARY_CRITIQUE_PROMPT_VERSION = "monitoring-document-authority-critique-primary-v1"
-VERIFIER_CRITIQUE_PROMPT_VERSION = "monitoring-document-authority-critique-verifier-v1"
+PRIMARY_CRITIQUE_PROMPT_VERSION = "monitoring-document-authority-critique-primary-v2"
+VERIFIER_CRITIQUE_PROMPT_VERSION = "monitoring-document-authority-critique-verifier-v2"
+LEGACY_CRITIQUE_PROMPT_PAIRS = frozenset({
+    (
+        "monitoring-document-authority-critique-primary-v1",
+        "monitoring-document-authority-critique-verifier-v1",
+    )
+})
 FULL_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS = frozenset(
     (
         f"monitoring-document-authority-adjudication-primary-v{version}",
@@ -64,6 +70,10 @@ UNRESOLVED_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS = frozenset({
     (
         "monitoring-document-authority-adjudication-primary-v6",
         "monitoring-document-authority-adjudication-verifier-v6",
+    ),
+    (
+        "monitoring-document-authority-adjudication-primary-v7",
+        "monitoring-document-authority-adjudication-verifier-v7",
     ),
 })
 REPLAY_ADJUDICATION_PROMPT_PAIRS = (
@@ -109,6 +119,7 @@ LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK = {
             *REPLAY_VERIFIER_ADJUDICATION_PROMPT_VERSIONS,
             LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
             LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+            *(version for pair in LEGACY_CRITIQUE_PROMPT_PAIRS for version in pair),
         }
     )
 }
@@ -965,8 +976,11 @@ def build_anonymous_critique_context(
     roles = tuple(str(value) for value in resolution["unresolved_roles"])
     if not roles:
         raise DocumentAuthorityError("document_authority_critique_not_required")
-    left = _review_index(adjudication_primary.review, roles)
-    right = _review_index(adjudication_verifier.review, roles)
+    adjudication_roles = tuple(
+        str(value) for value in adjudication_context["unresolved_roles"]
+    )
+    left = _review_index(adjudication_primary.review, adjudication_roles)
+    right = _review_index(adjudication_verifier.review, adjudication_roles)
     options = {
         role: sorted(
             (
@@ -1656,10 +1670,10 @@ def _validate_run_pair(
         and previous_prompt_pair not in REPLAY_ADJUDICATION_PROMPT_PAIRS
     ):
         raise DocumentAuthorityError("document_authority_run_identity_invalid")
-    if stage == "critique" and previous_prompt_pair != (
-        PRIMARY_CRITIQUE_PROMPT_VERSION,
-        VERIFIER_CRITIQUE_PROMPT_VERSION,
-    ):
+    if stage == "critique" and previous_prompt_pair not in {
+        (PRIMARY_CRITIQUE_PROMPT_VERSION, VERIFIER_CRITIQUE_PROMPT_VERSION),
+        *LEGACY_CRITIQUE_PROMPT_PAIRS,
+    }:
         raise DocumentAuthorityError("document_authority_run_identity_invalid")
     expected = (
         (
@@ -1667,7 +1681,7 @@ def _validate_run_pair(
             (
                 LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION
                 if stage == "legacy_adjudication"
-                else PRIMARY_CRITIQUE_PROMPT_VERSION
+                else left.prompt_version
                 if stage == "critique"
                 else left.prompt_version
                 if stage == "previous_adjudication"
@@ -1685,7 +1699,7 @@ def _validate_run_pair(
             (
                 LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION
                 if stage == "legacy_adjudication"
-                else VERIFIER_CRITIQUE_PROMPT_VERSION
+                else right.prompt_version
                 if stage == "critique"
                 else right.prompt_version
                 if stage == "previous_adjudication"

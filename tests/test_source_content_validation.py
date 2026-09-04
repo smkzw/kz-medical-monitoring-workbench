@@ -145,6 +145,31 @@ class SourceContentValidationTests(unittest.TestCase):
         self.assertEqual("matched", record.content_status)
         self.assertEqual("allowed", record.use_status)
 
+    def test_blank_ecrf_structure_does_not_require_studyid_values(self) -> None:
+        record = self.service.assess_listing(
+            project_id="proj_rux_03_002",
+            source_entry_id="src_rux_ecrf_structure",
+            module="medical_monitoring",
+            filename="RUX-03-002_ecrf_structure.xlsx",
+            file_sha256="c" * 64,
+            sheets=[
+                ListingSheetPayload(
+                    sheet_name="AE",
+                    rows=[{"FIELD": "AETERM", "LABEL": "不良事件名称"}],
+                )
+            ],
+            expected=SourceExpectedContext(
+                project_identifiers=("RUX-03-002",),
+                expected_file_role="ecrf",
+            ),
+            actor="system_validator",
+        )
+
+        checks = {check.check_code: check for check in record.checks}
+        self.assertEqual("not_assessed", checks["project_identity"].outcome)
+        self.assertEqual("matched", record.content_status)
+        self.assertEqual("allowed", record.use_status)
+
     def test_safety_medical_review_listing_keeps_cm_and_study_treatment_changes_separate(self) -> None:
         sheets = [
             ListingSheetPayload(

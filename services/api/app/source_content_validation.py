@@ -460,7 +460,11 @@ class SourceContentValidationService:
                 evidence_locators=[f"listing:{Path(filename).name}"],
             ),
             role_check,
-            self._listing_project_check(rows, expected.project_identifiers),
+            self._listing_project_check(
+                rows,
+                expected.project_identifiers,
+                expected.expected_file_role,
+            ),
         ]
         if safety_event_check is not None and safety_scope_check is not None:
             checks.extend([safety_event_check, safety_scope_check])
@@ -790,6 +794,7 @@ class SourceContentValidationService:
     def _listing_project_check(
         rows: Sequence[dict[str, object]],
         expected_identifiers: Sequence[str],
+        expected_role: str = "",
     ) -> SourceContentValidationCheck:
         observed = sorted(
             {
@@ -802,6 +807,8 @@ class SourceContentValidationService:
         expected_normalized = {_normalize_identifier(value) for value in expected_identifiers if value.strip()}
         observed_normalized = {_normalize_identifier(value) for value in observed}
         if not expected_normalized:
+            outcome = "not_assessed"
+        elif not observed_normalized and expected_role == "ecrf":
             outcome = "not_assessed"
         elif not observed_normalized:
             outcome = "warning"

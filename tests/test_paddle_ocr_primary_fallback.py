@@ -263,13 +263,31 @@ class PaddleOcrAdapterTests(unittest.TestCase):
     def test_submit_missing_job_id_raises_error(self) -> None:
         adapter = PaddleOcrAdapter(
             PaddleOcrSettings(),
-            submit_fn=lambda *a: json.dumps({"status": "ok"}),
+            submit_fn=lambda *a: json.dumps({"code": 0, "status": "ok"}),
             poll_fn=lambda *a: _make_poll_response("done"),
             jsonl_fn=lambda url, headers: _make_jsonl([{"markdown": "x"}]),
             sleep_fn=lambda s: None,
         )
-        with self.assertRaises(PaddleOcrError):
+        with self.assertRaises(PaddleOcrOutcomeUnknownError):
             adapter.submit_and_wait(b"fake")
+
+    def test_submit_provider_error_code_is_rejected_before_poll(self) -> None:
+        poll_calls: list[str] = []
+        adapter = PaddleOcrAdapter(
+            PaddleOcrSettings(),
+            submit_fn=lambda *a: json.dumps(
+                {"code": 10002, "msg": "request rejected", "data": None}
+            ),
+            poll_fn=lambda *a: poll_calls.append("poll") or "",
+            jsonl_fn=lambda *a: "",
+            sleep_fn=lambda s: None,
+        )
+
+        with self.assertRaises(PaddleOcrSubmissionRejectedError) as raised:
+            adapter.submit_and_wait(b"fake")
+
+        self.assertIn("code 10002", str(raised.exception))
+        self.assertEqual([], poll_calls)
 
     def test_submit_http_failure_preserves_status_without_url_or_secret(self) -> None:
         calls = 0
@@ -525,6 +543,30 @@ class OcrFallbackOrchestratorTests(unittest.TestCase):
         # Critical: GLM output is never labeled as Paddle
         self.assertNotEqual(PROVIDER_PADDLE, result.provider)
         self.assertNotEqual(PADDLE_OCR_MODEL, result.model)
+
+    def test_provider_rejection_falls_back_to_glm_once(self) -> None:
+        paddle = PaddleOcrAdapter(
+            PaddleOcrSettings(),
+            submit_fn=lambda *a: json.dumps(
+                {"code": 10002, "msg": "request rejected", "data": None}
+            ),
+            poll_fn=lambda *a: self.fail("rejected submit must not be polled"),
+            jsonl_fn=lambda *a: "",
+            sleep_fn=lambda s: None,
+        )
+        glm_calls: list[bytes] = []
+        orchestrator = OcrFallbackOrchestrator(
+            paddle_adapter=paddle,
+            glm_runner=lambda image, mime: glm_calls.append(image) or "GLM text",
+        )
+
+        result = orchestrator.run(b"fake")
+
+        self.assertEqual([b"fake"], glm_calls)
+        self.assertEqual("GLM text", result.text)
+        self.assertTrue(result.fell_back)
+        self.assertEqual(PROVIDER_GLM_OMLX, result.provider)
+        self.assertIn("code 10002", result.fallback_reason)
 
     def test_no_paddle_adapter_skips_directly_to_glm(self) -> None:
         def glm_runner(image_bytes: bytes, mime_type: str) -> str:

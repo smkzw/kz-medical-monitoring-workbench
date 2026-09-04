@@ -845,6 +845,8 @@ def promote_document_authority_from_jobs(
                 content,
                 document_role=role,
                 document_relation=binding_kind,
+                verified_text_spans=candidate.get("excerpts", ()),
+                expected_locator_count=int(candidate.get("locator_count") or 0),
             )
             if registration.entry.content_hash != candidate["content_sha256"]:
                 raise DocumentAuthorityError("document_authority_registration_hash_mismatch")
