@@ -628,6 +628,9 @@ def _dual_confirmation_service(verifier_role: str):
             if "verifier" in kwargs.get("business_key_prefix", "")
             else (primary_job,)
         ),
+        input_payload=lambda *_args: {
+            "field_profile": {"full_profile_sha256": "a" * 64}
+        },
         candidates=lambda _project_id, job_id: (candidate(job_id),),
     )
 

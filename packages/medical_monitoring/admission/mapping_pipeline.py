@@ -133,21 +133,35 @@ def _evidence_summary(candidate: Any, evidence_ids: list[str]) -> list[dict[str,
     return rows
 
 
-def _latest_job_cohort(jobs: Sequence[Any]) -> tuple[Any, ...]:
+def _latest_job_cohort(
+    jobs: Sequence[Any],
+    *,
+    repository: Any,
+) -> tuple[Any, ...]:
     """Keep only the newest submission contract for an admission attempt."""
 
     if not jobs:
         return ()
     latest = max(jobs, key=lambda item: (item.created_at, item.job_id))
-    identity = (str(latest.prompt_version), str(latest.input_revision_sha256))
+
+    def identity(job: Any, *, required: bool = False) -> tuple[str, str]:
+        try:
+            payload = repository.input_payload(job.project_id, job.job_id)
+            profile = payload.get("field_profile") or {}
+            profile_sha = str(profile.get("full_profile_sha256") or "").strip()
+        except (AttributeError, KeyError, TypeError, ValueError):
+            profile_sha = ""
+        if not profile_sha and required:
+            raise AdmissionMappingPipelineError("mapping_bridge_failed")
+        return str(job.prompt_version), profile_sha
+
+    cohort_identity = identity(latest, required=True)
+    cohort_prompt = cohort_identity[0]
     return tuple(
         job
         for job in jobs
-        if (
-            str(job.prompt_version),
-            str(job.input_revision_sha256),
-        )
-        == identity
+        if str(job.prompt_version) == cohort_prompt
+        and identity(job, required=True) == cohort_identity
     )
 
 
@@ -982,7 +996,7 @@ class AdmissionMappingPipeline:
         if not jobs:
             raise AdmissionMappingPipelineError("mapping_candidates_not_found")
         return self._project(
-            _latest_job_cohort(jobs),
+            _latest_job_cohort(jobs, repository=self._repository),
             attempt_id=attempt_id,
             cohort=contract.cohort,
         )

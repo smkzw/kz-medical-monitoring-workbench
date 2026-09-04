@@ -399,7 +399,7 @@ class AdmissionMappingConfirmationService:
         )
         if not jobs:
             raise AdmissionMappingPipelineError("mapping_candidates_not_found")
-        jobs = _latest_job_cohort(jobs)
+        jobs = _latest_job_cohort(jobs, repository=self.ai_repository)
         # Migration gate: the durable draft may only be assembled from the
         # new dual-cohort execution shapes. A verifier identity inside the
         # primary namespace is a legacy single-verifier cohort and must never
@@ -917,10 +917,9 @@ class AdmissionMappingConfirmationService:
             ):
                 raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
             # Dual-cohort input validation: agreement only counts when both
-            # cohorts mapped the identical frozen input. Cohort submissions
-            # share one deterministic bridge output, so any revision
-            # divergence means the inputs (including relationship evidence)
-            # are not the same and the pass must not be counted.
+            # cohorts contain the same set of per-job frozen revisions. The
+            # cohort identity is shared, but deterministic metadata jobs may
+            # carry a different revision from model-analyzed chunks.
             primary_revisions = {
                 str(job.input_revision_sha256) for job in primary_jobs
             }
@@ -968,7 +967,7 @@ class AdmissionMappingConfirmationService:
         )
         if not jobs:
             raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
-        return _latest_job_cohort(jobs)
+        return _latest_job_cohort(jobs, repository=self.ai_repository)
 
     def _completed_candidates(
         self,

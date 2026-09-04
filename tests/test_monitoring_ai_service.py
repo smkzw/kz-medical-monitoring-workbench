@@ -1235,6 +1235,8 @@ def test_one_controlled_json_repair_can_complete(tmp_path: Path) -> None:
             "candidates；candidates必须恰好包含一个完整候选，字段映射必须"
             "放在该候选的structured_payload.field_mappings中。不得只返回"
             "单个field_mapping、standards_reference或field_mappings。"
+            "每个field_mapping必须逐项包含output_schema列出的全部必填键；"
+            "user_action不得缺失或使用空字符串。"
             "没有具体且有证据支持的标准名称时，整个standards_reference"
             "必须为null，禁止用空字符串填充其内部字段。"
             "required_output_pairs中的全空字段必须保持unmapped，不得仅凭"

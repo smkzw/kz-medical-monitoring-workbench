@@ -3838,6 +3838,8 @@ class MonitoringAiService:
                         "包含一个完整候选，字段映射必须放在该候选的"
                         "structured_payload.field_mappings中。不得只返回单个"
                         "field_mapping、standards_reference或field_mappings。"
+                        "每个field_mapping必须逐项包含output_schema列出的全部"
+                        "必填键；user_action不得缺失或使用空字符串。"
                         "没有具体且有证据支持的标准名称时，整个"
                         "standards_reference必须为null，禁止用空字符串填充"
                         "其内部字段。required_output_pairs中的全空字段必须"
