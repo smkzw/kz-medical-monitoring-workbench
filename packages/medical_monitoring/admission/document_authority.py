@@ -42,10 +42,10 @@ LEGACY_REVIEW_PROMPT_PAIRS = frozenset({
     )
 })
 PRIMARY_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-primary-v6"
+    "monitoring-document-authority-adjudication-primary-v7"
 )
 VERIFIER_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-verifier-v6"
+    "monitoring-document-authority-adjudication-verifier-v7"
 )
 FULL_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS = frozenset(
     (
@@ -58,7 +58,11 @@ UNRESOLVED_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS = frozenset({
     (
         "monitoring-document-authority-adjudication-primary-v5",
         "monitoring-document-authority-adjudication-verifier-v5",
-    )
+    ),
+    (
+        "monitoring-document-authority-adjudication-primary-v6",
+        "monitoring-document-authority-adjudication-verifier-v6",
+    ),
 })
 REPLAY_ADJUDICATION_PROMPT_PAIRS = (
     FULL_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS
@@ -113,6 +117,7 @@ _CANDIDATE_KEYS = frozenset({
     "extraction_status", "page_count", "locator_count", "locator_index_sha256",
     "excerpts", "sheets", "zero_text_page_count", "zero_text_page_samples",
     "ocr_recovery_pages", "limitation_codes", "evidence_revision_sha256",
+    "content_profile",
 })
 _EXCERPT_KEYS = frozenset({"locator", "text", "text_sha256"})
 _OCR_PAGE_KEYS = frozenset({
@@ -124,10 +129,19 @@ _SHEET_KEYS = frozenset({
     "locator", "sheet_name", "row_count", "headers", "visibility", "used_range",
     "parser_warnings",
 })
-_CONFLICT_PACKET_KEYS = frozenset({
+_CONTENT_PROFILE_KEYS = frozenset({
+    "normalized_text_sha256", "normalized_character_count",
+    "represented_locator_count", "represented_page_count", "total_page_count",
+    "represented_coverage_per_mille", "fingerprint_sha256",
+})
+_LEGACY_CONFLICT_PACKET_KEYS = frozenset({
     "schema_version", "batch_id", "input_sha256", "reconciliation_sha256",
     "conflict_roles", "allowed_candidate_ids_by_role", "candidates",
     "candidate_coverage", "conflict_packet_sha256",
+})
+_CONFLICT_PACKET_KEYS = frozenset({
+    *_LEGACY_CONFLICT_PACKET_KEYS,
+    "document_relationships",
 })
 _ADJUDICATION_CONTEXT_V1_KEYS = frozenset({
     "schema_version",
@@ -189,7 +203,7 @@ def validate_document_authority_analysis(
 def validate_document_authority_conflict_packet(
     packet: Mapping[str, Any],
 ) -> str:
-    if set(packet) != _CONFLICT_PACKET_KEYS:
+    if set(packet) not in {_LEGACY_CONFLICT_PACKET_KEYS, _CONFLICT_PACKET_KEYS}:
         raise DocumentAuthorityError("document_authority_conflict_packet_invalid")
     claimed = str(packet.get("conflict_packet_sha256") or "")
     body = {key: value for key, value in packet.items() if key != "conflict_packet_sha256"}
@@ -225,6 +239,10 @@ def validate_document_authority_conflict_packet(
         or len(candidate_ids) != len(set(candidate_ids))
         or sorted(candidate_ids) != sorted(packet.get("candidate_coverage", ()))
         or packet.get("allowed_candidate_ids_by_role") != expected_allowed
+    ):
+        raise DocumentAuthorityError("document_authority_conflict_packet_invalid")
+    if "document_relationships" in packet and packet["document_relationships"] != (
+        _build_document_relationships(candidates)
     ):
         raise DocumentAuthorityError("document_authority_conflict_packet_invalid")
     return claimed
@@ -361,13 +379,59 @@ def validate_document_authority_adjudication_review(
         str(item["candidate_id"]): item for item in packet["candidates"]
     }
     unresolved_roles = set(context["unresolved_roles"])
+    focused_evidence_candidate_ids = _focused_adjudication_candidate_ids_by_role(
+        context, unresolved_roles
+    )
     for role in roles:
+        decision = decisions[role]
         _validate_conflict_decision(
-            decisions[role],
+            decision,
             set(packet["allowed_candidate_ids_by_role"][role]),
             candidates,
             require_complete_disposition=role in unresolved_roles,
+            required_evidence_candidate_ids=(
+                focused_evidence_candidate_ids[role]
+                if role in unresolved_roles
+                else None
+            ),
         )
+        if prompt_version in {
+            PRIMARY_ADJUDICATION_PROMPT_VERSION,
+            VERIFIER_ADJUDICATION_PROMPT_VERSION,
+        }:
+            if not isinstance(decision, AdjudicationDecision) or not (
+                decision.rationale.strip()
+            ):
+                raise DocumentAuthorityError(
+                    "document_authority_adjudication_rationale_missing"
+                )
+            for reference in decision.counter_evidence_references:
+                if (
+                    reference.candidate_id not in candidates
+                    or reference.locator
+                    not in _candidate_locators(candidates[reference.candidate_id])
+                ):
+                    raise DocumentAuthorityError(
+                        "document_authority_evidence_not_closed"
+                    )
+
+
+def _focused_adjudication_candidate_ids_by_role(
+    context: Mapping[str, Any], roles: Sequence[str]
+) -> dict[str, set[str]]:
+    return {
+        role: {
+            str(candidate_id)
+            for option in context["options_by_role"][role]
+            for candidate_id in (
+                option.get("selected_candidate_id"),
+                *(option.get("supplementary_candidate_ids") or ()),
+                *(context["disputed_candidate_ids_by_role"].get(role) or ()),
+            )
+            if candidate_id
+        }
+        for role in roles
+    }
 
 
 def _validate_nonempty_unique(values: tuple[str, ...]) -> tuple[str, ...]:
@@ -561,6 +625,10 @@ class AdjudicationDecision(ConflictDecision):
     excluded_candidate_ids: tuple[str, ...] = Field(
         max_length=MAX_DOCUMENT_AUTHORITY_CANDIDATES
     )
+    rationale: str = Field(default="", max_length=1200)
+    counter_evidence_references: tuple[EvidenceReference, ...] = Field(
+        default=(), max_length=20
+    )
 
     _excluded = field_validator("excluded_candidate_ids")(_validate_nonempty_unique)
 
@@ -568,6 +636,12 @@ class AdjudicationDecision(ConflictDecision):
     def validate_exclusions(self) -> "AdjudicationDecision":
         if set(self.excluded_candidate_ids) & _decision_bound_candidate_ids(self):
             raise ValueError("excluded candidates cannot also be bound")
+        counter_keys = {
+            (item.candidate_id, item.locator)
+            for item in self.counter_evidence_references
+        }
+        if len(counter_keys) != len(self.counter_evidence_references):
+            raise ValueError("counter evidence references must be unique")
         return self
 
 
@@ -758,6 +832,8 @@ def build_anonymous_conflict_packet(
         "candidates": sorted(candidates, key=lambda item: item["candidate_id"]),
         "candidate_coverage": sorted(candidate_ids),
     }
+    if any(candidate.get("content_profile") for candidate in candidates):
+        packet["document_relationships"] = _build_document_relationships(candidates)
     return {**packet, "conflict_packet_sha256": _digest(packet)}
 
 
@@ -974,10 +1050,27 @@ def resolve_document_authority_adjudication(
     }
     resolved = list(initial["resolved_roles"])
     unresolved: list[str] = []
+    focused_evidence_candidate_ids = (
+        _focused_adjudication_candidate_ids_by_role(
+            adjudication_context, initial["unresolved_roles"]
+        )
+        if adjudication_context["schema_version"]
+        == "monitoring-document-authority-adjudication-v2"
+        else None
+    )
     for role in initial["unresolved_roles"]:
         allowed = set(conflict_packet["allowed_candidate_ids_by_role"][role])
         for item in (left[role], right[role]):
-            _validate_conflict_decision(item, allowed, candidates)
+            _validate_conflict_decision(
+                item,
+                allowed,
+                candidates,
+                required_evidence_candidate_ids=(
+                    focused_evidence_candidate_ids[role]
+                    if focused_evidence_candidate_ids is not None
+                    else None
+                ),
+            )
         if _same_conflict_selection(left[role], right[role]):
             resolved.append(_resolved_role(
                 role,
@@ -1064,6 +1157,7 @@ def _validate_batch(
                     raise DocumentAuthorityError(
                         "document_authority_candidate_excerpt_hash_invalid"
                     )
+            _validate_candidate_content_profile(raw.get("content_profile"))
         _validate_candidate_ocr_evidence(raw, candidate_locators)
         if evidence_revision:
             page_count = int(raw.get("page_count") or 0)
@@ -1123,6 +1217,45 @@ def _validate_batch(
         ):
             eligible_candidate_ids.add(candidate_id)
     return candidate_ids, locators, eligible_candidate_ids
+
+
+def _validate_candidate_content_profile(profile: Any) -> None:
+    if profile is None:
+        return
+    fingerprints = tuple(profile.get("fingerprint_sha256", ())) if isinstance(
+        profile, Mapping
+    ) else ()
+    if (
+        not isinstance(profile, Mapping)
+        or set(profile) != _CONTENT_PROFILE_KEYS
+        or re.fullmatch(
+            r"[0-9a-f]{64}", str(profile.get("normalized_text_sha256") or "")
+        ) is None
+        or any(
+            re.fullmatch(r"[0-9a-f]{64}", str(value)) is None
+            for value in fingerprints
+        )
+        or list(fingerprints) != sorted(set(fingerprints))
+        or len(fingerprints) > 128
+        or any(
+            not isinstance(profile.get(key), int)
+            or isinstance(profile.get(key), bool)
+            or int(profile[key]) < 0
+            for key in (
+                "normalized_character_count",
+                "represented_locator_count",
+                "represented_page_count",
+                "total_page_count",
+                "represented_coverage_per_mille",
+            )
+        )
+        or int(profile["represented_coverage_per_mille"]) > 1000
+        or int(profile["represented_page_count"]) > int(profile["total_page_count"])
+        and int(profile["total_page_count"]) > 0
+    ):
+        raise DocumentAuthorityError(
+            "document_authority_candidate_content_profile_invalid"
+        )
 
 
 def _validate_candidate_ocr_evidence(
@@ -1330,7 +1463,7 @@ def _validate_run_pair(
 def _anonymous_candidate(raw: Mapping[str, Any]) -> dict[str, Any]:
     if set(raw) - _CANDIDATE_KEYS:
         raise DocumentAuthorityError("document_authority_candidate_shape_invalid")
-    return {
+    candidate = {
         "candidate_id": str(raw.get("candidate_id") or ""),
         "role_hypotheses": sorted(str(value) for value in raw.get("role_hypotheses", ())),
         "filename": str(raw.get("filename") or ""),
@@ -1340,6 +1473,61 @@ def _anonymous_candidate(raw: Mapping[str, Any]) -> dict[str, Any]:
         "excerpts": [_project_nested(item, _EXCERPT_KEYS) for item in raw.get("excerpts", ())],
         "sheets": [_project_nested(item, _SHEET_KEYS) for item in raw.get("sheets", ())],
     }
+    profile = raw.get("content_profile")
+    if profile is not None:
+        candidate["content_profile"] = _project_nested(profile, _CONTENT_PROFILE_KEYS)
+    return candidate
+
+
+def _build_document_relationships(
+    candidates: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    relationships: list[dict[str, Any]] = []
+    ordered = sorted(candidates, key=lambda item: str(item.get("candidate_id") or ""))
+    for index, left in enumerate(ordered):
+        left_profile = left.get("content_profile")
+        if not isinstance(left_profile, Mapping):
+            continue
+        left_count = int(left_profile.get("normalized_character_count") or 0)
+        left_fingerprints = set(left_profile.get("fingerprint_sha256") or ())
+        if left_count <= 0:
+            continue
+        for right in ordered[index + 1 :]:
+            right_profile = right.get("content_profile")
+            if not isinstance(right_profile, Mapping):
+                continue
+            right_count = int(right_profile.get("normalized_character_count") or 0)
+            right_fingerprints = set(right_profile.get("fingerprint_sha256") or ())
+            if right_count <= 0:
+                continue
+            shared = len(left_fingerprints & right_fingerprints)
+            left_overlap = (
+                shared * 1000 // len(left_fingerprints) if left_fingerprints else 0
+            )
+            right_overlap = (
+                shared * 1000 // len(right_fingerprints) if right_fingerprints else 0
+            )
+            equivalent = bool(
+                left_count == right_count
+                and left_profile.get("normalized_text_sha256")
+                == right_profile.get("normalized_text_sha256")
+            )
+            if not equivalent and max(left_overlap, right_overlap) < 100:
+                continue
+            relationships.append({
+                "candidate_ids": [left["candidate_id"], right["candidate_id"]],
+                "relation": "equivalent" if equivalent else "sampled_content_overlap",
+                "shared_fingerprint_count": shared,
+                "left_sampled_overlap_per_mille": left_overlap,
+                "right_sampled_overlap_per_mille": right_overlap,
+                "left_coverage_per_mille": int(
+                    left_profile.get("represented_coverage_per_mille") or 0
+                ),
+                "right_coverage_per_mille": int(
+                    right_profile.get("represented_coverage_per_mille") or 0
+                ),
+            })
+    return relationships
 
 
 def _project_nested(item: Mapping[str, Any], allowed: frozenset[str]) -> dict[str, Any]:
@@ -1428,6 +1616,7 @@ def _validate_conflict_decision(
     candidates: Mapping[str, Mapping[str, Any]],
     *,
     require_complete_disposition: bool = False,
+    required_evidence_candidate_ids: set[str] | None = None,
 ) -> None:
     if set(item.considered_candidate_ids) != allowed:
         raise DocumentAuthorityError("document_authority_review_coverage_invalid")
@@ -1463,16 +1652,22 @@ def _validate_conflict_decision(
         for candidate_id, locator in evidence
     ):
         raise DocumentAuthorityError("document_authority_review_evidence_not_closed")
-    if any(
-        candidate_locators
-        and not any(candidate_id == ref_candidate for ref_candidate, _locator in evidence)
-        for candidate_id, candidate_locators in locators_by_candidate.items()
-    ):
-        raise DocumentAuthorityError("document_authority_review_coverage_invalid")
     bound_candidate_ids = {
         item.selected_candidate_id,
         *item.supplementary_candidate_ids,
     } - {""}
+    evidence_required = (
+        allowed
+        if required_evidence_candidate_ids is None
+        else required_evidence_candidate_ids | bound_candidate_ids
+    )
+    if any(
+        candidate_locators
+        and not any(candidate_id == ref_candidate for ref_candidate, _locator in evidence)
+        for candidate_id, candidate_locators in locators_by_candidate.items()
+        if candidate_id in evidence_required
+    ):
+        raise DocumentAuthorityError("document_authority_review_coverage_invalid")
     if any(
         candidate_id not in {ref_candidate for ref_candidate, _locator in evidence}
         for candidate_id in bound_candidate_ids
