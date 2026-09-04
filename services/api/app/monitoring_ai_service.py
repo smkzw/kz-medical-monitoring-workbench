@@ -1627,6 +1627,7 @@ class MonitoringAiService:
                 max_attempts=max_attempts,
                 business_key=(
                     f"document-authority-analysis:{role}:"
+                    f"{prompt_version.rsplit('-', 1)[-1]}:"
                     f"{candidate_batch['batch_id']}"
                 ),
             )
@@ -1700,7 +1701,7 @@ class MonitoringAiService:
                     f"document-authority-"
                     f"{'adjudication' if adjudication_context is not None else 'review'}:"
                     f"{role}:"
-                    f"{'v5:' if adjudication_context is not None else ''}"
+                    f"{prompt_version.rsplit('-', 1)[-1] + ':' if adjudication_context is not None else ''}"
                     f"{packet_sha256}"
                 ),
             )
@@ -3249,10 +3250,14 @@ class MonitoringAiService:
                 " 这是文件权威识别，不是医学结论分析。必须独立检查冻结批次中"
                 "每个候选的正文、表结构、版本与日期证据，完整覆盖四类角色。"
                 "每个角色必须识别一个完整的当前主文件，并把仍然有效、会改变或"
-                "补充主文件内容的勘误、修订说明或增补文件逐个放入"
+                "补充主文件内容的勘误、修订或增补文件逐个放入"
                 "supplementary_bindings；每个补充文件必须引用其自身locator。"
-                "已被新版取代的旧主文件、仅供说明且不构成当前权威的历史摘要，"
-                "不得作为补充文件。没有补充文件时必须返回空数组，不能为了简化"
+                "仅描述版本差异、修订轨迹或变更汇总的对比材料默认属于参考资料；"
+                "只有正文证明该文件本身发布了仍生效的规范性纠正、修订、增补，"
+                "或包含当前主文件尚未纳入但仍有效的规范内容时，才可作为补充文件。"
+                "已被新版取代的旧主文件及其他不构成当前权威的历史材料不得作为"
+                "补充文件。必须依据正文作用和版本关系判断，不能只凭文件名、格式"
+                "或候选顺序。没有补充文件时必须返回空数组，不能为了简化"
                 "而遗漏会影响当前解释的有效勘误或修订。"
                 "document_authority_role只约束运行身份，不提供另一模型结论。"
                 "不得输出claims或evidence对象；只在structured_payload中引用"
@@ -3322,7 +3327,11 @@ class MonitoringAiService:
                     "不得遗漏、重叠或借候选顺序推断结论。"
                     " supplementary_candidate_ids只允许纳入明确修改、纠正、补充或"
                     "共同构成当前主文件规范内容，且必须与主文件合并阅读的文件。"
-                    "旧版完整主文件、重复副本、仅描述历史差异的摘要、填写或操作"
+                    "仅描述版本差异、修订轨迹、redline或变更汇总的对比材料默认是"
+                    "参考资料；只有正文证明该文件本身发布了仍生效的规范性纠正、"
+                    "修订、增补，或包含当前主文件尚未纳入但仍有效的规范内容时，"
+                    "才可纳入supplementary_candidate_ids。旧版完整主文件、重复"
+                    "副本、仅描述历史差异的摘要、填写或操作"
                     "指南、数据结构或导出说明及其他参考材料，即使与该角色相关，"
                     "也不属于当前权威补充，必须放入excluded_candidate_ids；这些"
                     "文件仍保留在隔离候选库，不得因排除于权威组合而声称被删除。"

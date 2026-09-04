@@ -21,22 +21,38 @@ REQUIRED_DOCUMENT_ROLES = frozenset({"protocol", "ecrf"})
 AUTO_RESOLVE_CONFIDENCE = 0.9
 REVIEW_CONSENSUS_CONFIDENCE = 0.75
 MAX_DOCUMENT_AUTHORITY_CANDIDATES = 100
-PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v6"
-VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v6"
+PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v7"
+VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v7"
+LEGACY_ANALYSIS_PROMPT_PAIRS = frozenset({
+    (
+        "monitoring-document-authority-primary-v6",
+        "monitoring-document-authority-verifier-v6",
+    )
+})
 PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v6"
 VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v6"
 PRIMARY_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-primary-v5"
+    "monitoring-document-authority-adjudication-primary-v6"
 )
 VERIFIER_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-document-authority-adjudication-verifier-v5"
+    "monitoring-document-authority-adjudication-verifier-v6"
 )
-REPLAY_ADJUDICATION_PROMPT_PAIRS = frozenset(
+FULL_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS = frozenset(
     (
         f"monitoring-document-authority-adjudication-primary-v{version}",
         f"monitoring-document-authority-adjudication-verifier-v{version}",
     )
     for version in (2, 3, 4)
+)
+UNRESOLVED_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS = frozenset({
+    (
+        "monitoring-document-authority-adjudication-primary-v5",
+        "monitoring-document-authority-adjudication-verifier-v5",
+    )
+})
+REPLAY_ADJUDICATION_PROMPT_PAIRS = (
+    FULL_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS
+    | UNRESOLVED_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS
 )
 REPLAY_PRIMARY_ADJUDICATION_PROMPT_VERSIONS = frozenset(
     pair[0] for pair in REPLAY_ADJUDICATION_PROMPT_PAIRS
@@ -65,6 +81,9 @@ CURRENT_PROMPT_VERSIONS_BY_TASK = {
     ),
 }
 LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK = {
+    "document_authority_analysis": frozenset(
+        version for pair in LEGACY_ANALYSIS_PROMPT_PAIRS for version in pair
+    ),
     "document_authority_review": frozenset(
         {
             *REPLAY_PRIMARY_ADJUDICATION_PROMPT_VERSIONS,
@@ -82,9 +101,14 @@ _CANDIDATE_KEYS = frozenset({
     "technical_status", "content_status", "use_status", "authority_status",
     "extraction_status", "page_count", "locator_count", "locator_index_sha256",
     "excerpts", "sheets", "zero_text_page_count", "zero_text_page_samples",
-    "limitation_codes",
+    "ocr_recovery_pages", "limitation_codes", "evidence_revision_sha256",
 })
 _EXCERPT_KEYS = frozenset({"locator", "text", "text_sha256"})
+_OCR_PAGE_KEYS = frozenset({
+    "page_number", "dpi", "image_sha256", "locator", "requested_model",
+    "actual_model", "provider", "fell_back", "status", "failure_code",
+    "text_sha256", "character_count",
+})
 _SHEET_KEYS = frozenset({
     "locator", "sheet_name", "row_count", "headers", "visibility", "used_range",
     "parser_warnings",
@@ -140,13 +164,14 @@ def document_authority_batch_sha256(batch: Mapping[str, Any]) -> str:
 def validate_document_authority_analysis(
     batch: Mapping[str, Any], analysis: "DocumentAuthorityAnalysis"
 ) -> None:
-    candidate_ids, locators = _validate_batch(batch)
+    candidate_ids, locators, eligible_candidate_ids = _validate_batch(batch)
     _validate_analysis(
         analysis,
         batch_id=str(batch["batch_id"]),
         input_sha256=_digest(batch),
         candidate_ids=candidate_ids,
         locators=locators,
+        eligible_candidate_ids=eligible_candidate_ids,
     )
 
 
@@ -307,15 +332,16 @@ def validate_document_authority_adjudication_review(
         return
     if review.conflict_packet_sha256 != packet["conflict_packet_sha256"]:
         raise DocumentAuthorityError("document_authority_review_input_mismatch")
-    replay_prompt_versions = (
-        REPLAY_PRIMARY_ADJUDICATION_PROMPT_VERSIONS
-        | REPLAY_VERIFIER_ADJUDICATION_PROMPT_VERSIONS
+    full_role_replay_prompt_versions = frozenset(
+        version
+        for pair in FULL_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS
+        for version in pair
     )
     roles = tuple(
         str(value)
         for value in (
             packet["conflict_roles"]
-            if prompt_version in replay_prompt_versions
+            if prompt_version in full_role_replay_prompt_versions
             else context["unresolved_roles"]
         )
     )
@@ -628,7 +654,7 @@ def reconcile_document_authority(
     primary: DocumentAuthorityRunEnvelope,
     verifier: DocumentAuthorityRunEnvelope,
 ) -> dict[str, Any]:
-    candidate_ids, locators = _validate_batch(batch)
+    candidate_ids, locators, eligible_candidate_ids = _validate_batch(batch)
     input_sha256 = _digest(batch)
     _validate_run_pair(primary, verifier, input_sha256, stage="analysis")
     for run in (primary, verifier):
@@ -638,6 +664,7 @@ def reconcile_document_authority(
             input_sha256=input_sha256,
             candidate_ids=candidate_ids,
             locators=locators,
+            eligible_candidate_ids=eligible_candidate_ids,
         )
 
     left_roles = {item.role: item for item in primary.analysis.role_selections}
@@ -698,7 +725,7 @@ def build_anonymous_conflict_packet(
     primary: DocumentAuthorityRunEnvelope,
     verifier: DocumentAuthorityRunEnvelope,
 ) -> dict[str, Any]:
-    candidate_ids, _locators = _validate_batch(batch)
+    candidate_ids, _locators, _eligible_candidate_ids = _validate_batch(batch)
     reconciliation = reconcile_document_authority(batch, primary, verifier)
     conflict_rows = list(reconciliation.get("conflicts") or ())
     conflict_roles = sorted(str(item.get("role") or "") for item in conflict_rows)
@@ -916,14 +943,16 @@ def resolve_document_authority_adjudication(
         review_primary,
         review_verifier,
     )
-    replay_pair = prompt_pair in REPLAY_ADJUDICATION_PROMPT_PAIRS
+    full_role_replay_pair = (
+        prompt_pair in FULL_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS
+    )
     output_roles = tuple(
         str(value)
         for value in (
             conflict_packet["conflict_roles"]
             if adjudication_context["schema_version"]
             == "monitoring-document-authority-adjudication-v1"
-            or replay_pair
+            or full_role_replay_pair
             else adjudication_context["unresolved_roles"]
         )
     )
@@ -970,7 +999,9 @@ def resolve_document_authority_adjudication(
     }
 
 
-def _validate_batch(batch: Mapping[str, Any]) -> tuple[set[str], dict[str, set[str]]]:
+def _validate_batch(
+    batch: Mapping[str, Any],
+) -> tuple[set[str], dict[str, set[str]], set[str]]:
     if (
         set(batch) - _BATCH_KEYS
         or batch.get("manifest_version") != "monitoring-document-candidate-v1"
@@ -982,6 +1013,7 @@ def _validate_batch(batch: Mapping[str, Any]) -> tuple[set[str], dict[str, set[s
         raise DocumentAuthorityError("document_authority_candidate_coverage_invalid")
     candidate_ids: set[str] = set()
     locators: dict[str, set[str]] = {}
+    eligible_candidate_ids: set[str] = set()
     for raw in raw_candidates:
         if set(raw) - _CANDIDATE_KEYS:
             raise DocumentAuthorityError("document_authority_candidate_shape_invalid")
@@ -991,20 +1023,181 @@ def _validate_batch(batch: Mapping[str, Any]) -> tuple[set[str], dict[str, set[s
         if not candidate_id or candidate_id in candidate_ids:
             raise DocumentAuthorityError("document_authority_candidate_coverage_invalid")
         candidate_ids.add(candidate_id)
-        candidate_locators = _candidate_locators(raw)
-        locator_count = int(raw.get("locator_count") or 0)
-        if locator_count < 0 or (locator_count == 0 and candidate_locators):
+        candidate_locator_list = _candidate_locator_list(raw)
+        candidate_locators = set(candidate_locator_list)
+        evidence_revision = str(raw.get("evidence_revision_sha256") or "")
+        if evidence_revision and len(candidate_locators) != len(candidate_locator_list):
             raise DocumentAuthorityError(
                 "document_authority_candidate_locator_count_invalid"
             )
+        locator_count = int(raw.get("locator_count") or 0)
+        if (
+            locator_count < len(candidate_locators)
+            or (evidence_revision and locator_count != len(candidate_locators))
+        ):
+            raise DocumentAuthorityError(
+                "document_authority_candidate_locator_count_invalid"
+            )
+        if evidence_revision:
+            if str(raw.get("locator_index_sha256") or "") != _digest(
+                candidate_locator_list
+            ):
+                raise DocumentAuthorityError(
+                    "document_authority_candidate_locator_index_invalid"
+                )
+            for excerpt in raw.get("excerpts", ()):
+                text = str(excerpt.get("text") or "")
+                if str(excerpt.get("text_sha256") or "") != hashlib.sha256(
+                    text.encode("utf-8")
+                ).hexdigest():
+                    raise DocumentAuthorityError(
+                        "document_authority_candidate_excerpt_hash_invalid"
+                    )
+        _validate_candidate_ocr_evidence(raw, candidate_locators)
+        if evidence_revision:
+            page_count = int(raw.get("page_count") or 0)
+            zero_text_page_count = int(raw.get("zero_text_page_count") or 0)
+            zero_text_page_samples = tuple(raw.get("zero_text_page_samples", ()))
+            if (
+                zero_text_page_count < 0
+                or zero_text_page_count > page_count
+                or any(
+                    not isinstance(page_number, int)
+                    or isinstance(page_number, bool)
+                    or page_number <= 0
+                    or page_number > page_count
+                    for page_number in zero_text_page_samples
+                )
+                or len(set(zero_text_page_samples)) != len(zero_text_page_samples)
+                or len(zero_text_page_samples) > zero_text_page_count
+            ):
+                raise DocumentAuthorityError(
+                    "document_authority_candidate_ocr_evidence_invalid"
+                )
+            ocr_pages = tuple(raw.get("ocr_recovery_pages", ()))
+            recovered_pages = {
+                int(item.get("page_number") or 0)
+                for item in ocr_pages
+                if item.get("status") == "recovered"
+            }
+            if not {
+                int(item.get("page_number") or 0) for item in ocr_pages
+            }.issubset(set(zero_text_page_samples)):
+                raise DocumentAuthorityError(
+                    "document_authority_candidate_ocr_evidence_invalid"
+                )
+            ocr_complete = (
+                zero_text_page_count > 0
+                and len(zero_text_page_samples) == zero_text_page_count
+                and recovered_pages == set(zero_text_page_samples)
+                and len(ocr_pages) == zero_text_page_count
+            )
+            if (zero_text_page_count or ocr_pages) and raw.get(
+                "extraction_status"
+            ) != ("parsed" if ocr_complete else "needs_ocr"):
+                raise DocumentAuthorityError(
+                    "document_authority_candidate_ocr_status_invalid"
+                )
+        if evidence_revision:
+            revision_body = dict(raw)
+            revision_body.pop("evidence_revision_sha256", None)
+            if evidence_revision != _digest(revision_body):
+                raise DocumentAuthorityError(
+                    "document_authority_candidate_evidence_revision_invalid"
+                )
         locators[candidate_id] = candidate_locators
-    return candidate_ids, locators
+        if (
+            raw.get("technical_status") == "ready"
+            and raw.get("extraction_status") == "parsed"
+        ):
+            eligible_candidate_ids.add(candidate_id)
+    return candidate_ids, locators, eligible_candidate_ids
+
+
+def _validate_candidate_ocr_evidence(
+    raw: Mapping[str, Any], candidate_locators: set[str]
+) -> None:
+    excerpts = {
+        str(item.get("locator") or ""): item
+        for item in raw.get("excerpts", ())
+        if item.get("locator")
+    }
+    seen_pages: set[int] = set()
+    empty_hash = hashlib.sha256(b"").hexdigest()
+    for item in raw.get("ocr_recovery_pages", ()):
+        if set(item) != _OCR_PAGE_KEYS:
+            raise DocumentAuthorityError(
+                "document_authority_candidate_ocr_evidence_invalid"
+            )
+        page_number = int(item.get("page_number") or 0)
+        status = str(item.get("status") or "")
+        locator = str(item.get("locator") or "")
+        text_sha256 = str(item.get("text_sha256") or "")
+        character_count = int(item.get("character_count") or 0)
+        requested_model = item.get("requested_model")
+        actual_model = str(item.get("actual_model") or "")
+        fell_back = item.get("fell_back")
+        if (
+            page_number <= 0
+            or page_number in seen_pages
+            or int(item.get("dpi") or 0) < 200
+            or re.fullmatch(r"[0-9a-f]{64}", str(item.get("image_sha256") or ""))
+            is None
+            or re.fullmatch(r"[0-9a-f]{64}", text_sha256) is None
+            or status not in {"recovered", "empty", "failed"}
+            or not isinstance(requested_model, str)
+            or not requested_model.strip()
+            or not isinstance(fell_back, bool)
+        ):
+            raise DocumentAuthorityError(
+                "document_authority_candidate_ocr_evidence_invalid"
+            )
+        seen_pages.add(page_number)
+        if status == "recovered":
+            excerpt = excerpts.get(locator)
+            expected_locator = (
+                f"candidate:{raw.get('candidate_id')}:p{page_number}:ocr"
+            )
+            if (
+                not locator
+                or locator != expected_locator
+                or locator not in candidate_locators
+                or excerpt is None
+                or text_sha256 != str(excerpt.get("text_sha256") or "")
+                or text_sha256
+                != hashlib.sha256(
+                    str(excerpt.get("text") or "").encode("utf-8")
+                ).hexdigest()
+                or character_count != len(str(excerpt.get("text") or ""))
+                or item.get("failure_code")
+                or not actual_model
+            ):
+                raise DocumentAuthorityError(
+                    "document_authority_candidate_ocr_evidence_invalid"
+                )
+        else:
+            invalid_status_provenance = (
+                status == "failed" and (actual_model or fell_back is not False)
+            ) or (status == "empty" and (not actual_model or item.get("failure_code")))
+            if (
+                locator
+                or character_count != 0
+                or text_sha256 != empty_hash
+                or (status == "failed") != (
+                    item.get("failure_code") == "ocr_runtime_unavailable"
+                )
+                or invalid_status_provenance
+            ):
+                raise DocumentAuthorityError(
+                    "document_authority_candidate_ocr_evidence_invalid"
+                )
 
 
 def _validate_analysis(
     analysis: DocumentAuthorityAnalysis,
     *, batch_id: str, input_sha256: str,
     candidate_ids: set[str], locators: Mapping[str, set[str]],
+    eligible_candidate_ids: set[str],
 ) -> None:
     if analysis.batch_id != batch_id or analysis.input_sha256 != input_sha256:
         raise DocumentAuthorityError("document_authority_analysis_stale")
@@ -1017,6 +1210,8 @@ def _validate_analysis(
     for assessment in assessments.values():
         if not set(assessment.evidence_locators).issubset(locators[assessment.candidate_id]):
             raise DocumentAuthorityError("document_authority_evidence_not_closed")
+        if assessment.usable and assessment.candidate_id not in eligible_candidate_ids:
+            raise DocumentAuthorityError("document_authority_candidate_not_usable")
     for selection in selections.values():
         candidate_id = selection.selected_candidate_id
         if candidate_id and candidate_id not in candidate_ids:
@@ -1060,6 +1255,12 @@ def _validate_run_pair(
     if left.job_input_revision_sha256 != right.job_input_revision_sha256:
         raise DocumentAuthorityError("document_authority_input_revision_mismatch")
     previous_prompt_pair = (left.prompt_version, right.prompt_version)
+    analysis_prompt_pairs = {
+        (PRIMARY_PROMPT_VERSION, VERIFIER_PROMPT_VERSION),
+        *LEGACY_ANALYSIS_PROMPT_PAIRS,
+    }
+    if stage == "analysis" and previous_prompt_pair not in analysis_prompt_pairs:
+        raise DocumentAuthorityError("document_authority_run_identity_invalid")
     if (
         stage == "previous_adjudication"
         and previous_prompt_pair not in REPLAY_ADJUDICATION_PROMPT_PAIRS
@@ -1077,6 +1278,8 @@ def _validate_run_pair(
                 if stage == "adjudication"
                 else PRIMARY_REVIEW_PROMPT_VERSION
                 if stage == "review"
+                else left.prompt_version
+                if stage == "analysis"
                 else PRIMARY_PROMPT_VERSION
             ),
         ),
@@ -1091,6 +1294,8 @@ def _validate_run_pair(
                 if stage == "adjudication"
                 else VERIFIER_REVIEW_PROMPT_VERSION
                 if stage == "review"
+                else right.prompt_version
+                if stage == "analysis"
                 else VERIFIER_PROMPT_VERSION
             ),
         ),
@@ -1128,12 +1333,16 @@ def _project_nested(item: Mapping[str, Any], allowed: frozenset[str]) -> dict[st
 
 
 def _candidate_locators(raw: Mapping[str, Any]) -> set[str]:
-    return {
+    return set(_candidate_locator_list(raw))
+
+
+def _candidate_locator_list(raw: Mapping[str, Any]) -> list[str]:
+    return [
         str(item.get("locator") or "")
         for key in ("excerpts", "sheets")
         for item in raw.get(key, ())
         if item.get("locator")
-    }
+    ]
 
 
 def _same_selection(left: RoleSelection, right: RoleSelection) -> bool:

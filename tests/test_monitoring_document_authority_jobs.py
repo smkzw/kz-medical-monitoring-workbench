@@ -346,6 +346,37 @@ def test_direct_job_history_builds_server_owned_run_envelope(
     assert fake.envelopes[0].max_output_tokens == 48_000
     assert "locator_count为0的候选没有授权定位证据" in fake.envelopes[0].system_prompt
 
+    legacy_prompt = (
+        "monitoring-document-authority-primary-v6"
+        if role == "primary"
+        else "monitoring-document-authority-verifier-v6"
+    )
+    legacy = repository.create_or_get(MonitoringAiJobCreate(
+        project_id=queued.project_id,
+        task_type=queued.task_type,
+        input_revision=queued.input_revision,
+        input_payload=repository.input_payload(queued.project_id, queued.job_id),
+        prompt_version=legacy_prompt,
+        profile_id=queued.profile_id,
+        provider=queued.provider,
+        requested_model=queued.requested_model,
+        max_attempts=queued.max_attempts,
+        business_key=f"legacy-analysis:{role}:{batch['batch_id']}",
+    ))
+    legacy_result = service.run_next(
+        "legacy-worker", claim_identity=service.claim_identity()
+    )
+    legacy_run = load_document_authority_analysis_run(
+        repository,
+        project_id=revision.project_id,
+        job_id=legacy.job_id,
+        candidate_batch=batch,
+        role=role,
+    )
+    assert legacy_result.job is not None
+    assert legacy_result.job.status == MonitoringAiJobStatus.COMPLETED
+    assert legacy_run.prompt_version == legacy_prompt
+
 
 def test_document_authority_gets_one_schema_only_repair(tmp_path) -> None:
     batch = _batch()
@@ -1164,7 +1195,7 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         business_key_prefix="document-authority-adjudication:",
     )
     assert len(adjudication_jobs) == 2
-    assert all(":v5:" in job.business_key for job in adjudication_jobs)
+    assert all(":v6:" in job.business_key for job in adjudication_jobs)
     primary_adjudication_job = next(
         job for job in adjudication_jobs if ":primary:" in job.business_key
     )
@@ -1463,10 +1494,16 @@ def test_resolved_authority_promotes_selected_documents_atomically(
         ("protocol.docx", protocol),
         ("ecrf.xlsx", ecrf),
     ])
+    protocol_evidence_revision = next(
+        item["evidence_revision_sha256"]
+        for item in batch["candidates"]
+        if item["filename"] == "protocol.docx"
+    )
     candidate_manifest = (
         candidate_root
         / "manifests"
-        / f"{candidate_ids['protocol.docx']}.json"
+        / candidate_ids["protocol.docx"]
+        / f"{protocol_evidence_revision}.json"
     )
     candidate_manifest.unlink()
     missing_candidate_registry = SourceRegistryService(

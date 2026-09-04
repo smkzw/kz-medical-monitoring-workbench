@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from ...admission.mapping_confirmation import enrich_candidates
+from ...admission.document_authority import DocumentAuthorityError
 from ...admission.mapping_pipeline import AdmissionMappingPipelineError
 from ...admission.pipeline import AdmissionPipelineError
 from ...runtime import project_backup as pb
@@ -615,7 +616,7 @@ def register_mapping_candidate_routes(
                 "headline": "系统正在独立识别并交叉核对研究文件",
                 "guidance": "当前无需逐项确认，完成后会自动更新研究文件状态。",
             }
-        except Exception:
+        except (DocumentAuthorityError, ValueError):
             return _mapping_error("mapping_document_registration_invalid")
         finally:
             for upload in files:
