@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping
 
 from packages.medical_monitoring.admission.document_authority import (
+    PRIMARY_CRITIQUE_PROMPT_VERSION,
     PRIMARY_ADJUDICATION_PROMPT_VERSION,
     LEGACY_ANALYSIS_PROMPT_PAIRS,
     LEGACY_REVIEW_PROMPT_PAIRS,
@@ -16,6 +17,7 @@ from packages.medical_monitoring.admission.document_authority import (
     PRIMARY_PROMPT_VERSION,
     PRIMARY_REVIEW_PROMPT_VERSION,
     VERIFIER_PROMPT_VERSION,
+    VERIFIER_CRITIQUE_PROMPT_VERSION,
     VERIFIER_ADJUDICATION_PROMPT_VERSION,
     VERIFIER_REVIEW_PROMPT_VERSION,
     DocumentAuthorityAnalysis,
@@ -26,10 +28,12 @@ from packages.medical_monitoring.admission.document_authority import (
     DocumentAuthorityRunEnvelope,
     build_anonymous_conflict_packet,
     build_anonymous_adjudication_context,
+    build_anonymous_critique_context,
     document_authority_batch_sha256,
     reconcile_document_authority,
     resolve_document_authority_conflicts,
     resolve_document_authority_adjudication,
+    resolve_document_authority_critique,
     validate_document_authority_analysis,
     validate_document_authority_conflict_review,
     validate_document_authority_adjudication_context,
@@ -50,10 +54,12 @@ from .monitoring_ai_contracts import (
 )
 from .monitoring_ai_repository import MonitoringAiRepository
 
-PROMOTION_RECEIPT_SCHEMA_VERSION = "monitoring-document-authority-promotion-v3"
-_PREVIOUS_PROMOTION_RECEIPT_SCHEMA_VERSION = (
-    "monitoring-document-authority-promotion-v2"
-)
+PROMOTION_RECEIPT_SCHEMA_VERSION = "monitoring-document-authority-promotion-v4"
+_REPLAY_PROMOTION_RECEIPT_SCHEMA_VERSIONS = frozenset({
+    "monitoring-document-authority-promotion-v2",
+    "monitoring-document-authority-promotion-v3",
+    PROMOTION_RECEIPT_SCHEMA_VERSION,
+})
 _PRIMARY_REGISTRATION_KEYS = frozenset({
     "role",
     "candidate_id",
@@ -291,6 +297,79 @@ def submit_document_authority_adjudication_pair(
     return context, primary_job, verifier_job
 
 
+def submit_document_authority_critique_pair(
+    primary_service: "MonitoringAiService",
+    verifier_service: "MonitoringAiService",
+    *,
+    input_revision: "MonitoringAiInputRevision",
+    candidate_batch: Mapping[str, Any],
+    primary_analysis_job_id: str,
+    verifier_analysis_job_id: str,
+    primary_review_job_id: str,
+    verifier_review_job_id: str,
+    primary_adjudication_job_id: str,
+    verifier_adjudication_job_id: str,
+) -> tuple[dict[str, Any], "MonitoringAiJob", "MonitoringAiJob"]:
+    repository = primary_service.repository
+    if verifier_service.repository is not repository:
+        raise DocumentAuthorityError("document_authority_repository_mismatch")
+    project_id = input_revision.project_id
+    primary_analysis = load_document_authority_analysis_run(
+        repository, project_id=project_id, job_id=primary_analysis_job_id,
+        candidate_batch=candidate_batch, role="primary",
+    )
+    verifier_analysis = load_document_authority_analysis_run(
+        repository, project_id=project_id, job_id=verifier_analysis_job_id,
+        candidate_batch=candidate_batch, role="verifier",
+    )
+    packet = build_anonymous_conflict_packet(
+        candidate_batch, primary_analysis, verifier_analysis
+    )
+    primary_review = load_document_authority_review_run(
+        repository, project_id=project_id, job_id=primary_review_job_id,
+        candidate_batch=candidate_batch, conflict_packet=packet, role="primary",
+    )
+    verifier_review = load_document_authority_review_run(
+        repository, project_id=project_id, job_id=verifier_review_job_id,
+        candidate_batch=candidate_batch, conflict_packet=packet, role="verifier",
+    )
+    adjudication_context = build_anonymous_adjudication_context(
+        candidate_batch, primary_analysis, verifier_analysis, packet,
+        primary_review, verifier_review,
+    )
+    primary_adjudication = load_document_authority_review_run(
+        repository, project_id=project_id, job_id=primary_adjudication_job_id,
+        candidate_batch=candidate_batch, conflict_packet=packet, role="primary",
+        adjudication_context=adjudication_context,
+    )
+    verifier_adjudication = load_document_authority_review_run(
+        repository, project_id=project_id, job_id=verifier_adjudication_job_id,
+        candidate_batch=candidate_batch, conflict_packet=packet, role="verifier",
+        adjudication_context=adjudication_context,
+    )
+    context = build_anonymous_critique_context(
+        candidate_batch, primary_analysis, verifier_analysis, packet,
+        primary_review, verifier_review, adjudication_context,
+        primary_adjudication, verifier_adjudication,
+    )
+    bindings = [{
+        "candidate_id": str(item["candidate_id"]),
+        "source_entry_id": str(item["file_id"]),
+        "source_content_sha256": str(item["content_sha256"]),
+    } for item in candidate_batch["candidates"]]
+    primary_job = primary_service.submit_document_authority_review(
+        project_id=project_id, input_revision=input_revision,
+        conflict_packet=packet, source_bindings=bindings, role="primary",
+        adjudication_context=context,
+    )
+    verifier_job = verifier_service.submit_document_authority_review(
+        project_id=project_id, input_revision=input_revision,
+        conflict_packet=packet, source_bindings=bindings, role="verifier",
+        adjudication_context=context,
+    )
+    return context, primary_job, verifier_job
+
+
 def load_document_authority_review_run(
     repository: MonitoringAiRepository,
     *,
@@ -307,12 +386,24 @@ def load_document_authority_review_run(
         and adjudication_context.get("schema_version")
         == "monitoring-document-authority-adjudication-v1"
     )
+    critique = (
+        adjudication_context is not None
+        and adjudication_context.get("schema_version")
+        == "monitoring-document-authority-critique-v1"
+    )
     expected_provider_model = (
         (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL)
         if role == "primary"
         else (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL)
     )
     allowed_prompt_versions = (
+        {
+            PRIMARY_CRITIQUE_PROMPT_VERSION
+            if role == "primary"
+            else VERIFIER_CRITIQUE_PROMPT_VERSION
+        }
+        if critique
+        else
         {
             LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION
             if role == "primary"
@@ -386,7 +477,10 @@ def load_document_authority_review_run(
             DocumentAuthorityAdjudicationReview
             if adjudication_context is not None
             and adjudication_context.get("schema_version")
-            == "monitoring-document-authority-adjudication-v2"
+            in {
+                "monitoring-document-authority-adjudication-v2",
+                "monitoring-document-authority-critique-v1",
+            }
             else DocumentAuthorityConflictReview
         )
         review = review_model.model_validate(candidates[0].structured_payload)
@@ -433,6 +527,8 @@ def resolve_document_authority_from_jobs(
     verifier_review_job_id: str = "",
     primary_adjudication_job_id: str = "",
     verifier_adjudication_job_id: str = "",
+    primary_critique_job_id: str = "",
+    verifier_critique_job_id: str = "",
 ) -> dict[str, Any]:
     primary_analysis = load_document_authority_analysis_run(
         repository,
@@ -565,6 +661,62 @@ def resolve_document_authority_from_jobs(
             for decision in primary_adjudication.review.decisions
             if decision.role in unresolved_before_adjudication
         })
+        if resolved["state"] != "resolved" and (
+            primary_critique_job_id or verifier_critique_job_id
+        ):
+            if not primary_critique_job_id or not verifier_critique_job_id:
+                raise DocumentAuthorityError(
+                    "document_authority_critique_jobs_required"
+                )
+            critique_context = build_anonymous_critique_context(
+                candidate_batch,
+                primary_analysis,
+                verifier_analysis,
+                expected_packet,
+                primary_review,
+                verifier_review,
+                adjudication_context,
+                primary_adjudication,
+                verifier_adjudication,
+            )
+            primary_critique = load_document_authority_review_run(
+                repository,
+                project_id=project_id,
+                job_id=primary_critique_job_id,
+                candidate_batch=candidate_batch,
+                conflict_packet=expected_packet,
+                role="primary",
+                adjudication_context=critique_context,
+            )
+            verifier_critique = load_document_authority_review_run(
+                repository,
+                project_id=project_id,
+                job_id=verifier_critique_job_id,
+                candidate_batch=candidate_batch,
+                conflict_packet=expected_packet,
+                role="verifier",
+                adjudication_context=critique_context,
+            )
+            unresolved_before_critique = set(resolved["unresolved_roles"])
+            resolved = resolve_document_authority_critique(
+                candidate_batch,
+                primary_analysis,
+                verifier_analysis,
+                expected_packet,
+                primary_review,
+                verifier_review,
+                adjudication_context,
+                primary_adjudication,
+                verifier_adjudication,
+                critique_context,
+                primary_critique,
+                verifier_critique,
+            )
+            identity_decisions.update({
+                decision.role: decision
+                for decision in primary_critique.review.decisions
+                if decision.role in unresolved_before_critique
+            })
     document_identities = _analysis_document_identities(
         primary_analysis, resolved["resolved_roles"]
     )
@@ -604,6 +756,8 @@ def promote_document_authority_from_jobs(
     verifier_review_job_id: str = "",
     primary_adjudication_job_id: str = "",
     verifier_adjudication_job_id: str = "",
+    primary_critique_job_id: str = "",
+    verifier_critique_job_id: str = "",
 ) -> dict[str, Any]:
     candidate_root = Path(candidate_root)
     frozen_batch = _load_json(
@@ -623,6 +777,8 @@ def promote_document_authority_from_jobs(
         verifier_review_job_id=verifier_review_job_id,
         primary_adjudication_job_id=primary_adjudication_job_id,
         verifier_adjudication_job_id=verifier_adjudication_job_id,
+        primary_critique_job_id=primary_critique_job_id,
+        verifier_critique_job_id=verifier_critique_job_id,
     )
     if resolution["state"] != "resolved":
         return {**resolution, "authority_status": "not_promoted"}
@@ -750,9 +906,15 @@ def promote_document_authority_from_jobs(
                 )
                 if job_id
             ),
+            "critique_job_ids": sorted(
+                job_id
+                for job_id in (primary_critique_job_id, verifier_critique_job_id)
+                if job_id
+            ),
             "analysis_run_ids": resolution["analysis_run_ids"],
             "review_run_ids": resolution["review_run_ids"],
             "adjudication_run_ids": resolution.get("adjudication_run_ids", []),
+            "critique_run_ids": resolution.get("critique_run_ids", []),
             "document_identities": resolution["document_identities"],
             "registrations": registrations,
         }
@@ -784,10 +946,7 @@ def verify_document_authority_promotion_receipt(
 
     try:
         receipt_schema = str(receipt["schema_version"])
-        if receipt_schema not in {
-            _PREVIOUS_PROMOTION_RECEIPT_SCHEMA_VERSION,
-            PROMOTION_RECEIPT_SCHEMA_VERSION,
-        }:
+        if receipt_schema not in _REPLAY_PROMOTION_RECEIPT_SCHEMA_VERSIONS:
             return False
         analysis_jobs = [
             repository.get(project_id, str(job_id))
@@ -853,6 +1012,24 @@ def verify_document_authority_promotion_receipt(
             "verifier",
         }:
             return False
+        critique_jobs = [
+            repository.get(project_id, str(job_id))
+            for job_id in receipt.get("critique_job_ids", ())
+        ]
+        critique_by_role = {
+            (
+                "primary"
+                if job.provider == MONITORING_C3_MAPPING_PROVIDER
+                and job.requested_model == MONITORING_C3_MAPPING_MODEL
+                else "verifier"
+                if job.provider == MONITORING_C3_VERIFIER_PROVIDER
+                and job.requested_model == MONITORING_C3_VERIFIER_MODEL
+                else ""
+            ): job
+            for job in critique_jobs
+        }
+        if critique_jobs and set(critique_by_role) != {"primary", "verifier"}:
+            return False
         resolution = resolve_document_authority_from_jobs(
             repository,
             project_id=project_id,
@@ -873,6 +1050,12 @@ def verify_document_authority_promotion_receipt(
                 adjudication_by_role["verifier"].job_id
                 if adjudication_by_role else ""
             ),
+            primary_critique_job_id=(
+                critique_by_role["primary"].job_id if critique_by_role else ""
+            ),
+            verifier_critique_job_id=(
+                critique_by_role["verifier"].job_id if critique_by_role else ""
+            ),
         )
         candidates = {
             str(item["candidate_id"]): item
@@ -882,11 +1065,7 @@ def verify_document_authority_promotion_receipt(
         registrations = list(receipt["registrations"])
         return bool(
             resolution["state"] == "resolved"
-            and receipt_schema
-            in {
-                _PREVIOUS_PROMOTION_RECEIPT_SCHEMA_VERSION,
-                PROMOTION_RECEIPT_SCHEMA_VERSION,
-            }
+            and receipt_schema in _REPLAY_PROMOTION_RECEIPT_SCHEMA_VERSIONS
             and receipt["batch_id"] == resolution["batch_id"]
             and receipt["input_sha256"] == resolution["input_sha256"]
             and sorted(receipt["analysis_job_ids"])
@@ -895,12 +1074,16 @@ def verify_document_authority_promotion_receipt(
             == sorted(job.job_id for job in review_jobs)
             and sorted(receipt.get("adjudication_job_ids", ()))
             == sorted(job.job_id for job in adjudication_jobs)
+            and sorted(receipt.get("critique_job_ids", ()))
+            == sorted(job.job_id for job in critique_jobs)
             and sorted(receipt["analysis_run_ids"])
             == sorted(resolution["analysis_run_ids"])
             and sorted(receipt["review_run_ids"])
             == sorted(resolution["review_run_ids"])
             and sorted(receipt.get("adjudication_run_ids", ()))
             == sorted(resolution.get("adjudication_run_ids", []))
+            and sorted(receipt.get("critique_run_ids", ()))
+            == sorted(resolution.get("critique_run_ids", []))
             and receipt["document_identities"] == resolution["document_identities"]
             and _registrations_bind_resolution(registrations, claims, candidates)
         )

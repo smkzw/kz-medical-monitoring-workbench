@@ -672,9 +672,15 @@ def register_mapping_candidate_routes(
                 if state == "needs_user_input":
                     headline = "还差一项关键信息"
                     guidance = str(result.get("user_question") or "").strip() or (
-                        "现有文件不足以可靠确定当前版本，请一次重新选择完整"
-                        "研究文件。"
+                        "仅有少量文件关系仍无法唯一确定，请确认系统标出的"
+                        "分歧文件。"
                     )
+                elif state == "evidence_incomplete":
+                    headline = "系统正在补齐少量文件内容"
+                    guidance = "暂时无需重新选择全部文件，系统会先恢复所需证据。"
+                elif state == "cross_checking":
+                    headline = "系统正在复核最后几个分歧"
+                    guidance = "无需操作，系统会独立核对并自行处理差异。"
                 elif state == "adjudicating":
                     headline = "系统正在完成最后一次核对"
                     guidance = "无需操作，系统会自行处理两次判断中的差异。"
@@ -687,6 +693,11 @@ def register_mapping_candidate_routes(
                     "analysis_token": payload.batch_id,
                     "headline": headline,
                     "guidance": guidance,
+                    "files": [
+                        str(value)
+                        for value in result.get("attention_files", ())
+                        if str(value).strip()
+                    ],
                 }
             for registration in result.get("registrations", ()):
                 pipeline.select_document(

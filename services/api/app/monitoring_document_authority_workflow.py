@@ -7,6 +7,7 @@ from typing import Any, Callable
 from packages.medical_monitoring.admission.document_authority import (
     DocumentAuthorityError,
     PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    PRIMARY_CRITIQUE_PROMPT_VERSION,
     PRIMARY_PROMPT_VERSION,
     build_anonymous_conflict_packet,
     reconcile_document_authority,
@@ -24,6 +25,7 @@ from .monitoring_document_authority_jobs import (
     promote_document_authority_from_jobs,
     resolve_document_authority_from_jobs,
     submit_document_authority_adjudication_pair,
+    submit_document_authority_critique_pair,
     submit_document_authority_review_pair,
 )
 from .monitoring_document_candidates import MonitoringDocumentCandidateDecomposer
@@ -33,6 +35,7 @@ from .source_intake import SourceRegistryService
 _ACTIVE = {MonitoringAiJobStatus.QUEUED, MonitoringAiJobStatus.RUNNING}
 _ANALYSIS_GENERATION = PRIMARY_PROMPT_VERSION.rsplit("-", 1)[-1]
 _ADJUDICATION_GENERATION = PRIMARY_ADJUDICATION_PROMPT_VERSION.rsplit("-", 1)[-1]
+_CRITIQUE_GENERATION = PRIMARY_CRITIQUE_PROMPT_VERSION.rsplit("-", 1)[-1]
 
 
 class MonitoringDocumentAuthorityWorkflow:
@@ -250,6 +253,71 @@ class MonitoringDocumentAuthorityWorkflow:
         )
         if pending is not None:
             return {**pending, "batch_id": batch_id}
+        adjudication_resolution = resolve_document_authority_from_jobs(
+            self.repository,
+            project_id=project_id,
+            candidate_batch=batch,
+            primary_analysis_job_id=primary_job.job_id,
+            verifier_analysis_job_id=verifier_job.job_id,
+            primary_review_job_id=primary_review.job_id,
+            verifier_review_job_id=verifier_review.job_id,
+            primary_adjudication_job_id=primary_adjudication.job_id,
+            verifier_adjudication_job_id=verifier_adjudication.job_id,
+        )
+        if adjudication_resolution["state"] == "resolved":
+            return promote_document_authority_from_jobs(
+                self.repository,
+                project_id=project_id,
+                candidate_batch=batch,
+                candidate_root=candidate_root,
+                source_registry=self.source_registry,
+                primary_analysis_job_id=primary_job.job_id,
+                verifier_analysis_job_id=verifier_job.job_id,
+                primary_review_job_id=primary_review.job_id,
+                verifier_review_job_id=verifier_review.job_id,
+                primary_adjudication_job_id=primary_adjudication.job_id,
+                verifier_adjudication_job_id=verifier_adjudication.job_id,
+            )
+
+        primary_critique = self._optional_job(
+            project_id,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+            f"document-authority-critique:primary:{_CRITIQUE_GENERATION}:{packet_sha256}",
+        )
+        verifier_critique = self._optional_job(
+            project_id,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+            f"document-authority-critique:verifier:{_CRITIQUE_GENERATION}:{packet_sha256}",
+        )
+        if primary_critique is None or verifier_critique is None:
+            revision = self._input_revision(project_id, batch)
+            _, primary_critique, verifier_critique = (
+                submit_document_authority_critique_pair(
+                    self.primary_service,
+                    self.verifier_service,
+                    input_revision=revision,
+                    candidate_batch=batch,
+                    primary_analysis_job_id=primary_job.job_id,
+                    verifier_analysis_job_id=verifier_job.job_id,
+                    primary_review_job_id=primary_review.job_id,
+                    verifier_review_job_id=verifier_review.job_id,
+                    primary_adjudication_job_id=primary_adjudication.job_id,
+                    verifier_adjudication_job_id=verifier_adjudication.job_id,
+                )
+            )
+            self.worker_wake()
+            return {"state": "cross_checking", "batch_id": batch_id}
+        if self._recover_failed_once((primary_critique, verifier_critique)):
+            return {
+                "state": "cross_checking",
+                "authority_status": "not_promoted",
+                "batch_id": batch_id,
+            }
+        pending = self._pending_state(
+            (primary_critique, verifier_critique), "cross_checking"
+        )
+        if pending is not None:
+            return {**pending, "batch_id": batch_id}
         return promote_document_authority_from_jobs(
             self.repository,
             project_id=project_id,
@@ -262,6 +330,8 @@ class MonitoringDocumentAuthorityWorkflow:
             verifier_review_job_id=verifier_review.job_id,
             primary_adjudication_job_id=primary_adjudication.job_id,
             verifier_adjudication_job_id=verifier_adjudication.job_id,
+            primary_critique_job_id=primary_critique.job_id,
+            verifier_critique_job_id=verifier_critique.job_id,
         )
 
     @staticmethod

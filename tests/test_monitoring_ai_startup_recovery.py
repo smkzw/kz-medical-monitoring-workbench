@@ -116,6 +116,8 @@ def test_document_authority_startup_prompt_sets_are_explicit() -> None:
                 "monitoring-document-authority-review-verifier-v7",
                 "monitoring-document-authority-adjudication-primary-v7",
                 "monitoring-document-authority-adjudication-verifier-v7",
+                "monitoring-document-authority-critique-primary-v1",
+                "monitoring-document-authority-critique-verifier-v1",
             }
         ),
     }

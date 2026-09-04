@@ -93,10 +93,12 @@ from packages.medical_monitoring.admission.document_authority import (
     CURRENT_PROMPT_VERSIONS_BY_TASK as DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK,  # noqa: F401
     LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK as DOCUMENT_AUTHORITY_LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK,  # noqa: F401
     PRIMARY_ADJUDICATION_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    PRIMARY_CRITIQUE_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_CRITIQUE_PROMPT_VERSION,
     PRIMARY_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_PROMPT_VERSION,
     PRIMARY_REVIEW_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_REVIEW_PROMPT_VERSION,
     VERIFIER_PROMPT_VERSION as DOCUMENT_AUTHORITY_VERIFIER_PROMPT_VERSION,
     VERIFIER_ADJUDICATION_PROMPT_VERSION as DOCUMENT_AUTHORITY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
+    VERIFIER_CRITIQUE_PROMPT_VERSION as DOCUMENT_AUTHORITY_VERIFIER_CRITIQUE_PROMPT_VERSION,
     VERIFIER_REVIEW_PROMPT_VERSION as DOCUMENT_AUTHORITY_VERIFIER_REVIEW_PROMPT_VERSION,
     DocumentAuthorityAnalysis,
     DocumentAuthorityAdjudicationReview,
@@ -1651,8 +1653,26 @@ class MonitoringAiService:
             validate_document_authority_adjudication_context(
                 conflict_packet, adjudication_context
             )
+        review_stage = (
+            "critique"
+            if adjudication_context is not None
+            and adjudication_context.get("schema_version")
+            == "monitoring-document-authority-critique-v1"
+            else "adjudication"
+            if adjudication_context is not None
+            else "review"
+        )
         prompt_version = (
-            DOCUMENT_AUTHORITY_PRIMARY_ADJUDICATION_PROMPT_VERSION
+            DOCUMENT_AUTHORITY_PRIMARY_CRITIQUE_PROMPT_VERSION
+            if role == "primary"
+            and adjudication_context is not None
+            and adjudication_context.get("schema_version")
+            == "monitoring-document-authority-critique-v1"
+            else DOCUMENT_AUTHORITY_VERIFIER_CRITIQUE_PROMPT_VERSION
+            if adjudication_context is not None
+            and adjudication_context.get("schema_version")
+            == "monitoring-document-authority-critique-v1"
+            else DOCUMENT_AUTHORITY_PRIMARY_ADJUDICATION_PROMPT_VERSION
             if role == "primary" and adjudication_context is not None
             else DOCUMENT_AUTHORITY_VERIFIER_ADJUDICATION_PROMPT_VERSION
             if adjudication_context is not None
@@ -1698,8 +1718,7 @@ class MonitoringAiService:
                 requested_model=runtime.model,
                 max_attempts=max_attempts,
                 business_key=(
-                    f"document-authority-"
-                    f"{'adjudication' if adjudication_context is not None else 'review'}:"
+                    f"document-authority-{review_stage}:"
                     f"{role}:"
                     f"{prompt_version.rsplit('-', 1)[-1] + ':' if adjudication_context is not None else ''}"
                     f"{packet_sha256}"
@@ -3283,7 +3302,14 @@ class MonitoringAiService:
             )
         elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
             system_prompt += (
-                " 这是文件权威冲突的系统内最终裁决。input_payload中的"
+                " 这是一次且仅一次的匿名相互质询。必须逐项回应两个前轮选项的"
+                "rationale与counter_evidence_references，回到冻结证据和"
+                "document_relationships后维持或修订自己的完整决定；不得按顺序、"
+                "票数或置信度选边，也不得推测模型身份。"
+                if input_payload.get("document_authority_adjudication_context", {}).get(
+                    "schema_version"
+                ) == "monitoring-document-authority-critique-v1"
+                else " 这是文件权威冲突的系统内最终裁决。input_payload中的"
                 "document_authority_adjudication_context只列出前轮仍未收敛的"
                 "匿名选项，不含模型身份；必须回到冻结候选内容逐项裁决，不能"
                 "按选项顺序、票数或原置信度选边。只输出unresolved_roles列出的"
@@ -3599,7 +3625,10 @@ class MonitoringAiService:
             list(adjudication_context["unresolved_roles"])
             if isinstance(adjudication_context, dict)
             and adjudication_context.get("schema_version")
-            == "monitoring-document-authority-adjudication-v2"
+            in {
+                "monitoring-document-authority-adjudication-v2",
+                "monitoring-document-authority-critique-v1",
+            }
             else list(packet["conflict_roles"])
         )
         evidence_candidates = [

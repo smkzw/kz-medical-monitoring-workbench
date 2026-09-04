@@ -523,13 +523,24 @@ def test_document_authority_promotion_is_server_wired_and_publicly_plain(
             "无需操作",
         ),
         (
+            {"state": "cross_checking", "authority_status": "not_promoted"},
+            "系统正在复核最后几个分歧",
+            "无需操作",
+        ),
+        (
+            {"state": "evidence_incomplete", "authority_status": "not_promoted"},
+            "系统正在补齐少量文件内容",
+            "暂时无需重新选择全部文件",
+        ),
+        (
             {
                 "state": "needs_user_input",
                 "authority_status": "not_promoted",
-                "user_question": "请一次重新选择完整研究文件。",
+                "user_question": "仅需确认：eCRF 修订说明是否需与主文件一起阅读？",
+                "attention_files": ["eCRF 修订说明.pdf"],
             },
             "还差一项关键信息",
-            "请一次重新选择完整研究文件。",
+            "仅需确认",
         ),
     ),
 )
@@ -553,6 +564,8 @@ def test_document_authority_public_state_hides_internal_adjudication(
     assert response.status_code == 200
     assert response.json()["headline"] == headline
     assert guidance in response.json()["guidance"]
+    if result.get("attention_files"):
+        assert response.json()["files"] == result["attention_files"]
     public_blob = json.dumps(response.json(), ensure_ascii=False)
     assert "模型" not in public_blob
     assert "provider" not in public_blob

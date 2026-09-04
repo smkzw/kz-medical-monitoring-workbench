@@ -151,6 +151,15 @@ check(renders.documentsFailed.includes("当前研究方案"), "readiness failure
 check(renders.documentsFailed.includes("已识别"), "readiness failure keeps completed work visible");
 check(renders.documentsFailed.includes(">重新核对研究文件</button>"), "readiness failure offers one plain retry action");
 check(renders.documentsFailed.includes('role="alert"'), "readiness failure is announced accessibly");
+check(
+  renders.documentsCrossChecking.includes("系统正在复核最后几个分歧"),
+  "critique progress stays in plain Chinese",
+);
+check(
+  renders.documentsCrossChecking.includes("eCRF 修订说明.pdf")
+    && renders.documentsCrossChecking.includes('disabled=""'),
+  "critique keeps the named file visible and upload disabled",
+);
 
 // Confirm step: plain summary leads, engineering field list stays collapsed.
 check(
