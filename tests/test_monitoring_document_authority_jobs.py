@@ -576,6 +576,35 @@ def test_matching_analysis_jobs_resolve_without_conflict_reviews(tmp_path) -> No
     }
 
 
+def test_product_workflow_stops_before_models_when_role_candidate_is_incomplete(
+    tmp_path,
+) -> None:
+    pymupdf = pytest.importorskip("pymupdf")
+    document = pymupdf.open()
+    document.new_page()
+    blank_pdf = document.tobytes()
+    document.close()
+    repository = MonitoringAiRepository(tmp_path / "workflow.sqlite")
+    wake_calls = []
+    workflow = MonitoringDocumentAuthorityWorkflow(
+        repository,
+        SimpleNamespace(),
+        SimpleNamespace(),
+        SourceRegistryService(SourceRegistryStore(tmp_path / "registry.jsonl")),
+        worker_wake=lambda: wake_calls.append(True),
+    )
+
+    with pytest.raises(DocumentAuthorityError, match="evidence_incomplete"):
+        workflow.start(
+            project_id="project-document-authority",
+            workspace_dir=tmp_path / "workspace",
+            files=[("protocol.pdf", blank_pdf)],
+        )
+
+    assert repository.list_jobs("project-document-authority") == ()
+    assert wake_calls == []
+
+
 def test_product_workflow_starts_both_models_and_promotes_direct_agreement(
     tmp_path,
 ) -> None:

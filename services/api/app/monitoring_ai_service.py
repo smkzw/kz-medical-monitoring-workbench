@@ -3277,6 +3277,9 @@ class MonitoringAiService:
                 " locator_count为0的候选没有授权定位证据：必须设为"
                 "usable=false，evidence_locators为空，且不得选为主文件或"
                 "supplementary_bindings。不得创造候选中未提供的locator。"
+                " technical_status不是ready或extraction_status不是parsed的候选"
+                "同样必须设为usable=false、不得选择；不能因为候选仍有部分"
+                "locator就忽略未完成的提取或OCR。"
             )
         elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
             system_prompt += (

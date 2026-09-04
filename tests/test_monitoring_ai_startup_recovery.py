@@ -106,8 +106,8 @@ def test_document_authority_startup_prompt_sets_are_explicit() -> None:
     assert DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK == {
         "document_authority_analysis": frozenset(
             {
-                "monitoring-document-authority-primary-v7",
-                "monitoring-document-authority-verifier-v7",
+                "monitoring-document-authority-primary-v8",
+                "monitoring-document-authority-verifier-v8",
             }
         ),
         "document_authority_review": frozenset(
@@ -124,6 +124,8 @@ def test_document_authority_startup_prompt_sets_are_explicit() -> None:
             {
                 "monitoring-document-authority-primary-v6",
                 "monitoring-document-authority-verifier-v6",
+                "monitoring-document-authority-primary-v7",
+                "monitoring-document-authority-verifier-v7",
             }
         ),
         "document_authority_review": frozenset(

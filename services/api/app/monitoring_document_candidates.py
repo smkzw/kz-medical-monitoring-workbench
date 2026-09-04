@@ -313,10 +313,14 @@ class MonitoringDocumentCandidateDecomposer:
             parser_name, parser_version, page_count, zero_text_pages, blocks = (
                 _extract_pdf_candidate_blocks(content, candidate_id)
             )
-            blocks = blocks[:MAX_EXCERPTS]
             ocr_evidence: tuple[CandidateOcrPageEvidence, ...] = ()
-            ocr_page_limit = max(0, MAX_EXCERPTS - len(blocks))
-            if zero_text_pages and self.ocr_runner is not None and ocr_page_limit:
+            ocr_page_limit = (
+                min(len(zero_text_pages), MAX_EXCERPTS)
+                if self.ocr_runner is not None
+                else 0
+            )
+            blocks = blocks[: MAX_EXCERPTS - ocr_page_limit]
+            if zero_text_pages and ocr_page_limit:
                 recovered, ocr_evidence = _recover_pdf_candidate_pages(
                     content,
                     candidate_id,

@@ -21,13 +21,17 @@ REQUIRED_DOCUMENT_ROLES = frozenset({"protocol", "ecrf"})
 AUTO_RESOLVE_CONFIDENCE = 0.9
 REVIEW_CONSENSUS_CONFIDENCE = 0.75
 MAX_DOCUMENT_AUTHORITY_CANDIDATES = 100
-PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v7"
-VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v7"
+PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v8"
+VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v8"
 LEGACY_ANALYSIS_PROMPT_PAIRS = frozenset({
     (
         "monitoring-document-authority-primary-v6",
         "monitoring-document-authority-verifier-v6",
-    )
+    ),
+    (
+        "monitoring-document-authority-primary-v7",
+        "monitoring-document-authority-verifier-v7",
+    ),
 })
 PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v6"
 VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v6"

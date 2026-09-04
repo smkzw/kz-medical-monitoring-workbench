@@ -44,6 +44,9 @@ from packages.medical_monitoring.admission import (
     LOCATOR_INDEX_KIND,
     DataAdmissionPipeline,
 )
+from packages.medical_monitoring.admission.document_authority import (
+    DocumentAuthorityError,
+)
 from packages.medical_monitoring.graph.store import Store
 from packages.medical_monitoring.runtime.runtime_progress import (
     ARTIFACT_DIR_NAME,
@@ -603,6 +606,27 @@ def test_document_authority_route_does_not_hide_unexpected_starter_defect(
             f"{_base()}/data-admissions/attempt-0001/study-documents/analyze",
             files=[("files", ("scan.pdf", b"pdf", "application/pdf"))],
         )
+
+
+def test_document_authority_route_stops_before_models_for_incomplete_evidence(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path / "runtime",
+        mapping_pipeline=FakeMappingPipeline(),
+        document_authority_starter=lambda **_kwargs: (_ for _ in ()).throw(
+            DocumentAuthorityError("document_authority_evidence_incomplete")
+        ),
+    )
+
+    response = client.post(
+        f"{_base()}/data-admissions/attempt-0001/study-documents/analyze",
+        files=[("files", ("scan.pdf", b"pdf", "application/pdf"))],
+    )
+
+    assert response.status_code == 422
+    assert "完整性核对" in response.json()["message"]
+    assert "模型" not in json.dumps(response.json(), ensure_ascii=False)
 
 
 def test_product_runtime_rejects_legacy_role_assigned_document_upload(
