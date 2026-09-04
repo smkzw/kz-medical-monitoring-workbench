@@ -3319,6 +3319,9 @@ class MonitoringAiService:
                 " evidence_references必须为该角色的每个"
                 "evidence_required_candidate_id至少引用一条该候选已提供的"
                 "locator，包括未入选候选；零locator候选不引用证据。"
+                "每个候选至少一条覆盖证据应逐字复制同一角色"
+                "required_locator_by_candidate中给出的locator，不能自行递增、"
+                "缩写或改写；需要时可以再增加该候选已提供的其他locator。"
             )
             if "document_authority_adjudication_context" in input_payload:
                 system_prompt += (
@@ -3602,6 +3605,16 @@ class MonitoringAiService:
                 for item in candidate.get(key, ())
             )
         ]
+        required_locator_by_candidate = {
+            str(candidate["candidate_id"]): sorted(
+                str(item["locator"])
+                for key in ("excerpts", "sheets")
+                for item in candidate.get(key, ())
+                if item.get("locator")
+            )[0]
+            for candidate in packet["candidates"]
+            if str(candidate["candidate_id"]) in evidence_required
+        }
         return {
             "conflict_roles": roles,
             "by_role": {
@@ -3610,6 +3623,7 @@ class MonitoringAiService:
                         packet["allowed_candidate_ids_by_role"][role]
                     ),
                     "evidence_required_candidate_ids": evidence_required,
+                    "required_locator_by_candidate": required_locator_by_candidate,
                 }
                 for role in roles
             },

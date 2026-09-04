@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Literal, Mapping
 from packages.medical_monitoring.admission.document_authority import (
     PRIMARY_ADJUDICATION_PROMPT_VERSION,
     LEGACY_ANALYSIS_PROMPT_PAIRS,
+    LEGACY_REVIEW_PROMPT_PAIRS,
     LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
     LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
     REPLAY_PRIMARY_ADJUDICATION_PROMPT_VERSIONS,
@@ -329,9 +330,13 @@ def load_document_authority_review_run(
         }
         if adjudication_context is not None
         else {
-            PRIMARY_REVIEW_PROMPT_VERSION
-            if role == "primary"
-            else VERIFIER_REVIEW_PROMPT_VERSION
+            PRIMARY_REVIEW_PROMPT_VERSION,
+            *(pair[0] for pair in LEGACY_REVIEW_PROMPT_PAIRS),
+        }
+        if role == "primary"
+        else {
+            VERIFIER_REVIEW_PROMPT_VERSION,
+            *(pair[1] for pair in LEGACY_REVIEW_PROMPT_PAIRS),
         }
     )
     if (

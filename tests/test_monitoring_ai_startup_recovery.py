@@ -112,8 +112,8 @@ def test_document_authority_startup_prompt_sets_are_explicit() -> None:
         ),
         "document_authority_review": frozenset(
             {
-                "monitoring-document-authority-review-primary-v6",
-                "monitoring-document-authority-review-verifier-v6",
+                "monitoring-document-authority-review-primary-v7",
+                "monitoring-document-authority-review-verifier-v7",
                 "monitoring-document-authority-adjudication-primary-v6",
                 "monitoring-document-authority-adjudication-verifier-v6",
             }
@@ -130,6 +130,8 @@ def test_document_authority_startup_prompt_sets_are_explicit() -> None:
         ),
         "document_authority_review": frozenset(
             {
+                "monitoring-document-authority-review-primary-v6",
+                "monitoring-document-authority-review-verifier-v6",
                 "monitoring-document-authority-adjudication-primary-v1",
                 "monitoring-document-authority-adjudication-verifier-v1",
                 "monitoring-document-authority-adjudication-primary-v2",
