@@ -346,36 +346,33 @@ def test_direct_job_history_builds_server_owned_run_envelope(
     assert fake.envelopes[0].max_output_tokens == 48_000
     assert "locator_count为0的候选没有授权定位证据" in fake.envelopes[0].system_prompt
 
-    legacy_prompt = (
-        "monitoring-document-authority-primary-v6"
-        if role == "primary"
-        else "monitoring-document-authority-verifier-v6"
-    )
-    legacy = repository.create_or_get(MonitoringAiJobCreate(
-        project_id=queued.project_id,
-        task_type=queued.task_type,
-        input_revision=queued.input_revision,
-        input_payload=repository.input_payload(queued.project_id, queued.job_id),
-        prompt_version=legacy_prompt,
-        profile_id=queued.profile_id,
-        provider=queued.provider,
-        requested_model=queued.requested_model,
-        max_attempts=queued.max_attempts,
-        business_key=f"legacy-analysis:{role}:{batch['batch_id']}",
-    ))
-    legacy_result = service.run_next(
-        "legacy-worker", claim_identity=service.claim_identity()
-    )
-    legacy_run = load_document_authority_analysis_run(
-        repository,
-        project_id=revision.project_id,
-        job_id=legacy.job_id,
-        candidate_batch=batch,
-        role=role,
-    )
-    assert legacy_result.job is not None
-    assert legacy_result.job.status == MonitoringAiJobStatus.COMPLETED
-    assert legacy_run.prompt_version == legacy_prompt
+    for generation in (6, 7):
+        legacy_prompt = f"monitoring-document-authority-{role}-v{generation}"
+        legacy = repository.create_or_get(MonitoringAiJobCreate(
+            project_id=queued.project_id,
+            task_type=queued.task_type,
+            input_revision=queued.input_revision,
+            input_payload=repository.input_payload(queued.project_id, queued.job_id),
+            prompt_version=legacy_prompt,
+            profile_id=queued.profile_id,
+            provider=queued.provider,
+            requested_model=queued.requested_model,
+            max_attempts=queued.max_attempts,
+            business_key=f"legacy-analysis:{role}:v{generation}:{batch['batch_id']}",
+        ))
+        legacy_result = service.run_next(
+            f"legacy-v{generation}-worker", claim_identity=service.claim_identity()
+        )
+        legacy_run = load_document_authority_analysis_run(
+            repository,
+            project_id=revision.project_id,
+            job_id=legacy.job_id,
+            candidate_batch=batch,
+            role=role,
+        )
+        assert legacy_result.job is not None
+        assert legacy_result.job.status == MonitoringAiJobStatus.COMPLETED
+        assert legacy_run.prompt_version == legacy_prompt
 
 
 def test_document_authority_gets_one_schema_only_repair(tmp_path) -> None:
@@ -1166,6 +1163,40 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         "verifier-review-worker", claim_identity=verifier_review_service.claim_identity()
     )
 
+    legacy_review_jobs = []
+    for original, prompt_version in (
+        (primary_review_job, "monitoring-document-authority-review-primary-v6"),
+        (verifier_review_job, "monitoring-document-authority-review-verifier-v6"),
+    ):
+        legacy_review_jobs.append(repository.create_or_get(MonitoringAiJobCreate(
+            project_id=original.project_id,
+            task_type=original.task_type,
+            input_revision=original.input_revision,
+            input_payload=repository.input_payload(original.project_id, original.job_id),
+            prompt_version=prompt_version,
+            profile_id=original.profile_id,
+            provider=original.provider,
+            requested_model=original.requested_model,
+            max_attempts=original.max_attempts,
+            business_key=f"{original.business_key}:legacy-v6",
+        )))
+    primary_review_service.run_next(
+        "primary-review-v6-worker", claim_identity=primary_review_service.claim_identity()
+    )
+    verifier_review_service.run_next(
+        "verifier-review-v6-worker", claim_identity=verifier_review_service.claim_identity()
+    )
+    legacy_initial = resolve_document_authority_from_jobs(
+        repository,
+        project_id=revision.project_id,
+        candidate_batch=batch,
+        primary_analysis_job_id=primary_job.job_id,
+        verifier_analysis_job_id=verifier_job.job_id,
+        primary_review_job_id=legacy_review_jobs[0].job_id,
+        verifier_review_job_id=legacy_review_jobs[1].job_id,
+    )
+    assert legacy_initial["state"] == "needs_user_input"
+
     initial = resolve_document_authority_from_jobs(
         repository,
         project_id=revision.project_id,
@@ -1342,7 +1373,14 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
                 "evidence_required_candidate_ids"
             ]
         ) == {"candidate_protocol", "candidate_ecrf"}
+        assert coverage["by_role"]["ecrf"][
+            "required_locator_by_candidate"
+        ] == {
+            "candidate_protocol": "doc:p1",
+            "candidate_ecrf": "xlsx:sheet:1",
+        }
         assert "包括未入选候选" in provider.envelopes[0].system_prompt
+        assert "required_locator_by_candidate" in provider.envelopes[0].system_prompt
         adjudication_payload = provider.envelopes[0].payload["input_payload"]
         assert adjudication_payload["document_authority_adjudication_context"] == context
         assert "document_authority_source_bindings" not in adjudication_payload

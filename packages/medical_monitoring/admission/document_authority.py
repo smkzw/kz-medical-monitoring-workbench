@@ -33,8 +33,14 @@ LEGACY_ANALYSIS_PROMPT_PAIRS = frozenset({
         "monitoring-document-authority-verifier-v7",
     ),
 })
-PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v6"
-VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v6"
+PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v7"
+VERIFIER_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-verifier-v7"
+LEGACY_REVIEW_PROMPT_PAIRS = frozenset({
+    (
+        "monitoring-document-authority-review-primary-v6",
+        "monitoring-document-authority-review-verifier-v6",
+    )
+})
 PRIMARY_ADJUDICATION_PROMPT_VERSION = (
     "monitoring-document-authority-adjudication-primary-v6"
 )
@@ -90,6 +96,7 @@ LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK = {
     ),
     "document_authority_review": frozenset(
         {
+            *(version for pair in LEGACY_REVIEW_PROMPT_PAIRS for version in pair),
             *REPLAY_PRIMARY_ADJUDICATION_PROMPT_VERSIONS,
             *REPLAY_VERIFIER_ADJUDICATION_PROMPT_VERSIONS,
             LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
@@ -1265,6 +1272,11 @@ def _validate_run_pair(
     }
     if stage == "analysis" and previous_prompt_pair not in analysis_prompt_pairs:
         raise DocumentAuthorityError("document_authority_run_identity_invalid")
+    if stage == "review" and previous_prompt_pair not in {
+        (PRIMARY_REVIEW_PROMPT_VERSION, VERIFIER_REVIEW_PROMPT_VERSION),
+        *LEGACY_REVIEW_PROMPT_PAIRS,
+    }:
+        raise DocumentAuthorityError("document_authority_run_identity_invalid")
     if (
         stage == "previous_adjudication"
         and previous_prompt_pair not in REPLAY_ADJUDICATION_PROMPT_PAIRS
@@ -1280,7 +1292,7 @@ def _validate_run_pair(
                 if stage == "previous_adjudication"
                 else PRIMARY_ADJUDICATION_PROMPT_VERSION
                 if stage == "adjudication"
-                else PRIMARY_REVIEW_PROMPT_VERSION
+                else left.prompt_version
                 if stage == "review"
                 else left.prompt_version
                 if stage == "analysis"
@@ -1296,7 +1308,7 @@ def _validate_run_pair(
                 if stage == "previous_adjudication"
                 else VERIFIER_ADJUDICATION_PROMPT_VERSION
                 if stage == "adjudication"
-                else VERIFIER_REVIEW_PROMPT_VERSION
+                else right.prompt_version
                 if stage == "review"
                 else right.prompt_version
                 if stage == "analysis"
