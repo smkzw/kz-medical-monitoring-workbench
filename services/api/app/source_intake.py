@@ -1001,7 +1001,11 @@ class SourceRegistryService:
                 filename,
                 content,
                 module="medical_monitoring",
-                expected_file_role="ecrf",
+                expected_file_role=(
+                    "ecrf_supplement"
+                    if relation == "supplementary"
+                    else "ecrf"
+                ),
                 parsed_sheets=sheets,
             )
         return self._register_monitoring_reference_document(
@@ -1574,18 +1578,26 @@ class SourceRegistryService:
             "safety_pv",
         }
         entries = self.list_entries(project_id)
-        for span in self.store.get_spans(project_id, source_ids):
-            validation = self.current_content_validation(project_id, span.entry_id)
+        entry_ids = dict.fromkeys(
+            span.entry_id for span in self.store.get_spans(project_id, source_ids)
+        )
+        for entry_id in entry_ids:
+            entry = next((item for item in entries if item.entry_id == entry_id), None)
+            if entry is None:
+                raise ValueError(f"registered source entry is unavailable: {entry_id}")
+            validation = self.current_content_validation(project_id, entry_id)
             if validation is None:
+                if entry.module in operational_modules:
+                    raise ValueError(
+                        "registered source validation is unavailable and must be "
+                        f"created before AI use: {entry_id}"
+                    )
                 continue
             if validation.validator_version != VALIDATOR_VERSION:
                 raise ValueError(
                     "registered source validation is stale and must be refreshed before AI use: "
-                    f"{span.entry_id}/{validation.validator_version}"
+                    f"{entry_id}/{validation.validator_version}"
                 )
-            entry = next((item for item in entries if item.entry_id == span.entry_id), None)
-            if entry is None:
-                raise ValueError(f"registered source entry is unavailable: {span.entry_id}")
             if self.expected_context_resolver is not None:
                 expected = self.expected_context_resolver(project_id, entry.module, entry.source_kind)
                 if (
@@ -1601,7 +1613,7 @@ class SourceRegistryService:
                 if validation.expected_context_hash != expected.context_hash:
                     raise ValueError(
                         "registered source project context changed and must be refreshed before AI use: "
-                        f"{span.entry_id}"
+                        f"{entry_id}"
                     )
             if entry.module in operational_modules:
                 logical_source_kind = (
@@ -1609,7 +1621,7 @@ class SourceRegistryService:
                     if entry.module == "medical_monitoring"
                     else entry.source_kind
                 )
-                latest_candidates = [
+                role_candidates = [
                     item
                     for item in entries
                     if item.module == entry.module
@@ -1624,16 +1636,35 @@ class SourceRegistryService:
                         or _monitoring_authority_main_entry_id(item)
                         == item.entry_id
                     )
-                    and (
-                        item.module != "medical_monitoring"
-                        or self._monitoring_entry_is_usable(item)
-                    )
                 ]
+                latest_candidates = [
+                    item
+                    for item in role_candidates
+                    if item.module != "medical_monitoring"
+                    or self._monitoring_entry_is_usable(item)
+                ]
+                if entry.module == "medical_monitoring":
+                    promoted_exists = any(
+                        (item.metadata or {}).get(
+                            "monitoring_authority_status"
+                        )
+                        == "promoted"
+                        for item in role_candidates
+                    )
+                    if promoted_exists:
+                        latest_candidates = [
+                            item
+                            for item in latest_candidates
+                            if (item.metadata or {}).get(
+                                "monitoring_authority_status"
+                            )
+                            == "promoted"
+                        ]
                 if not latest_candidates:
                     raise ValueError(
                         "registered source requires content-consistency "
                         "confirmation before AI use: "
-                        f"{span.entry_id}/{validation.use_status}"
+                        f"{entry_id}/{validation.use_status}"
                     )
                 latest = max(
                     latest_candidates,
@@ -1652,7 +1683,7 @@ class SourceRegistryService:
             if validation.use_status not in {"allowed", "confirmed_after_warning"}:
                 raise ValueError(
                     "registered source requires content-consistency confirmation before AI use: "
-                    f"{span.entry_id}/{validation.use_status}"
+                    f"{entry_id}/{validation.use_status}"
                 )
 
     def _monitoring_entry_is_usable(

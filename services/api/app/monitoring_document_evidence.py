@@ -218,6 +218,14 @@ class MonitoringDocumentEvidenceResolver:
             for entry in entries
             if entry.source_kind in _SOURCE_KINDS_BY_ROLE[role]
         ]
+        promoted = [
+            entry
+            for entry in candidates
+            if (entry.metadata or {}).get("monitoring_authority_status")
+            == "promoted"
+        ]
+        if promoted:
+            candidates = promoted
         if not candidates:
             return DocumentRoleEvidence(
                 role=role,

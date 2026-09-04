@@ -656,7 +656,7 @@ class SourceContentValidationService:
             outcome = "match" if has_subject else "warning"
         elif expected_role == "edc_data_listing":
             outcome = "match" if has_subject and has_clinical_data else "mismatch"
-        elif expected_role == "ecrf":
+        elif expected_role in {"ecrf", "ecrf_supplement"}:
             # The upload role is explicit; detailed form/column semantics are
             # resolved later by the independent dual-model mapping harness.
             outcome = "match" if headers else "mismatch"
@@ -808,7 +808,10 @@ class SourceContentValidationService:
         observed_normalized = {_normalize_identifier(value) for value in observed}
         if not expected_normalized:
             outcome = "not_assessed"
-        elif not observed_normalized and expected_role == "ecrf":
+        elif not observed_normalized and expected_role in {
+            "ecrf",
+            "ecrf_supplement",
+        }:
             outcome = "not_assessed"
         elif not observed_normalized:
             outcome = "warning"
