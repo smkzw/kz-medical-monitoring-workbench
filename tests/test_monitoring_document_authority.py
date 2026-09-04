@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 
@@ -20,6 +21,7 @@ from packages.medical_monitoring.admission.document_authority import (
     DocumentAuthorityError,
     DocumentAuthorityRunEnvelope,
     EvidenceReference,
+    FULL_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS,
     PRIMARY_ADJUDICATION_PROMPT_VERSION,
     PRIMARY_PROMPT_VERSION,
     PRIMARY_REVIEW_PROMPT_VERSION,
@@ -35,6 +37,7 @@ from packages.medical_monitoring.admission.document_authority import (
     reconcile_document_authority,
     resolve_document_authority_conflicts,
     resolve_document_authority_adjudication,
+    validate_document_authority_analysis,
     validate_document_authority_adjudication_context,
     validate_document_authority_adjudication_review,
     validate_document_authority_conflict_packet,
@@ -101,6 +104,212 @@ def test_batch_rejects_locator_content_when_locator_count_is_zero() -> None:
         DocumentAuthorityError,
         match="document_authority_candidate_locator_count_invalid",
     ):
+        document_authority_batch_sha256(batch)
+
+
+def test_legacy_batch_allows_historical_full_locator_count_above_excerpts() -> None:
+    batch = _batch()
+    batch["candidates"][0]["locator_count"] = 13
+
+    assert document_authority_batch_sha256(batch) == _digest(batch)
+
+
+def _ocr_batch() -> dict:
+    candidate_id = "candidate_scan"
+    locator = f"candidate:{candidate_id}:p1:ocr"
+    text = "REAL TEXT"
+    text_sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    candidate = {
+        "candidate_id": candidate_id,
+        "filename": "scan.pdf",
+        "role_hypotheses": ["protocol"],
+        "technical_status": "ready",
+        "extraction_status": "parsed",
+        "page_count": 1,
+        "locator_count": 1,
+        "locator_index_sha256": _digest([locator]),
+        "excerpts": [{
+            "locator": locator,
+            "text": text,
+            "text_sha256": text_sha256,
+        }],
+        "sheets": [],
+        "zero_text_page_count": 1,
+        "zero_text_page_samples": [1],
+        "ocr_recovery_pages": [{
+            "page_number": 1,
+            "dpi": 200,
+            "image_sha256": "a" * 64,
+            "locator": locator,
+            "requested_model": "ocr-model",
+            "actual_model": "ocr-model",
+            "provider": "test",
+            "fell_back": False,
+            "status": "recovered",
+            "failure_code": "",
+            "text_sha256": text_sha256,
+            "character_count": len(text),
+        }],
+    }
+    candidate["evidence_revision_sha256"] = _digest(candidate)
+    return {
+        "manifest_version": "monitoring-document-candidate-v1",
+        "batch_id": "mmbatch_ocr",
+        "authority_status": "not_adjudicated",
+        "candidates": [candidate],
+    }
+
+
+@pytest.mark.parametrize("tamper", ("text_hash", "locator_index", "page_locator"))
+def test_revised_ocr_candidate_recomputes_hash_and_locator_closure(
+    tamper: str,
+) -> None:
+    batch = _ocr_batch()
+    candidate = batch["candidates"][0]
+    if tamper == "text_hash":
+        candidate["excerpts"][0]["text_sha256"] = "1" * 64
+        candidate["ocr_recovery_pages"][0]["text_sha256"] = "1" * 64
+    elif tamper == "locator_index":
+        candidate["locator_index_sha256"] = "0" * 64
+    else:
+        wrong = "candidate:candidate_scan:p2:ocr"
+        candidate["excerpts"][0]["locator"] = wrong
+        candidate["ocr_recovery_pages"][0]["locator"] = wrong
+        candidate["locator_index_sha256"] = _digest([wrong])
+    candidate["evidence_revision_sha256"] = _digest({
+        key: value
+        for key, value in candidate.items()
+        if key != "evidence_revision_sha256"
+    })
+
+    with pytest.raises(DocumentAuthorityError):
+        document_authority_batch_sha256(batch)
+
+
+def test_revised_candidate_cannot_claim_parsed_when_ocr_failed() -> None:
+    batch = _ocr_batch()
+    candidate = batch["candidates"][0]
+    evidence = candidate["ocr_recovery_pages"][0]
+    candidate["excerpts"] = []
+    candidate["locator_count"] = 0
+    candidate["locator_index_sha256"] = _digest([])
+    evidence.update({
+        "locator": "",
+        "actual_model": "",
+        "status": "failed",
+        "failure_code": "ocr_runtime_unavailable",
+        "text_sha256": hashlib.sha256(b"").hexdigest(),
+        "character_count": 0,
+    })
+    candidate["evidence_revision_sha256"] = _digest({
+        key: value
+        for key, value in candidate.items()
+        if key != "evidence_revision_sha256"
+    })
+
+    with pytest.raises(DocumentAuthorityError, match="ocr_status_invalid"):
+        document_authority_batch_sha256(batch)
+
+
+def test_revised_candidate_rejects_wrong_recovered_page_with_matching_count() -> None:
+    batch = _ocr_batch()
+    candidate = batch["candidates"][0]
+    candidate["zero_text_page_count"] = 2
+    candidate["zero_text_page_samples"] = [1, 2]
+    wrong = copy.deepcopy(candidate["ocr_recovery_pages"][0])
+    wrong_locator = "candidate:candidate_scan:p3:ocr"
+    wrong["page_number"] = 3
+    wrong["locator"] = wrong_locator
+    candidate["ocr_recovery_pages"].append(wrong)
+    candidate["excerpts"].append({
+        **candidate["excerpts"][0],
+        "locator": wrong_locator,
+    })
+    candidate["locator_count"] = 2
+    candidate["locator_index_sha256"] = _digest([
+        candidate["excerpts"][0]["locator"],
+        wrong_locator,
+    ])
+    candidate["evidence_revision_sha256"] = _digest({
+        key: value
+        for key, value in candidate.items()
+        if key != "evidence_revision_sha256"
+    })
+
+    with pytest.raises(DocumentAuthorityError, match="ocr_evidence_invalid"):
+        document_authority_batch_sha256(batch)
+
+
+def test_revised_candidate_rejects_ocr_page_outside_pdf_page_count() -> None:
+    batch = _ocr_batch()
+    candidate = batch["candidates"][0]
+    candidate["page_count"] = 1
+    candidate["zero_text_page_samples"] = [2]
+    evidence = candidate["ocr_recovery_pages"][0]
+    wrong_locator = "candidate:candidate_scan:p2:ocr"
+    evidence["page_number"] = 2
+    evidence["locator"] = wrong_locator
+    candidate["excerpts"][0]["locator"] = wrong_locator
+    candidate["locator_index_sha256"] = _digest([wrong_locator])
+    candidate["evidence_revision_sha256"] = _digest({
+        key: value
+        for key, value in candidate.items()
+        if key != "evidence_revision_sha256"
+    })
+
+    with pytest.raises(DocumentAuthorityError, match="ocr_evidence_invalid"):
+        document_authority_batch_sha256(batch)
+
+
+def test_revised_candidate_rejects_missing_requested_ocr_model() -> None:
+    batch = _ocr_batch()
+    candidate = batch["candidates"][0]
+    candidate["ocr_recovery_pages"][0]["requested_model"] = ""
+    candidate["evidence_revision_sha256"] = _digest({
+        key: value
+        for key, value in candidate.items()
+        if key != "evidence_revision_sha256"
+    })
+
+    with pytest.raises(DocumentAuthorityError, match="ocr_evidence_invalid"):
+        document_authority_batch_sha256(batch)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("actual_model", "invented-model"),
+        ("fell_back", True),
+        ("requested_model", ""),
+    ),
+)
+def test_revised_candidate_rejects_failed_ocr_provenance_tampering(
+    field: str, value: object,
+) -> None:
+    batch = _ocr_batch()
+    candidate = batch["candidates"][0]
+    evidence = candidate["ocr_recovery_pages"][0]
+    candidate["extraction_status"] = "needs_ocr"
+    candidate["excerpts"] = []
+    candidate["locator_count"] = 0
+    candidate["locator_index_sha256"] = _digest([])
+    evidence.update({
+        "locator": "",
+        "actual_model": "",
+        "fell_back": False,
+        "status": "failed",
+        "failure_code": "ocr_runtime_unavailable",
+        "text_sha256": hashlib.sha256(b"").hexdigest(),
+        "character_count": 0,
+        field: value,
+    })
+    candidate["evidence_revision_sha256"] = _digest({
+        key: value
+        for key, value in candidate.items()
+        if key != "evidence_revision_sha256"
+    })
+
+    with pytest.raises(DocumentAuthorityError, match="ocr_evidence_invalid"):
         document_authority_batch_sha256(batch)
 
 
@@ -174,6 +383,14 @@ def _analysis(batch: dict, *, ecrf: str = "candidate_ecrf") -> DocumentAuthority
     )
 
 
+def test_analysis_rejects_usable_candidate_with_incomplete_extraction() -> None:
+    batch = _batch()
+    batch["candidates"][0]["extraction_status"] = "needs_ocr"
+
+    with pytest.raises(DocumentAuthorityError, match="candidate_not_usable"):
+        validate_document_authority_analysis(batch, _analysis(batch))
+
+
 def _run(
     analysis: DocumentAuthorityAnalysis, role: str
 ) -> DocumentAuthorityRunEnvelope:
@@ -203,6 +420,21 @@ def _reconcile(
     return reconcile_document_authority(
         batch, _run(primary, "primary"), _run(verifier, "verifier")
     )
+
+
+def test_legacy_v6_analysis_pair_replays_but_mixed_generation_fails() -> None:
+    batch = _batch()
+    analysis = _analysis(batch)
+    primary = _run(analysis, "primary").model_copy(
+        update={"prompt_version": "monitoring-document-authority-primary-v6"}
+    )
+    verifier = _run(analysis, "verifier").model_copy(
+        update={"prompt_version": "monitoring-document-authority-verifier-v6"}
+    )
+
+    assert reconcile_document_authority(batch, primary, verifier)["state"] == "resolved"
+    with pytest.raises(DocumentAuthorityError, match="run_identity_invalid"):
+        reconcile_document_authority(batch, _run(analysis, "primary"), verifier)
 
 
 def _review_run(
@@ -1671,8 +1903,15 @@ def test_v2_adjudication_review_covers_only_unresolved_roles() -> None:
         expanded_packet,
         expanded_context,
         review.model_copy(update={"decisions": (*review.decisions, extra_role)}),
-        prompt_version=sorted(REPLAY_ADJUDICATION_PROMPT_PAIRS)[-1][0],
+        prompt_version=sorted(FULL_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS)[-1][0],
     )
+    with pytest.raises(DocumentAuthorityError, match="review_coverage_invalid"):
+        validate_document_authority_adjudication_review(
+            expanded_packet,
+            expanded_context,
+            review.model_copy(update={"decisions": (*review.decisions, extra_role)}),
+            prompt_version="monitoring-document-authority-adjudication-primary-v5",
+        )
 
 
 def test_internal_adjudication_remains_fail_closed_and_context_bound() -> None:

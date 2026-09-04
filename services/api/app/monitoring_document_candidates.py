@@ -5,10 +5,10 @@ import io
 import json
 import re
 import zipfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Callable, Literal
 from xml.etree import ElementTree
 
 from openpyxl.utils.exceptions import InvalidFileException
@@ -43,6 +43,19 @@ class CandidateMalformedInputError(ValueError):
     pass
 
 
+class CandidateOcrUnavailableError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        requested_model: str = "",
+        provider: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.requested_model = requested_model
+        self.provider = provider
+
+
 @dataclass(frozen=True)
 class CandidateExcerpt:
     locator: str
@@ -59,6 +72,22 @@ class CandidateSheetEvidence:
     visibility: str
     used_range: str
     parser_warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CandidateOcrPageEvidence:
+    page_number: int
+    dpi: int
+    image_sha256: str
+    locator: str
+    requested_model: str
+    actual_model: str
+    provider: str
+    fell_back: bool
+    status: Literal["recovered", "empty", "failed"]
+    failure_code: str
+    text_sha256: str
+    character_count: int
 
 
 @dataclass(frozen=True)
@@ -85,7 +114,9 @@ class MonitoringDocumentCandidate:
     sheets: tuple[CandidateSheetEvidence, ...] = ()
     zero_text_page_count: int = 0
     zero_text_page_samples: tuple[int, ...] = ()
+    ocr_recovery_pages: tuple[CandidateOcrPageEvidence, ...] = ()
     limitation_codes: tuple[str, ...] = ()
+    evidence_revision_sha256: str = ""
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -105,8 +136,22 @@ class MonitoringDocumentCandidateBatch:
 class MonitoringDocumentCandidateDecomposer:
     """Create isolated structural evidence without selecting document authority."""
 
-    def __init__(self, candidate_root: Path):
+    def __init__(
+        self,
+        candidate_root: Path,
+        *,
+        ocr_runner: Callable[[int, int, str, bytes], Any] | None = None,
+        ocr_model: str = "GLM-OCR-bf16",
+        ocr_dpi: int = 200,
+    ):
         self.candidate_root = Path(candidate_root)
+        self.ocr_runner = ocr_runner
+        self.ocr_model = str(ocr_model).strip()
+        self.ocr_dpi = int(ocr_dpi)
+        if self.ocr_runner is not None and (
+            not self.ocr_model or self.ocr_dpi < 200
+        ):
+            raise ValueError("monitoring candidate OCR configuration is invalid")
 
     def decompose_many(
         self, files: list[tuple[str, bytes]]
@@ -118,7 +163,13 @@ class MonitoringDocumentCandidateDecomposer:
             )
         )
         batch_digest = hashlib.sha256(
-            _stable_json([candidate.candidate_id for candidate in candidates])
+            _stable_json([
+                {
+                    "candidate_id": candidate.candidate_id,
+                    "evidence_revision_sha256": candidate.evidence_revision_sha256,
+                }
+                for candidate in candidates
+            ])
         ).hexdigest()
         batch = MonitoringDocumentCandidateBatch(
             manifest_version=CANDIDATE_MANIFEST_VERSION,
@@ -158,6 +209,10 @@ class MonitoringDocumentCandidateDecomposer:
                 candidate_id, file_id, safe_name, content_sha256, len(content), suffix
             )
 
+        candidate = replace(
+            candidate,
+            evidence_revision_sha256=_candidate_evidence_revision(candidate),
+        )
         self._persist_manifest(candidate)
         return candidate
 
@@ -258,6 +313,20 @@ class MonitoringDocumentCandidateDecomposer:
             parser_name, parser_version, page_count, zero_text_pages, blocks = (
                 _extract_pdf_candidate_blocks(content, candidate_id)
             )
+            blocks = blocks[:MAX_EXCERPTS]
+            ocr_evidence: tuple[CandidateOcrPageEvidence, ...] = ()
+            ocr_page_limit = max(0, MAX_EXCERPTS - len(blocks))
+            if zero_text_pages and self.ocr_runner is not None and ocr_page_limit:
+                recovered, ocr_evidence = _recover_pdf_candidate_pages(
+                    content,
+                    candidate_id,
+                    zero_text_pages[:ocr_page_limit],
+                    runner=self.ocr_runner,
+                    model=self.ocr_model,
+                    dpi=self.ocr_dpi,
+                )
+                blocks.extend(recovered)
+                parser_version += "+page_ocr_v1"
         else:
             _validate_ooxml_package(
                 content,
@@ -275,11 +344,25 @@ class MonitoringDocumentCandidateDecomposer:
             zero_text_pages = extracted.zero_text_pages
             blocks = [
                 (span.source_locator, span.source_text) for span in extracted.spans
-            ]
+            ][:MAX_EXCERPTS]
+            ocr_evidence = ()
         locators = [locator for locator, _text in blocks]
         excerpts = tuple(_candidate_excerpt(locator, text) for locator, text in blocks[:MAX_EXCERPTS])
-        needs_ocr = suffix == ".pdf" and not blocks and bool(zero_text_pages)
-        limitations = ("native_text_absent_ocr_required",) if needs_ocr else ()
+        recovered_pages = {
+            item.page_number for item in ocr_evidence if item.status == "recovered"
+        }
+        unresolved_ocr_pages = set(zero_text_pages) - recovered_pages
+        needs_ocr = suffix == ".pdf" and bool(unresolved_ocr_pages)
+        if not needs_ocr:
+            limitations: tuple[str, ...] = ()
+        elif self.ocr_runner is None:
+            limitations = ("native_text_absent_ocr_required",)
+        elif any(item.status == "failed" for item in ocr_evidence):
+            limitations = ("ocr_recovery_failed",)
+        elif len(ocr_evidence) < len(zero_text_pages):
+            limitations = ("ocr_evidence_budget_exhausted",)
+        else:
+            limitations = ("ocr_recovery_empty",)
         return MonitoringDocumentCandidate(
             manifest_version=CANDIDATE_MANIFEST_VERSION,
             candidate_id=candidate_id,
@@ -302,6 +385,7 @@ class MonitoringDocumentCandidateDecomposer:
             excerpts=excerpts,
             zero_text_page_count=len(zero_text_pages),
             zero_text_page_samples=tuple(zero_text_pages[:MAX_OCR_PAGE_SAMPLES]),
+            ocr_recovery_pages=ocr_evidence,
             limitation_codes=limitations,
         )
 
@@ -346,7 +430,12 @@ class MonitoringDocumentCandidateDecomposer:
         path.write_bytes(content)
 
     def _persist_manifest(self, candidate: MonitoringDocumentCandidate) -> None:
-        path = self.candidate_root / "manifests" / f"{candidate.candidate_id}.json"
+        path = (
+            self.candidate_root
+            / "manifests"
+            / candidate.candidate_id
+            / f"{candidate.evidence_revision_sha256}.json"
+        )
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = _stable_json(candidate.to_dict()) + b"\n"
         if path.exists():
@@ -429,6 +518,75 @@ def _extract_pdf_candidate_blocks(
         document.close()
 
 
+def _recover_pdf_candidate_pages(
+    payload: bytes,
+    candidate_id: str,
+    page_numbers: list[int],
+    *,
+    runner: Callable[[int, int, str, bytes], Any],
+    model: str,
+    dpi: int,
+) -> tuple[list[tuple[str, str]], tuple[CandidateOcrPageEvidence, ...]]:
+    """Recover native-zero PDF pages without changing file-bound identity."""
+
+    import pymupdf
+
+    document = pymupdf.open(stream=payload, filetype="pdf")
+    blocks: list[tuple[str, str]] = []
+    evidence: list[CandidateOcrPageEvidence] = []
+    try:
+        for page_number in page_numbers:
+            image_bytes = document[page_number - 1].get_pixmap(dpi=dpi).tobytes("png")
+            image_sha256 = hashlib.sha256(image_bytes).hexdigest()
+            try:
+                result = runner(page_number, dpi, model, image_bytes)
+                text = _bounded_text(re.sub(
+                    r"\s+", " ", str(getattr(result, "text", result) or "")
+                ).strip())
+                status: Literal["recovered", "empty", "failed"] = (
+                    "recovered" if text else "empty"
+                )
+                actual_model = str(getattr(result, "model", model) or model)
+                provider = str(getattr(result, "provider", "") or "")
+                fell_back = bool(getattr(result, "fell_back", False))
+                failure_code = ""
+            except CandidateOcrUnavailableError as exc:
+                text = ""
+                status = "failed"
+                model = exc.requested_model or model
+                actual_model = ""
+                provider = exc.provider
+                fell_back = False
+                failure_code = "ocr_runtime_unavailable"
+            locator = (
+                f"candidate:{candidate_id}:p{page_number}:ocr" if text else ""
+            )
+            text_sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            evidence.append(
+                CandidateOcrPageEvidence(
+                    page_number=page_number,
+                    dpi=dpi,
+                    image_sha256=image_sha256,
+                    locator=locator,
+                    requested_model=str(
+                        getattr(result, "requested_model", model) or model
+                    ) if status != "failed" else model,
+                    actual_model=actual_model,
+                    provider=provider,
+                    fell_back=fell_back,
+                    status=status,
+                    failure_code=failure_code,
+                    text_sha256=text_sha256,
+                    character_count=len(text),
+                )
+            )
+            if text:
+                blocks.append((locator, text))
+    finally:
+        document.close()
+    return blocks, tuple(evidence)
+
+
 def _validate_ooxml_package(
     payload: bytes, *, required_members: tuple[str, ...]
 ) -> None:
@@ -443,6 +601,12 @@ def _validate_ooxml_package(
 
 def _locator_digest(locators: list[str]) -> str:
     return hashlib.sha256(_stable_json(locators)).hexdigest()
+
+
+def _candidate_evidence_revision(candidate: MonitoringDocumentCandidate) -> str:
+    payload = candidate.to_dict()
+    payload.pop("evidence_revision_sha256", None)
+    return hashlib.sha256(_stable_json(payload)).hexdigest()
 
 
 def _stable_json(value: object) -> bytes:

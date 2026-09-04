@@ -544,6 +544,7 @@ from .monitoring_document_evidence import (
 from .monitoring_document_authority_workflow import (
     MonitoringDocumentAuthorityWorkflow,
 )
+from .monitoring_document_candidates import CandidateOcrUnavailableError
 from .monitoring_document_authority_jobs import (
     verify_document_authority_promotion_receipt,
 )
@@ -1539,7 +1540,7 @@ def _recover_monitoring_ai_jobs():
                 ),
             )
         monitoring_ai_repository.expire_exhausted_leases()
-        monitoring_ai_worker.wake()
+        _wake_monitoring_mapping_workers()
     except Exception:
         # Queue state is durable and remains visible for an explicit retry.
         pass
@@ -1672,6 +1673,9 @@ from .writing_reference_upper_layer_adapters import (  # noqa: E402
 )
 from .ocr_gateway import (  # noqa: E402
     LocalOcrGateway,
+    OcrGatewayConfigurationError,
+    OcrGatewayRequestError,
+    OcrGatewayRuntimeError,
     OcrGatewaySettings,
     OcrResult,
     OcrRequest,
@@ -2087,6 +2091,33 @@ def _writing_reference_ocr_runner(
         OcrRequest(image_bytes=image_bytes, image_suffix=".png")
     )
     return _OcrRunnerText(result)
+
+
+def _monitoring_candidate_ocr_runner(
+    page_number: int, dpi: int, model: str, image_bytes: bytes
+) -> str:
+    runtime_model = model
+    runtime_provider = ""
+    try:
+        binding, profile, _values = _runtime_role_context(OCR_ROLE)
+        runtime_model = binding.model
+        runtime_provider = profile.provider
+        result = _writing_reference_ocr_runner(
+            page_number, dpi, runtime_model, image_bytes
+        )
+        result.requested_model = runtime_model
+        return result
+    except (
+        CompositePipelineUnavailableError,
+        OcrGatewayConfigurationError,
+        OcrGatewayRequestError,
+        OcrGatewayRuntimeError,
+    ) as exc:
+        raise CandidateOcrUnavailableError(
+            type(exc).__name__,
+            requested_model=runtime_model,
+            provider=runtime_provider,
+        ) from exc
 
 
 def _mixed_ocr_consistency_qc_runner(
@@ -3648,6 +3679,9 @@ def _start_r7_monitoring_document_authority(
         project_id=project_id,
         workspace_dir=workspace_dir,
         files=files,
+        ocr_runner=_monitoring_candidate_ocr_runner,
+        ocr_model=WRITING_REFERENCE_OCR_MODEL,
+        ocr_dpi=WRITING_REFERENCE_OCR_MIN_DPI,
     )
 
 

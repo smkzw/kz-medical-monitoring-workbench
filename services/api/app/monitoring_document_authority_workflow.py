@@ -6,6 +6,8 @@ from typing import Any, Callable
 
 from packages.medical_monitoring.admission.document_authority import (
     DocumentAuthorityError,
+    PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    PRIMARY_PROMPT_VERSION,
     build_anonymous_conflict_packet,
     reconcile_document_authority,
 )
@@ -29,6 +31,8 @@ from .source_intake import SourceRegistryService
 
 
 _ACTIVE = {MonitoringAiJobStatus.QUEUED, MonitoringAiJobStatus.RUNNING}
+_ANALYSIS_GENERATION = PRIMARY_PROMPT_VERSION.rsplit("-", 1)[-1]
+_ADJUDICATION_GENERATION = PRIMARY_ADJUDICATION_PROMPT_VERSION.rsplit("-", 1)[-1]
 
 
 class MonitoringDocumentAuthorityWorkflow:
@@ -55,11 +59,17 @@ class MonitoringDocumentAuthorityWorkflow:
         project_id: str,
         workspace_dir: Path,
         files: list[tuple[str, bytes]],
+        ocr_runner: Callable[[int, int, str, bytes], Any] | None = None,
+        ocr_model: str = "GLM-OCR-bf16",
+        ocr_dpi: int = 200,
     ) -> dict[str, Any]:
         candidate_root = self._candidate_root(workspace_dir)
-        batch = MonitoringDocumentCandidateDecomposer(candidate_root).decompose_many(
-            files
-        ).to_dict()
+        batch = MonitoringDocumentCandidateDecomposer(
+            candidate_root,
+            ocr_runner=ocr_runner,
+            ocr_model=ocr_model,
+            ocr_dpi=ocr_dpi,
+        ).decompose_many(files).to_dict()
         revision = self._input_revision(project_id, batch)
         self.primary_service.submit_document_authority_analysis(
             project_id=project_id,
@@ -88,12 +98,12 @@ class MonitoringDocumentAuthorityWorkflow:
         primary_job = self._job(
             project_id,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
-            f"document-authority-analysis:primary:{batch_id}",
+            f"document-authority-analysis:primary:{_ANALYSIS_GENERATION}:{batch_id}",
         )
         verifier_job = self._job(
             project_id,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
-            f"document-authority-analysis:verifier:{batch_id}",
+            f"document-authority-analysis:verifier:{_ANALYSIS_GENERATION}:{batch_id}",
         )
         if self._recover_failed_once((primary_job, verifier_job)):
             return {
@@ -196,12 +206,12 @@ class MonitoringDocumentAuthorityWorkflow:
         primary_adjudication = self._optional_job(
             project_id,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
-            f"document-authority-adjudication:primary:v5:{packet_sha256}",
+            f"document-authority-adjudication:primary:{_ADJUDICATION_GENERATION}:{packet_sha256}",
         )
         verifier_adjudication = self._optional_job(
             project_id,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
-            f"document-authority-adjudication:verifier:v5:{packet_sha256}",
+            f"document-authority-adjudication:verifier:{_ADJUDICATION_GENERATION}:{packet_sha256}",
         )
         if primary_adjudication is None or verifier_adjudication is None:
             revision = self._input_revision(project_id, batch)

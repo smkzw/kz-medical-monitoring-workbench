@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal, Mapping
 
 from packages.medical_monitoring.admission.document_authority import (
     PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    LEGACY_ANALYSIS_PROMPT_PAIRS,
     LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
     LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION,
     REPLAY_PRIMARY_ADJUDICATION_PROMPT_VERSIONS,
@@ -85,19 +86,24 @@ def load_document_authority_analysis_run(
     role: Literal["primary", "verifier"],
 ) -> DocumentAuthorityRunEnvelope:
     job = repository.get(project_id, job_id)
-    expected = (
-        (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL, PRIMARY_PROMPT_VERSION)
+    expected_provider_model = (
+        (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL)
         if role == "primary"
-        else (
-            MONITORING_C3_VERIFIER_PROVIDER,
-            MONITORING_C3_VERIFIER_MODEL,
+        else (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL)
+    )
+    allowed_prompt_versions = (
+        {PRIMARY_PROMPT_VERSION, *(pair[0] for pair in LEGACY_ANALYSIS_PROMPT_PAIRS)}
+        if role == "primary"
+        else {
             VERIFIER_PROMPT_VERSION,
-        )
+            *(pair[1] for pair in LEGACY_ANALYSIS_PROMPT_PAIRS),
+        }
     )
     if (
         job.status != MonitoringAiJobStatus.COMPLETED
         or job.task_type != MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS
-        or (job.provider, job.requested_model, job.prompt_version) != expected
+        or (job.provider, job.requested_model) != expected_provider_model
+        or job.prompt_version not in allowed_prompt_versions
         or job.response_model != job.requested_model
     ):
         raise DocumentAuthorityError("document_authority_job_identity_invalid")
@@ -641,8 +647,17 @@ def promote_document_authority_from_jobs(
             )
         ):
             raise DocumentAuthorityError("document_authority_candidate_not_promotable")
+        evidence_revision = str(candidate.get("evidence_revision_sha256") or "")
+        manifest_path = (
+            candidate_root
+            / "manifests"
+            / str(candidate["candidate_id"])
+            / f"{evidence_revision}.json"
+            if evidence_revision
+            else candidate_root / "manifests" / f"{candidate['candidate_id']}.json"
+        )
         manifest = _load_json(
-            candidate_root / "manifests" / f"{candidate['candidate_id']}.json",
+            manifest_path,
             "document_authority_candidate_manifest_missing",
         )
         if manifest != _json_value(candidate):

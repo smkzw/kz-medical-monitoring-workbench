@@ -587,6 +587,24 @@ def test_document_authority_analysis_starts_both_models_without_user_review(
     ]
 
 
+def test_document_authority_route_does_not_hide_unexpected_starter_defect(
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        tmp_path / "runtime",
+        mapping_pipeline=FakeMappingPipeline(),
+        document_authority_starter=lambda **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("programming defect")
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="programming defect"):
+        client.post(
+            f"{_base()}/data-admissions/attempt-0001/study-documents/analyze",
+            files=[("files", ("scan.pdf", b"pdf", "application/pdf"))],
+        )
+
+
 def test_product_runtime_rejects_legacy_role_assigned_document_upload(
     tmp_path: Path,
 ) -> None:

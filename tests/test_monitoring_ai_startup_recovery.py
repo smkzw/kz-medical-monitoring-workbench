@@ -4,6 +4,8 @@ from hashlib import sha256
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from packages.medical_monitoring.admission import (
     MAPPING_ADJUDICATION_PROMPT_VERSION,
 )
@@ -21,6 +23,12 @@ from services.api.app.monitoring_ai_contracts import (
 )
 from services.api.app.monitoring_ai_source_packet import MonitoringAiSourcePacket
 from services.api.app.monitoring_ai_service import PROMPT_VERSION_BY_TASK
+from services.api.app.chapter_translation_pipeline import (
+    CompositePipelineUnavailableError,
+)
+from services.api.app.monitoring_document_candidates import (
+    CandidateOcrUnavailableError,
+)
 from services.api.app.monitoring_protocol_preparation_service import (
     PROTOCOL_RETIREMENT_AUDIT_PROMPT_VERSIONS,
 )
@@ -60,9 +68,9 @@ def test_startup_retires_old_prompt_contracts_before_waking_worker(
         lambda: events.append(("expire", "", "", frozenset(), frozenset())),
     )
     monkeypatch.setattr(
-        app_main.monitoring_ai_worker,
-        "wake",
-        lambda: events.append(("wake", "", "", frozenset(), frozenset())),
+        app_main,
+        "_wake_monitoring_mapping_workers",
+        lambda: events.append(("wake_both", "", "", frozenset(), frozenset())),
     )
 
     app_main._recover_monitoring_ai_jobs()
@@ -90,7 +98,7 @@ def test_startup_retires_old_prompt_contracts_before_waking_worker(
     ]
     assert events == expected + [
         ("expire", "", "", frozenset(), frozenset()),
-        ("wake", "", "", frozenset(), frozenset()),
+        ("wake_both", "", "", frozenset(), frozenset()),
     ]
 
 
@@ -98,20 +106,26 @@ def test_document_authority_startup_prompt_sets_are_explicit() -> None:
     assert DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK == {
         "document_authority_analysis": frozenset(
             {
-                "monitoring-document-authority-primary-v6",
-                "monitoring-document-authority-verifier-v6",
+                "monitoring-document-authority-primary-v7",
+                "monitoring-document-authority-verifier-v7",
             }
         ),
         "document_authority_review": frozenset(
             {
                 "monitoring-document-authority-review-primary-v6",
                 "monitoring-document-authority-review-verifier-v6",
-                "monitoring-document-authority-adjudication-primary-v5",
-                "monitoring-document-authority-adjudication-verifier-v5",
+                "monitoring-document-authority-adjudication-primary-v6",
+                "monitoring-document-authority-adjudication-verifier-v6",
             }
         ),
     }
     assert DOCUMENT_AUTHORITY_LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK == {
+        "document_authority_analysis": frozenset(
+            {
+                "monitoring-document-authority-primary-v6",
+                "monitoring-document-authority-verifier-v6",
+            }
+        ),
         "document_authority_review": frozenset(
             {
                 "monitoring-document-authority-adjudication-primary-v1",
@@ -122,9 +136,68 @@ def test_document_authority_startup_prompt_sets_are_explicit() -> None:
                 "monitoring-document-authority-adjudication-verifier-v3",
                 "monitoring-document-authority-adjudication-primary-v4",
                 "monitoring-document-authority-adjudication-verifier-v4",
+                "monitoring-document-authority-adjudication-primary-v5",
+                "monitoring-document-authority-adjudication-verifier-v5",
             }
         )
     }
+
+
+def test_monitoring_authority_defers_ocr_role_resolution_into_runner(
+    monkeypatch, tmp_path,
+) -> None:
+    captured = {}
+
+    def start(**kwargs):
+        captured.update(kwargs)
+        return {"state": "analyzing", "batch_id": "mmbatch_deferred"}
+
+    monkeypatch.setattr(app_main.monitoring_document_authority_workflow, "start", start)
+    monkeypatch.setattr(
+        app_main,
+        "_runtime_role_context",
+        lambda _role: (_ for _ in ()).throw(
+            CompositePipelineUnavailableError("OCR role unavailable")
+        ),
+    )
+
+    result = app_main._start_r7_monitoring_document_authority(
+        project_id="project-test",
+        workspace_dir=tmp_path,
+        files=[("scan.pdf", b"pdf")],
+    )
+
+    assert result["state"] == "analyzing"
+    assert captured["ocr_model"] == "GLM-OCR-bf16"
+    with pytest.raises(CandidateOcrUnavailableError):
+        captured["ocr_runner"](1, 200, "ignored", b"png")
+
+
+def test_monitoring_ocr_failure_preserves_requested_runtime_identity(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        app_main,
+        "_runtime_role_context",
+        lambda _role: (
+            SimpleNamespace(model="PaddleOCR-VL-1.6"),
+            SimpleNamespace(provider="paddle_official"),
+            {},
+        ),
+    )
+    monkeypatch.setattr(
+        app_main,
+        "_writing_reference_ocr_runner",
+        lambda *_args: (_ for _ in ()).throw(
+            CompositePipelineUnavailableError("gateway unavailable")
+        ),
+    )
+
+    with pytest.raises(CandidateOcrUnavailableError) as captured:
+        app_main._monitoring_candidate_ocr_runner(1, 200, "fallback", b"png")
+
+    assert captured.value.requested_model == "PaddleOCR-VL-1.6"
+    assert captured.value.provider == "paddle_official"
 
 
 def test_source_job_recovery_preserves_pre_fact_revision_hash(

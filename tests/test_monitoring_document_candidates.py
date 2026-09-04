@@ -11,6 +11,7 @@ import pytest
 
 import services.api.app.monitoring_document_candidates as candidates_module
 from services.api.app.monitoring_document_candidates import (
+    CandidateOcrUnavailableError,
     MonitoringDocumentCandidateDecomposer,
 )
 
@@ -55,6 +56,24 @@ def _image_only_pdf_bytes() -> bytes:
     document = pymupdf.open()
     page = document.new_page()
     page.insert_image(page.rect, stream=image)
+    payload = document.tobytes()
+    document.close()
+    return payload
+
+
+def _mixed_pdf_bytes() -> bytes:
+    document = pymupdf.open()
+    document.new_page().insert_text((72, 72), "Current protocol")
+    document.new_page()
+    payload = document.tobytes()
+    document.close()
+    return payload
+
+
+def _blank_pdf_bytes(page_count: int) -> bytes:
+    document = pymupdf.open()
+    for _ in range(page_count):
+        document.new_page()
     payload = document.tobytes()
     document.close()
     return payload
@@ -193,6 +212,164 @@ def test_pdf_candidate_distinguishes_native_text_from_ocr_need(tmp_path: Path) -
     assert image_only.locator_count == 0
 
 
+def test_pdf_candidate_recovers_zero_text_pages_with_injected_ocr(
+    tmp_path: Path,
+) -> None:
+    calls: list[tuple[int, int, str, bytes]] = []
+
+    class OcrText(str):
+        model = "actual-ocr"
+        provider = "local-test"
+        fell_back = True
+
+        @property
+        def text(self) -> str:
+            return str(self)
+
+    def ocr(page: int, dpi: int, model: str, image: bytes) -> OcrText:
+        calls.append((page, dpi, model, image))
+        return OcrText("签署勘误：第 3 条更正")
+
+    content = _image_only_pdf_bytes()
+    without_ocr = MonitoringDocumentCandidateDecomposer(
+        tmp_path / "without-ocr"
+    ).decompose("erratum.pdf", content)
+    recovered = MonitoringDocumentCandidateDecomposer(
+        tmp_path / "with-ocr",
+        ocr_runner=ocr,
+        ocr_model="requested-ocr",
+        ocr_dpi=200,
+    ).decompose("erratum.pdf", content)
+
+    assert recovered.candidate_id == without_ocr.candidate_id
+    assert recovered.extraction_status == "parsed"
+    assert recovered.limitation_codes == ()
+    assert recovered.locator_count == 1
+    assert recovered.excerpts[0].locator.endswith(":p1:ocr")
+    assert recovered.ocr_recovery_pages[0].status == "recovered"
+    assert recovered.ocr_recovery_pages[0].requested_model == "requested-ocr"
+    assert recovered.ocr_recovery_pages[0].actual_model == "actual-ocr"
+    assert recovered.ocr_recovery_pages[0].provider == "local-test"
+    assert recovered.ocr_recovery_pages[0].fell_back is True
+    assert calls[0][:3] == (1, 200, "requested-ocr")
+    assert calls[0][3].startswith(b"\x89PNG\r\n\x1a\n")
+
+
+@pytest.mark.parametrize(
+    ("runner", "expected_limitation", "expected_status"),
+    (
+        (lambda *_args: "", "ocr_recovery_empty", "empty"),
+        (
+            lambda *_args: (_ for _ in ()).throw(
+                CandidateOcrUnavailableError("gateway down")
+            ),
+            "ocr_recovery_failed",
+            "failed",
+        ),
+    ),
+)
+def test_pdf_candidate_ocr_failure_remains_non_promotable(
+    tmp_path: Path,
+    runner: object,
+    expected_limitation: str,
+    expected_status: str,
+) -> None:
+    candidate = MonitoringDocumentCandidateDecomposer(
+        tmp_path / expected_status,
+        ocr_runner=runner,  # type: ignore[arg-type]
+    ).decompose("scan.pdf", _image_only_pdf_bytes())
+
+    assert candidate.extraction_status == "needs_ocr"
+    assert candidate.locator_count == 0
+    assert candidate.limitation_codes == (expected_limitation,)
+    assert candidate.ocr_recovery_pages[0].status == expected_status
+
+
+def test_pdf_candidate_failed_ocr_records_requested_model_without_fake_actual(
+    tmp_path: Path,
+) -> None:
+    candidate = MonitoringDocumentCandidateDecomposer(
+        tmp_path / "failed-model",
+        ocr_runner=lambda *_args: (_ for _ in ()).throw(
+            CandidateOcrUnavailableError(
+                "gateway down",
+                requested_model="PaddleOCR-VL-1.6",
+                provider="paddle_official",
+            )
+        ),
+    ).decompose("scan.pdf", _image_only_pdf_bytes())
+
+    evidence = candidate.ocr_recovery_pages[0]
+    assert evidence.requested_model == "PaddleOCR-VL-1.6"
+    assert evidence.actual_model == ""
+    assert evidence.provider == "paddle_official"
+
+
+def test_pdf_candidate_requires_recovery_for_every_native_zero_page(
+    tmp_path: Path,
+) -> None:
+    candidate = MonitoringDocumentCandidateDecomposer(
+        tmp_path / "mixed",
+        ocr_runner=lambda page, *_args: "" if page == 2 else "unexpected",
+    ).decompose("mixed.pdf", _mixed_pdf_bytes())
+
+    assert candidate.extraction_status == "needs_ocr"
+    assert candidate.locator_count == 1
+    assert candidate.zero_text_page_samples == (2,)
+    assert candidate.limitation_codes == ("ocr_recovery_empty",)
+
+
+def test_pdf_candidate_does_not_mark_unexposed_ocr_pages_as_parsed(
+    tmp_path: Path,
+) -> None:
+    candidate = MonitoringDocumentCandidateDecomposer(
+        tmp_path / "long-scan", ocr_runner=lambda page, *_args: f"page {page}"
+    ).decompose("long-scan.pdf", _blank_pdf_bytes(13))
+
+    assert candidate.extraction_status == "needs_ocr"
+    assert candidate.locator_count == 12
+    assert len(candidate.excerpts) == len(candidate.ocr_recovery_pages) == 12
+    assert candidate.limitation_codes == ("ocr_evidence_budget_exhausted",)
+    for excerpt, evidence in zip(candidate.excerpts, candidate.ocr_recovery_pages):
+        assert evidence.locator == excerpt.locator
+        assert evidence.text_sha256 == excerpt.text_sha256
+        assert evidence.character_count == len(excerpt.text)
+
+
+def test_pdf_candidate_ocr_retry_creates_new_immutable_evidence_revision(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "retry"
+    content = _image_only_pdf_bytes()
+    first = MonitoringDocumentCandidateDecomposer(root).decompose("scan.pdf", content)
+    second = MonitoringDocumentCandidateDecomposer(
+        root, ocr_runner=lambda *_args: "recovered"
+    ).decompose("scan.pdf", content)
+
+    assert first.candidate_id == second.candidate_id
+    assert first.evidence_revision_sha256 != second.evidence_revision_sha256
+    manifests = list((root / "manifests" / first.candidate_id).glob("*.json"))
+    assert len(manifests) == 2
+
+
+def test_unexpected_ocr_runner_defect_is_not_hidden(tmp_path: Path) -> None:
+    def broken_runner(*_args: object) -> str:
+        raise RuntimeError("programming defect")
+
+    with pytest.raises(RuntimeError, match="programming defect"):
+        MonitoringDocumentCandidateDecomposer(
+            tmp_path / "broken", ocr_runner=broken_runner
+        ).decompose("scan.pdf", _image_only_pdf_bytes())
+    assert not (tmp_path / "broken" / "manifests").exists()
+
+
+def test_pdf_candidate_rejects_unsafe_ocr_configuration(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="OCR configuration"):
+        MonitoringDocumentCandidateDecomposer(
+            tmp_path / "candidates", ocr_runner=lambda *_args: "text", ocr_dpi=199
+        )
+
+
 def test_malformed_supported_file_is_retained_as_unreadable_candidate(
     tmp_path: Path,
 ) -> None:
@@ -213,7 +390,13 @@ def test_malformed_xlsx_is_retained_as_unreadable_candidate(tmp_path: Path) -> N
 
     assert candidate.extraction_status == "unreadable"
     assert candidate.technical_status == "failed"
-    manifest = tmp_path / "candidates" / "manifests" / f"{candidate.candidate_id}.json"
+    manifest = (
+        tmp_path
+        / "candidates"
+        / "manifests"
+        / candidate.candidate_id
+        / f"{candidate.evidence_revision_sha256}.json"
+    )
     assert manifest.exists()
 
 
