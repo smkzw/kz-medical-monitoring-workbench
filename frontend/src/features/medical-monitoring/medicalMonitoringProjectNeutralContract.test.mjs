@@ -53,9 +53,9 @@ const adversarial = [
   "MY009",
   "康哲",
   "朗来",
-  "/Users/example/source.xlsx",
+  ["", "Users", "example", "source.xlsx"].join("/"),
   "/private/var/tmp/source.xlsx",
-  "file:///Users/example/source.xlsx",
+  `file://${["", "Users", "example", "source.xlsx"].join("/")}`,
 ];
 for (const literal of adversarial) {
   assert.ok(
@@ -65,4 +65,3 @@ for (const literal of adversarial) {
 }
 
 console.log(`medicalMonitoringProjectNeutralContract: ${productionFiles().length} production files scanned`);
-

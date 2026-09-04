@@ -2196,6 +2196,98 @@ def test_critique_context_exposes_anonymous_reasoned_options() -> None:
     assert "provider" not in json.dumps(context)
 
 
+def test_critique_context_accepts_partial_adjudication_resolution() -> None:
+    batch = _composite_batch()
+    primary = _run(
+        _composite_analysis(batch, ecrf="", bind_erratum=True), "primary"
+    )
+    verifier = _run(_composite_analysis(batch), "verifier")
+    packet = build_anonymous_conflict_packet(batch, primary, verifier)
+    primary_review = _review_run(
+        _two_role_review(packet, include_supplements=True), "primary"
+    )
+    verifier_review = _review_run(
+        _two_role_review(packet, include_supplements=False), "verifier"
+    )
+    adjudication_context = build_anonymous_adjudication_context(
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+    )
+    considered = tuple(sorted(packet["candidate_coverage"]))
+
+    def adjudication(*, ecrf_supplement: bool) -> DocumentAuthorityAdjudicationReview:
+        return DocumentAuthorityAdjudicationReview(
+            schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+            conflict_packet_sha256=packet["conflict_packet_sha256"],
+            decisions=(
+                AdjudicationDecision(
+                    role="protocol",
+                    decision="selected",
+                    selected_candidate_id="candidate_protocol",
+                    document_version="V1.0",
+                    confidence=0.97,
+                    considered_candidate_ids=considered,
+                    supplementary_candidate_ids=("candidate_protocol_erratum",),
+                    excluded_candidate_ids=(
+                        "candidate_ecrf",
+                        "candidate_ecrf_addendum",
+                    ),
+                    evidence_references=_refs(
+                        ("candidate_protocol", "doc:p1"),
+                        ("candidate_protocol_erratum", "erratum:p1"),
+                    ),
+                    rationale="方案正文与勘误共同构成当前规范内容。",
+                ),
+                AdjudicationDecision(
+                    role="ecrf",
+                    decision="selected",
+                    selected_candidate_id="candidate_ecrf",
+                    document_version="V1.0",
+                    confidence=0.97,
+                    considered_candidate_ids=considered,
+                    supplementary_candidate_ids=(
+                        ("candidate_ecrf_addendum",) if ecrf_supplement else ()
+                    ),
+                    excluded_candidate_ids=(
+                        ("candidate_protocol", "candidate_protocol_erratum")
+                        if ecrf_supplement
+                        else (
+                            "candidate_protocol",
+                            "candidate_protocol_erratum",
+                            "candidate_ecrf_addendum",
+                        )
+                    ),
+                    evidence_references=_refs(
+                        ("candidate_ecrf", "xlsx:sheet:1"),
+                        ("candidate_ecrf_addendum", "xlsx:sheet:2"),
+                    ),
+                    rationale="表单增补关系仍需继续独立核对。",
+                ),
+            ),
+        )
+
+    context = build_anonymous_critique_context(
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+        adjudication_context,
+        _review_run(adjudication(ecrf_supplement=True), "primary", adjudication=True),
+        _review_run(
+            adjudication(ecrf_supplement=False), "verifier", adjudication=True
+        ),
+    )
+
+    assert context["unresolved_roles"] == ["ecrf"]
+    assert list(context["options_by_role"]) == ["ecrf"]
+
+
 def test_one_critique_round_resolves_only_on_agreement() -> None:
     fixture = _critique_fixture()
     packet = fixture[3]

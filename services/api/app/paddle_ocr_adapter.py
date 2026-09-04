@@ -326,6 +326,8 @@ class PaddleOcrAdapter:
                 )
         try:
             job_id = self._parse_job_id(submit_response)
+        except PaddleOcrSubmissionRejectedError:
+            raise
         except PaddleOcrError as exc:
             raise PaddleOcrOutcomeUnknownError(
                 f"Paddle OCR submit outcome is unknown: {exc}"
@@ -462,6 +464,16 @@ class PaddleOcrAdapter:
             ) from exc
         job_id = ""
         if isinstance(payload, dict):
+            provider_code = payload.get("code")
+            try:
+                normalized_code = int(provider_code)
+            except (TypeError, ValueError):
+                normalized_code = 0
+            if provider_code is not None and normalized_code != 0:
+                raise PaddleOcrSubmissionRejectedError(
+                    "Paddle OCR submit was rejected by provider "
+                    f"(code {normalized_code})"
+                )
             data = payload.get("data")
             if isinstance(data, dict):
                 job_id = str(

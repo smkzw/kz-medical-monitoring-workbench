@@ -970,6 +970,8 @@ class SourceRegistryService:
         *,
         document_role: str,
         document_relation: str = "primary",
+        verified_text_spans: Sequence[Mapping[str, str]] = (),
+        expected_locator_count: int = 0,
     ) -> SourceRegistrationResult:
         """Register one study document in the monitoring namespace."""
 
@@ -988,8 +990,6 @@ class SourceRegistryService:
                 module="medical_monitoring",
                 expected_file_role="protocol",
             )
-        if role == "ecrf" and relation == "primary" and suffix != ".xlsx":
-            raise ValueError("electronic case report form must be an XLSX file")
         if role == "ecrf" and suffix == ".xlsx":
             sheets = parse_listing_file(filename, content)
             if len(sheets) > 80:
@@ -1001,9 +1001,7 @@ class SourceRegistryService:
                 filename,
                 content,
                 module="medical_monitoring",
-                expected_file_role=(
-                    "ecrf" if relation == "primary" else "ecrf_supplement"
-                ),
+                expected_file_role="ecrf",
                 parsed_sheets=sheets,
             )
         return self._register_monitoring_reference_document(
@@ -1012,6 +1010,8 @@ class SourceRegistryService:
             content,
             document_role=role,
             document_relation=relation,
+            verified_text_spans=verified_text_spans,
+            expected_locator_count=expected_locator_count,
         )
 
     def _register_monitoring_reference_document(
@@ -1022,6 +1022,8 @@ class SourceRegistryService:
         *,
         document_role: str,
         document_relation: str = "primary",
+        verified_text_spans: Sequence[Mapping[str, str]] = (),
+        expected_locator_count: int = 0,
     ) -> SourceRegistrationResult:
         suffix = Path(filename).suffix.lower()
         if suffix not in {".docx", ".pdf"}:
@@ -1070,10 +1072,34 @@ class SourceRegistryService:
             if suffix == ".pdf"
             else extract_docx_sections(content, artifact)
         )
-        readable_spans = [
-            span for span in extracted.spans if span.source_text.strip()
+        located_text = [
+            (span.source_locator, span.source_text)
+            for span in extracted.spans
+            if span.source_text.strip()
         ]
-        if not readable_spans or len(readable_spans) > MAX_PROTOCOL_REGISTRY_SPANS:
+        used_verified_text = False
+        if not located_text and verified_text_spans:
+            verified_text_spans = tuple(verified_text_spans)
+            located_text = [
+                (str(item.get("locator") or ""), str(item.get("text") or ""))
+                for item in verified_text_spans
+            ]
+            valid_hashes = all(
+                str(item.get("text_sha256") or "")
+                == hashlib.sha256(text.encode("utf-8")).hexdigest()
+                for item, (_locator, text) in zip(verified_text_spans, located_text)
+            )
+            if (
+                expected_locator_count <= 0
+                or len(located_text) != expected_locator_count
+                or len({locator for locator, _text in located_text}) != len(located_text)
+                or any(not locator or not text.strip() for locator, text in located_text)
+                or not valid_hashes
+            ):
+                located_text = []
+            else:
+                used_verified_text = True
+        if not located_text or len(located_text) > MAX_PROTOCOL_REGISTRY_SPANS:
             raise ValueError("monitoring reference has no complete text locator set")
         storage_key = ""
         if self.artifact_root is not None:
@@ -1110,22 +1136,40 @@ class SourceRegistryService:
                 "media_type": artifact.content_type,
                 "document_role": document_role,
                 "document_relation": document_relation,
-                "parser_name": _slug(extracted.parser_name),
-                "parser_version": extracted.parser_version,
+                "parser_name": (
+                    "monitoring_candidate_ocr"
+                    if used_verified_text
+                    else _slug(extracted.parser_name)
+                ),
+                "parser_version": (
+                    "monitoring-candidate-ocr-v1"
+                    if used_verified_text
+                    else extracted.parser_version
+                ),
                 "page_count": extracted.page_count,
-                "extraction_revision": extracted.extraction_revision,
+                "extraction_revision": (
+                    hashlib.sha256(
+                        json.dumps(
+                            located_text,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ).encode("utf-8")
+                    ).hexdigest()
+                    if used_verified_text
+                    else extracted.extraction_revision
+                ),
             },
             server_path=storage_key,
         )
         refs = [
             AiSourceRef(
-                source_id=f"{entry.entry_id}_{span.span_id}",
+                source_id=f"{entry.entry_id}_{index}",
                 source_type=f"{document_role}_span",
                 title=Path(filename).name,
-                locator=span.source_locator,
-                text_preview=_sanitize_preview_text(span.source_text[:6000]),
+                locator=locator,
+                text_preview=_sanitize_preview_text(text[:6000]),
             )
-            for span in readable_spans
+            for index, (locator, text) in enumerate(located_text, start=1)
         ]
         result = self._result_from_refs(entry, refs)
         self.store.append(result)
@@ -1138,10 +1182,10 @@ class SourceRegistryService:
                 ProtocolTextSpan(
                     span_id=str(index),
                     kind="reference_text",
-                    text=span.source_text,
-                    source_locator=span.source_locator,
+                    text=text,
+                    source_locator=locator,
                 )
-                for index, span in enumerate(readable_spans, start=1)
+                for index, (locator, text) in enumerate(located_text, start=1)
             ],
             source_hash=content_hash,
         )
@@ -1544,7 +1588,10 @@ class SourceRegistryService:
                 raise ValueError(f"registered source entry is unavailable: {span.entry_id}")
             if self.expected_context_resolver is not None:
                 expected = self.expected_context_resolver(project_id, entry.module, entry.source_kind)
-                if entry.module == "medical_monitoring":
+                if (
+                    entry.module == "medical_monitoring"
+                    and entry.source_kind != "listing_file"
+                ):
                     expected = replace(
                         expected,
                         expected_file_role=_monitoring_validation_role(
@@ -1655,12 +1702,13 @@ class SourceRegistryService:
             entry.module,
             entry.source_kind,
         )
-        expected = replace(
-            expected,
-            expected_file_role=_monitoring_validation_role(
-                entry.source_kind
-            ),
-        )
+        if entry.source_kind != "listing_file":
+            expected = replace(
+                expected,
+                expected_file_role=_monitoring_validation_role(
+                    entry.source_kind
+                ),
+            )
         return validation.expected_context_hash == expected.context_hash
 
     def assert_operational_sources_usable(
