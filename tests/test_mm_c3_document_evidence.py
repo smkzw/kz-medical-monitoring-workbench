@@ -786,15 +786,25 @@ class _Registry:
             if source_ids[0].startswith(item.entry_id + "-span-")
         )
         latest = max(
-            (
+            [
                 item
                 for item in self._entries
                 if item.project_id == project_id
                 and item.module == "medical_monitoring"
                 and item.source_kind == target.source_kind
-            ),
+            ],
             key=lambda item: item.created_at,
         )
+        promoted = [
+            item
+            for item in self._entries
+            if item.project_id == project_id
+            and item.module == "medical_monitoring"
+            and item.source_kind == target.source_kind
+            and item.metadata.get("monitoring_authority_status") == "promoted"
+        ]
+        if promoted:
+            latest = max(promoted, key=lambda item: item.created_at)
         if latest.entry_id != target.entry_id:
             raise ValueError("superseded")
 
@@ -977,6 +987,26 @@ def test_registry_resolver_accepts_complete_promoted_authority_set() -> None:
     assert by_role["ecrf"].status == "current"
 
 
+def test_promoted_authority_is_not_displaced_by_newer_unpromoted_upload() -> None:
+    promoted = _entry("protocol", 1)
+    _promote_entries(promoted)
+    unpromoted = _entry("protocol", 2)
+    entries = [promoted, unpromoted]
+    registry = _Registry(
+        entries,
+        [_span(entry, index) for entry in entries for index in (1, 2)],
+    )
+
+    packet = MonitoringDocumentEvidenceResolver(registry).resolve(
+        project_id=PROJECT_ID,
+    )
+
+    protocol = packet.roles[0]
+    assert protocol.status == "current"
+    assert protocol.binding is not None
+    assert protocol.binding.source_entry_id == promoted.entry_id
+
+
 def test_registry_resolver_uses_only_monitoring_owned_current_sources() -> None:
     current = [
         _entry("protocol", 2),
@@ -1116,6 +1146,15 @@ def test_ecrf_registration_persists_independent_locator_manifest(
     )
     assert metadata["expected_locator_count"] == len(result.spans) == 1
     assert len(metadata["expected_locator_index_sha256"]) == 64
+
+    supplementary = registry.register_monitoring_mapping_document(
+        PROJECT_ID,
+        "forms-supplement.xlsx",
+        stream.getvalue(),
+        document_role="ecrf",
+        document_relation="supplementary",
+    )
+    assert supplementary.entry.source_kind == "ecrf_supplement"
 
 
 def test_scanned_monitoring_reference_uses_complete_verified_ocr_spans(

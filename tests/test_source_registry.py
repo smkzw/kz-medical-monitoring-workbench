@@ -351,6 +351,87 @@ class SourceRegistryTests(unittest.TestCase):
                     self.ai_policy,
                 )
 
+    def test_operational_ai_rejects_source_without_validation_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = SourceRegistryService(
+                SourceRegistryStore(Path(tmp) / "sources.jsonl"),
+                content_validation_service=SourceContentValidationService(
+                    SourceContentValidationStore(Path(tmp) / "validations.sqlite3")
+                ),
+                expected_context_resolver=lambda project_id, module, source_kind: SourceExpectedContext(
+                    expected_file_role="clinical_data_file",
+                ),
+            )
+            result = service.register_listing_file(
+                "proj_mgk10_sar_demo",
+                "listing.xlsx",
+                _minimal_xlsx_bytes(),
+                module="medical_monitoring",
+                expected_file_role="clinical_data_file",
+            )
+
+            with patch.object(service, "current_content_validation", return_value=None):
+                with self.assertRaisesRegex(ValueError, "validation is unavailable"):
+                    service.assert_operational_sources_usable(
+                        "proj_mgk10_sar_demo",
+                        [result.spans[0].source_id],
+                    )
+
+    def test_broken_promoted_authority_does_not_fall_back_to_upload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = SourceRegistryService(
+                SourceRegistryStore(Path(tmp) / "sources.jsonl"),
+                content_validation_service=SourceContentValidationService(
+                    SourceContentValidationStore(Path(tmp) / "validations.sqlite3")
+                ),
+                expected_context_resolver=lambda project_id, module, source_kind: SourceExpectedContext(
+                    expected_file_role="clinical_data_file",
+                ),
+            )
+            authority = service.register_listing_file(
+                "proj_mgk10_sar_demo",
+                "authority.xlsx",
+                _minimal_xlsx_bytes("10001"),
+                module="medical_monitoring",
+                expected_file_role="clinical_data_file",
+            )
+            upload = service.register_listing_file(
+                "proj_mgk10_sar_demo",
+                "upload.xlsx",
+                _minimal_xlsx_bytes("10002"),
+                module="medical_monitoring",
+                expected_file_role="clinical_data_file",
+            )
+            promoted = authority.entry.model_copy(
+                update={
+                    "metadata": {
+                        **authority.entry.metadata,
+                        "monitoring_authority_status": "promoted",
+                    }
+                }
+            )
+
+            with (
+                patch.object(
+                    service,
+                    "list_entries",
+                    return_value=[promoted, upload.entry],
+                ),
+                patch.object(
+                    service,
+                    "_monitoring_entry_is_usable",
+                    side_effect=lambda item: item.entry_id == upload.entry.entry_id,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "requires content-consistency confirmation",
+                ):
+                    service.assert_operational_sources_usable(
+                        "proj_mgk10_sar_demo",
+                        [upload.spans[0].source_id],
+                    )
+
     def test_operational_ai_rejects_stale_validator_decision(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = SourceRegistryService(
