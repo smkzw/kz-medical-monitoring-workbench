@@ -70,6 +70,15 @@ class MonitoringDocumentAuthorityWorkflow:
             ocr_model=ocr_model,
             ocr_dpi=ocr_dpi,
         ).decompose_many(files).to_dict()
+        if any(
+            candidate.get("role_hypotheses")
+            and (
+                candidate.get("technical_status") != "ready"
+                or candidate.get("extraction_status") != "parsed"
+            )
+            for candidate in batch["candidates"]
+        ):
+            raise DocumentAuthorityError("document_authority_evidence_incomplete")
         revision = self._input_revision(project_id, batch)
         self.primary_service.submit_document_authority_analysis(
             project_id=project_id,

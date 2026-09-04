@@ -79,6 +79,16 @@ def _blank_pdf_bytes(page_count: int) -> bytes:
     return payload
 
 
+def _dense_native_and_blank_pdf_bytes() -> bytes:
+    document = pymupdf.open()
+    for page_number in range(1, 13):
+        document.new_page().insert_text((72, 72), f"Native page {page_number}")
+    document.new_page()
+    payload = document.tobytes()
+    document.close()
+    return payload
+
+
 def test_xlsx_candidate_exposes_structure_without_row_values(tmp_path: Path) -> None:
     decomposer = MonitoringDocumentCandidateDecomposer(tmp_path / "candidates")
 
@@ -317,6 +327,22 @@ def test_pdf_candidate_requires_recovery_for_every_native_zero_page(
     assert candidate.locator_count == 1
     assert candidate.zero_text_page_samples == (2,)
     assert candidate.limitation_codes == ("ocr_recovery_empty",)
+
+
+def test_native_excerpt_budget_reserves_space_for_zero_text_page_ocr(
+    tmp_path: Path,
+) -> None:
+    candidate = MonitoringDocumentCandidateDecomposer(
+        tmp_path / "dense-mixed",
+        ocr_runner=lambda page, *_args: f"Recovered page {page}",
+    ).decompose("dense-mixed.pdf", _dense_native_and_blank_pdf_bytes())
+
+    assert candidate.extraction_status == "parsed"
+    assert candidate.locator_count == 12
+    assert len(candidate.ocr_recovery_pages) == 1
+    assert candidate.ocr_recovery_pages[0].page_number == 13
+    assert candidate.ocr_recovery_pages[0].status == "recovered"
+    assert sum(excerpt.locator.endswith(":ocr") for excerpt in candidate.excerpts) == 1
 
 
 def test_pdf_candidate_does_not_mark_unexposed_ocr_pages_as_parsed(

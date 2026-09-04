@@ -616,7 +616,11 @@ def register_mapping_candidate_routes(
                 "headline": "系统正在独立识别并交叉核对研究文件",
                 "guidance": "当前无需逐项确认，完成后会自动更新研究文件状态。",
             }
-        except (DocumentAuthorityError, ValueError):
+        except DocumentAuthorityError as exc:
+            if str(exc) == "document_authority_evidence_incomplete":
+                return _mapping_error("mapping_document_evidence_incomplete")
+            return _mapping_error("mapping_document_registration_invalid")
+        except ValueError:
             return _mapping_error("mapping_document_registration_invalid")
         finally:
             for upload in files:
