@@ -769,7 +769,7 @@ def test_list_candidates_ignores_superseded_submission_cohorts(tmp_path: Path) -
             created_at=created_at,
         )
 
-    old = job("job-old", prompt="v17", status="stale_input", created_at=now)
+    old = job("job-old", prompt="v18", status="stale_input", created_at=now)
     current = job(
         "job-current",
         prompt="v18",
@@ -785,12 +785,35 @@ def test_list_candidates_ignores_superseded_submission_cohorts(tmp_path: Path) -
         provider="workbench-system",
         requested_model="deterministic-metadata-mapping-v1",
     )
+    deterministic.input_revision_sha256 = "revision-deterministic"
+    previous_prompt = job(
+        "job-previous-prompt",
+        prompt="v17",
+        status="completed",
+        created_at=now - timedelta(seconds=1),
+    )
     candidate = SimpleNamespace(
         structured_payload={"field_mappings": []},
         evidence=(),
     )
+    profile_shas = {
+        "job-old": "profile-old",
+        "job-current": "profile-current",
+        "job-deterministic": "profile-current",
+        "job-previous-prompt": "profile-current",
+    }
     repository = SimpleNamespace(
-        list_jobs=lambda *_args, **_kwargs: (old, deterministic, current),
+        list_jobs=lambda *_args, **_kwargs: (
+            previous_prompt,
+            old,
+            deterministic,
+            current,
+        ),
+        input_payload=lambda _project_id, job_id: {
+            "field_profile": {
+                "full_profile_sha256": profile_shas[job_id],
+            }
+        },
         candidates=lambda *_args: (candidate,),
     )
     pipeline = AdmissionMappingPipeline(
@@ -808,6 +831,60 @@ def test_list_candidates_ignores_superseded_submission_cohorts(tmp_path: Path) -
 
     assert result["state"] == "candidates_ready"
     assert result["summary"]["job_count"] == 2
+
+
+@pytest.mark.parametrize("missing_job_id", ["job-current", "job-earlier"])
+def test_list_candidates_fails_closed_when_current_cohort_identity_is_missing(
+    tmp_path: Path,
+    missing_job_id: str,
+) -> None:
+    attempt_id, workspace = _admit(tmp_path)
+    now = datetime.now(timezone.utc)
+    job = SimpleNamespace(
+        project_id=PROJECT_ID,
+        job_id="job-current",
+        status="completed",
+        provider="zhipu-coding-plan",
+        requested_model="glm-5.3-flash",
+        response_model="glm-5.3-flash",
+        failure_code="",
+        prompt_version="v18",
+        input_revision_sha256="revision-current",
+        profile_id="profile-current",
+        created_at=now,
+    )
+    earlier = SimpleNamespace(
+        **{
+            **job.__dict__,
+            "job_id": "job-earlier",
+            "created_at": now - timedelta(seconds=1),
+        }
+    )
+    repository = SimpleNamespace(
+        list_jobs=lambda *_args, **_kwargs: (earlier, job),
+        input_payload=lambda _project_id, job_id: {
+            "field_profile": (
+                {} if job_id == missing_job_id else {
+                    "full_profile_sha256": "profile-current"
+                }
+            )
+        },
+    )
+    pipeline = AdmissionMappingPipeline(
+        ai_service=SimpleNamespace(),
+        ai_repository=repository,
+        input_revision_factory=lambda value: value,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+    )
+
+    with pytest.raises(AdmissionMappingPipelineError) as exc:
+        pipeline.list_candidates(
+            project_id=PROJECT_ID,
+            attempt_id=attempt_id,
+            workspace_dir=workspace,
+        )
+
+    assert exc.value.code == "mapping_bridge_failed"
 
 
 def _load_rows_by_snapshot(

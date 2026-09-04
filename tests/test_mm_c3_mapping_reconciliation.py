@@ -614,6 +614,7 @@ def test_service_reconciliation_refuses_cohorts_mapped_on_different_inputs() -> 
     def _job(job_id: str, revision: str, prompt: str, provider: str, model: str):
         return SimpleNamespace(
             job_id=job_id,
+            project_id="p1",
             status="completed",
             prompt_version=prompt,
             input_revision_sha256=revision,
@@ -668,6 +669,9 @@ def test_service_reconciliation_refuses_cohorts_mapped_on_different_inputs() -> 
     )
     ai_repo = SimpleNamespace(
         list_jobs=_list_jobs,
+        input_payload=lambda *_args: {
+            "field_profile": {"full_profile_sha256": "a" * 64}
+        },
         candidates=lambda *_args: (
             SimpleNamespace(
                 candidate_id="cand-1",
