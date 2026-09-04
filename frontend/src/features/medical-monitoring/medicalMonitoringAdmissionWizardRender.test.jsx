@@ -278,6 +278,21 @@ export const renders = {
       },
     },
   ),
+  documentsCrossChecking: render(
+    readyWizardState(),
+    createAdmissionMappingConfirmState(),
+    null,
+    {
+      phase: "cross_checking",
+      error: null,
+      payload: {
+        ready: false,
+        headline: "系统正在复核最后几个分歧",
+        guidance: "无需操作，系统会独立核对并自行处理差异。",
+        files: ["eCRF 修订说明.pdf"],
+      },
+    },
+  ),
   confirmDrafting: render(readyWizardState(), mappingFrom([
     { type: "load-ready", payload: candidatesPayload() },
     { type: "adopt-ready", payload: draftPayload },

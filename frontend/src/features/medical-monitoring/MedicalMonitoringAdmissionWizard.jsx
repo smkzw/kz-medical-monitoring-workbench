@@ -59,7 +59,9 @@ function DocumentReadinessPanel({ state, onFiles, onRetry }) {
     return <p className="monitoring-admission-loading" role="status">正在核对研究文档…</p>;
   }
   const payload = state.payload || {};
-  const processing = ["uploading", "analyzing", "reviewing", "adjudicating"]
+  const processing = [
+    "uploading", "analyzing", "reviewing", "adjudicating", "cross_checking",
+  ]
     .includes(state.phase);
   return (
     <section className="monitoring-admission-documents" aria-label="研究文档准备情况">
@@ -74,6 +76,11 @@ function DocumentReadinessPanel({ state, onFiles, onRetry }) {
           </li>
         ))}
       </ul>
+      {payload.files?.length ? (
+        <p className="monitoring-admission-warning">
+          涉及文件：{payload.files.join("、")}
+        </p>
+      ) : null}
       {!payload.ready ? (
         <label className="monitoring-admission-document-picker">
           <input
@@ -620,7 +627,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
 
   useEffect(() => {
     if (
-      !["analyzing", "reviewing", "adjudicating"].includes(documentState.phase)
+      !["analyzing", "reviewing", "adjudicating", "cross_checking"]
+        .includes(documentState.phase)
       || !documentState.payload?.analysis_token
     ) return undefined;
     const timer = setTimeout(async () => {

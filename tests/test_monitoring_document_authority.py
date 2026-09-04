@@ -23,6 +23,7 @@ from packages.medical_monitoring.admission.document_authority import (
     EvidenceReference,
     FULL_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS,
     PRIMARY_ADJUDICATION_PROMPT_VERSION,
+    PRIMARY_CRITIQUE_PROMPT_VERSION,
     PRIMARY_PROMPT_VERSION,
     PRIMARY_REVIEW_PROMPT_VERSION,
     ResolvedRole,
@@ -30,13 +31,16 @@ from packages.medical_monitoring.admission.document_authority import (
     RoleSupplementaryBinding,
     VERIFIER_PROMPT_VERSION,
     VERIFIER_ADJUDICATION_PROMPT_VERSION,
+    VERIFIER_CRITIQUE_PROMPT_VERSION,
     VERIFIER_REVIEW_PROMPT_VERSION,
     build_anonymous_conflict_packet,
     build_anonymous_adjudication_context,
+    build_anonymous_critique_context,
     document_authority_batch_sha256,
     reconcile_document_authority,
     resolve_document_authority_conflicts,
     resolve_document_authority_adjudication,
+    resolve_document_authority_critique,
     validate_document_authority_analysis,
     validate_document_authority_adjudication_context,
     validate_document_authority_adjudication_review,
@@ -865,6 +869,8 @@ def test_dual_conflict_review_resolves_or_asks_one_plain_question() -> None:
         _review_run(unresolved, "verifier"),
     )
     assert result["state"] == "needs_user_input"
+    assert result["unresolved_roles"] == ["ecrf"]
+
     assert result["user_question"].count("？") + result["user_question"].count("。") == 1
     assert "模型" not in result["user_question"]
 
@@ -2113,6 +2119,135 @@ def test_internal_adjudication_remains_fail_closed_and_context_bound() -> None:
             _review_run(_ecrf_adjudication_review(packet), "primary", adjudication=True),
             _review_run(_ecrf_adjudication_review(packet), "verifier", adjudication=True),
         )
+
+
+def _critique_run(
+    review: DocumentAuthorityAdjudicationReview, role: str
+) -> DocumentAuthorityConflictRunEnvelope:
+    return _review_run(review, role, adjudication=True).model_copy(update={
+        "prompt_version": (
+            PRIMARY_CRITIQUE_PROMPT_VERSION
+            if role == "primary"
+            else VERIFIER_CRITIQUE_PROMPT_VERSION
+        )
+    })
+
+
+def _critique_fixture(*, complete_profiles: bool = False) -> tuple:
+    batch = _composite_batch()
+    if complete_profiles:
+        for candidate in batch["candidates"]:
+            candidate["content_profile"] = {
+                "normalized_character_count": 100,
+                "represented_coverage_per_mille": 1000,
+            }
+    primary, verifier, packet = _composite_conflict_context(batch)
+    primary_review = _review_run(_ecrf_composite_review(packet), "primary")
+    verifier_review = _review_run(
+        _ecrf_composite_review(packet, supplements=()), "verifier"
+    )
+    adjudication_context = build_anonymous_adjudication_context(
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+    )
+    primary_adjudication = _review_run(
+        _ecrf_adjudication_review(packet), "primary", adjudication=True
+    )
+    verifier_adjudication = _review_run(
+        _ecrf_adjudication_review(packet, supplements=()),
+        "verifier",
+        adjudication=True,
+    )
+    critique_context = build_anonymous_critique_context(
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+        adjudication_context,
+        primary_adjudication,
+        verifier_adjudication,
+    )
+    return (
+        batch,
+        primary,
+        verifier,
+        packet,
+        primary_review,
+        verifier_review,
+        adjudication_context,
+        primary_adjudication,
+        verifier_adjudication,
+        critique_context,
+    )
+
+
+def test_critique_context_exposes_anonymous_reasoned_options() -> None:
+    *_, context = _critique_fixture()
+
+    assert context["schema_version"] == "monitoring-document-authority-critique-v1"
+    assert context["unresolved_roles"] == ["ecrf"]
+    assert all(option["rationale"] for option in context["options_by_role"]["ecrf"])
+    assert "provider" not in json.dumps(context)
+
+
+def test_one_critique_round_resolves_only_on_agreement() -> None:
+    fixture = _critique_fixture()
+    packet = fixture[3]
+    agreed = _ecrf_adjudication_review(packet)
+
+    result = resolve_document_authority_critique(
+        *fixture[:-1],
+        fixture[-1],
+        _critique_run(agreed, "primary"),
+        _critique_run(agreed, "verifier"),
+    )
+
+    assert result["state"] == "resolved"
+    assert result["unresolved_roles"] == []
+    assert len(result["critique_run_ids"]) == 2
+
+
+def test_persistent_critique_disagreement_without_profiles_requests_evidence() -> None:
+    fixture = _critique_fixture()
+    packet = fixture[3]
+
+    result = resolve_document_authority_critique(
+        *fixture[:-1],
+        fixture[-1],
+        _critique_run(_ecrf_adjudication_review(packet), "primary"),
+        _critique_run(
+            _ecrf_adjudication_review(packet, supplements=()), "verifier"
+        ),
+    )
+
+    assert result["state"] == "evidence_incomplete"
+    assert result["user_question"] == ""
+    assert result["unresolved_roles"] == ["ecrf"]
+
+
+def test_persistent_critique_disagreement_names_only_relevant_files() -> None:
+    fixture = _critique_fixture(complete_profiles=True)
+    packet = fixture[3]
+
+    result = resolve_document_authority_critique(
+        *fixture[:-1],
+        fixture[-1],
+        _critique_run(_ecrf_adjudication_review(packet), "primary"),
+        _critique_run(
+            _ecrf_adjudication_review(packet, supplements=()), "verifier"
+        ),
+    )
+
+    assert result["state"] == "needs_user_input"
+    assert result["attention_files"]
+    assert all(name in result["user_question"] for name in result["attention_files"])
+    assert "重新选择完整" not in result["user_question"]
 
 
 def test_conflict_review_supplement_must_be_allowed_and_evidence_bound() -> None:

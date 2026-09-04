@@ -47,6 +47,7 @@ from services.api.app.monitoring_document_authority_jobs import (
     load_document_authority_analysis_run,
     promote_document_authority_from_jobs,
     resolve_document_authority_from_jobs,
+    submit_document_authority_critique_pair,
     submit_document_authority_review_pair,
     verify_document_authority_promotion_receipt,
 )
@@ -1225,6 +1226,22 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
             ),
         ),
     )
+    critique_payload = adjudication_payload.copy()
+    critique_payload["evidence_references"] = (
+        EvidenceReference(candidate_id="candidate_protocol", locator="doc:p1"),
+        EvidenceReference(candidate_id="candidate_ecrf", locator="xlsx:sheet:1"),
+    )
+    critique_review = DocumentAuthorityAdjudicationReview(
+        schema_version=review.schema_version,
+        conflict_packet_sha256=review.conflict_packet_sha256,
+        decisions=(
+            AdjudicationDecision(
+                **critique_payload,
+                excluded_candidate_ids=("candidate_protocol",),
+                rationale="回到冻结证据后，完整处置与文件关系仍支持该结论。",
+            ),
+        ),
+    )
     primary_review_provider["value"] = _ReviewProvider(
         MONITORING_C3_MAPPING_PROVIDER,
         MONITORING_C3_MAPPING_MODEL,
@@ -1297,6 +1314,109 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
     assert result["user_question"] == ""
     assert len(result["adjudication_run_ids"]) == 2
     assert context["unresolved_roles"] == ["ecrf"]
+
+    competing_payload = adjudication_payload.copy()
+    competing_payload.update({
+        "selected_candidate_id": "candidate_protocol",
+        "evidence_references": (
+            EvidenceReference(candidate_id="candidate_protocol", locator="doc:p1"),
+            EvidenceReference(candidate_id="candidate_ecrf", locator="xlsx:sheet:1"),
+        ),
+    })
+    competing_adjudication = DocumentAuthorityAdjudicationReview(
+        schema_version=review.schema_version,
+        conflict_packet_sha256=review.conflict_packet_sha256,
+        decisions=(
+            AdjudicationDecision(
+                **competing_payload,
+                excluded_candidate_ids=("candidate_ecrf",),
+                rationale="反方选项对候选文件关系作出了不同解释。",
+            ),
+        ),
+    )
+    verifier_review_provider["value"] = _ReviewProvider(
+        MONITORING_C3_VERIFIER_PROVIDER,
+        MONITORING_C3_VERIFIER_MODEL,
+        competing_adjudication,
+    )
+    competing_job = repository.create_or_get(MonitoringAiJobCreate(
+        project_id=verifier_adjudication_job.project_id,
+        task_type=verifier_adjudication_job.task_type,
+        input_revision=verifier_adjudication_job.input_revision,
+        input_payload=repository.input_payload(
+            verifier_adjudication_job.project_id,
+            verifier_adjudication_job.job_id,
+        ),
+        prompt_version=verifier_adjudication_job.prompt_version,
+        profile_id=verifier_adjudication_job.profile_id,
+        provider=verifier_adjudication_job.provider,
+        requested_model=verifier_adjudication_job.requested_model,
+        max_attempts=verifier_adjudication_job.max_attempts,
+        business_key=f"{verifier_adjudication_job.business_key}:competing",
+    ))
+    verifier_review_service.run_next(
+        "verifier-competing-adjudication-worker",
+        claim_identity=verifier_review_service.claim_identity(),
+    )
+    critique_context, primary_critique_job, verifier_critique_job = (
+        submit_document_authority_critique_pair(
+            primary_review_service,
+            verifier_review_service,
+            input_revision=revision,
+            candidate_batch=batch,
+            primary_analysis_job_id=primary_job.job_id,
+            verifier_analysis_job_id=verifier_job.job_id,
+            primary_review_job_id=primary_review_job.job_id,
+            verifier_review_job_id=verifier_review_job.job_id,
+            primary_adjudication_job_id=primary_adjudication_job.job_id,
+            verifier_adjudication_job_id=competing_job.job_id,
+        )
+    )
+    serialized_context = json.dumps(critique_context, ensure_ascii=False)
+    assert critique_context["schema_version"] == (
+        "monitoring-document-authority-critique-v1"
+    )
+    assert "cms-smk" not in serialized_context
+    assert "zhipu-coding-plan" not in serialized_context
+    assert primary_critique_job.business_key.startswith(
+        "document-authority-critique:primary:v1:"
+    )
+    assert verifier_critique_job.business_key.startswith(
+        "document-authority-critique:verifier:v1:"
+    )
+    primary_review_provider["value"] = _ReviewProvider(
+        MONITORING_C3_MAPPING_PROVIDER,
+        MONITORING_C3_MAPPING_MODEL,
+        critique_review,
+    )
+    verifier_review_provider["value"] = _ReviewProvider(
+        MONITORING_C3_VERIFIER_PROVIDER,
+        MONITORING_C3_VERIFIER_MODEL,
+        critique_review,
+    )
+    primary_review_service.run_next(
+        "primary-critique-worker",
+        claim_identity=primary_review_service.claim_identity(),
+    )
+    verifier_review_service.run_next(
+        "verifier-critique-worker",
+        claim_identity=verifier_review_service.claim_identity(),
+    )
+    critique_resolution = resolve_document_authority_from_jobs(
+        repository,
+        project_id=revision.project_id,
+        candidate_batch=batch,
+        primary_analysis_job_id=primary_job.job_id,
+        verifier_analysis_job_id=verifier_job.job_id,
+        primary_review_job_id=primary_review_job.job_id,
+        verifier_review_job_id=verifier_review_job.job_id,
+        primary_adjudication_job_id=primary_adjudication_job.job_id,
+        verifier_adjudication_job_id=competing_job.job_id,
+        primary_critique_job_id=primary_critique_job.job_id,
+        verifier_critique_job_id=verifier_critique_job.job_id,
+    )
+    assert critique_resolution["state"] == "resolved"
+    assert len(critique_resolution["critique_run_ids"]) == 2
 
     persisted_replay_jobs = []
     for primary_prompt, verifier_prompt in sorted(REPLAY_ADJUDICATION_PROMPT_PAIRS):
@@ -1379,16 +1499,21 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
             coverage["by_role"]["ecrf"][
                 "evidence_required_candidate_ids"
             ]
-        ) == {"candidate_ecrf"}
+        ) == {"candidate_protocol", "candidate_ecrf"}
         assert coverage["by_role"]["ecrf"][
             "required_locator_by_candidate"
-        ] == {"candidate_ecrf": "xlsx:sheet:1"}
+        ] == {
+            "candidate_protocol": "doc:p1",
+            "candidate_ecrf": "xlsx:sheet:1",
+        }
         assert "包括未入选候选" in provider.envelopes[0].system_prompt
         assert "required_locator_by_candidate" in provider.envelopes[0].system_prompt
-        adjudication_payload = provider.envelopes[0].payload["input_payload"]
-        assert adjudication_payload["document_authority_adjudication_context"] == context
-        assert "document_authority_source_bindings" not in adjudication_payload
-        assert "系统内最终裁决" in provider.envelopes[0].system_prompt
+        critique_input = provider.envelopes[0].payload["input_payload"]
+        assert critique_input["document_authority_adjudication_context"] == (
+            critique_context
+        )
+        assert "document_authority_source_bindings" not in critique_input
+        assert "匿名相互质询" in provider.envelopes[0].system_prompt
         assert "不属于当前权威补充" in provider.envelopes[0].system_prompt
         assert "重复载体" in provider.envelopes[0].system_prompt
         assert "counter_evidence_references" in provider.envelopes[0].system_prompt

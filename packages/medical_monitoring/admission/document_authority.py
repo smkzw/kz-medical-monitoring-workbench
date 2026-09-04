@@ -47,6 +47,8 @@ PRIMARY_ADJUDICATION_PROMPT_VERSION = (
 VERIFIER_ADJUDICATION_PROMPT_VERSION = (
     "monitoring-document-authority-adjudication-verifier-v7"
 )
+PRIMARY_CRITIQUE_PROMPT_VERSION = "monitoring-document-authority-critique-primary-v1"
+VERIFIER_CRITIQUE_PROMPT_VERSION = "monitoring-document-authority-critique-verifier-v1"
 FULL_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS = frozenset(
     (
         f"monitoring-document-authority-adjudication-primary-v{version}",
@@ -91,6 +93,8 @@ CURRENT_PROMPT_VERSIONS_BY_TASK = {
             VERIFIER_REVIEW_PROMPT_VERSION,
             PRIMARY_ADJUDICATION_PROMPT_VERSION,
             VERIFIER_ADJUDICATION_PROMPT_VERSION,
+            PRIMARY_CRITIQUE_PROMPT_VERSION,
+            VERIFIER_CRITIQUE_PROMPT_VERSION,
         }
     ),
 }
@@ -153,6 +157,10 @@ _ADJUDICATION_CONTEXT_V1_KEYS = frozenset({
 _ADJUDICATION_CONTEXT_KEYS = frozenset({
     *_ADJUDICATION_CONTEXT_V1_KEYS,
     "disputed_candidate_ids_by_role",
+})
+_CRITIQUE_CONTEXT_KEYS = frozenset({
+    *_ADJUDICATION_CONTEXT_KEYS,
+    "prior_adjudication_context_sha256",
 })
 _DOCUMENT_VERSION_RE = re.compile(
     r"(?:[Vv](?:ersion)?\s*[0-9]+(?:[._-][0-9A-Za-z]+)*(?:版|版本|稿)?|"
@@ -275,6 +283,8 @@ def validate_document_authority_adjudication_context(
     expected_keys = (
         _ADJUDICATION_CONTEXT_V1_KEYS
         if schema_version == "monitoring-document-authority-adjudication-v1"
+        else _CRITIQUE_CONTEXT_KEYS
+        if schema_version == "monitoring-document-authority-critique-v1"
         else _ADJUDICATION_CONTEXT_KEYS
     )
     if set(context) != expected_keys:
@@ -292,15 +302,28 @@ def validate_document_authority_adjudication_context(
         schema_version not in {
             "monitoring-document-authority-adjudication-v1",
             "monitoring-document-authority-adjudication-v2",
+            "monitoring-document-authority-critique-v1",
         }
         or context.get("conflict_packet_sha256") != packet_sha256
+        or (
+            schema_version == "monitoring-document-authority-critique-v1"
+            and re.fullmatch(
+                r"[0-9a-f]{64}",
+                str(context.get("prior_adjudication_context_sha256") or ""),
+            )
+            is None
+        )
         or not roles
         or len(roles) != len(set(roles))
         or not set(roles).issubset(packet["conflict_roles"])
         or not isinstance(options, Mapping)
         or set(options) != set(roles)
         or (
-            schema_version == "monitoring-document-authority-adjudication-v2"
+            schema_version
+            in {
+                "monitoring-document-authority-adjudication-v2",
+                "monitoring-document-authority-critique-v1",
+            }
             and (not isinstance(disputed, Mapping) or set(disputed) != set(roles))
         )
         or claimed != _digest(body)
@@ -316,7 +339,12 @@ def validate_document_authority_adjudication_context(
                 "document_authority_adjudication_context_invalid"
             )
         try:
-            decisions = tuple(ConflictDecision.model_validate(item) for item in raw_options)
+            decision_model = (
+                AdjudicationDecision
+                if schema_version == "monitoring-document-authority-critique-v1"
+                else ConflictDecision
+            )
+            decisions = tuple(decision_model.model_validate(item) for item in raw_options)
         except ValueError as exc:
             raise DocumentAuthorityError(
                 "document_authority_adjudication_context_invalid"
@@ -330,12 +358,24 @@ def validate_document_authority_adjudication_context(
                 item,
                 set(packet["allowed_candidate_ids_by_role"][role]),
                 candidates,
+                require_complete_disposition=(
+                    schema_version == "monitoring-document-authority-critique-v1"
+                ),
+                required_evidence_candidate_ids=(
+                    set()
+                    if schema_version == "monitoring-document-authority-critique-v1"
+                    else None
+                ),
             )
         left_bound = _decision_bound_candidate_ids(decisions[0])
         right_bound = _decision_bound_candidate_ids(decisions[1])
         expected_disputed = sorted(left_bound ^ right_bound)
         if (
-            schema_version == "monitoring-document-authority-adjudication-v2"
+            schema_version
+            in {
+                "monitoring-document-authority-adjudication-v2",
+                "monitoring-document-authority-critique-v1",
+            }
             and disputed[role] != expected_disputed
         ):
             raise DocumentAuthorityError(
@@ -356,7 +396,10 @@ def validate_document_authority_adjudication_review(
     prompt_version: str | None = None,
 ) -> None:
     validate_document_authority_adjudication_context(packet, context)
-    if context["schema_version"] != "monitoring-document-authority-adjudication-v2":
+    if context["schema_version"] not in {
+        "monitoring-document-authority-adjudication-v2",
+        "monitoring-document-authority-critique-v1",
+    }:
         validate_document_authority_conflict_review(packet, review)
         return
     if review.conflict_packet_sha256 != packet["conflict_packet_sha256"]:
@@ -398,6 +441,8 @@ def validate_document_authority_adjudication_review(
         if prompt_version in {
             PRIMARY_ADJUDICATION_PROMPT_VERSION,
             VERIFIER_ADJUDICATION_PROMPT_VERSION,
+            PRIMARY_CRITIQUE_PROMPT_VERSION,
+            VERIFIER_CRITIQUE_PROMPT_VERSION,
         }:
             if not isinstance(decision, AdjudicationDecision) or not (
                 decision.rationale.strip()
@@ -895,6 +940,64 @@ def build_anonymous_adjudication_context(
     return output
 
 
+def build_anonymous_critique_context(
+    batch: Mapping[str, Any],
+    analysis_primary: DocumentAuthorityRunEnvelope,
+    analysis_verifier: DocumentAuthorityRunEnvelope,
+    conflict_packet: Mapping[str, Any],
+    review_primary: DocumentAuthorityConflictRunEnvelope,
+    review_verifier: DocumentAuthorityConflictRunEnvelope,
+    adjudication_context: Mapping[str, Any],
+    adjudication_primary: DocumentAuthorityConflictRunEnvelope,
+    adjudication_verifier: DocumentAuthorityConflictRunEnvelope,
+) -> dict[str, Any]:
+    resolution = resolve_document_authority_adjudication(
+        batch,
+        analysis_primary,
+        analysis_verifier,
+        conflict_packet,
+        review_primary,
+        review_verifier,
+        adjudication_context,
+        adjudication_primary,
+        adjudication_verifier,
+    )
+    roles = tuple(str(value) for value in resolution["unresolved_roles"])
+    if not roles:
+        raise DocumentAuthorityError("document_authority_critique_not_required")
+    left = _review_index(adjudication_primary.review, roles)
+    right = _review_index(adjudication_verifier.review, roles)
+    options = {
+        role: sorted(
+            (
+                left[role].model_dump(mode="json"),
+                right[role].model_dump(mode="json"),
+            ),
+            key=_digest,
+        )
+        for role in roles
+    }
+    context = {
+        "schema_version": "monitoring-document-authority-critique-v1",
+        "conflict_packet_sha256": conflict_packet["conflict_packet_sha256"],
+        "prior_adjudication_context_sha256": adjudication_context[
+            "adjudication_context_sha256"
+        ],
+        "unresolved_roles": list(roles),
+        "options_by_role": options,
+        "disputed_candidate_ids_by_role": {
+            role: sorted(
+                _decision_bound_candidate_ids(left[role])
+                ^ _decision_bound_candidate_ids(right[role])
+            )
+            for role in roles
+        },
+    }
+    output = {**context, "adjudication_context_sha256": _digest(context)}
+    validate_document_authority_adjudication_context(conflict_packet, output)
+    return output
+
+
 def resolve_document_authority_conflicts(
     batch: Mapping[str, Any],
     analysis_primary: DocumentAuthorityRunEnvelope,
@@ -1101,6 +1204,143 @@ def resolve_document_authority_adjudication(
             (adjudication_primary.run_id, adjudication_verifier.run_id)
         ),
     }
+
+
+def resolve_document_authority_critique(
+    batch: Mapping[str, Any],
+    analysis_primary: DocumentAuthorityRunEnvelope,
+    analysis_verifier: DocumentAuthorityRunEnvelope,
+    conflict_packet: Mapping[str, Any],
+    review_primary: DocumentAuthorityConflictRunEnvelope,
+    review_verifier: DocumentAuthorityConflictRunEnvelope,
+    adjudication_context: Mapping[str, Any],
+    adjudication_primary: DocumentAuthorityConflictRunEnvelope,
+    adjudication_verifier: DocumentAuthorityConflictRunEnvelope,
+    critique_context: Mapping[str, Any],
+    critique_primary: DocumentAuthorityConflictRunEnvelope,
+    critique_verifier: DocumentAuthorityConflictRunEnvelope,
+) -> dict[str, Any]:
+    initial = resolve_document_authority_adjudication(
+        batch,
+        analysis_primary,
+        analysis_verifier,
+        conflict_packet,
+        review_primary,
+        review_verifier,
+        adjudication_context,
+        adjudication_primary,
+        adjudication_verifier,
+    )
+    expected_context = build_anonymous_critique_context(
+        batch,
+        analysis_primary,
+        analysis_verifier,
+        conflict_packet,
+        review_primary,
+        review_verifier,
+        adjudication_context,
+        adjudication_primary,
+        adjudication_verifier,
+    )
+    if critique_context != expected_context:
+        raise DocumentAuthorityError("document_authority_critique_context_tampered")
+    packet_hash = str(conflict_packet["conflict_packet_sha256"])
+    _validate_run_pair(
+        critique_primary, critique_verifier, packet_hash, stage="critique"
+    )
+    for run in (critique_primary, critique_verifier):
+        validate_document_authority_adjudication_review(
+            conflict_packet,
+            critique_context,
+            run.review,
+            prompt_version=run.prompt_version,
+        )
+    roles = tuple(str(value) for value in initial["unresolved_roles"])
+    left = _review_index(critique_primary.review, roles)
+    right = _review_index(critique_verifier.review, roles)
+    candidates = {
+        str(item["candidate_id"]): item for item in conflict_packet["candidates"]
+    }
+    focused_by_role = _focused_adjudication_candidate_ids_by_role(
+        critique_context, roles
+    )
+    resolved = list(initial["resolved_roles"])
+    unresolved: list[str] = []
+    for role in roles:
+        allowed = set(conflict_packet["allowed_candidate_ids_by_role"][role])
+        for item in (left[role], right[role]):
+            _validate_conflict_decision(
+                item,
+                allowed,
+                candidates,
+                require_complete_disposition=True,
+                required_evidence_candidate_ids=focused_by_role[role],
+            )
+        if _same_conflict_selection(left[role], right[role]):
+            resolved.append(_resolved_role(
+                role,
+                "selected",
+                left[role].selected_candidate_id,
+                left[role].supplementary_candidate_ids,
+            ))
+        elif role not in REQUIRED_DOCUMENT_ROLES and _same_conflict_missing(
+            left[role], right[role], allowed
+        ):
+            resolved.append(_resolved_role(role, "missing", ""))
+        else:
+            unresolved.append(role)
+    evidence_candidate_ids = {
+        candidate_id
+        for role in unresolved
+        for candidate_id in (
+            focused_by_role[role]
+            | _decision_bound_candidate_ids(left[role])
+            | _decision_bound_candidate_ids(right[role])
+        )
+    }
+    evidence_complete = bool(evidence_candidate_ids) and all(
+        _candidate_profile_complete(candidates[candidate_id])
+        for candidate_id in evidence_candidate_ids
+    )
+    attention_files = sorted({
+        str(candidates[candidate_id]["filename"])
+        for candidate_id in evidence_candidate_ids
+    })
+    state = (
+        "resolved"
+        if not unresolved
+        else "needs_user_input"
+        if evidence_complete
+        else "evidence_incomplete"
+    )
+    return {
+        "schema_version": DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+        "batch_id": initial["batch_id"],
+        "state": state,
+        "resolved_roles": sorted(
+            resolved, key=lambda item: DOCUMENT_ROLES.index(item["role"])
+        ),
+        "unresolved_roles": unresolved,
+        "attention_files": attention_files,
+        "user_question": (
+            f"仅需确认：{'、'.join(attention_files)} 中，哪些是当前主文件"
+            "或必须与主文件一起阅读的补充文件？"
+            if state == "needs_user_input"
+            else ""
+        ),
+        "review_run_ids": initial["review_run_ids"],
+        "adjudication_run_ids": initial["adjudication_run_ids"],
+        "critique_run_ids": sorted((critique_primary.run_id, critique_verifier.run_id)),
+    }
+
+
+def _candidate_profile_complete(candidate: Mapping[str, Any]) -> bool:
+    profile = candidate.get("content_profile")
+    return bool(
+        isinstance(profile, Mapping)
+        and int(profile.get("normalized_character_count") or 0) > 0
+        and int(profile.get("represented_coverage_per_mille") or 0) == 1000
+    )
 
 
 def _validate_batch(
@@ -1390,6 +1630,7 @@ def _validate_run_pair(
         "analysis",
         "review",
         "adjudication",
+        "critique",
         "previous_adjudication",
         "legacy_adjudication",
     ],
@@ -1415,12 +1656,19 @@ def _validate_run_pair(
         and previous_prompt_pair not in REPLAY_ADJUDICATION_PROMPT_PAIRS
     ):
         raise DocumentAuthorityError("document_authority_run_identity_invalid")
+    if stage == "critique" and previous_prompt_pair != (
+        PRIMARY_CRITIQUE_PROMPT_VERSION,
+        VERIFIER_CRITIQUE_PROMPT_VERSION,
+    ):
+        raise DocumentAuthorityError("document_authority_run_identity_invalid")
     expected = (
         (
             "primary", MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL,
             (
                 LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION
                 if stage == "legacy_adjudication"
+                else PRIMARY_CRITIQUE_PROMPT_VERSION
+                if stage == "critique"
                 else left.prompt_version
                 if stage == "previous_adjudication"
                 else PRIMARY_ADJUDICATION_PROMPT_VERSION
@@ -1437,6 +1685,8 @@ def _validate_run_pair(
             (
                 LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION
                 if stage == "legacy_adjudication"
+                else VERIFIER_CRITIQUE_PROMPT_VERSION
+                if stage == "critique"
                 else right.prompt_version
                 if stage == "previous_adjudication"
                 else VERIFIER_ADJUDICATION_PROMPT_VERSION
