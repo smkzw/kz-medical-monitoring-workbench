@@ -1216,10 +1216,30 @@ def test_one_controlled_json_repair_can_complete(tmp_path: Path) -> None:
     assert result.job is not None
     assert result.job.status == MonitoringAiJobStatus.COMPLETED
     assert len(provider.envelopes) == 2
+    assert provider.envelopes[1].prompt_version.endswith(":json-repair-2")
     assert provider.envelopes[1].payload["repair_contract"] == {
         "attempt": 1,
         "maximum_repairs": 1,
-        "instruction": "按原始任务和output_schema重建完整JSON对象。",
+        "response_shape": (
+            "complete_outer_object_with_exactly_"
+            "schema_version_task_id_task_type_"
+            "input_revision_sha256_candidates"
+        ),
+        "standards_reference_policy": (
+            "use_null_when_no_specific_named_standard_is_supported;"
+            "never_emit_blank_reference_fields"
+        ),
+        "instruction": (
+            "必须重建完整的最外层JSON对象，且最外层只能包含"
+            "schema_version、task_id、task_type、input_revision_sha256、"
+            "candidates；candidates必须恰好包含一个完整候选，字段映射必须"
+            "放在该候选的structured_payload.field_mappings中。不得只返回"
+            "单个field_mapping、standards_reference或field_mappings。"
+            "没有具体且有证据支持的标准名称时，整个standards_reference"
+            "必须为null，禁止用空字符串填充其内部字段。"
+            "required_output_pairs中的全空字段必须保持unmapped，不得仅凭"
+            "字段名赋予含义。"
+        ),
     }
     repair_payload = provider.envelopes[1].payload
     assert set(repair_payload) == {
