@@ -1208,13 +1208,20 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
     )
     assert initial["state"] == "needs_user_input"
 
+    adjudication_payload = review.decisions[0].model_dump(mode="python")
+    adjudication_payload["evidence_references"] = (
+        EvidenceReference(
+            candidate_id="candidate_ecrf", locator="xlsx:sheet:1"
+        ),
+    )
     adjudication_review = DocumentAuthorityAdjudicationReview(
         schema_version=review.schema_version,
         conflict_packet_sha256=review.conflict_packet_sha256,
         decisions=(
             AdjudicationDecision(
-                **review.decisions[0].model_dump(mode="python"),
+                **adjudication_payload,
                 excluded_candidate_ids=("candidate_protocol",),
+                rationale="正文作用与版本关系支持该完整处置集合。",
             ),
         ),
     )
@@ -1255,7 +1262,7 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         business_key_prefix="document-authority-adjudication:",
     )
     assert len(adjudication_jobs) == 2
-    assert all(":v6:" in job.business_key for job in adjudication_jobs)
+    assert all(":v7:" in job.business_key for job in adjudication_jobs)
     primary_adjudication_job = next(
         job for job in adjudication_jobs if ":primary:" in job.business_key
     )
@@ -1372,13 +1379,10 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
             coverage["by_role"]["ecrf"][
                 "evidence_required_candidate_ids"
             ]
-        ) == {"candidate_protocol", "candidate_ecrf"}
+        ) == {"candidate_ecrf"}
         assert coverage["by_role"]["ecrf"][
             "required_locator_by_candidate"
-        ] == {
-            "candidate_protocol": "doc:p1",
-            "candidate_ecrf": "xlsx:sheet:1",
-        }
+        ] == {"candidate_ecrf": "xlsx:sheet:1"}
         assert "包括未入选候选" in provider.envelopes[0].system_prompt
         assert "required_locator_by_candidate" in provider.envelopes[0].system_prompt
         adjudication_payload = provider.envelopes[0].payload["input_payload"]
@@ -1387,6 +1391,7 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         assert "系统内最终裁决" in provider.envelopes[0].system_prompt
         assert "不属于当前权威补充" in provider.envelopes[0].system_prompt
         assert "重复载体" in provider.envelopes[0].system_prompt
+        assert "counter_evidence_references" in provider.envelopes[0].system_prompt
 
 
 def test_resolved_authority_promotes_selected_documents_atomically(

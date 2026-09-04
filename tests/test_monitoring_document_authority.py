@@ -186,6 +186,22 @@ def test_revised_ocr_candidate_recomputes_hash_and_locator_closure(
         document_authority_batch_sha256(batch)
 
 
+def test_content_profile_is_bound_into_candidate_evidence_revision() -> None:
+    batch = _ocr_batch()
+    candidate = batch["candidates"][0]
+    candidate["content_profile"] = _content_profile("a" * 64, ("b" * 64,))
+    candidate["evidence_revision_sha256"] = _digest({
+        key: value
+        for key, value in candidate.items()
+        if key != "evidence_revision_sha256"
+    })
+    document_authority_batch_sha256(batch)
+
+    candidate["content_profile"]["normalized_character_count"] += 1
+    with pytest.raises(DocumentAuthorityError, match="evidence_revision_invalid"):
+        document_authority_batch_sha256(batch)
+
+
 def test_revised_candidate_cannot_claim_parsed_when_ocr_failed() -> None:
     batch = _ocr_batch()
     candidate = batch["candidates"][0]
@@ -1258,6 +1274,45 @@ def _composite_batch() -> dict:
     return batch
 
 
+def _content_profile(text_hash: str, fingerprints: tuple[str, ...]) -> dict:
+    return {
+        "normalized_text_sha256": text_hash,
+        "normalized_character_count": 100,
+        "represented_locator_count": 20,
+        "represented_page_count": 10,
+        "total_page_count": 10,
+        "represented_coverage_per_mille": 1000,
+        "fingerprint_sha256": list(fingerprints),
+    }
+
+
+def test_conflict_packet_reports_hash_bound_equivalence_without_selecting() -> None:
+    batch = _composite_batch()
+    content_hash = "a" * 64
+    fingerprints = ("b" * 64, "c" * 64)
+    batch["candidates"][0]["content_profile"] = _content_profile(
+        content_hash, fingerprints
+    )
+    batch["candidates"][1]["content_profile"] = _content_profile(
+        content_hash, fingerprints
+    )
+    primary = _run(_composite_analysis(batch), "primary")
+    verifier = _run(_composite_analysis(batch, ecrf=""), "verifier")
+
+    packet = build_anonymous_conflict_packet(batch, primary, verifier)
+
+    assert packet["document_relationships"] == [{
+        "candidate_ids": ["candidate_ecrf", "candidate_protocol"],
+        "relation": "equivalent",
+        "shared_fingerprint_count": 2,
+        "left_sampled_overlap_per_mille": 1000,
+        "right_sampled_overlap_per_mille": 1000,
+        "left_coverage_per_mille": 1000,
+        "right_coverage_per_mille": 1000,
+    }]
+    assert "selected_candidate_id" not in packet["document_relationships"][0]
+
+
 def _composite_analysis(
     batch: dict,
     *,
@@ -1405,8 +1460,99 @@ def _ecrf_adjudication_review(
             AdjudicationDecision(
                 **decision.model_dump(mode="python"),
                 excluded_candidate_ids=tuple(sorted(considered - bound)),
+                rationale="正文作用与版本关系支持该完整处置集合。",
             ),
         ),
+    )
+
+
+def _two_role_review(packet: dict, *, include_supplements: bool) -> DocumentAuthorityConflictReview:
+    considered = tuple(sorted(packet["candidate_coverage"]))
+    references = _composite_references()
+    return DocumentAuthorityConflictReview(
+        schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+        conflict_packet_sha256=packet["conflict_packet_sha256"],
+        decisions=(
+            ConflictDecision(
+                role="protocol",
+                decision="selected",
+                selected_candidate_id="candidate_protocol",
+                document_version="V1.0",
+                confidence=0.97,
+                considered_candidate_ids=considered,
+                supplementary_candidate_ids=(
+                    ("candidate_protocol_erratum",) if include_supplements else ()
+                ),
+                evidence_references=references,
+            ),
+            ConflictDecision(
+                role="ecrf",
+                decision="selected",
+                selected_candidate_id="candidate_ecrf",
+                document_version="V1.0",
+                confidence=0.97,
+                considered_candidate_ids=considered,
+                supplementary_candidate_ids=(
+                    ("candidate_ecrf_addendum",) if include_supplements else ()
+                ),
+                evidence_references=references,
+            ),
+        ),
+    )
+
+
+def test_multi_role_adjudication_keeps_evidence_focus_role_local() -> None:
+    batch = _composite_batch()
+    primary = _run(
+        _composite_analysis(batch, ecrf="", bind_erratum=True), "primary"
+    )
+    verifier = _run(_composite_analysis(batch), "verifier")
+    packet = build_anonymous_conflict_packet(batch, primary, verifier)
+    left = _review_run(_two_role_review(packet, include_supplements=True), "primary")
+    right = _review_run(_two_role_review(packet, include_supplements=False), "verifier")
+    context = build_anonymous_adjudication_context(
+        batch, primary, verifier, packet, left, right
+    )
+    considered = tuple(sorted(packet["candidate_coverage"]))
+    review = DocumentAuthorityAdjudicationReview(
+        schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
+        conflict_packet_sha256=packet["conflict_packet_sha256"],
+        decisions=(
+            AdjudicationDecision(
+                role="protocol",
+                decision="selected",
+                selected_candidate_id="candidate_protocol",
+                document_version="V1.0",
+                confidence=0.97,
+                considered_candidate_ids=considered,
+                supplementary_candidate_ids=("candidate_protocol_erratum",),
+                excluded_candidate_ids=("candidate_ecrf", "candidate_ecrf_addendum"),
+                evidence_references=_refs(
+                    ("candidate_protocol", "doc:p1"),
+                    ("candidate_protocol_erratum", "erratum:p1"),
+                ),
+                rationale="方案正文与勘误共同构成当前规范内容。",
+            ),
+            AdjudicationDecision(
+                role="ecrf",
+                decision="selected",
+                selected_candidate_id="candidate_ecrf",
+                document_version="V1.0",
+                confidence=0.97,
+                considered_candidate_ids=considered,
+                supplementary_candidate_ids=("candidate_ecrf_addendum",),
+                excluded_candidate_ids=("candidate_protocol", "candidate_protocol_erratum"),
+                evidence_references=_refs(
+                    ("candidate_ecrf", "xlsx:sheet:1"),
+                    ("candidate_ecrf_addendum", "xlsx:sheet:2"),
+                ),
+                rationale="表单与增补共同构成当前规范内容。",
+            ),
+        ),
+    )
+
+    validate_document_authority_adjudication_review(
+        packet, context, review, prompt_version=PRIMARY_ADJUDICATION_PROMPT_VERSION
     )
 
 

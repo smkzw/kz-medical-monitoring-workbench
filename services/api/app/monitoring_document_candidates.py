@@ -23,6 +23,7 @@ CANDIDATE_MANIFEST_VERSION = "monitoring-document-candidate-v1"
 MAX_EXCERPTS = 12
 MAX_EXCERPT_CHARS = 500
 MAX_OCR_PAGE_SAMPLES = 100
+MAX_CONTENT_FINGERPRINTS = 128
 ROLE_HYPOTHESES_BY_SUFFIX = {
     ".xlsx": ("ecrf",),
     ".docx": ("protocol", "investigator_brochure", "ecrf", "sap"),
@@ -91,6 +92,17 @@ class CandidateOcrPageEvidence:
 
 
 @dataclass(frozen=True)
+class CandidateContentProfile:
+    normalized_text_sha256: str
+    normalized_character_count: int
+    represented_locator_count: int
+    represented_page_count: int
+    total_page_count: int
+    represented_coverage_per_mille: int
+    fingerprint_sha256: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class MonitoringDocumentCandidate:
     manifest_version: str
     candidate_id: str
@@ -117,6 +129,7 @@ class MonitoringDocumentCandidate:
     ocr_recovery_pages: tuple[CandidateOcrPageEvidence, ...] = ()
     limitation_codes: tuple[str, ...] = ()
     evidence_revision_sha256: str = ""
+    content_profile: CandidateContentProfile | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -257,6 +270,18 @@ class MonitoringDocumentCandidateDecomposer:
             for index, sheet in enumerate(sheets, start=1)
         )
         locators = [item.locator for item in evidence]
+        profile_blocks = []
+        for index, (sheet, item) in enumerate(zip(sheets, evidence), start=1):
+            profile_blocks.append(
+                (item.locator, " ".join((item.sheet_name, *item.headers)))
+            )
+            profile_blocks.extend(
+                (
+                    f"xlsx:sheet:{index}:row:{row_number}",
+                    json.dumps(row, ensure_ascii=False, sort_keys=True),
+                )
+                for row_number, row in zip(sheet.row_numbers, sheet.rows)
+            )
         parser_versions = sorted(
             {str(sheet.parser_version or "unknown") for sheet in sheets}
         )
@@ -280,6 +305,7 @@ class MonitoringDocumentCandidateDecomposer:
             locator_count=len(locators),
             locator_index_sha256=_locator_digest(locators),
             sheets=evidence,
+            content_profile=_content_profile(profile_blocks, page_count=0),
         )
 
     def _decompose_text_document(
@@ -313,6 +339,7 @@ class MonitoringDocumentCandidateDecomposer:
             parser_name, parser_version, page_count, zero_text_pages, blocks = (
                 _extract_pdf_candidate_blocks(content, candidate_id)
             )
+            all_blocks = list(blocks)
             ocr_evidence: tuple[CandidateOcrPageEvidence, ...] = ()
             ocr_page_limit = (
                 min(len(zero_text_pages), MAX_EXCERPTS)
@@ -330,6 +357,7 @@ class MonitoringDocumentCandidateDecomposer:
                     dpi=self.ocr_dpi,
                 )
                 blocks.extend(recovered)
+                all_blocks.extend(recovered)
                 parser_version += "+page_ocr_v1"
         else:
             _validate_ooxml_package(
@@ -346,9 +374,10 @@ class MonitoringDocumentCandidateDecomposer:
             parser_version = extracted.parser_version
             page_count = extracted.page_count
             zero_text_pages = extracted.zero_text_pages
-            blocks = [
+            all_blocks = [
                 (span.source_locator, span.source_text) for span in extracted.spans
-            ][:MAX_EXCERPTS]
+            ]
+            blocks = all_blocks[:MAX_EXCERPTS]
             ocr_evidence = ()
         locators = [locator for locator, _text in blocks]
         excerpts = tuple(_candidate_excerpt(locator, text) for locator, text in blocks[:MAX_EXCERPTS])
@@ -391,6 +420,7 @@ class MonitoringDocumentCandidateDecomposer:
             zero_text_page_samples=tuple(zero_text_pages[:MAX_OCR_PAGE_SAMPLES]),
             ocr_recovery_pages=ocr_evidence,
             limitation_codes=limitations,
+            content_profile=_content_profile(all_blocks, page_count=page_count),
         )
 
     def _unreadable_candidate(
@@ -460,15 +490,25 @@ class MonitoringDocumentCandidateDecomposer:
 
 
 def _bounded_text(value: str) -> str:
-    stripped = value.strip()
-    redacted = (
-        "[local_path_redacted]"
-        if LOCAL_PATH_SIGNAL_RE.search(stripped)
-        else stripped
-    )
+    redacted = _redact_local_path_suffix(value)
     if len(redacted) <= MAX_EXCERPT_CHARS:
         return redacted
     return redacted[:MAX_EXCERPT_CHARS] + "...[truncated]"
+
+
+def _redact_local_path_suffix(value: str) -> str:
+    stripped = value.strip()
+    match = LOCAL_PATH_SIGNAL_RE.search(stripped)
+    if match is None:
+        redacted = stripped
+    else:
+        prefix = stripped[: match.start()].strip(" \t:：-—")
+        redacted = (
+            f"{prefix} [local_path_redacted]"
+            if _has_substantive_text(prefix)
+            else "[local_path_redacted]"
+        )
+    return redacted
 
 
 def _candidate_excerpt(locator: str, source_text: str) -> CandidateExcerpt:
@@ -477,6 +517,56 @@ def _candidate_excerpt(locator: str, source_text: str) -> CandidateExcerpt:
         locator=locator,
         text=text,
         text_sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+    )
+
+
+def _has_substantive_text(value: str) -> bool:
+    return bool(re.search(r"[A-Za-z0-9\u3400-\u9fff]", value)) and value != (
+        "[local_path_redacted]"
+    )
+
+
+def _normalize_content_text(value: str) -> str:
+    return " ".join(
+        re.findall(r"[a-z0-9]+|[\u3400-\u9fff]", value.casefold())
+    )
+
+
+def _content_profile(
+    blocks: list[tuple[str, str]], *, page_count: int
+) -> CandidateContentProfile:
+    normalized_blocks = [
+        _normalize_content_text(_redact_local_path_suffix(text))
+        for _locator, text in blocks
+        if _has_substantive_text(_redact_local_path_suffix(text))
+    ]
+    normalized_text = " ".join(value for value in normalized_blocks if value)
+    tokens = normalized_text.split()
+    fingerprints = {
+        hashlib.sha256(" ".join(tokens[index : index + 5]).encode("utf-8")).hexdigest()
+        for index in range(max(0, len(tokens) - 4))
+    }
+    represented_pages = {
+        int(match.group(1))
+        for locator, _text in blocks
+        if (match := re.search(r":p([0-9]+)(?::|$)", locator))
+    }
+    represented_count = len(represented_pages)
+    coverage = (
+        min(1000, represented_count * 1000 // page_count)
+        if page_count > 0
+        else (1000 if normalized_text else 0)
+    )
+    return CandidateContentProfile(
+        normalized_text_sha256=hashlib.sha256(
+            normalized_text.encode("utf-8")
+        ).hexdigest(),
+        normalized_character_count=len(normalized_text),
+        represented_locator_count=len(blocks),
+        represented_page_count=represented_count,
+        total_page_count=page_count,
+        represented_coverage_per_mille=coverage,
+        fingerprint_sha256=tuple(sorted(fingerprints)[:MAX_CONTENT_FINGERPRINTS]),
     )
 
 
@@ -547,6 +637,8 @@ def _recover_pdf_candidate_pages(
                 text = _bounded_text(re.sub(
                     r"\s+", " ", str(getattr(result, "text", result) or "")
                 ).strip())
+                if not _has_substantive_text(text):
+                    text = ""
                 status: Literal["recovered", "empty", "failed"] = (
                     "recovered" if text else "empty"
                 )

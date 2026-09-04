@@ -90,8 +90,8 @@ from packages.medical_monitoring.admission.document_evidence import (
     validate_document_evidence_packet,
 )
 from packages.medical_monitoring.admission.document_authority import (
-    CURRENT_PROMPT_VERSIONS_BY_TASK as DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK,
-    LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK as DOCUMENT_AUTHORITY_LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK,
+    CURRENT_PROMPT_VERSIONS_BY_TASK as DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK,  # noqa: F401
+    LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK as DOCUMENT_AUTHORITY_LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK,  # noqa: F401
     PRIMARY_ADJUDICATION_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
     PRIMARY_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_PROMPT_VERSION,
     PRIMARY_REVIEW_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_REVIEW_PROMPT_VERSION,
@@ -3342,6 +3342,13 @@ class MonitoringAiService:
                     "也不属于当前权威补充，必须放入excluded_candidate_ids；这些"
                     "文件仍保留在隔离候选库，不得因排除于权威组合而声称被删除。"
                     "必须依据正文作用和版本关系判断，不能只凭文件名关键词。"
+                    " conflict_packet.document_relationships是从未截断的已提取正文"
+                    "计算的哈希绑定描述性关系，只用于核对正文等同、抽样重叠和"
+                    "证据覆盖；它不替代权威判断，也不得按相似度数值机械选边。"
+                    " 每项决定必须用rationale简洁说明为何主文件、补充文件和排除"
+                    "集合符合正文作用与版本关系；对足以反对当前结论但最终未采纳的"
+                    "证据，用counter_evidence_references绑定候选及其真实locator，"
+                    "没有实质反证时返回空数组。不得在理由中输出本地路径。"
                     " 同一版本、正文实质一致的文件若只是不同载体，且其中一份有"
                     "签署或批准证据、另一份只是未签署的可编辑副本，则签署或批准的"
                     "冻结载体作为当前主文件，可编辑副本属于重复载体并放入"
@@ -3595,7 +3602,7 @@ class MonitoringAiService:
             == "monitoring-document-authority-adjudication-v2"
             else list(packet["conflict_roles"])
         )
-        evidence_required = [
+        evidence_candidates = [
             str(candidate["candidate_id"])
             for candidate in packet["candidates"]
             if int(candidate.get("locator_count") or 0) > 0
@@ -3605,7 +3612,34 @@ class MonitoringAiService:
                 for item in candidate.get(key, ())
             )
         ]
-        required_locator_by_candidate = {
+        if isinstance(adjudication_context, dict):
+            focused_candidate_ids_by_role = {
+                role: {
+                    str(candidate_id)
+                    for option in adjudication_context["options_by_role"][role]
+                    for candidate_id in (
+                        option.get("selected_candidate_id"),
+                        *(option.get("supplementary_candidate_ids") or ()),
+                        *(adjudication_context[
+                            "disputed_candidate_ids_by_role"
+                        ].get(role) or ()),
+                    )
+                    if candidate_id
+                }
+                for role in roles
+            }
+        else:
+            focused_candidate_ids_by_role = {
+                role: set(evidence_candidates) for role in roles
+            }
+        evidence_required_by_role = {
+            role: [
+                candidate_id for candidate_id in evidence_candidates
+                if candidate_id in focused_candidate_ids_by_role[role]
+            ]
+            for role in roles
+        }
+        locator_by_candidate = {
             str(candidate["candidate_id"]): sorted(
                 str(item["locator"])
                 for key in ("excerpts", "sheets")
@@ -3613,7 +3647,7 @@ class MonitoringAiService:
                 if item.get("locator")
             )[0]
             for candidate in packet["candidates"]
-            if str(candidate["candidate_id"]) in evidence_required
+            if str(candidate["candidate_id"]) in evidence_candidates
         }
         return {
             "conflict_roles": roles,
@@ -3622,8 +3656,11 @@ class MonitoringAiService:
                     "required_considered_candidate_ids": list(
                         packet["allowed_candidate_ids_by_role"][role]
                     ),
-                    "evidence_required_candidate_ids": evidence_required,
-                    "required_locator_by_candidate": required_locator_by_candidate,
+                    "evidence_required_candidate_ids": evidence_required_by_role[role],
+                    "required_locator_by_candidate": {
+                        candidate_id: locator_by_candidate[candidate_id]
+                        for candidate_id in evidence_required_by_role[role]
+                    },
                 }
                 for role in roles
             },

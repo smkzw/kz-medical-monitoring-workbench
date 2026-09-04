@@ -160,6 +160,34 @@ def test_marker_like_headerless_values_are_not_exposed(tmp_path: Path) -> None:
     assert candidate.sheets[0].headers == ()
 
 
+def test_xlsx_content_profile_binds_rows_without_exposing_values(tmp_path: Path) -> None:
+    def workbook_bytes(value: str) -> bytes:
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        sheet.append(["SUBJID", "AETERM"])
+        sheet.append(["001", value])
+        stream = io.BytesIO()
+        workbook.save(stream)
+        workbook.close()
+        return stream.getvalue()
+
+    left = MonitoringDocumentCandidateDecomposer(tmp_path / "left-xlsx").decompose(
+        "listing.xlsx", workbook_bytes("Headache")
+    )
+    right = MonitoringDocumentCandidateDecomposer(tmp_path / "right-xlsx").decompose(
+        "listing.xlsx", workbook_bytes("Nausea")
+    )
+
+    assert left.sheets[0].headers == right.sheets[0].headers
+    assert left.content_profile is not None
+    assert right.content_profile is not None
+    assert left.content_profile.normalized_text_sha256 != (
+        right.content_profile.normalized_text_sha256
+    )
+    serialized = json.dumps(left.to_dict(), ensure_ascii=False)
+    assert "Headache" not in serialized
+
+
 def test_docx_candidate_is_deterministic_and_redacts_local_paths(tmp_path: Path) -> None:
     content = _docx_bytes(
         "研究方案摘要",
@@ -293,6 +321,50 @@ def test_pdf_candidate_ocr_failure_remains_non_promotable(
     assert candidate.locator_count == 0
     assert candidate.limitation_codes == (expected_limitation,)
     assert candidate.ocr_recovery_pages[0].status == expected_status
+
+
+def test_pdf_candidate_path_only_ocr_is_not_admissible_evidence(
+    tmp_path: Path,
+) -> None:
+    candidate = MonitoringDocumentCandidateDecomposer(
+        tmp_path / "path-only",
+        ocr_runner=lambda *_args: "/private/tmp/page-result.json",
+    ).decompose("scan.pdf", _image_only_pdf_bytes())
+
+    assert candidate.extraction_status == "needs_ocr"
+    assert candidate.locator_count == 0
+    assert candidate.ocr_recovery_pages[0].status == "empty"
+
+
+def test_pdf_candidate_preserves_meaning_before_redacted_ocr_path(
+    tmp_path: Path,
+) -> None:
+    candidate = MonitoringDocumentCandidateDecomposer(
+        tmp_path / "text-plus-path",
+        ocr_runner=lambda *_args: "签署勘误：第 3 条更正 /private/tmp/result.json",
+    ).decompose("scan.pdf", _image_only_pdf_bytes())
+
+    assert candidate.extraction_status == "parsed"
+    assert candidate.excerpts[0].text == "签署勘误：第 3 条更正 [local_path_redacted]"
+
+
+def test_docx_content_profile_uses_text_beyond_excerpt_budget(tmp_path: Path) -> None:
+    shared = tuple(f"共同正文段落 {index}" for index in range(12))
+    left = MonitoringDocumentCandidateDecomposer(tmp_path / "left").decompose(
+        "left.docx", _docx_bytes(*shared, "第十三段有效修订 A")
+    )
+    right = MonitoringDocumentCandidateDecomposer(tmp_path / "right").decompose(
+        "right.docx", _docx_bytes(*shared, "第十三段有效修订 B")
+    )
+
+    assert [item.text for item in left.excerpts] == [
+        item.text for item in right.excerpts
+    ]
+    assert left.content_profile is not None
+    assert right.content_profile is not None
+    assert left.content_profile.normalized_text_sha256 != (
+        right.content_profile.normalized_text_sha256
+    )
 
 
 def test_pdf_candidate_failed_ocr_records_requested_model_without_fake_actual(
