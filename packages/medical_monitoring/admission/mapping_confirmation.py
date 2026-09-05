@@ -1043,6 +1043,7 @@ class AdmissionMappingConfirmationService:
                 project_id,
                 primary_jobs,
                 workspace_dir=workspace_dir,
+                allow_profile_evidence_upgrade=True,
             )
             primary = cohort_payload_from_candidates(primary_candidates)
             primary_mappings = primary["mappings"]
@@ -1091,6 +1092,7 @@ class AdmissionMappingConfirmationService:
                 project_id,
                 verifier_jobs,
                 workspace_dir=workspace_dir,
+                allow_profile_evidence_upgrade=True,
             )
         verifier = cohort_payload_from_candidates(verifier_candidates or ())
         report = reconcile_mapping_cohorts(
@@ -1132,6 +1134,7 @@ class AdmissionMappingConfirmationService:
         jobs: Iterable[Any],
         *,
         workspace_dir: Any = None,
+        allow_profile_evidence_upgrade: bool = False,
     ) -> tuple[Any, ...]:
         candidates: list[Any] = []
         current_revisions: dict[str, str] = {}
@@ -1145,6 +1148,9 @@ class AdmissionMappingConfirmationService:
                     current_revision = self._revision_for_job(
                         job,
                         workspace_dir=workspace_dir,
+                        allow_profile_evidence_upgrade=(
+                            allow_profile_evidence_upgrade
+                        ),
                     )
                     current_revisions[revision_key] = current_revision
                 if current_revision != revision_key:
@@ -1268,7 +1274,31 @@ class AdmissionMappingConfirmationService:
                 return False
         return bool(divergences)
 
-    def _revision_for_job(self, job: Any, *, workspace_dir: Any) -> str:
+    def _revision_for_job(
+        self,
+        job: Any,
+        *,
+        workspace_dir: Any,
+        allow_profile_evidence_upgrade: bool = False,
+    ) -> str:
+        if allow_profile_evidence_upgrade:
+            resolved = current_admission_mapping_revision(
+                self.ai_repository,
+                job,
+                workspace_dir=workspace_dir,
+                relationship_profiler=(
+                    self.mapping_pipeline._resolve_relationship_profiler()
+                    if self.mapping_pipeline is not None
+                    else None
+                ),
+                document_evidence_resolver=(
+                    self.mapping_pipeline._document_evidence_resolver
+                    if self.mapping_pipeline is not None
+                    else None
+                ),
+                allow_profile_evidence_upgrade=True,
+            )
+            return str(resolved or "")
         if self.current_revision_resolver is not None:
             return str(
                 self.current_revision_resolver(

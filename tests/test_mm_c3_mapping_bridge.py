@@ -354,6 +354,25 @@ def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path
         relationship_profiler=_stub_profiler,
     ) == jobs[0].input_revision_sha256
 
+    def _upgraded_profiler(**kwargs):
+        payload = _stub_profiler(**kwargs)
+        payload["profiler_contract"] = "upgraded-evidence-v2"
+        return payload
+
+    assert current_admission_mapping_revision(
+        repository,
+        jobs[0],
+        workspace_dir=workspace,
+        relationship_profiler=_upgraded_profiler,
+    ) == ""
+    assert current_admission_mapping_revision(
+        repository,
+        jobs[0],
+        workspace_dir=workspace,
+        relationship_profiler=_upgraded_profiler,
+        allow_profile_evidence_upgrade=True,
+    ) == jobs[0].input_revision_sha256
+
     assert current_admission_mapping_revision(
         repository,
         jobs[0],
