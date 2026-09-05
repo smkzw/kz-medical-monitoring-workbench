@@ -1506,6 +1506,9 @@ class MonitoringMappingDraftRepository:
                 project_id=project_id,
                 batch_id=row["batch_id"],
                 full_profile_sha256=row["full_profile_sha256"],
+                expected_job_ids=tuple(
+                    json.loads(row["expected_job_ids_json"])
+                ),
             )
             if (
                 current_source["source_set_sha256"] != row["source_set_sha256"]
@@ -1988,6 +1991,7 @@ class MonitoringMappingDraftRepository:
         batch_id: str,
         full_profile_sha256: str,
         prompt_version: str = "",
+        expected_job_ids: tuple[str, ...] = (),
     ) -> dict[str, Any]:
         source_tables = {
             row["name"]
@@ -2017,6 +2021,8 @@ class MonitoringMappingDraftRepository:
         ).fetchall()
         matching: list[tuple[sqlite3.Row, dict[str, Any]]] = []
         for row in rows:
+            if expected_job_ids and row["job_id"] not in expected_job_ids:
+                continue
             payload = json.loads(row["input_payload_json"])
             profile = payload.get("field_profile")
             if not isinstance(profile, dict):

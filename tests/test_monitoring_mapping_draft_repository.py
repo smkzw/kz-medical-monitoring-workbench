@@ -1468,6 +1468,40 @@ def test_explicit_confirmation_creates_immutable_revision_with_provenance(
             )
 
 
+def test_confirmation_revalidates_only_the_draft_source_prompt_generation(
+    repositories,
+) -> None:
+    _, ai_repository, mapping_repository = repositories
+    _seed_complete_source(ai_repository)
+    draft = mapping_repository.assemble(
+        "project-alpha",
+        "batch-001",
+        PROFILE_HASH,
+    )
+    _seed_chunk(
+        ai_repository,
+        domain="AE",
+        chunk_index=1,
+        chunk_total=1,
+        fields=("AETERM",),
+        domain_field_count=1,
+        full_field_count=1,
+        expected_domains=("AE",),
+        prompt_version="mapping-adjudication-v2",
+    )
+
+    revision = mapping_repository.confirm(
+        "project-alpha",
+        draft.draft_id,
+        expected_version=draft.version,
+        confirmed_by="system-harness",
+        confirmation_reason="独立复核已完成。",
+        idempotency_key="confirm-with-adjudication-generation",
+    )
+
+    assert revision.field_sources == draft.field_sources
+
+
 def test_persisted_mapping_revision_content_tamper_is_rejected_on_read(
     repositories,
 ) -> None:
