@@ -205,7 +205,8 @@ from .listing_file_parser import parse_listing_file
 from packages.medical_monitoring.admission import (
     AdmissionMappingPipeline,
     AdmissionMappingConfirmationService,
-    MAPPING_ADJUDICATION_PROMPT_VERSION,
+    MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS,
+    MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS,
     current_admission_mapping_revision,
     DataAdmissionPipeline,
 )
@@ -1521,6 +1522,11 @@ def _recover_monitoring_ai_jobs():
                 task_type.value,
                 frozenset({prompt_version}),
             )
+            if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING:
+                current_prompt_versions = (
+                    current_prompt_versions
+                    | MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS
+                )
             monitoring_ai_repository.supersede_prompt_versions_except(
                 task_type=task_type,
                 current_prompt_version=prompt_version,
@@ -1531,7 +1537,7 @@ def _recover_monitoring_ai_jobs():
                     PROTOCOL_RETIREMENT_AUDIT_PROMPT_VERSIONS
                     if task_type
                     == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING
-                    else (MAPPING_ADJUDICATION_PROMPT_VERSION,)
+                    else MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS
                     if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
                     else DOCUMENT_AUTHORITY_LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK.get(
                         task_type.value,

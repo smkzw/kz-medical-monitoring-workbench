@@ -188,6 +188,27 @@ def test_enrich_candidates_rejects_invalid_focus() -> None:
     assert exc.value.code == "mapping_focus_invalid"
 
 
+def test_flagged_question_hides_codes_and_document_lookup_work() -> None:
+    question = classify_user_question({
+        "domain": "EX2",
+        "source_field": "EXDOSE1",
+        "user_decision_required": True,
+        "user_action": (
+            "EX2表给药剂量(EXDOSE1)列无法从表结构判断记录的是"
+            "计划剂量还是实际给药剂量，请问该列填写的是哪一个？"
+            "请依据CRF字段标签、填表说明或同行关系确认剂量语义。"
+        ),
+    })
+
+    assert question is not None
+    assert question["question_text"] == (
+        "请确认：给药剂量记录的是计划剂量，还是实际给药剂量？"
+    )
+    assert "EX2" not in question["question_text"]
+    assert "EXDOSE1" not in question["question_text"]
+    assert "CRF" not in question["question_text"]
+
+
 def test_list_for_review_resumes_a_confirmed_system_draft() -> None:
     draft = SimpleNamespace(
         draft_id="draft-1",
@@ -607,17 +628,142 @@ def test_second_pass_waits_for_both_independent_reviewers() -> None:
     assert edits == []
 
 
+def test_second_pass_replay_uses_immutable_first_pass_identity() -> None:
+    calls = []
+    current_field = {
+        "domain": "AE",
+        "source_field": "AETERM",
+        "recommended_role": "ae_term_text",
+        "field_kind": "source_collected",
+        "confidence": 0.9,
+        "uncertainty": "系统复核后仍需医学确认。",
+        "user_action": "该列记录何种事件名称？",
+        "user_decision_required": True,
+    }
+    draft = SimpleNamespace(
+        batch_id="attempt-1",
+        draft_id="draft-1",
+        version=2,
+        model_dump=lambda mode="json": {
+            "project_id": "p1",
+            "draft_id": "draft-1",
+            "batch_id": "attempt-1",
+            "version": 2,
+            "fields": [current_field],
+        },
+    )
+    service = AdmissionMappingConfirmationService(
+        mapping_pipeline=SimpleNamespace(
+            adjudicate_candidates=lambda **kwargs: (
+                calls.append(kwargs) or {"state": "running", "mappings": []}
+            ),
+        ),
+        mapping_repository=SimpleNamespace(
+            get_draft=lambda *_args: draft,
+            semantic_quality=lambda *_args: SimpleNamespace(
+                as_payload=lambda: {"confirmable": True}
+            ),
+        ),
+        ai_repository=SimpleNamespace(),
+        prompt_version="prompt",
+        accepted_status="accepted",
+        proposed_status="proposed",
+        require_dual_reconciliation=True,
+    )
+    service.reconcile_with_verifier = lambda **_kwargs: {
+        "reconciliation": {
+            "state": "diverged",
+            "auto_pass": False,
+            "divergences": [{
+                "domain": "AE",
+                "source_field": "AETERM",
+                "result": "diverged",
+                "primary": {
+                    "semantic_verdict": {
+                        "recommended_role": "ae_term",
+                        "field_kind": "source_collected",
+                    },
+                },
+                "verifier": {
+                    "semantic_verdict": {
+                        "recommended_role": "ae_term_text",
+                        "field_kind": "source_collected",
+                    },
+                },
+                "violations": [],
+            }],
+        },
+    }
+
+    payload = service.adjudicate_draft(
+        project_id="p1",
+        attempt_id="attempt-1",
+        draft_id="draft-1",
+        workspace_dir="/generated/non-real",
+    )
+
+    assert payload["adjudication"]["state"] == "running"
+    assert len(calls) == 2
+    assert all(
+        call["draft_fields"][0]["recommended_role"] == "ae_term"
+        for call in calls
+    )
+
+
+def test_completed_candidates_deep_verify_each_shared_revision_once() -> None:
+    revision = "r" * 64
+    calls = []
+    jobs = tuple(
+        SimpleNamespace(
+            job_id=f"job-{index}",
+            status="completed",
+            input_revision_sha256=revision,
+        )
+        for index in range(3)
+    )
+    service = AdmissionMappingConfirmationService(
+        mapping_pipeline=SimpleNamespace(),
+        mapping_repository=SimpleNamespace(),
+        ai_repository=SimpleNamespace(
+            candidates=lambda _project, job_id: (
+                SimpleNamespace(candidate_id=f"candidate-{job_id}"),
+            ),
+        ),
+        prompt_version="prompt",
+        accepted_status="accepted",
+        proposed_status="proposed",
+        current_revision_resolver=lambda *_args, **_kwargs: (
+            calls.append(True) or revision
+        ),
+    )
+
+    candidates = service._completed_candidates(
+        "p1",
+        jobs,
+        workspace_dir="/generated/non-real",
+    )
+
+    assert len(candidates) == 3
+    assert len(calls) == 1
+
+
 @pytest.mark.parametrize(
-    ("adjudicated_role", "needs_user", "resolved_count"),
+    (
+        "adjudicated_role", "verifier_role", "needs_user",
+        "resolved_count", "resolution",
+    ),
     [
-        ("ae_term_text", False, 1),
-        ("ae_term_text", True, 0),
+        ("ae_term_text", "ae_term_text", False, 1, "adjudicated_mapping"),
+        ("ae_term_text", "ae_term", False, 1, "primary_retained"),
+        ("ae_term_text", "ae_term", True, 0, "escalated"),
     ],
 )
 def test_dual_disagreement_is_adjudicated_before_any_user_question(
     adjudicated_role: str,
+    verifier_role: str,
     needs_user: bool,
     resolved_count: int,
+    resolution: str,
 ) -> None:
     field = {
         "domain": "AE",
@@ -659,7 +805,10 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
     mapping_repo = SimpleNamespace(
         get_draft=lambda *_args: draft,
         edit_field=edit_field,
-        record_adjudication=lambda *_args, **kwargs: receipts.append(kwargs),
+        record_adjudication=lambda *_args, **kwargs: receipts.append(
+            SimpleNamespace(**kwargs)
+        ),
+        adjudication_receipts=lambda *_args: tuple(receipts),
         semantic_quality=lambda *_args: SimpleNamespace(
             as_payload=lambda: {"confirmable": True}
         ),
@@ -687,8 +836,8 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
                 **field,
                 "recommended_role": (
                     adjudicated_role
-                    if kwargs["cohort"] == "primary" or not needs_user
-                    else "ae_term"
+                    if kwargs["cohort"] == "primary"
+                    else verifier_role
                 ),
                 "user_decision_required": needs_user,
                 "uncertainty": "同表及跨表证据复核完成。",
@@ -696,6 +845,16 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
                     "该列记录的是原始不良事件描述，还是标准化后的事件名称？"
                     if needs_user
                     else "同表事件名称及记录分布支持原对应。"
+                ),
+                "related_fields": (
+                    ["AEDECOD", "AEDECOD"]
+                    if verifier_role != adjudicated_role
+                    and kwargs["cohort"] == "primary"
+                    else (
+                        ["AEDECOD"]
+                        if verifier_role != adjudicated_role
+                        else []
+                    )
                 ),
                 "evidence_ids": [f"ev-dual-{kwargs['cohort']}"],
                 "candidate_id": f"candidate-dual-{kwargs['cohort']}",
@@ -748,9 +907,7 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
     )
 
     assert calls[0]["review_context"] == {"divergences": [divergence]}
-    assert receipts[0]["resolution"] == (
-        "escalated" if needs_user else "adjudicated_mapping"
-    )
+    assert receipts[0].resolution == resolution
     assert payload["adjudication"]["resolved_count"] == resolved_count
     assert payload["review_summary"]["user_question_count"] == int(needs_user)
     assert state["field"]["recommended_role"] == (
@@ -761,6 +918,19 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         assert "模型" not in state["field"]["user_action"]
     else:
         assert state["field"]["user_action"].startswith("系统复核：")
+        if verifier_role != adjudicated_role:
+            assert state["field"]["related_fields"] == ["AEDECOD"]
+    version_after_first_pass = state["version"]
+    replay = service.adjudicate_draft(
+        project_id="p1",
+        attempt_id="attempt-1",
+        draft_id="draft-1",
+        workspace_dir="/generated/non-real",
+    )
+    assert state["version"] == version_after_first_pass
+    assert len(receipts) == 1
+    assert len(calls) == 2
+    assert replay["adjudication"]["resolved_count"] == resolved_count
 
 
 def test_confirm_accepts_a_durable_system_resolution_of_dual_disagreement() -> None:

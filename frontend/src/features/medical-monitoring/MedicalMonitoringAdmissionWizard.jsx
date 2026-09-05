@@ -177,8 +177,7 @@ function MappingConfirmPanel({ mappingState, onAnswerCard }) {
                 className={`monitoring-admission-question${answeredKeys[card.key] ? " is-answered" : ""}`}
               >
                 <div className="monitoring-admission-question-head">
-                  <strong>请确认这一项</strong>
-                  <span>{card.domain} · {card.sourceField}</span>
+                  <strong>请做一个医学选择</strong>
                 </div>
                 <p className="monitoring-admission-question-text">{card.question}</p>
                 {card.evidenceText ? (
@@ -196,12 +195,12 @@ function MappingConfirmPanel({ mappingState, onAnswerCard }) {
                       className="monitoring-admission-secondary"
                       onClick={() => onAnswerCard?.(card, null)}
                     >
-                      系统判断正确
+                      {card.suggestedAnswer ? `确认：${card.suggestedAnswer}` : "系统判断正确"}
                     </button>
                     {noteKey === card.key ? (
                       <span className="monitoring-admission-question-note">
                         <textarea
-                          aria-label={`补充说明：${card.sourceField}`}
+                          aria-label="补充实际医学含义"
                           value={noteText}
                           placeholder="请用一句话说明实际情况"
                           onChange={(event) => setNoteText(event.target.value)}
@@ -224,7 +223,7 @@ function MappingConfirmPanel({ mappingState, onAnswerCard }) {
                           setNoteText("");
                         }}
                       >
-                        实际情况不同
+                        不是，说明实际含义
                       </button>
                     )}
                   </div>

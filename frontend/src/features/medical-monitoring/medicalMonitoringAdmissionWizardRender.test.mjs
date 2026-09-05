@@ -187,7 +187,8 @@ for (const engineering of ["重点优先", "全部建议", 'aria-label="搜索�
 
 // Question guide: only the current substantive ambiguity is prominent.
 check(!renders.confirm.includes("低置信度"), "internal attention label stays hidden");
-check(renders.confirmDrafting.includes("访视列表 · 访视日期"), "question names the table and column");
+check(!renders.confirmDrafting.includes("<span>访视列表 · 访视日期</span>"), "question hides table and column codes");
+check(renders.confirmDrafting.includes("请做一个医学选择"), "question uses a plain medical heading");
 check(renders.confirmDrafting.includes("请确认这一列是否为实际访视日期。"), "harness question copy rendered");
 check(renders.confirmDrafting.includes("126/128 条非空"), "value-profile evidence rendered");
 check(renders.confirmDrafting.includes("2 个样例默认隐藏"), "sample values stay hidden by default");
@@ -198,9 +199,9 @@ check(!renders.confirm.includes("subject_id"), "technical role stays out of the 
 // Drafting: answer controls appear and confirmation waits for every answer.
 check(renders.confirmDrafting.includes("已完成 0/1"), "answer progress rendered");
 check(renders.confirmDrafting.includes(">系统判断正确</button>"), "one-tap confirmation offered");
-check(renders.confirmDrafting.includes(">实际情况不同</button>"), "free-text alternative offered");
+check(renders.confirmDrafting.includes(">不是，说明实际含义</button>"), "free-text alternative offered");
 check(
-  renders.confirmDrafting.includes('aria-label="补充说明：访视日期"') === false,
+  renders.confirmDrafting.includes('aria-label="补充实际医学含义"') === false,
   "note field appears only after choosing 另有情况",
 );
 check(
@@ -208,7 +209,7 @@ check(
   "confirmation stays disabled while a question is unanswered",
 );
 check(renders.confirmDraftingAnswered.includes("已完成 1/1"), "answered progress rendered");
-check(!renders.confirmDraftingAnswered.includes("请确认这一项"), "answered card leaves the active view");
+check(!renders.confirmDraftingAnswered.includes("请做一个医学选择"), "answered card leaves the active view");
 check(
   renders.confirmDraftingAnswered.includes("系统正在完成字段识别"),
   "system completes automatically after every question is answered",

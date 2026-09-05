@@ -27,6 +27,7 @@ from pydantic import (
     StrictBool,
     StrictFloat,
     ValidationError,
+    field_validator,
     model_validator,
 )
 
@@ -784,6 +785,19 @@ def _contains_internal_monitoring_identifier(value: str) -> bool:
     )
 
 
+def _delegates_available_evidence_to_user(value: str) -> bool:
+    """Reject questions that ask the user to re-read supplied study files."""
+
+    return bool(
+        re.search(
+            r"(?:请)?(?:依据|查看|查阅|核对)[^\n。！？!?]{0,80}"
+            r"(?:CRF|电子病例报告表|方案|研究者手册|IB|SAP)",
+            value,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
 def _bounded_context_value(value: Any) -> Any:
     if isinstance(value, dict):
         if value.get("redacted"):
@@ -1166,6 +1180,19 @@ class _FieldMappingItem(BaseModel):
     ] = "not_applicable"
     quality_gate_actions: List[str] = Field(default_factory=list, max_length=24)
 
+    @field_validator(
+        "related_fields",
+        "evidence_ids",
+        "object_identity_evidence_fields",
+        "quality_gate_actions",
+    )
+    @classmethod
+    def validate_unique_text_list(cls, value: List[str]) -> List[str]:
+        cleaned = [item.strip() for item in value]
+        if any(not item for item in cleaned) or len(cleaned) != len(set(cleaned)):
+            raise ValueError("field mapping lists must be non-empty and unique")
+        return cleaned
+
     @model_validator(mode="after")
     def validate_scientific_boundary(self) -> "_FieldMappingItem":
         conclusion_violations = mapping_conclusion_violations(
@@ -1180,24 +1207,19 @@ class _FieldMappingItem(BaseModel):
                 "mapping-stage output must not contain CTCAE grade, risk "
                 f"or Query conclusions: {detail}"
             )
-        if len(self.evidence_ids) != len(set(self.evidence_ids)):
-            raise ValueError("field mapping evidence_ids must be unique")
-        if len(self.object_identity_evidence_fields) != len(
-            set(self.object_identity_evidence_fields)
-        ):
-            raise ValueError(
-                "object_identity_evidence_fields must be unique"
-            )
-        if len(self.quality_gate_actions) != len(
-            set(self.quality_gate_actions)
-        ):
-            raise ValueError("quality_gate_actions must be unique")
         if self.user_decision_required and not (
             "？" in self.user_action or "?" in self.user_action
         ):
             raise ValueError(
                 "user_decision_required mappings must phrase user_action as "
                 "a concrete question for the user"
+            )
+        if self.user_decision_required and _delegates_available_evidence_to_user(
+            self.user_action
+        ):
+            raise ValueError(
+                "user decision questions must not delegate review of supplied "
+                "study documents back to the user"
             )
         validate_monitoring_mapping_semantics(
             domain=self.domain,
@@ -3241,6 +3263,11 @@ class MonitoringAiService:
                     "在user_action中用中文简述证据依据。若证据仍不足或缺失信息会改变下游医学"
                     "分类，才保持true并提出一个具体中文问题。"
                     "不得仅因希望减少问题数量而清除疑点。"
+                    " 输入中已经提供的eCRF、方案、研究者手册、IB、SAP、"
+                    "同表与跨表证据必须由系统自行穷尽；不得要求用户"
+                    "再查看、查阅或核对这些已提供文件。若穷尽证据后仍只能"
+                    "由医学监查人员决定，问题必须直接呈现医学选项，不得暴露"
+                    "sheet名、字段码、表名、模型、映射或其他工程识别符。"
                 )
                 if isinstance(dual_review, list) and dual_review:
                     system_prompt += (
@@ -3258,7 +3285,7 @@ class MonitoringAiService:
                         "既有解释；不得机械附和，应以冻结证据重新判断。"
                     )
                 if job.prompt_version == (
-                    "monitoring-listing-field-mapping-adjudication-verifier-v1"
+                    "monitoring-listing-field-mapping-adjudication-verifier-v2"
                 ):
                     system_prompt += (
                         " 你是与另一复核harness隔离运行的第二裁决者。不得推测或复述"

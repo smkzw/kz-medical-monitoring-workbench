@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import re
 from typing import Any, Callable, Iterable, Mapping, Optional
 
 from .mapping_gate import (
@@ -34,6 +35,7 @@ from .mapping_pipeline import (
     current_admission_mapping_revision,
 )
 from .mapping_reconciliation import (
+    RECONCILIATION_SCHEMA_VERSION,
     cohort_payload_from_candidates,
     reconcile_mapping_cohorts,
 )
@@ -105,6 +107,36 @@ def _question_label(domain: Any, source_field: Any) -> str:
     return f"「{cleaned_field or cleaned_domain}」"
 
 
+def _plain_medical_question(value: Any) -> str:
+    """Hide source-system notation and evidence-retrieval chores from users."""
+
+    question = str(value or "").strip()
+    if not question:
+        return ""
+    question = re.sub(r"(?i)\b[A-Z][A-Z0-9_]{1,20}表", "", question)
+    question = re.sub(r"(?i)[（(][A-Z][A-Z0-9_]{1,30}[）)]", "", question)
+    question = re.sub(
+        r"(?:请)?(?:依据|查看|查阅|核对)(?:CRF|电子病例报告表|"
+        r"方案|研究者手册|IB|SAP)[^。！？!?]*[。！？!?]?",
+        "",
+        question,
+        flags=re.IGNORECASE,
+    )
+    alternatives = re.search(
+        r"([^，,。？?]{1,30}?)(?:列|记录)?(?:无法[^，,]{0,30})?"
+        r"记录的是([^，,。？?]{1,30}?)还是([^，,。？?]{1,30}?)(?:，|,|。|？|\?)",
+        question,
+    )
+    if alternatives:
+        label, first, second = (
+            re.sub(r"^(?:请确认)?", "", item).strip()
+            for item in alternatives.groups()
+        )
+        return f"请确认：{label}记录的是{first}，还是{second}？"
+    question = re.sub(r"(?:请)?(?:依据|查看|查阅|核对)[^。！？!?]*$", "", question)
+    return question.strip(" ，,。")
+
+
 def _question_text(code: str, item: Mapping[str, Any]) -> str:
     label = _question_label(item.get("domain"), item.get("source_field"))
     role = str(item.get("recommended_role") or "").strip()
@@ -117,7 +149,7 @@ def _question_text(code: str, item: Mapping[str, Any]) -> str:
     if code == USER_QUESTION_MODEL_FLAGGED:
         # The mapping contract requires a flagged candidate to phrase its
         # user_action as a concrete question, so it leads the card directly.
-        flagged = str(item.get("user_action") or "").strip()
+        flagged = _plain_medical_question(item.get("user_action"))
         uncertainty = str(item.get("uncertainty") or "").strip()
         detail = flagged or uncertainty[:200]
         if detail:
@@ -520,6 +552,8 @@ class AdmissionMappingConfirmationService:
         reconciliation = None
         reconciliation_sha256 = ""
         divergence_pairs: set[tuple[str, str]] = set()
+        existing_receipts: dict[tuple[str, str], Any] = {}
+        previously_resolved = 0
         if self.require_dual_reconciliation:
             try:
                 reconciliation = self.reconcile_with_verifier(
@@ -573,25 +607,107 @@ class AdmissionMappingConfirmationService:
                 )
                 if pair in divergence_pairs and pair not in unresolved_by_pair:
                     unresolved.append(field)
+            if hasattr(self.mapping_repository, "adjudication_receipts"):
+                existing_receipts = {
+                    (receipt.domain, receipt.source_field): receipt
+                    for receipt in self.mapping_repository.adjudication_receipts(
+                        project_id,
+                        draft_id,
+                    )
+                    if receipt.reconciliation_sha256 == reconciliation_sha256
+                }
+            pending = []
+            for field in unresolved:
+                pair = (
+                    str(field.get("domain") or ""),
+                    str(field.get("source_field") or ""),
+                )
+                receipt = existing_receipts.get(pair)
+                if receipt is None:
+                    pending.append(field)
+                    continue
+                if receipt.resolution == "escalated":
+                    if (
+                        classify_user_question(field) is None
+                        and not _decision_recorded(field)
+                    ):
+                        raise AdmissionMappingPipelineError(
+                            "mapping_bridge_failed"
+                        )
+                    continue
+                if (
+                    receipt.resolution
+                    in {"primary_retained", "adjudicated_mapping"}
+                    and not _model_flag(field)
+                    and str(field.get("user_action") or "").startswith(
+                        _SYSTEM_ADJUDICATION_PREFIX
+                    )
+                ):
+                    previously_resolved += 1
+                    continue
+                raise AdmissionMappingPipelineError("mapping_bridge_failed")
+            unresolved = pending
         if not unresolved:
             projected = self._draft_payload(draft)
             projected["adjudication"] = {
                 "state": "complete",
-                "resolved_count": 0,
-                "remaining_question_count": 0,
+                "resolved_count": previously_resolved,
+                "remaining_question_count": projected["review_summary"][
+                    "user_question_count"
+                ],
             }
             return projected
+        pending_pairs = {
+            (
+                str(field.get("domain") or ""),
+                str(field.get("source_field") or ""),
+            )
+            for field in unresolved
+        }
         review_context = (
-            {"divergences": reconciliation.get("divergences") or []}
+            {
+                "divergences": [
+                    item
+                    for item in (reconciliation.get("divergences") or [])
+                    if (
+                        str(item.get("domain") or ""),
+                        str(item.get("source_field") or ""),
+                    ) in pending_pairs
+                ]
+            }
             if reconciliation is not None and divergence_pairs
             else None
         )
+        # A replay can start after some draft fields were already patched by
+        # this same adjudication.  Build the model-review identity from the
+        # immutable first-pass verdicts, not from those mutable draft values,
+        # so restart never creates a duplicate cohort for the same conflict.
+        first_pass_verdicts = {
+            (
+                str(row.get("domain") or ""),
+                str(row.get("source_field") or ""),
+            ): dict((row.get("primary") or {}).get("semantic_verdict") or {})
+            for row in (reconciliation or {}).get("divergences", ())
+            if isinstance(row.get("primary"), Mapping)
+        }
+        review_fields = []
+        for field in unresolved:
+            review_field = dict(field)
+            first_pass_verdict = first_pass_verdicts.get(
+                (
+                    str(field.get("domain") or ""),
+                    str(field.get("source_field") or ""),
+                ),
+                {},
+            )
+            review_field.update(first_pass_verdict)
+            review_fields.append(review_field)
         cohort_results = {
             cohort: self.mapping_pipeline.adjudicate_candidates(
                 project_id=project_id,
                 attempt_id=attempt_id,
                 draft_id=draft_id,
-                draft_fields=unresolved,
+                draft_fields=review_fields,
                 workspace_dir=workspace_dir,
                 review_context=review_context,
                 cohort=cohort,
@@ -615,6 +731,7 @@ class AdmissionMappingConfirmationService:
             }
             return projected
 
+        current_revisions: dict[str, str] = {}
         for result in cohort_results.values():
             for job_id in {
                 str(item.get("job_id") or "")
@@ -622,9 +739,15 @@ class AdmissionMappingConfirmationService:
                 if str(item.get("job_id") or "")
             }:
                 job = self.ai_repository.get(project_id, job_id)
-                if self._revision_for_job(job, workspace_dir=workspace_dir) != str(
-                    job.input_revision_sha256
-                ):
+                revision_key = str(job.input_revision_sha256)
+                current_revision = current_revisions.get(revision_key)
+                if current_revision is None:
+                    current_revision = self._revision_for_job(
+                        job,
+                        workspace_dir=workspace_dir,
+                    )
+                    current_revisions[revision_key] = current_revision
+                if current_revision != revision_key:
                     raise AdmissionMappingPipelineError("mapping_run_incomplete")
                 candidates = self.ai_repository.candidates(project_id, job_id)
                 for candidate in candidates:
@@ -671,7 +794,7 @@ class AdmissionMappingConfirmationService:
             (str(field.get("domain")), str(field.get("source_field"))): field
             for field in unresolved
         }
-        resolved = 0
+        resolved = previously_resolved
         cohort_maps = {
             cohort: {
                 (str(item.get("domain") or ""), str(item.get("source_field") or "")): item
@@ -692,9 +815,14 @@ class AdmissionMappingConfirmationService:
             agreed = review_row.get("result") == "agreed"
             item = primary_item
             rationale = str(item.get("user_action") or "").strip()
+            # MiniMax is the declared primary analyst and this focused pass
+            # already includes the anonymous GLM blind-review challenge.  A
+            # remaining reviewer disagreement is therefore durable dissent,
+            # not user work by itself.  Escalate only when either evidence-
+            # bound reviewer explicitly says that medical context is still
+            # insufficient for a system decision.
             requires_user = (
-                not agreed
-                or _model_flag(item)
+                _model_flag(item)
                 or _model_flag(verifier_item)
                 or not rationale
                 or "?" in rationale
@@ -725,7 +853,8 @@ class AdmissionMappingConfirmationService:
             uncertainty = str(item.get("uncertainty") or "").strip()
             operation_id = "adjudicate-" + hashlib.sha256(
                 (
-                    f"{draft_id}|{item.get('candidate_id')}|"
+                    f"{RECONCILIATION_SCHEMA_VERSION}|{draft_id}|"
+                    f"{item.get('candidate_id')}|"
                     f"{pair[0]}|{pair[1]}"
                 ).encode("utf-8")
             ).hexdigest()
@@ -759,6 +888,14 @@ class AdmissionMappingConfirmationService:
                     )
                     if key in item
                 }
+                # Candidates accepted before the upstream list validator was
+                # added can contain exact duplicate relationship labels.  The
+                # draft contract is stricter; collapse only exact duplicates
+                # while preserving model order and meaning.
+                if "related_fields" in patch:
+                    patch["related_fields"] = list(
+                        dict.fromkeys(patch["related_fields"])
+                    )
                 patch.update({
                     "user_decision_required": False,
                     "uncertainty": (
@@ -800,7 +937,11 @@ class AdmissionMappingConfirmationService:
                     resolution=(
                         "escalated"
                         if requires_user
-                        else "adjudicated_mapping"
+                        else (
+                            "adjudicated_mapping"
+                            if agreed
+                            else "primary_retained"
+                        )
                     ),
                     job_id=str(item.get("job_id") or ""),
                     candidate_id=str(item.get("candidate_id") or ""),
@@ -977,14 +1118,23 @@ class AdmissionMappingConfirmationService:
         workspace_dir: Any = None,
     ) -> tuple[Any, ...]:
         candidates: list[Any] = []
+        current_revisions: dict[str, str] = {}
         for job in jobs:
             if str(_value(job.status)) != "completed":
                 raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
-            if workspace_dir is not None and self._revision_for_job(
-                job,
-                workspace_dir=workspace_dir,
-            ) != str(job.input_revision_sha256):
-                raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
+            if workspace_dir is not None:
+                revision_key = str(job.input_revision_sha256)
+                current_revision = current_revisions.get(revision_key)
+                if current_revision is None:
+                    current_revision = self._revision_for_job(
+                        job,
+                        workspace_dir=workspace_dir,
+                    )
+                    current_revisions[revision_key] = current_revision
+                if current_revision != revision_key:
+                    raise AdmissionMappingPipelineError(
+                        "mapping_verifier_incomplete"
+                    )
             rows = self.ai_repository.candidates(project_id, job.job_id)
             if len(rows) != 1:
                 raise AdmissionMappingPipelineError("mapping_verifier_incomplete")

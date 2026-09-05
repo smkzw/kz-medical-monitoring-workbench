@@ -66,6 +66,8 @@ from .mapping_gate import (
 from .mapping_pipeline import (
     AdmissionMappingPipeline,
     AdmissionMappingPipelineError,
+    MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS,
+    MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS,
     MAPPING_ADJUDICATION_PROMPT_VERSION,
     current_admission_mapping_revision,
 )
@@ -164,6 +166,8 @@ __all__ = [
     "validate_relationship_profile",
     "AdmissionMappingPipeline",
     "AdmissionMappingPipelineError",
+    "MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS",
+    "MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS",
     "MAPPING_ADJUDICATION_PROMPT_VERSION",
     "AdmissionMappingConfirmationService",
     "USER_QUESTION_LOW_CONFIDENCE",

@@ -579,6 +579,42 @@ def test_provider_confidences_reject_boolean_values() -> None:
         )
 
 
+def test_field_mapping_lists_reject_blank_or_duplicate_values() -> None:
+    payload = {
+        "domain": "AE",
+        "source_field": "AETERM",
+        "recommended_role": "ae_term",
+        "field_kind": "source_collected",
+        "confidence": 0.9,
+        "uncertainty": "同表语境支持当前判断。",
+        "user_action": "系统可按当前判断继续。",
+        "user_decision_required": False,
+        "related_fields": ["AEDECOD", "AEDECOD"],
+        "evidence_ids": [],
+    }
+
+    with pytest.raises(ValidationError, match="non-empty and unique"):
+        monitoring_ai_service_module._FieldMappingItem.model_validate(payload)
+
+
+def test_mapping_question_cannot_delegate_supplied_document_review_to_user() -> None:
+    payload = {
+        "domain": "EX",
+        "source_field": "EXDOSE",
+        "recommended_role": "treatment.dose.unresolved",
+        "field_kind": "source_collected",
+        "confidence": 0.6,
+        "uncertainty": "计划剂量与实际给药剂量尚未区分。",
+        "user_action": "这是计划剂量还是实际给药剂量？请依据CRF确认。",
+        "user_decision_required": True,
+        "related_fields": [],
+        "evidence_ids": [],
+    }
+
+    with pytest.raises(ValidationError, match="must not delegate review"):
+        monitoring_ai_service_module._FieldMappingItem.model_validate(payload)
+
+
 def test_first_pass_never_silently_demotes_a_malformed_question(
     tmp_path: Path,
 ) -> None:

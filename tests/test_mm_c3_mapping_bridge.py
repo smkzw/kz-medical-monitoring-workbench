@@ -28,6 +28,9 @@ from packages.medical_monitoring.admission import (
     admission_record_to_harness_input,
     current_admission_mapping_revision,
 )
+from packages.medical_monitoring.admission.mapping_pipeline import (
+    _completed_payload_equivalent_cohort,
+)
 from packages.medical_monitoring.graph.store import Store
 from packages.medical_monitoring.runtime.runtime_progress import (
     ARTIFACT_DIR_NAME,
@@ -132,6 +135,35 @@ def _runtime(
         env=env or {},
         available=True,
     )
+
+
+def test_completed_equivalent_adjudication_cohort_survives_digest_drift() -> None:
+    def job(group: str, index: int, status: str, updated_at: str):
+        return SimpleNamespace(
+            business_key=f"prefix:{group}:g01:chunk-{index}",
+            input_payload_sha256=f"payload-{index}",
+            input_revision_sha256="revision",
+            prompt_version="prompt",
+            profile_id="profile",
+            provider="provider",
+            requested_model="model",
+            status=status,
+            updated_at=updated_at,
+        )
+
+    current = tuple(
+        job("new", index, "stale_input", "2026-09-05")
+        for index in range(3)
+    )
+    completed = tuple(
+        job("old", index, "completed", "2026-09-04")
+        for index in range(3)
+    )
+
+    assert _completed_payload_equivalent_cohort(
+        current,
+        (*current, *completed),
+    ) == completed
 
 
 def test_bridge_redacts_subject_values_and_binds_every_table(tmp_path: Path) -> None:
@@ -425,7 +457,7 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
         for field in profile["read_only_adjudication_context_profiles"]
     } >= {"SUBJID", "VISIT", "VSDAT"}
     assert jobs[0].prompt_version == (
-        "monitoring-listing-field-mapping-adjudication-v3"
+        "monitoring-listing-field-mapping-adjudication-v4"
     )
     verifier_jobs = repository.list_jobs(
         PROJECT_ID,
@@ -436,7 +468,7 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
     )
     assert len(verifier_jobs) == 1
     assert verifier_jobs[0].prompt_version == (
-        "monitoring-listing-field-mapping-adjudication-verifier-v1"
+        "monitoring-listing-field-mapping-adjudication-verifier-v2"
     )
     verifier_profile = repository.input_payload(
         PROJECT_ID, verifier_jobs[0].job_id
