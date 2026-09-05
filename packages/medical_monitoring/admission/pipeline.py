@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -41,6 +42,18 @@ ADMISSION_RECORD_KIND = "data_admission"
 LOCATOR_INDEX_KIND = "source_cell_locator_index"
 DEFAULT_LISTING_SUFFIXES = frozenset({".csv", ".xls", ".xlsx", ".xlsm"})
 _UPLOAD_CHUNK_SIZE = 1024 * 1024
+_PROJECT_ID_HEADERS = frozenset(
+    {
+        "STUDYID",
+        "STUDYOID",
+        "PSTUDYID",
+        "PROJECTID",
+        "PROTOCOLID",
+        "项目编号",
+        "研究编号",
+        "方案编号",
+    }
+)
 
 
 class AdmissionPipelineError(RuntimeError):
@@ -84,6 +97,77 @@ def _candidate_roles(column: Any) -> list[str]:
     if column.is_date_candidate:
         roles.append("日期")
     return roles
+
+
+def _normalized_identifier(value: Any) -> str:
+    return re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+
+
+def _normalized_header(value: Any) -> str:
+    return re.sub(r"[^A-Z0-9\u4e00-\u9fff]", "", str(value or "").upper())
+
+
+def _project_identifiers(
+    headers: Sequence[str],
+    rows: Sequence[Mapping[str, Any]],
+) -> set[str]:
+    identity_headers = [
+        header
+        for header in headers
+        if _normalized_header(header) in _PROJECT_ID_HEADERS
+    ]
+    return {
+        normalized
+        for row in rows
+        for header in identity_headers
+        if (normalized := _normalized_identifier(row.get(header)))
+    }
+
+
+def _project_identity_assessment(
+    expected_values: Sequence[str],
+    observed_values: Iterable[str],
+) -> dict[str, Any]:
+    expected = sorted(
+        {
+            normalized
+            for value in expected_values
+            if (normalized := _normalized_identifier(value))
+        }
+    )
+    observed = sorted(
+        {
+            normalized
+            for value in observed_values
+            if (normalized := _normalized_identifier(value))
+        }
+    )
+    compatible = bool(expected and observed) and all(
+        any(
+            expected_id == observed_id
+            or expected_id.startswith(observed_id)
+            or observed_id.startswith(expected_id)
+            for expected_id in expected
+        )
+        for observed_id in observed
+    )
+    status = (
+        "not_configured"
+        if not expected
+        else "not_observed"
+        if not observed
+        else "matched"
+        if compatible
+        else "conflict"
+    )
+    return {
+        "schema_version": "mm-admission-project-identity-v1",
+        "status": status,
+        "expected_count": len(expected),
+        "observed_count": len(observed),
+        "expected_sha256": content_hash(expected),
+        "observed_sha256": content_hash(observed),
+    }
 
 
 def _public_table(
@@ -138,10 +222,14 @@ class DataAdmissionPipeline:
         *,
         supported_suffixes: Iterable[str] = DEFAULT_LISTING_SUFFIXES,
         manifest_provider: Optional[Callable[[str, bytes], Mapping[str, Any]]] = None,
+        expected_project_identifiers: Optional[
+            Callable[[str], Sequence[str]]
+        ] = None,
     ) -> None:
         self._parser = parser
         self._suffixes = frozenset(str(value).lower() for value in supported_suffixes)
         self._manifest_provider = manifest_provider
+        self._expected_project_identifiers = expected_project_identifiers
 
     @staticmethod
     def _admission_workspace(workspace_dir: Path) -> Path:
@@ -199,6 +287,7 @@ class DataAdmissionPipeline:
         locator_index_ids: list[str] = []
         manifest_files: list[dict[str, Any]] = []
         staged_file_payloads: list[dict[str, Any]] = []
+        observed_project_identifiers: set[str] = set()
         store = _store(workspace_dir)
         try:
             try:
@@ -266,6 +355,9 @@ class DataAdmissionPipeline:
                     )
                 for sheet in sheets:
                     table_name, headers, rows, row_numbers = table_rows_from_sheet(sheet)
+                    observed_project_identifiers.update(
+                        _project_identifiers(headers, rows)
+                    )
                     snapshot = build_table_snapshot(
                         project_id,
                         revision_id,
@@ -325,6 +417,19 @@ class DataAdmissionPipeline:
             else:
                 manifest_bundle = None
                 reconciliation = manifest_unavailable_summary()
+            expected_project_identifiers = (
+                tuple(self._expected_project_identifiers(project_id))
+                if self._expected_project_identifiers is not None
+                else ()
+            )
+            project_identity = _project_identity_assessment(
+                expected_project_identifiers,
+                observed_project_identifiers,
+            )
+            if project_identity["status"] == "conflict":
+                raise AdmissionPipelineError(
+                    "admission_project_identity_conflict"
+                )
             summary = {
                 "files": len(attempt.files),
                 "tables": len(public_tables),
@@ -343,6 +448,7 @@ class DataAdmissionPipeline:
                     "snapshot_ids": snapshot_ids,
                     "locator_index_ids": locator_index_ids,
                     "profile_ids": [profile.profile_id for profile in profiles],
+                    "project_identity": project_identity,
                     "physical_manifest": manifest_bundle,
                     "source_profile_reconciliation": {
                         "schema_version": SOURCE_PROFILE_RECONCILIATION_SCHEMA_VERSION,
@@ -363,6 +469,50 @@ class DataAdmissionPipeline:
             raise AdmissionPipelineError("admission_pipeline_failed") from exc
         finally:
             store.close()
+
+    def revalidate_project_identity(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Path,
+    ) -> Mapping[str, Any]:
+        """Recheck a persisted attempt and quarantine a cross-project binding."""
+
+        if self._expected_project_identifiers is None:
+            raise AdmissionPipelineError("admission_project_identity_unavailable")
+        record = self._record(
+            project_id=project_id,
+            attempt_id=attempt_id,
+            workspace_dir=workspace_dir,
+        )
+        technical = dict(record.get("technical_details") or {})
+        observed: set[str] = set()
+        store = _store(workspace_dir)
+        try:
+            for snapshot_id in technical.get("snapshot_ids") or ():
+                content = store.load_listing_content(str(snapshot_id))
+                for rows in content.values():
+                    if not isinstance(rows, list) or not rows:
+                        continue
+                    headers = tuple(rows[0])
+                    observed.update(_project_identifiers(headers, rows))
+            assessment = _project_identity_assessment(
+                tuple(self._expected_project_identifiers(project_id)),
+                observed,
+            )
+            technical["project_identity"] = assessment
+            record["technical_details"] = technical
+            if assessment["status"] == "conflict":
+                record["state"] = "identity_conflict"
+            store.put_domain_object(ADMISSION_RECORD_KIND, attempt_id, record)
+        finally:
+            store.close()
+        return {
+            "attempt_id": attempt_id,
+            "state": record["state"],
+            "identity_status": assessment["status"],
+        }
 
     def create_uploaded_attempt(
         self,

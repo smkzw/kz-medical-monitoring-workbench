@@ -80,7 +80,10 @@ _ADMISSION_MESSAGES = {
     "admission_source_invalid": "未找到可导入的数据目录。请确认所选数据位置存在且包含数据文件后重试。",
     "admission_copy_rejected": "数据复制校验未通过，系统已拒绝本次导入，原始数据未受影响。请重新发起导入；如再次失败，请检查数据来源是否完整。",
     "admission_profile_unavailable": "系统暂时无法识别这批数据的结构，本次导入未完成。请确认文件格式受支持后重新导入。",
-    "admission_project_identity_conflict": "当前为演示项目，不能接入本机数据。请在实际研究项目中使用数据接入。",
+    "admission_project_identity_conflict": (
+        "所选数据与当前研究不一致，系统已停止导入，原始数据未受影响。"
+        "请回到项目首页选择对应研究，或重新选择当前研究的数据。"
+    ),
     "admission_attempt_not_found": "未找到对应的数据导入记录。请返回上一步重新选择，或重新发起导入。",
     "admission_pipeline_unconfigured": "数据接入服务尚未配置，暂时无法导入新的数据版本。请联系管理员完成配置后再试。",
     "admission_pipeline_failed": "数据导入过程中出现问题，本次操作未生效，原始数据未受影响。请重试；如再次失败请联系管理员。",

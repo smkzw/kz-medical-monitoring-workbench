@@ -155,6 +155,43 @@ def test_materializes_idempotent_row_facts_with_exact_cell_locators(tmp_path: Pa
         store.close()
 
 
+def test_identity_conflict_attempt_cannot_report_or_generate_ready_facts(
+    tmp_path: Path,
+) -> None:
+    workspace, attempt_id = _admit(tmp_path)
+    store = _store(workspace)
+    try:
+        _, record = store.get_domain_object(
+            ADMISSION_RECORD_KIND,
+            attempt_id,
+        )
+        record = dict(record)
+        record["state"] = "identity_conflict"
+        store.put_domain_object(ADMISSION_RECORD_KIND, attempt_id, record)
+    finally:
+        store.close()
+    service = FactMaterializationService(_mapping(attempt_id))
+
+    with pytest.raises(
+        FactMaterializationError,
+        match="facts_admission_not_found",
+    ):
+        service.materialize(
+            project_id=PROJECT_ID,
+            attempt_id=attempt_id,
+            workspace_dir=workspace,
+        )
+    with pytest.raises(
+        FactMaterializationError,
+        match="facts_admission_not_found",
+    ):
+        service.status(
+            project_id=PROJECT_ID,
+            attempt_id=attempt_id,
+            workspace_dir=workspace,
+        )
+
+
 def test_rejects_incomplete_mapping_without_creating_ready_summary(tmp_path: Path) -> None:
     workspace, attempt_id = _admit(tmp_path)
     repository = _mapping(attempt_id)
