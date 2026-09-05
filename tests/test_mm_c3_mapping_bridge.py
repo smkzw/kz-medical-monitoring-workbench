@@ -29,6 +29,7 @@ from packages.medical_monitoring.admission import (
     current_admission_mapping_revision,
 )
 from packages.medical_monitoring.admission.mapping_pipeline import (
+    _adjudication_generation_is_running,
     _completed_payload_equivalent_cohort,
 )
 from packages.medical_monitoring.graph.store import Store
@@ -54,6 +55,15 @@ from tests.medical_monitoring.relationship_profiler_stub import (
 
 PROJECT_ID = "c3-mapping-bridge-demo"
 ATTEMPT_PREFIX = "stg-"
+
+
+def test_adjudication_waits_for_active_jobs_before_new_generation() -> None:
+    assert _adjudication_generation_is_running(
+        ["completed", "failed", "queued", "running"]
+    )
+    assert not _adjudication_generation_is_running(
+        ["completed", "failed", "blocked", "stale_input", "cancelled"]
+    )
 
 
 def _xlsx_bytes() -> bytes:
