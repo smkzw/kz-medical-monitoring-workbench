@@ -1448,6 +1448,7 @@ def current_admission_mapping_revision(
     workspace_dir: Path,
     relationship_profiler: Optional[Callable[..., Any]] = None,
     document_evidence_resolver: Optional[Callable[..., Any]] = None,
+    allow_profile_evidence_upgrade: bool = False,
 ) -> Optional[str]:
     """Resolve a C3 admission job against the current accepted profile.
 
@@ -1508,13 +1509,23 @@ def current_admission_mapping_revision(
                 current_input, stored_receipt
             )
         current = current_input.field_profile
-        expected = {
+        source_identity = {
             "project_id": job.project_id,
             "batch_id": attempt_id,
-            "full_profile_sha256": current["profile_sha256"],
-            "full_input_sha256": current["input_sha256"],
             "source_bindings": current["source_bindings"],
             "source_sha256s": current["source_sha256s"],
+            "document_evidence": current.get("document_evidence"),
+        }
+        if any(
+            field_profile.get(key) != value
+            for key, value in source_identity.items()
+        ):
+            return ""
+        if allow_profile_evidence_upgrade:
+            return str(job.input_revision_sha256)
+        expected = {
+            "full_profile_sha256": current["profile_sha256"],
+            "full_input_sha256": current["input_sha256"],
         }
         if any(field_profile.get(key) != value for key, value in expected.items()):
             return ""
