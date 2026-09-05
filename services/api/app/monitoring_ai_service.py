@@ -8266,6 +8266,19 @@ class MonitoringAiService:
             raise ValueError("listing field profile relationships must be a list")
         relationship_keys = []
         current_field_pairs = set(field_pairs)
+        adjudication_context_pairs = {
+            (
+                str(item.get("domain", "")).strip(),
+                str(item.get("field", "")).strip(),
+            )
+            for item in field_profile.get(
+                "read_only_adjudication_context_profiles",
+                [],
+            )
+            if isinstance(item, dict)
+            and str(item.get("domain", "")).strip()
+            and str(item.get("field", "")).strip()
+        }
         for relationship in relationships:
             if not isinstance(relationship, dict):
                 raise ValueError("listing field relationship must be an object")
@@ -8329,7 +8342,12 @@ class MonitoringAiService:
                     raise ValueError(
                         "listing field relationship is unrelated to chunk"
                     )
-            elif not relation_pairs.issubset(current_field_pairs):
+            elif not (
+                relation_pairs.intersection(current_field_pairs)
+                and relation_pairs.issubset(
+                    current_field_pairs | adjudication_context_pairs
+                )
+            ):
                 raise ValueError(
                     "listing field relationship references unknown field"
                 )
@@ -8546,7 +8564,9 @@ class MonitoringAiService:
                     str(relationship["right_field"]).strip(),
                 ),
             }
-            if not relation_pairs.issubset(domain_name_pairs):
+            if not relation_pairs.issubset(
+                domain_name_pairs | adjudication_context_pairs
+            ):
                 raise ValueError(
                     "listing field relationship must stay within "
                     "domain_field_names"

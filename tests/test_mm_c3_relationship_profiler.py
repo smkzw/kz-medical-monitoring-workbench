@@ -18,6 +18,7 @@ from packages.medical_monitoring.admission.relationship_profiler import (
     MAX_CROSS_TABLE_ITEMS,
     MAX_PAIRS_PER_TABLE,
     MAX_SAMPLE_ROWS,
+    MAX_SAME_TABLE_ITEMS,
     RELATIONSHIP_PROFILER_CONTRACT,
     build_relationship_profile,
 )
@@ -170,6 +171,19 @@ def test_wide_table_pair_budget_is_enforced() -> None:
         {"wide": fields},
     )
     assert len(payload["same_table"]) == MAX_PAIRS_PER_TABLE
+
+
+def test_global_pair_budget_is_shared_across_early_and_late_tables() -> None:
+    fields = [f"FIELD_{index:02d}" for index in range(20)]
+    rows = {field: index for index, field in enumerate(fields)}
+    domains = [f"table_{index}" for index in range(5)]
+    payload = _build(
+        {domain: [rows] for domain in domains},
+        {domain: fields for domain in domains},
+    )
+
+    assert len(payload["same_table"]) == MAX_SAME_TABLE_ITEMS
+    assert {item["domain"] for item in payload["same_table"]} == set(domains)
 
 
 def test_cross_table_shared_field_coverage_and_row_match_rate() -> None:

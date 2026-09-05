@@ -59,6 +59,7 @@ _TYPE_MAP = {
     "empty": "string",
     "mixed": "string",
 }
+_MAX_SAME_ROW_VALUES = 7
 
 
 class MappingBridgeError(ValueError):
@@ -280,7 +281,8 @@ def _same_row_examples(
     These examples preserve the relationship between one value and its table
     context without sending subject identifiers or entire rows to the model.
     Selection is deterministic and generic: first, middle and last populated
-    rows, with two source columns on either side of the target column.
+    rows, with at most seven nearest populated source columns. Empty columns
+    do not consume the evidence budget.
     """
 
     populated = [
@@ -290,30 +292,36 @@ def _same_row_examples(
     if not populated:
         return []
     positions = sorted({0, len(populated) // 2, len(populated) - 1})
-    start = max(0, column_index - 2)
-    end = min(len(columns), column_index + 3)
-    visible_columns = columns[start:end]
     result: list[dict[str, Any]] = []
     for position in positions:
         row = populated[position]
-        values = []
-        for column in visible_columns:
+        values: list[tuple[int, dict[str, Any]]] = []
+        ranked_columns = sorted(
+            enumerate(columns),
+            key=lambda item: (abs(item[0] - column_index), item[0]),
+        )
+        for source_index, column in ranked_columns:
             name = str(column.get("name") or "").strip()
             value = row.get(name)
             if value is None or not str(value).strip():
                 continue
             roles = column.get("suggested_roles") or []
             is_identifier = isinstance(roles, list) and _SUBJECT_ROLE in roles
-            values.append({
+            values.append((source_index, {
                 "field": name,
                 "value": (
                     {"redacted": "identifier"}
                     if is_identifier
                     else str(value)[:160]
                 ),
-            })
+            }))
+            if len(values) >= _MAX_SAME_ROW_VALUES:
+                break
         if values:
-            result.append({"nearby_values": values})
+            values.sort(key=lambda item: item[0])
+            result.append({
+                "nearby_values": [item for _, item in values]
+            })
     return result
 
 

@@ -327,6 +327,19 @@ def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path
     fields = payload["field_profile"]["fields"]
     assert any(field["same_row_examples"] for field in fields)
     assert any(field["top_values"] for field in fields)
+    sysbp = next(
+        field
+        for job in jobs
+        for field in repository.input_payload(
+            PROJECT_ID, job.job_id
+        )["field_profile"]["fields"]
+        if field["field"] == "SYSBP"
+    )
+    assert {
+        value["field"]
+        for example in sysbp["same_row_examples"]
+        for value in example["nearby_values"]
+    } == {"SUBJID", "VISIT", "VSDAT", "SYSBP"}
     assert {"redacted": "identifier"} in [
         value["value"]
         for field in fields
@@ -452,12 +465,17 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
     assert len(options["candidate_options"]) == 2
     assert "primary" not in options and "verifier" not in options
     assert profile["adjudication_contract"]["first_pass_mappings"] == []
+    assert profile["relationships"]
+    assert all(
+        "SYSBP" in {item["left_field"], item["right_field"]}
+        for item in profile["relationships"]
+    )
     assert {
         field["field"]
         for field in profile["read_only_adjudication_context_profiles"]
     } >= {"SUBJID", "VISIT", "VSDAT"}
     assert jobs[0].prompt_version == (
-        "monitoring-listing-field-mapping-adjudication-v4"
+        "monitoring-listing-field-mapping-adjudication-v5"
     )
     verifier_jobs = repository.list_jobs(
         PROJECT_ID,
@@ -468,7 +486,7 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
     )
     assert len(verifier_jobs) == 1
     assert verifier_jobs[0].prompt_version == (
-        "monitoring-listing-field-mapping-adjudication-verifier-v2"
+        "monitoring-listing-field-mapping-adjudication-verifier-v3"
     )
     verifier_profile = repository.input_payload(
         PROJECT_ID, verifier_jobs[0].job_id
@@ -1066,7 +1084,7 @@ def test_pipeline_resolves_default_relationship_profiler(
     payload = repository.input_payload(PROJECT_ID, jobs[0].job_id)
     profile = payload["field_profile"]
     assert profile["relationship_profile"]["profiler_contract"] == (
-        "admission-relationship-profiler-strided-max512-v2"
+        "admission-relationship-profiler-strided-max512-v3"
     )
     assert profile["relationship_profile"]["same_table_pair_count"] >= len(
         profile["relationships"]

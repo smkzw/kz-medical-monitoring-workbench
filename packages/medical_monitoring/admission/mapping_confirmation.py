@@ -31,6 +31,7 @@ from .mapping_gate import (
 )
 from .mapping_pipeline import (
     AdmissionMappingPipelineError,
+    MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS,
     _latest_job_cohort,
     current_admission_mapping_revision,
 )
@@ -77,6 +78,26 @@ _OFFENDING_EXECUTION_ROUTES = frozenset({
     MONITORING_C3_MAPPING_EXECUTION_ROUTE_VERIFIER,
     MONITORING_C3_MAPPING_EXECUTION_ROUTE_UNRECOGNIZED,
 })
+
+
+def _adjudication_reconciliation_sha256(
+    reconciliation: Mapping[str, Any],
+) -> str:
+    """Bind a durable resolution to the evidence/prompt generation that made it."""
+
+    return hashlib.sha256(
+        json.dumps(
+            {
+                "reconciliation": reconciliation,
+                "adjudication_prompt_versions": sorted(
+                    MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS
+                ),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _confidence(item: Mapping[str, Any]) -> float:
@@ -580,14 +601,9 @@ class AdmissionMappingConfirmationService:
                     "remaining_question_count": len(unresolved),
                 }
                 return projected
-            reconciliation_sha256 = hashlib.sha256(
-                json.dumps(
-                    reconciliation,
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ).encode("utf-8")
-            ).hexdigest()
+            reconciliation_sha256 = _adjudication_reconciliation_sha256(
+                reconciliation
+            )
             divergence_pairs = {
                 (
                     str(item.get("domain") or ""),
@@ -1214,14 +1230,9 @@ class AdmissionMappingConfirmationService:
             (str(item.get("domain") or ""), str(item.get("source_field") or "")): item
             for item in draft_fields
         }
-        reconciliation_sha256 = hashlib.sha256(
-            json.dumps(
-                reconciliation,
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
+        reconciliation_sha256 = _adjudication_reconciliation_sha256(
+            reconciliation
+        )
         if not hasattr(self.mapping_repository, "adjudication_receipts"):
             return False
         receipts = {
