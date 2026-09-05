@@ -42,6 +42,15 @@ const QUESTION_TYPE_TEXTS = Object.freeze({
   empty: "空列",
 });
 
+const DOSE_SEMANTICS_TEXTS = Object.freeze({
+  planned: "计划剂量",
+  prescribed: "处方剂量",
+  actual_administered: "实际给药剂量",
+  dispensed: "发放量",
+  returned: "回收量",
+  duplicate_or_derived: "重复或派生剂量",
+});
+
 function questionTypeText(value) {
   return QUESTION_TYPE_TEXTS[value] || "类型待定";
 }
@@ -99,6 +108,7 @@ export function projectMappingCandidates(payload) {
     recommendedRole: String(item.recommended_role || ""),
     fieldKind: String(item.field_kind || ""),
     confidence: item.confidence,
+    doseSemantics: String(item.dose_semantics || ""),
     uncertainty: String(item.uncertainty || ""),
     userAction: String(item.user_action || ""),
     questionText: String(item.question_text || ""),
@@ -117,6 +127,7 @@ export function projectMappingCandidates(payload) {
       question: questionText(item),
       evidenceText: mappingEvidenceText(item.evidenceSummary),
       confidence: item.confidence,
+      suggestedAnswer: DOSE_SEMANTICS_TEXTS[item.doseSemantics] || "",
     }));
   const byDomain = new Map();
   for (const item of projected) {
@@ -155,6 +166,7 @@ function draftQuestionCards(draft) {
     question: questionText(item),
     evidenceText: mappingEvidenceText(item?.evidence_summary),
     confidence: item?.confidence,
+    suggestedAnswer: DOSE_SEMANTICS_TEXTS[String(item?.dose_semantics || "")] || "",
   }));
 }
 

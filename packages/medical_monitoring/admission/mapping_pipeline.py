@@ -43,11 +43,19 @@ class AdmissionMappingPipelineError(RuntimeError):
 
 
 MAPPING_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-listing-field-mapping-adjudication-v3"
+    "monitoring-listing-field-mapping-adjudication-v4"
 )
 MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION = (
-    "monitoring-listing-field-mapping-adjudication-verifier-v1"
+    "monitoring-listing-field-mapping-adjudication-verifier-v2"
 )
+MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS = frozenset({
+    MAPPING_ADJUDICATION_PROMPT_VERSION,
+    MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION,
+})
+MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS = frozenset({
+    "monitoring-listing-field-mapping-adjudication-v3",
+    "monitoring-listing-field-mapping-adjudication-verifier-v1",
+})
 MAPPING_ADJUDICATION_BUSINESS_PREFIX = (
     "listing-field-mapping-adjudication"
 )
@@ -66,6 +74,54 @@ _DOCUMENT_ROLE_LABELS = {
     "ecrf": "电子病例报告表",
     "sap": "统计分析计划",
 }
+
+
+def _completed_payload_equivalent_cohort(
+    current: Sequence[Any],
+    available: Sequence[Any],
+) -> tuple[Any, ...]:
+    """Reuse a completed cohort when only its legacy routing digest differs."""
+
+    def signature(rows: Sequence[Any]) -> tuple[tuple[str, ...], ...]:
+        return tuple(sorted(
+            (
+                str(row.input_payload_sha256),
+                str(row.input_revision_sha256),
+                str(row.prompt_version),
+                str(row.profile_id),
+                str(row.provider),
+                str(row.requested_model),
+            )
+            for row in rows
+        ))
+
+    if not current:
+        return ()
+    target = signature(current)
+    groups: dict[tuple[str, int], list[Any]] = {}
+    for job in available:
+        match = _ADJUDICATION_GENERATION_RE.search(str(job.business_key))
+        if match is None:
+            continue
+        groups.setdefault(
+            (str(job.business_key)[:match.start()], int(match.group(1))),
+            [],
+        ).append(job)
+    matches = [
+        tuple(rows)
+        for rows in groups.values()
+        if len(rows) == len(current)
+        and all(
+            str(getattr(row.status, "value", row.status)) == "completed"
+            for row in rows
+        )
+        and signature(rows) == target
+    ]
+    return max(
+        matches,
+        key=lambda rows: max(str(row.updated_at) for row in rows),
+        default=(),
+    )
 
 
 def _anonymous_review_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -1076,6 +1132,25 @@ class AdmissionMappingPipeline:
             if f":g{generation:02d}:" in str(job.business_key)
         )
         states = [str(_value(job.status)) for job in jobs]
+        if states and not all(state == "completed" for state in states):
+            equivalent = _completed_payload_equivalent_cohort(
+                jobs,
+                self._repository.list_jobs(
+                    project_id,
+                    task_type=str(_value(self._task_type)),
+                    business_key_prefix=(
+                        f"{MAPPING_ADJUDICATION_BUSINESS_PREFIX}:"
+                        f"{contract.cohort}:{attempt_id}:"
+                    ),
+                ),
+            )
+            if equivalent:
+                jobs = equivalent
+                match = _ADJUDICATION_GENERATION_RE.search(
+                    str(jobs[0].business_key)
+                )
+                generation = int(match.group(1)) if match is not None else 0
+                states = [str(_value(job.status)) for job in jobs]
         if states and all(state == "completed" for state in states):
             return {
                 "state": "ready",
@@ -1446,6 +1521,9 @@ __all__ = [
     "AdmissionMappingPipeline",
     "AdmissionMappingPipelineError",
     "MAPPING_ADJUDICATION_BUSINESS_PREFIX",
+    "MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS",
+    "MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS",
     "MAPPING_ADJUDICATION_PROMPT_VERSION",
+    "MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION",
     "current_admission_mapping_revision",
 ]

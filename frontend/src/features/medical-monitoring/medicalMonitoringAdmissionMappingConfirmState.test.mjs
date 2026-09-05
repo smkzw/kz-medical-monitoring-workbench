@@ -70,6 +70,13 @@ test("server triage question text and summary keys take precedence", () => {
   assert.equal(projected.questionCount, 2);
 });
 
+test("dose question exposes a plain suggested answer without engineering labels", () => {
+  const payload = candidatesPayload();
+  payload.candidates[0].dose_semantics = "actual_administered";
+  const projected = projectMappingCandidates(payload);
+  assert.equal(projected.questions[0].suggestedAnswer, "实际给药剂量");
+});
+
 test("projection keeps Chinese summary, question cards and table summaries", () => {
   const projected = projectMappingCandidates(candidatesPayload());
   assert.match(projected.headline, /10 个字段/);

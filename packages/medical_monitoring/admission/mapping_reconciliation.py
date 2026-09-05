@@ -37,7 +37,7 @@ from typing import Any, Collection, Iterable, Mapping, Sequence
 from .mapping_gate import MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY
 
 
-RECONCILIATION_SCHEMA_VERSION = "mm-c3-mapping-reconciliation-v1"
+RECONCILIATION_SCHEMA_VERSION = "mm-c3-mapping-reconciliation-v2"
 
 COHORT_PRIMARY = "primary"
 COHORT_VERIFIER = "verifier"

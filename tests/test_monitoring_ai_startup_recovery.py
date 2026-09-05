@@ -7,7 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from packages.medical_monitoring.admission import (
-    MAPPING_ADJUDICATION_PROMPT_VERSION,
+    MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS,
+    MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS,
 )
 from packages.medical_monitoring.admission.document_authority import (
     CURRENT_PROMPT_VERSIONS_BY_TASK
@@ -80,14 +81,21 @@ def test_startup_retires_old_prompt_contracts_before_waking_worker(
             "supersede",
             task_type.value,
             PROMPT_VERSION_BY_TASK[task_type],
-            DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK.get(
-                task_type.value,
-                frozenset({PROMPT_VERSION_BY_TASK[task_type]}),
+            (
+                DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK.get(
+                    task_type.value,
+                    frozenset({PROMPT_VERSION_BY_TASK[task_type]}),
+                )
+                | (
+                    MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS
+                    if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
+                    else frozenset()
+                )
             )
             - {PROMPT_VERSION_BY_TASK[task_type]},
             PROTOCOL_RETIREMENT_AUDIT_PROMPT_VERSIONS
             if task_type == MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING
-            else frozenset({MAPPING_ADJUDICATION_PROMPT_VERSION})
+            else MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS
             if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
             else DOCUMENT_AUTHORITY_LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK.get(
                 task_type.value,
