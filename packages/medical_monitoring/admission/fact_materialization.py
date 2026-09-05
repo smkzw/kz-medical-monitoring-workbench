@@ -237,6 +237,46 @@ class FactMaterializationService:
             raise FactMaterializationError("facts_locator_invalid")
         return locator
 
+    @staticmethod
+    def _snapshot_inputs(
+        store: Store,
+        *,
+        project_id: str,
+        snapshot_id: str,
+        source_digests: Mapping[str, str],
+        fields_by_domain: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    ) -> tuple[Any, Mapping[str, Any], dict[str, Any], list[Any], tuple[Any, ...], Mapping[str, Mapping[str, Any]]]:
+        snapshot = store.get_listing_snapshot(snapshot_id)
+        if snapshot.project_id != project_id:
+            raise FactMaterializationError("facts_mapping_conflict")
+        content = store.load_listing_content(snapshot.snapshot_id)
+        if content_hash(content) != snapshot.content_hash:
+            raise FactMaterializationError("facts_snapshot_digest_mismatch")
+        persisted_index = store.get_domain_object(
+            LOCATOR_INDEX_KIND, snapshot.snapshot_id
+        )
+        if persisted_index is None or not isinstance(persisted_index[1], Mapping):
+            raise FactMaterializationError("facts_locator_invalid")
+        index = dict(persisted_index[1])
+        table_name = str(index.get("table_name") or "")
+        rows = content.get(table_name)
+        columns = tuple(index.get("columns") or ())
+        if (
+            index.get("project_id") != project_id
+            or index.get("source_revision_id") != snapshot.revision_id
+            or index.get("snapshot_id") != snapshot.snapshot_id
+            or source_digests.get(str(index.get("source_file")))
+            != index.get("source_file_digest")
+            or not isinstance(rows, list)
+            or len(rows) != snapshot.row_count
+            or len(index.get("locator_ids") or ()) != len(rows) * len(columns)
+        ):
+            raise FactMaterializationError("facts_locator_invalid")
+        domain_fields = fields_by_domain.get(table_name.casefold())
+        if domain_fields is None or set(domain_fields) != set(columns):
+            raise FactMaterializationError("facts_mapping_incomplete")
+        return snapshot, content, index, rows, columns, domain_fields
+
     def materialize(
         self, *, project_id: str, attempt_id: str, workspace_dir: Path
     ) -> Mapping[str, Any]:
@@ -273,39 +313,37 @@ class FactMaterializationService:
                     source_digests[name] = digest
                 elif source_digests[name] != digest:
                     source_digests[name] = ""
+            snapshot_ids = tuple(
+                str(value) for value in (technical.get("snapshot_ids") or ())
+            )
+            # Validate the complete batch before writing any fact artifact or
+            # advancing any snapshot. A later-table defect must not leave an
+            # earlier table looking accepted.
+            for snapshot_id in snapshot_ids:
+                self._snapshot_inputs(
+                    store,
+                    project_id=project_id,
+                    snapshot_id=snapshot_id,
+                    source_digests=source_digests,
+                    fields_by_domain=fields_by_domain,
+                )
+
             fact_set_manifests = []
             skipped_unmapped = 0
             skipped_derived = 0
             value_count = 0
             row_count = 0
-            for snapshot_id in technical.get("snapshot_ids") or ():
-                snapshot = store.get_listing_snapshot(str(snapshot_id))
-                if snapshot.project_id != project_id:
-                    raise FactMaterializationError("facts_mapping_conflict")
-                content = store.load_listing_content(snapshot.snapshot_id)
-                if content_hash(content) != snapshot.content_hash:
-                    raise FactMaterializationError("facts_snapshot_digest_mismatch")
-                persisted_index = store.get_domain_object(LOCATOR_INDEX_KIND, snapshot.snapshot_id)
-                if persisted_index is None or not isinstance(persisted_index[1], Mapping):
-                    raise FactMaterializationError("facts_locator_invalid")
-                index = dict(persisted_index[1])
+            for snapshot_id in snapshot_ids:
+                snapshot, content, index, rows, columns, domain_fields = (
+                    self._snapshot_inputs(
+                        store,
+                        project_id=project_id,
+                        snapshot_id=snapshot_id,
+                        source_digests=source_digests,
+                        fields_by_domain=fields_by_domain,
+                    )
+                )
                 table_name = str(index.get("table_name") or "")
-                rows = content.get(table_name)
-                columns = tuple(index.get("columns") or ())
-                if (
-                    index.get("project_id") != project_id
-                    or index.get("source_revision_id") != snapshot.revision_id
-                    or index.get("snapshot_id") != snapshot.snapshot_id
-                    or source_digests.get(str(index.get("source_file")))
-                    != index.get("source_file_digest")
-                    or not isinstance(rows, list)
-                    or len(rows) != snapshot.row_count
-                    or len(index.get("locator_ids") or ()) != len(rows) * len(columns)
-                ):
-                    raise FactMaterializationError("facts_locator_invalid")
-                domain_fields = fields_by_domain.get(table_name.casefold())
-                if domain_fields is None or set(domain_fields) != set(columns):
-                    raise FactMaterializationError("facts_mapping_incomplete")
 
                 row_facts = []
                 for row_index, row in enumerate(rows):
@@ -374,11 +412,6 @@ class FactMaterializationService:
                     "value_fact_count": sum(len(item["values"]) for item in row_facts),
                 }
                 fact_set_id = "mmfactset_" + content_hash(fact_set)[:32]
-                _advance(
-                    store,
-                    snapshot.snapshot_id,
-                    SnapshotAcceptanceState.SNAPSHOT_ACCEPTED,
-                )
                 digest, artifact_sha256 = _write_fact_artifact(workspace_dir, fact_set)
                 manifest = {
                     "schema_version": FACT_SET_SCHEMA_VERSION,
@@ -396,14 +429,16 @@ class FactMaterializationService:
                 }
                 store.put_domain_object(FACT_SET_KIND, fact_set_id, manifest)
                 fact_set_manifests.append(manifest)
+
+            if len(fact_set_manifests) != len(snapshot_ids):
+                raise FactMaterializationError("facts_snapshot_incomplete")
+
+            for manifest in fact_set_manifests:
                 _advance(
                     store,
-                    snapshot.snapshot_id,
+                    str(manifest["snapshot_id"]),
                     SnapshotAcceptanceState.BASELINE_ELIGIBLE,
                 )
-
-            if len(fact_set_manifests) != len(technical.get("snapshot_ids") or ()):
-                raise FactMaterializationError("facts_snapshot_incomplete")
 
             summary = {
                 "schema_version": FACT_MATERIALIZATION_SCHEMA_VERSION,

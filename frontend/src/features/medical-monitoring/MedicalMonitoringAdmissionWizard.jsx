@@ -333,6 +333,13 @@ export function MedicalMonitoringAdmissionWizardView({
                 : mappingState?.phase === "confirmed" ? "系统已完成字段识别" : "数据已完成接入"}
             </p>
             <p className="monitoring-admission-big">{profile?.summaryText || ""}</p>
+            {resolvedFactState.phase === "ready" && resolvedFactState.payload?.summary ? (
+              <p className="monitoring-admission-fact-summary">
+                已整理 {resolvedFactState.payload.summary.tables || 0} 张数据表、
+                {resolvedFactState.payload.summary.rows || 0} 条记录、
+                {resolvedFactState.payload.summary.values || 0} 个数据项
+              </p>
+            ) : null}
             <p className="monitoring-admission-minor">
               {mappingState?.phase === "confirmed"
                 ? resolvedFactState.phase === "ready"
@@ -816,7 +823,6 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         state.attemptId,
       );
       setFactState({ phase: "ready", payload, error: null });
-      onAdmitted?.(payload);
     } catch (error) {
       factsInFlight.current = false;
       setFactState({
@@ -828,7 +834,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         },
       });
     }
-  }, [api, onAdmitted, state.attemptId, state.projectId]);
+  }, [api, state.attemptId, state.projectId]);
 
   useEffect(() => {
     if (

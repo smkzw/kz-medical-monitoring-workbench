@@ -232,6 +232,7 @@ check(renders.done.includes("无需逐项确认"), "post-confirm facts generate 
 check(renders.done.includes("正在生成监查数据"), "done primary reports automatic progress");
 check(renders.doneReady.includes("监查数据已准备完成"), "ready outcome names the user result");
 check(renders.doneReady.includes("已与原始表格逐格对齐"), "ready outcome explains source alignment");
+check(renders.doneReady.includes("已整理 3 张数据表、128 条记录、640 个数据项"), "ready outcome summarizes generated data");
 check(renders.doneReady.includes("进入医学监查"), "ready outcome offers one clear next action");
 
 // Failures: alert role, server text, concrete guidance, retry hierarchy.

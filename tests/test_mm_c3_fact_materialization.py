@@ -15,7 +15,10 @@ from packages.medical_monitoring.admission.fact_materialization import (
     load_fact_set,
     locator_from_fact,
 )
-from packages.medical_monitoring.admission.pipeline import DataAdmissionPipeline
+from packages.medical_monitoring.admission.pipeline import (
+    ADMISSION_RECORD_KIND,
+    DataAdmissionPipeline,
+)
 from packages.medical_monitoring.domain.execution import SnapshotAcceptanceState
 from packages.medical_monitoring.graph.store import Store
 from packages.medical_monitoring.intelligence.structure_profile import (
@@ -87,12 +90,12 @@ def _mapping(attempt_id: str):
     )
 
 
-def _admit(tmp_path: Path):
+def _admit(tmp_path: Path, parser=_parser):
     source = tmp_path / "source"
     source.mkdir()
     (source / "listing.csv").write_text("synthetic", encoding="utf-8")
     workspace = tmp_path / "workspace"
-    result = DataAdmissionPipeline(_parser).create_attempt(
+    result = DataAdmissionPipeline(parser).create_attempt(
         project_id=PROJECT_ID,
         source_dir=source,
         workspace_dir=workspace,
@@ -165,6 +168,43 @@ def test_rejects_incomplete_mapping_without_creating_ready_summary(tmp_path: Pat
     assert exc.value.code == "facts_mapping_incomplete"
     store = _store(workspace)
     try:
+        assert store.get_domain_object(FACT_MATERIALIZATION_KIND, attempt_id) is None
+    finally:
+        store.close()
+
+
+def test_later_table_failure_does_not_advance_earlier_snapshot(tmp_path: Path) -> None:
+    def two_tables(name: str, content: bytes):
+        return [
+            *_parser(name, content),
+            {
+                "table_name": "CM",
+                "headers": ["SUBJID", "CMTRT"],
+                "rows": [{"SUBJID": "S001", "CMTRT": "Medicine"}],
+                "row_numbers": [3],
+            },
+        ]
+
+    workspace, attempt_id = _admit(tmp_path, two_tables)
+    service = FactMaterializationService(_mapping(attempt_id))
+
+    with pytest.raises(FactMaterializationError) as exc:
+        service.materialize(
+            project_id=PROJECT_ID,
+            attempt_id=attempt_id,
+            workspace_dir=workspace,
+        )
+    assert exc.value.code == "facts_mapping_incomplete"
+
+    store = _store(workspace)
+    try:
+        record = store.get_domain_object(ADMISSION_RECORD_KIND, attempt_id)
+        assert record is not None
+        for snapshot_id in record[1]["technical_details"]["snapshot_ids"]:
+            assert (
+                store.get_acceptance(snapshot_id).state
+                != SnapshotAcceptanceState.BASELINE_ELIGIBLE
+            )
         assert store.get_domain_object(FACT_MATERIALIZATION_KIND, attempt_id) is None
     finally:
         store.close()
