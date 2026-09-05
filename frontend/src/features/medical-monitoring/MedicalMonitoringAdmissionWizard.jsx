@@ -337,13 +337,16 @@ export function MedicalMonitoringAdmissionWizardView({
               <p className="monitoring-admission-fact-summary">
                 已整理 {resolvedFactState.payload.summary.tables || 0} 张数据表、
                 {resolvedFactState.payload.summary.rows || 0} 条记录、
-                {resolvedFactState.payload.summary.values || 0} 个数据项
+                {resolvedFactState.payload.summary.values || 0} 个数据项；系统已自动核对
+                {resolvedFactState.payload.summary.source_values_verified
+                  ?? resolvedFactState.payload.summary.values
+                  ?? 0} 个原始数据位置
               </p>
             ) : null}
             <p className="monitoring-admission-minor">
               {mappingState?.phase === "confirmed"
                 ? resolvedFactState.phase === "ready"
-                  ? "已与原始表格逐格对齐，可以开始医学监查。"
+                  ? "无需逐项检查，可以直接开始医学监查。"
                   : resolvedFactState.phase === "failed"
                     ? "本次未生成监查数据，原始文件未受影响。"
                     : "正在自动生成可用于监查的数据，无需逐项确认。"

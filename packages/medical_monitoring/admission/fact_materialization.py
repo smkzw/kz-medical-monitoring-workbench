@@ -123,6 +123,8 @@ def _fact_sets_available(
     summary = payload.get("summary") or {}
     if not fact_set_ids or len(fact_set_ids) != int(summary.get("tables") or 0):
         return False
+    row_count = 0
+    value_count = 0
     for fact_set_id in fact_set_ids:
         persisted = store.get_domain_object(FACT_SET_KIND, str(fact_set_id))
         if persisted is None or not isinstance(persisted[1], Mapping):
@@ -143,7 +145,13 @@ def _fact_sets_available(
             or artifact_sha256 != manifest.get("artifact_sha256")
         ):
             return False
-    return True
+        row_count += int(manifest.get("row_fact_count") or 0)
+        value_count += int(manifest.get("value_fact_count") or 0)
+    return (
+        row_count == int(summary.get("rows") or 0)
+        and value_count == int(summary.get("values") or 0)
+        and value_count == int(summary.get("source_values_verified") or value_count)
+    )
 
 
 def locator_from_fact(
@@ -450,6 +458,7 @@ class FactMaterializationService:
                     "tables": len(fact_set_manifests),
                     "rows": row_count,
                     "values": value_count,
+                    "source_values_verified": value_count,
                     "unmapped_values_skipped": skipped_unmapped,
                     "derived_values_skipped": skipped_derived,
                 },
@@ -487,10 +496,13 @@ class FactMaterializationService:
     @staticmethod
     def _public(payload: Mapping[str, Any]) -> dict[str, Any]:
         ready = payload.get("state") == "ready"
+        summary = dict(payload.get("summary") or {})
+        if ready and "source_values_verified" not in summary:
+            summary["source_values_verified"] = int(summary.get("values") or 0)
         return {
             "state": payload.get("state", "not_generated"),
             "facts_generated": ready,
-            "summary": dict(payload.get("summary") or {}),
+            "summary": summary,
             "message": (
                 "可用于监查的数据已生成，可以开始监查。"
                 if ready else "可用于监查的数据尚未生成。"

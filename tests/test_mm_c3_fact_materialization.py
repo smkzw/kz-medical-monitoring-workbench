@@ -127,6 +127,7 @@ def test_materializes_idempotent_row_facts_with_exact_cell_locators(tmp_path: Pa
         "tables": 1,
         "rows": 2,
         "values": 8,
+        "source_values_verified": 8,
         "unmapped_values_skipped": 2,
         "derived_values_skipped": 0,
     }
@@ -236,6 +237,31 @@ def test_ready_status_rejects_a_changed_fact_artifact(tmp_path: Path) -> None:
         (workspace / RUNTIME_DIR_NAME / ARTIFACT_DIR_NAME / "canonical_fact_sets").glob("*.json.gz")
     )
     artifact.write_bytes(artifact.read_bytes() + b"changed")
+    with pytest.raises(FactMaterializationError) as exc:
+        service.status(
+            project_id=PROJECT_ID, attempt_id=attempt_id, workspace_dir=workspace
+        )
+    assert exc.value.code == "facts_snapshot_digest_mismatch"
+
+
+def test_ready_status_rejects_summary_counts_that_do_not_match_fact_sets(
+    tmp_path: Path,
+) -> None:
+    workspace, attempt_id = _admit(tmp_path)
+    service = FactMaterializationService(_mapping(attempt_id))
+    service.materialize(
+        project_id=PROJECT_ID, attempt_id=attempt_id, workspace_dir=workspace
+    )
+    store = _store(workspace)
+    try:
+        persisted = store.get_domain_object(FACT_MATERIALIZATION_KIND, attempt_id)
+        assert persisted is not None
+        payload = dict(persisted[1])
+        payload["summary"] = {**payload["summary"], "values": 9}
+        store.put_domain_object(FACT_MATERIALIZATION_KIND, attempt_id, payload)
+    finally:
+        store.close()
+
     with pytest.raises(FactMaterializationError) as exc:
         service.status(
             project_id=PROJECT_ID, attempt_id=attempt_id, workspace_dir=workspace
