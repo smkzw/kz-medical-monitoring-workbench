@@ -63,6 +63,7 @@ _PARTIAL_DATE_VALUE_RE = re.compile(
     re.IGNORECASE,
 )
 _LOW_CONFIDENCE_UNRESOLVED_ROLE_THRESHOLD = 0.70
+_EXPORT_CONTEXT_NORMALIZATION_VERSION = "known_export_context_v2"
 
 # Project-neutral IP action families. The authoritative marker table lives in
 # monitoring_mapping_semantic_quality._ACTION_MARKERS; this local copy keeps the
@@ -1400,6 +1401,170 @@ class MonitoringMappingDraftRepository:
                 connection.rollback()
                 raise MonitoringMappingStateConflictError(
                     "mapping draft edit lost CAS"
+                )
+            connection.execute(
+                """
+                INSERT INTO monitoring_mapping_edit_operations(
+                    operation_id, draft_id, project_id, request_sha256,
+                    result_version, actor, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    idempotency_key,
+                    draft_id,
+                    project_id,
+                    request_sha256,
+                    next_version,
+                    actor,
+                    _iso(now),
+                ),
+            )
+            refreshed = connection.execute(
+                "SELECT * FROM monitoring_mapping_drafts WHERE draft_id = ?",
+                (draft_id,),
+            ).fetchone()
+            field_sources = self._effective_field_sources(
+                connection, project_id, draft_id
+            )
+            connection.commit()
+        return self._draft_from_row(refreshed, field_sources=field_sources)
+
+    def reapply_known_export_context(
+        self,
+        project_id: str,
+        draft_id: str,
+        *,
+        expected_version: int,
+        actor: str,
+        idempotency_key: str,
+    ) -> MonitoringMappingDraft:
+        """Atomically bring an older draft onto the current export metadata rule.
+
+        This deliberately narrow migration never reinterprets clinical values or
+        rewrites immutable candidate evidence. It only reapplies the same
+        project-neutral exporter-context normalization used during assembly.
+        """
+
+        project_id = _require_safe_identifier(project_id, "project_id")
+        draft_id = _require_safe_identifier(draft_id, "draft_id")
+        idempotency_key = _require_safe_identifier(
+            idempotency_key,
+            "idempotency_key",
+        )
+        actor = actor.strip()
+        if actor != "system_harness":
+            raise ValueError(
+                "only the system harness may reapply export context normalization"
+            )
+        if expected_version < 1:
+            raise ValueError("expected_version must be positive")
+        request_payload = {
+            "project_id": project_id,
+            "draft_id": draft_id,
+            "expected_version": expected_version,
+            "actor": actor,
+            "normalization_version": _EXPORT_CONTEXT_NORMALIZATION_VERSION,
+        }
+        request_sha256 = content_sha256(request_payload)
+        now = self.clock()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            prior = connection.execute(
+                """
+                SELECT draft_id, request_sha256
+                FROM monitoring_mapping_edit_operations
+                WHERE project_id = ? AND operation_id = ?
+                """,
+                (project_id, idempotency_key),
+            ).fetchone()
+            if prior is not None:
+                if (
+                    prior["draft_id"] != draft_id
+                    or prior["request_sha256"] != request_sha256
+                ):
+                    connection.rollback()
+                    raise MonitoringMappingStateConflictError(
+                        "idempotency key was reused with another edit"
+                    )
+                row = connection.execute(
+                    """
+                    SELECT * FROM monitoring_mapping_drafts
+                    WHERE project_id = ? AND draft_id = ?
+                    """,
+                    (project_id, draft_id),
+                ).fetchone()
+                field_sources = self._effective_field_sources(
+                    connection, project_id, draft_id
+                )
+                connection.commit()
+                return self._draft_from_row(row, field_sources=field_sources)
+
+            row = connection.execute(
+                """
+                SELECT * FROM monitoring_mapping_drafts
+                WHERE project_id = ? AND draft_id = ?
+                """,
+                (project_id, draft_id),
+            ).fetchone()
+            if row is None:
+                connection.rollback()
+                raise MonitoringMappingNotFoundError("mapping draft not found")
+            if row["status"] != MonitoringMappingDraftStatus.DRAFT.value:
+                connection.rollback()
+                raise MonitoringMappingStateConflictError(
+                    "confirmed mapping draft cannot be normalized"
+                )
+            if int(row["version"]) != expected_version:
+                connection.rollback()
+                raise MonitoringMappingStateConflictError(
+                    "mapping draft normalization lost CAS"
+                )
+            current_source = self._validated_source(
+                connection,
+                project_id=project_id,
+                batch_id=row["batch_id"],
+                full_profile_sha256=row["full_profile_sha256"],
+                expected_job_ids=tuple(json.loads(row["expected_job_ids_json"])),
+            )
+            if (
+                current_source["source_set_sha256"] != row["source_set_sha256"]
+                or current_source["input_revision_sha256"]
+                != row["input_revision_sha256"]
+                or current_source["full_input_sha256"] != row["full_input_sha256"]
+                or current_source["expected_job_ids"]
+                != tuple(json.loads(row["expected_job_ids_json"]))
+            ):
+                connection.rollback()
+                raise MonitoringMappingStateConflictError(
+                    "mapping source changed before deterministic normalization"
+                )
+            fields = [
+                MonitoringMappingField.model_validate(item)
+                for item in json.loads(row["fields_json"])
+            ]
+            normalized = [_normalize_known_export_context(item) for item in fields]
+            next_version = expected_version + 1
+            updated = connection.execute(
+                """
+                UPDATE monitoring_mapping_drafts
+                SET fields_json = ?, version = ?, updated_at = ?
+                WHERE project_id = ? AND draft_id = ? AND status = ?
+                  AND version = ?
+                """,
+                (
+                    _model_sequence_json(normalized),
+                    next_version,
+                    _iso(now),
+                    project_id,
+                    draft_id,
+                    MonitoringMappingDraftStatus.DRAFT.value,
+                    expected_version,
+                ),
+            )
+            if updated.rowcount != 1:
+                connection.rollback()
+                raise MonitoringMappingStateConflictError(
+                    "mapping draft normalization lost CAS"
                 )
             connection.execute(
                 """

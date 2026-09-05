@@ -1977,6 +1977,91 @@ def test_assemble_normalizes_declared_coding_support_without_changing_candidate(
     assert original["MDRALANG"]["field_kind"] == "source_collected"
 
 
+def test_reapply_known_export_context_is_atomic_idempotent_and_keeps_sources(
+    repositories,
+) -> None:
+    _, ai_repository, mapping_repository = repositories
+    _seed_chunk(
+        ai_repository,
+        domain="AE",
+        chunk_index=1,
+        chunk_total=1,
+        fields=("SUBJSTA",),
+        domain_field_count=1,
+        full_field_count=1,
+        expected_domains=("AE",),
+        mapping_overrides={
+            "SUBJSTA": {
+                "recommended_role": "subject_status",
+                "field_kind": "source_collected",
+            }
+        },
+    )
+    draft = mapping_repository.assemble(
+        "project-alpha",
+        "batch-001",
+        PROFILE_HASH,
+    )
+    original_sources = draft.field_sources
+    stale = mapping_repository.edit_field(
+        "project-alpha",
+        draft.draft_id,
+        domain="AE",
+        source_field="SUBJSTA",
+        patch={
+            "recommended_role": "subject_status",
+            "field_kind": "source_collected",
+        },
+        expected_version=draft.version,
+        actor="system_harness",
+        idempotency_key="simulate-legacy-export-context",
+    )
+
+    corrected = mapping_repository.reapply_known_export_context(
+        "project-alpha",
+        draft.draft_id,
+        expected_version=stale.version,
+        actor="system_harness",
+        idempotency_key="normalize-export-context-v2",
+    )
+    repeated = mapping_repository.reapply_known_export_context(
+        "project-alpha",
+        draft.draft_id,
+        expected_version=stale.version,
+        actor="system_harness",
+        idempotency_key="normalize-export-context-v2",
+    )
+
+    assert corrected.version == stale.version + 1
+    assert repeated.version == corrected.version
+    assert corrected.field_sources == original_sources
+    assert repeated.field_sources == original_sources
+    assert corrected.fields[0].recommended_role == "metadata.subject_status"
+    assert corrected.fields[0].field_kind.value == "source_metadata"
+    assert corrected.fields[0].user_decision_required is False
+
+
+def test_only_system_harness_can_reapply_known_export_context(
+    repositories,
+) -> None:
+    _, ai_repository, mapping_repository = repositories
+    _seed_complete_source(ai_repository)
+    draft = mapping_repository.assemble(
+        "project-alpha",
+        "batch-001",
+        PROFILE_HASH,
+    )
+
+    with pytest.raises(ValueError, match="only the system harness"):
+        mapping_repository.reapply_known_export_context(
+            "project-alpha",
+            draft.draft_id,
+            expected_version=draft.version,
+            actor="medical-manager",
+            idempotency_key="forbidden-export-context-normalization",
+        )
+
+
 def test_assemble_quarantines_multi_action_ip_role_without_changing_candidate(
     repositories,
 ) -> None:
