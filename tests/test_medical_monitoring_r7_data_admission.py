@@ -960,6 +960,105 @@ def test_real_pipeline_refuses_existing_synthetic_project_identity(tmp_path: Pat
     assert response.json()["code"] == "admission_project_identity_conflict"
 
 
+def test_real_pipeline_rejects_listing_from_another_study(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    listing = source / "listing.csv"
+    listing.write_text(
+        "STUDYID,SUBJID\nMG-K10-SAR-001[PROD],S001\n",
+        encoding="utf-8",
+    )
+    before = _snapshot_tree(source)
+    pipeline = DataAdmissionPipeline(
+        parse_listing_file,
+        expected_project_identifiers=lambda _project_id: ("RUX-03-002",),
+    )
+
+    with pytest.raises(
+        AdmissionPipelineError,
+        match="admission_project_identity_conflict",
+    ):
+        pipeline.create_attempt(
+            project_id=PROJECT_A,
+            source_dir=source,
+            workspace_dir=tmp_path / "workspace",
+        )
+
+    assert _snapshot_tree(source) == before
+
+
+def test_real_pipeline_persists_hash_only_matching_study_identity(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "listing.csv").write_text(
+        "STUDYID,SUBJID\nMG-K10-SAR-001[PROD],S001\n",
+        encoding="utf-8",
+    )
+    pipeline = DataAdmissionPipeline(
+        parse_listing_file,
+        expected_project_identifiers=lambda _project_id: (
+            "MG-K10-SAR-001",
+        ),
+    )
+
+    result = pipeline.create_attempt(
+        project_id=PROJECT_A,
+        source_dir=source,
+        workspace_dir=tmp_path / "workspace",
+    )
+
+    identity = result["technical_details"]["project_identity"]
+    assert identity["status"] == "matched"
+    assert identity["expected_count"] == 1
+    assert identity["observed_count"] == 1
+    assert set(identity) == {
+        "schema_version",
+        "status",
+        "expected_count",
+        "observed_count",
+        "expected_sha256",
+        "observed_sha256",
+    }
+
+
+def test_revalidation_quarantines_a_legacy_cross_study_attempt(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "listing.csv").write_text(
+        "STUDYID,SUBJID\nMG-K10-SAR-001[PROD],S001\n",
+        encoding="utf-8",
+    )
+    workspace = tmp_path / "workspace"
+    legacy = DataAdmissionPipeline(parse_listing_file).create_attempt(
+        project_id=PROJECT_A,
+        source_dir=source,
+        workspace_dir=workspace,
+    )
+    pipeline = DataAdmissionPipeline(
+        parse_listing_file,
+        expected_project_identifiers=lambda _project_id: ("RUX-03-002",),
+    )
+
+    result = pipeline.revalidate_project_identity(
+        project_id=PROJECT_A,
+        attempt_id=legacy["attempt_id"],
+        workspace_dir=workspace,
+    )
+    status = pipeline.attempt_status(
+        project_id=PROJECT_A,
+        attempt_id=legacy["attempt_id"],
+        workspace_dir=workspace,
+    )
+
+    assert result["state"] == "identity_conflict"
+    assert result["identity_status"] == "conflict"
+    assert status["state"] == "identity_conflict"
+
+
 def test_create_leaves_generated_source_tree_unmodified(tmp_path: Path) -> None:
     runtime_dir = tmp_path / "runtime"
     runtime_dir.mkdir()

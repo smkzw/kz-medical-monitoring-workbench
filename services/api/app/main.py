@@ -3712,7 +3712,16 @@ app.include_router(
         require_server_principal=True,
         publication_authority_provider=_r7_synthetic_publication_provider,
         r6_output_provider=_r7_synthetic_mode_output_provider,
-        admission_pipeline=DataAdmissionPipeline(parse_listing_file),
+        admission_pipeline=DataAdmissionPipeline(
+            parse_listing_file,
+            expected_project_identifiers=lambda project_id: (
+                _expected_source_context(
+                    project_id,
+                    "medical_monitoring",
+                    "listing_file",
+                ).project_identifiers
+            ),
+        ),
         admission_mapping_pipeline=_r7_admission_mapping_pipeline,
         admission_mapping_confirmation=_r7_admission_mapping_confirmation,
         monitoring_document_registrar=(
