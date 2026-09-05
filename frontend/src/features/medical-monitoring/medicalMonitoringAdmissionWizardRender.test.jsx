@@ -333,7 +333,7 @@ export const renders = {
     phase: "ready",
     payload: {
       facts_generated: true,
-      summary: { tables: 3, rows: 128, values: 640 },
+      summary: { tables: 3, rows: 128, values: 640, source_values_verified: 640 },
     },
     error: null,
   }),
