@@ -1216,7 +1216,7 @@ def test_one_controlled_json_repair_can_complete(tmp_path: Path) -> None:
     assert result.job is not None
     assert result.job.status == MonitoringAiJobStatus.COMPLETED
     assert len(provider.envelopes) == 2
-    assert provider.envelopes[1].prompt_version.endswith(":json-repair-2")
+    assert provider.envelopes[1].prompt_version.endswith(":json-repair-3")
     assert provider.envelopes[1].payload["repair_contract"] == {
         "attempt": 1,
         "maximum_repairs": 1,
@@ -1235,8 +1235,14 @@ def test_one_controlled_json_repair_can_complete(tmp_path: Path) -> None:
             "candidates；candidates必须恰好包含一个完整候选，字段映射必须"
             "放在该候选的structured_payload.field_mappings中。不得只返回"
             "单个field_mapping、standards_reference或field_mappings。"
+            "最外层schema_version、task_id、task_type和input_revision_sha256"
+            "必须逐字复制output_schema中的值，不得复制field_profile或"
+            "adjudication_contract中的同名schema_version。候选必须完整包含"
+            "candidate_type、title、text和structured_payload。"
             "每个field_mapping必须逐项包含output_schema列出的全部必填键；"
-            "user_action不得缺失或使用空字符串。"
+            "domain和source_field必须逐字复制required_output_pairs，不得改写"
+            "字符；user_action不得缺失或使用空字符串，"
+            "user_decision_required为true时必须写成一个具体中文问题。"
             "没有具体且有证据支持的标准名称时，整个standards_reference"
             "必须为null，禁止用空字符串填充其内部字段。"
             "required_output_pairs中的全空字段必须保持unmapped，不得仅凭"

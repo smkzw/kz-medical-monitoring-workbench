@@ -3838,8 +3838,16 @@ class MonitoringAiService:
                         "包含一个完整候选，字段映射必须放在该候选的"
                         "structured_payload.field_mappings中。不得只返回单个"
                         "field_mapping、standards_reference或field_mappings。"
+                        "最外层schema_version、task_id、task_type和"
+                        "input_revision_sha256必须逐字复制output_schema中的值，"
+                        "不得复制field_profile或adjudication_contract中的同名"
+                        "schema_version。候选必须完整包含candidate_type、title、"
+                        "text和structured_payload。"
                         "每个field_mapping必须逐项包含output_schema列出的全部"
-                        "必填键；user_action不得缺失或使用空字符串。"
+                        "必填键；domain和source_field必须逐字复制"
+                        "required_output_pairs，不得改写字符；user_action不得"
+                        "缺失或使用空字符串，user_decision_required为true时必须"
+                        "写成一个具体中文问题。"
                         "没有具体且有证据支持的标准名称时，整个"
                         "standards_reference必须为null，禁止用空字符串填充"
                         "其内部字段。required_output_pairs中的全空字段必须"
@@ -3928,7 +3936,7 @@ class MonitoringAiService:
             task_id=job.job_id,
             task_type=base.task_type,
             prompt_version=(
-                f"{job.prompt_version}:json-repair-2"
+                f"{job.prompt_version}:json-repair-3"
                 if job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
                 else f"{job.prompt_version}:json-repair-1"
             ),
