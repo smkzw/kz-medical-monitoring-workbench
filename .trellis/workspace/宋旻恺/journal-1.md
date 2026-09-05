@@ -1206,3 +1206,9 @@ Introduced generation-neutral application and route entry points without changin
 - The completion surface tells the monitor how many original data positions the system checked and explicitly says no item-by-item inspection is needed. This adds no new endpoint, model call or user decision and remains compatible with prior ready summaries.
 - Generated-fixture verification passed: 81 adjacent Python admission/mapping/fact tests, 155 rendered-wizard assertions, 17 mapping-confirmation state tests, 47 admission integration assertions, Vite production build, Python compilation, fatal Ruff and `git diff --check`. No real-project fact was generated and no medical-writing source or asset was touched.
 - The one medically material planned-versus-actual dose question remains unanswered. Phase C stays `in_progress`; keep port 8911 stopped and generate real facts only after that single answer.
+
+## 2026-09-05 — Phase C audience-safe fact summary
+
+- Removed internal materialization counters from the product response while retaining them in the persisted audit summary. The monitor now receives only table, record, data-item and automatic source-check counts; no unmapped/derived processing vocabulary reaches the admission client.
+- Generated-fixture and adjacent verification passed: 81 Python admission/mapping/fact tests, 155 rendered-wizard assertions, 47 admission integration assertions, Vite production build, Python compilation, fatal Ruff and `git diff --check`.
+- No real-project state changed and medical writing remained untouched. The single dose-semantics answer is still required before mapping confirmation and real fact generation; port 8911 remains stopped.

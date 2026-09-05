@@ -128,13 +128,13 @@ def test_materializes_idempotent_row_facts_with_exact_cell_locators(tmp_path: Pa
         "rows": 2,
         "values": 8,
         "source_values_verified": 8,
-        "unmapped_values_skipped": 2,
-        "derived_values_skipped": 0,
     }
     store = _store(workspace)
     try:
         summary = store.get_domain_object(FACT_MATERIALIZATION_KIND, attempt_id)
         assert summary is not None and summary[0] == 1
+        assert summary[1]["summary"]["unmapped_values_skipped"] == 2
+        assert summary[1]["summary"]["derived_values_skipped"] == 0
         fact_set_id = summary[1]["fact_set_ids"][0]
         fact_set = store.get_domain_object(FACT_SET_KIND, fact_set_id)
         assert fact_set is not None and fact_set[0] == 1

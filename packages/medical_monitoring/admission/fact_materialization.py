@@ -496,7 +496,12 @@ class FactMaterializationService:
     @staticmethod
     def _public(payload: Mapping[str, Any]) -> dict[str, Any]:
         ready = payload.get("state") == "ready"
-        summary = dict(payload.get("summary") or {})
+        internal_summary = dict(payload.get("summary") or {})
+        summary = {
+            key: int(internal_summary.get(key) or 0)
+            for key in ("tables", "rows", "values", "source_values_verified")
+            if key in internal_summary
+        }
         if ready and "source_values_verified" not in summary:
             summary["source_values_verified"] = int(summary.get("values") or 0)
         return {
