@@ -43,10 +43,10 @@ class AdmissionMappingPipelineError(RuntimeError):
 
 
 MAPPING_ADJUDICATION_PROMPT_VERSION = (
-    "monitoring-listing-field-mapping-adjudication-v4"
+    "monitoring-listing-field-mapping-adjudication-v5"
 )
 MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION = (
-    "monitoring-listing-field-mapping-adjudication-verifier-v2"
+    "monitoring-listing-field-mapping-adjudication-verifier-v3"
 )
 MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS = frozenset({
     MAPPING_ADJUDICATION_PROMPT_VERSION,
@@ -54,7 +54,9 @@ MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS = frozenset({
 })
 MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS = frozenset({
     "monitoring-listing-field-mapping-adjudication-v3",
+    "monitoring-listing-field-mapping-adjudication-v4",
     "monitoring-listing-field-mapping-adjudication-verifier-v1",
+    "monitoring-listing-field-mapping-adjudication-verifier-v2",
 })
 MAPPING_ADJUDICATION_BUSINESS_PREFIX = (
     "listing-field-mapping-adjudication"
@@ -1103,6 +1105,11 @@ class AdmissionMappingPipeline:
                     "draft_id": draft_id,
                     "fields": identity,
                     "dual_review": dual_rows,
+                    "prompt_version": (
+                        MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION
+                        if contract.cohort == MONITORING_MAPPING_COHORT_VERIFIER
+                        else MAPPING_ADJUDICATION_PROMPT_VERSION
+                    ),
                 },
                 ensure_ascii=False,
                 sort_keys=True,
@@ -1209,10 +1216,9 @@ class AdmissionMappingPipeline:
             ]
             if len(profile["fields"]) != len(pair_set):
                 raise AdmissionMappingPipelineError("mapping_bridge_failed")
-            # The trimmed profile only carries the question fields, and the
-            # harness relationship validator requires both sides of a pair to
-            # exist in the submitted field set — so keep only fully covered
-            # pairs; everything else stays in the full-profile evidence.
+            # Keep every relationship touching a question field. The other
+            # side remains read-only context and must never become an output
+            # mapping, but its paired counts are often the decisive evidence.
             profile["relationships"] = [
                 relationship
                 for relationship in profile.get("relationships", [])
@@ -1221,7 +1227,7 @@ class AdmissionMappingPipeline:
                     str(relationship.get("left_field") or "").strip(),
                 )
                 in pair_set
-                and (
+                or (
                     str(relationship.get("domain") or "").strip(),
                     str(relationship.get("right_field") or "").strip(),
                 )

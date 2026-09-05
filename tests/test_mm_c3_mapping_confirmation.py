@@ -11,6 +11,7 @@ import pytest
 from packages.medical_monitoring.admission.mapping_confirmation import (
     AdmissionMappingConfirmationService,
     USER_QUESTION_MODEL_FLAGGED,
+    _adjudication_reconciliation_sha256,
     attention_reason,
     classify_user_question,
     enrich_candidates,
@@ -899,6 +900,23 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         }
     }
 
+    # A prior evidence generation may have escalated the same disagreement.
+    # It remains immutable history but must not suppress a fresh dual review.
+    legacy_reconciliation_sha256 = hashlib.sha256(
+        json.dumps(
+            service.reconcile_with_verifier()["reconciliation"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    receipts.append(SimpleNamespace(
+        domain="AE",
+        source_field="AETERM",
+        reconciliation_sha256=legacy_reconciliation_sha256,
+        resolution="escalated",
+    ))
+
     payload = service.adjudicate_draft(
         project_id="p1",
         attempt_id="attempt-1",
@@ -907,7 +925,8 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
     )
 
     assert calls[0]["review_context"] == {"divergences": [divergence]}
-    assert receipts[0].resolution == resolution
+    assert receipts[1].resolution == resolution
+    assert receipts[1].reconciliation_sha256 != legacy_reconciliation_sha256
     assert payload["adjudication"]["resolved_count"] == resolved_count
     assert payload["review_summary"]["user_question_count"] == int(needs_user)
     assert state["field"]["recommended_role"] == (
@@ -928,7 +947,7 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         workspace_dir="/generated/non-real",
     )
     assert state["version"] == version_after_first_pass
-    assert len(receipts) == 1
+    assert len(receipts) == 2
     assert len(calls) == 2
     assert replay["adjudication"]["resolved_count"] == resolved_count
 
@@ -943,14 +962,7 @@ def test_confirm_accepts_a_durable_system_resolution_of_dual_disagreement() -> N
             "result": "diverged",
         }],
     }
-    reconciliation_sha256 = hashlib.sha256(
-        json.dumps(
-            reconciliation,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()
+    reconciliation_sha256 = _adjudication_reconciliation_sha256(reconciliation)
     draft = SimpleNamespace(
         batch_id="attempt-1",
         model_dump=lambda mode="json": {

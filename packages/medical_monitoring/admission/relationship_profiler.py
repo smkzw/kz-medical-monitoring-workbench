@@ -61,7 +61,7 @@ MAX_CROSS_TABLE_ITEMS = 256
 
 #: Declared statistics basis; must satisfy the gate's contract pattern.
 RELATIONSHIP_PROFILER_CONTRACT = (
-    "admission-relationship-profiler-strided-max512-v2"
+    "admission-relationship-profiler-strided-max512-v3"
 )
 
 #: Field/domain name width the gate accepts; longer names are skipped.
@@ -350,10 +350,10 @@ def build_relationship_profile(
             field: [_cell(row, field) for row in sampled]
             for field in usable
         }
-    same_table: List[Dict[str, Any]] = []
+    candidates_by_domain: Dict[
+        str, List[Tuple[str, str, str]]
+    ] = {}
     for domain in fields_by_domain:
-        if len(same_table) >= MAX_SAME_TABLE_ITEMS:
-            break
         columns = sampled_columns[domain]
         numeric_by_field = {
             field: _mostly_numeric(column)
@@ -362,14 +362,22 @@ def build_relationship_profile(
         canonical_by_field = {
             field: _canonical_name(field) for field in columns
         }
-        candidates = _pair_candidates(
+        candidates_by_domain[domain] = _pair_candidates(
             list(columns), canonical_by_field, numeric_by_field
-        )
-        for left_field, right_field, relationship_type in candidates[
-            :MAX_PAIRS_PER_TABLE
-        ]:
+        )[:MAX_PAIRS_PER_TABLE]
+
+    same_table: List[Dict[str, Any]] = []
+    # Round-robin prevents early workbook sheets from exhausting the global
+    # evidence budget before later sheets contribute any relationship data.
+    for pair_index in range(MAX_PAIRS_PER_TABLE):
+        for domain in fields_by_domain:
             if len(same_table) >= MAX_SAME_TABLE_ITEMS:
                 break
+            candidates = candidates_by_domain[domain]
+            if pair_index >= len(candidates):
+                continue
+            left_field, right_field, relationship_type = candidates[pair_index]
+            columns = sampled_columns[domain]
             item = _same_table_item(
                 domain=domain,
                 total_rows=total_rows_by_domain[domain],
@@ -386,6 +394,8 @@ def build_relationship_profile(
             ):
                 continue
             same_table.append(item)
+        if len(same_table) >= MAX_SAME_TABLE_ITEMS:
+            break
     cross_table: List[Dict[str, Any]] = []
     domains = list(fields_by_domain)
     for index, left_domain in enumerate(domains):
