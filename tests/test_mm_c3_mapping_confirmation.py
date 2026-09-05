@@ -12,6 +12,7 @@ from packages.medical_monitoring.admission.mapping_confirmation import (
     AdmissionMappingConfirmationService,
     USER_QUESTION_MODEL_FLAGGED,
     _adjudication_reconciliation_sha256,
+    _effective_adjudication_receipts,
     attention_reason,
     classify_user_question,
     enrich_candidates,
@@ -22,6 +23,28 @@ from packages.medical_monitoring.admission.mapping_pipeline import (
 from packages.medical_monitoring.api.r7_product.mapping_candidate_routes import (
     _mapping_error,
 )
+
+
+def test_new_evidence_keeps_prior_system_decisions_but_reopens_escalations() -> None:
+    prior_system = SimpleNamespace(
+        domain="AE",
+        source_field="AETERM",
+        reconciliation_sha256="a" * 64,
+        resolution="primary_retained",
+    )
+    prior_escalation = SimpleNamespace(
+        domain="EX",
+        source_field="EXDOSE",
+        reconciliation_sha256="a" * 64,
+        resolution="escalated",
+    )
+
+    effective = _effective_adjudication_receipts(
+        (prior_system, prior_escalation),
+        "b" * 64,
+    )
+
+    assert effective == {("AE", "AETERM"): prior_system}
 
 
 def test_attention_reason_adopts_sound_candidates_and_questions_substantive_ones() -> None:
