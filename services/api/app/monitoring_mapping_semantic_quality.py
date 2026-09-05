@@ -12,8 +12,8 @@ from .monitoring_mapping_contract import MonitoringFieldKind
 
 
 SEMANTIC_QUALITY_SCHEMA_VERSION = "monitoring_mapping_semantic_quality_v2"
-ROLE_CATALOG_VERSION = "monitoring_role_catalog_v4"
-RULE_CATALOG_VERSION = "monitoring_semantic_rules_v3"
+ROLE_CATALOG_VERSION = "monitoring_role_catalog_v5"
+RULE_CATALOG_VERSION = "monitoring_semantic_rules_v4"
 CAPABILITY_MANIFEST_VERSION = "monitoring_capability_manifest_v1"
 
 
@@ -197,6 +197,7 @@ ROLE_CATALOG_V2: tuple[RoleConcept, ...] = (
         "subject_status_identifier",
         "subject_status_key",
         "subject_status_metadata",
+        "subject_status_row_indicator",
     ),
     _concept(
         "metadata.visit_id",
@@ -227,6 +228,7 @@ ROLE_CATALOG_V2: tuple[RoleConcept, ...] = (
         "identifier",
         "form_id",
         "form_identifier",
+        "form_oid",
         "source_form_identifier",
         "technical_form_id",
     ),
@@ -884,6 +886,13 @@ ROLE_CATALOG_V2: tuple[RoleConcept, ...] = (
         "treatment_administration_neutral",
         "treatment_administration_unresolved_identity",
     ),
+    _concept(
+        "treatment.background.source",
+        "background.treatment",
+        "source_value",
+        "background_therapy_source",
+        "background_medication_source",
+    ),
     # Dose ambiguity concepts.
     _concept(
         "ip.dose.planned",
@@ -1437,7 +1446,11 @@ def _fallback_role_concept(
         return ""
     if normalized_role.startswith(("ip.", "investigational.", "study.drug.")):
         return ""
-    if normalized_role.startswith(("treatment.", "background.therapy", "background.medication")):
+    if normalized_role.startswith(("background.therapy", "background.medication")):
+        return "treatment.background.source"
+    if normalized_role.startswith(("treatment.administration", "treatment.administered")):
+        return "treatment.administration.neutral"
+    if normalized_role.startswith("treatment.identity"):
         return "treatment.identity.name"
     if normalized_role.startswith(("meddra.",)):
         return "coding.meddra.source_other"
@@ -1655,12 +1668,29 @@ def _evaluate_ip_action_separation(
             len(matched) == 1
             and not field.role_family.startswith("ip.")
             and field.role_family != "cm"
+            and field.role_family not in {
+                "background.treatment",
+                "treatment.administration",
+            }
+            and field.object_identity not in {
+                "background_therapy",
+                "rescue_therapy",
+                "concomitant_non_ip",
+                "other_non_ip_treatment",
+            }
         ):
             unresolved.append(field)
         if (
             any(marker in normalized_role for marker in _IP_ACCOUNTABILITY_MARKERS)
             and not field.role_family.startswith("ip.")
             and field.role_family != "cm"
+            and field.role_family != "background.treatment"
+            and field.object_identity not in {
+                "background_therapy",
+                "rescue_therapy",
+                "concomitant_non_ip",
+                "other_non_ip_treatment",
+            }
         ):
             unresolved_accountability.append(field)
     if ambiguous:
@@ -1769,7 +1799,16 @@ def _evaluate_treatment_identity(
             field
             for field in domain_fields
             if field.role_family.startswith("ip.")
-            or field.role_family == "treatment.administration"
+            or (
+                field.role_family == "treatment.administration"
+                and field.object_identity
+                not in {
+                    "background_therapy",
+                    "rescue_therapy",
+                    "concomitant_non_ip",
+                    "other_non_ip_treatment",
+                }
+            )
         )
 
     if unanchored:

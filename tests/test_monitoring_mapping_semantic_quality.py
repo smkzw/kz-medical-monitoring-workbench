@@ -1027,6 +1027,66 @@ def test_background_therapy_preserved_as_neutral_treatment() -> None:
     assert "G-CMIP-001" not in _rules(report)
 
 
+def test_background_administration_is_not_treated_as_unresolved_ip_action() -> None:
+    report = evaluate_mapping_semantic_quality(
+        fields=[
+            _field(
+                "BG_TX",
+                "BGDOSE",
+                "background_therapy_administered_dose_value",
+                object_identity="background_therapy",
+                dose_semantics="actual_administered",
+            ),
+            _field(
+                "BG_TX",
+                "BGDATE",
+                "treatment.administration.neutral",
+                object_identity="background_therapy",
+            ),
+        ],
+    )
+
+    assert "G-CMIP-003" not in _rules(report)
+    assert "G-CMIP-005" not in _rules(report)
+    assert "G-ROLE-002" not in _rules(report)
+
+
+def test_background_identity_label_cannot_release_an_explicit_ip_role() -> None:
+    report = evaluate_mapping_semantic_quality(
+        fields=[
+            _field(
+                "ANY",
+                "DOSE",
+                "ip.administration.dose",
+                object_identity="background_therapy",
+            )
+        ],
+    )
+
+    assert "G-CMIP-005" in _rules(report)
+
+
+def test_export_metadata_aliases_are_closed_project_neutral_roles() -> None:
+    report = evaluate_mapping_semantic_quality(
+        fields=[
+            _field(
+                "ANY",
+                "SUBJSTA",
+                "subject_status_row_indicator",
+                field_kind="source_metadata",
+            ),
+            _field(
+                "TOC",
+                "FORMOID",
+                "form_oid",
+                field_kind="source_metadata",
+            ),
+        ],
+    )
+
+    assert "G-ROLE-002" not in _rules(report)
+
+
 def test_cm_preserved_as_non_ip_medication() -> None:
     """CM fields must never be promoted to IP roles."""
 
