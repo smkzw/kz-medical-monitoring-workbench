@@ -100,6 +100,22 @@ def _adjudication_reconciliation_sha256(
     ).hexdigest()
 
 
+def _effective_adjudication_receipts(
+    receipts: Iterable[Any],
+    reconciliation_sha256: str,
+) -> dict[tuple[str, str], Any]:
+    """Keep prior system decisions, but never let an old escalation block re-review."""
+
+    selected: dict[tuple[str, str], Any] = {}
+    for receipt in receipts:
+        pair = (receipt.domain, receipt.source_field)
+        if receipt.reconciliation_sha256 == reconciliation_sha256:
+            selected[pair] = receipt
+        elif pair not in selected and receipt.resolution != "escalated":
+            selected[pair] = receipt
+    return selected
+
+
 def _confidence(item: Mapping[str, Any]) -> float:
     try:
         return float(item.get("confidence"))
@@ -624,14 +640,13 @@ class AdmissionMappingConfirmationService:
                 if pair in divergence_pairs and pair not in unresolved_by_pair:
                     unresolved.append(field)
             if hasattr(self.mapping_repository, "adjudication_receipts"):
-                existing_receipts = {
-                    (receipt.domain, receipt.source_field): receipt
-                    for receipt in self.mapping_repository.adjudication_receipts(
+                existing_receipts = _effective_adjudication_receipts(
+                    self.mapping_repository.adjudication_receipts(
                         project_id,
                         draft_id,
-                    )
-                    if receipt.reconciliation_sha256 == reconciliation_sha256
-                }
+                    ),
+                    reconciliation_sha256,
+                )
             pending = []
             for field in unresolved:
                 pair = (
@@ -1241,14 +1256,13 @@ class AdmissionMappingConfirmationService:
         )
         if not hasattr(self.mapping_repository, "adjudication_receipts"):
             return False
-        receipts = {
-            (item.domain, item.source_field): item
-            for item in self.mapping_repository.adjudication_receipts(
+        receipts = _effective_adjudication_receipts(
+            self.mapping_repository.adjudication_receipts(
                 project_id,
                 draft_id,
-            )
-            if item.reconciliation_sha256 == reconciliation_sha256
-        }
+            ),
+            reconciliation_sha256,
+        )
         for divergence in divergences:
             pair = (
                 str(divergence.get("domain") or ""),
