@@ -349,6 +349,18 @@
   color: #2f6b52;
 }
 
+.monitoring-admission-fact-summary {
+  width: fit-content;
+  margin: 2px 0;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: #eef7f2;
+  color: #245a45;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .monitoring-admission-alert {
   margin-top: 10px;
   display: grid;

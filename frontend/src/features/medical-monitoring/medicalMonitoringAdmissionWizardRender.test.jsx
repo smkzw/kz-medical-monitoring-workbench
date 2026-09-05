@@ -329,7 +329,14 @@ export const renders = {
     { type: "finish" },
   ]), mappingFrom([
     { type: "confirm-ready", payload: { mapping_revision: "rev-1", facts_generated: false } },
-  ]), { phase: "ready", payload: { facts_generated: true }, error: null }),
+  ]), {
+    phase: "ready",
+    payload: {
+      facts_generated: true,
+      summary: { tables: 3, rows: 128, values: 640 },
+    },
+    error: null,
+  }),
   failedRetry: render(wizardState([
     {
       type: "error",
