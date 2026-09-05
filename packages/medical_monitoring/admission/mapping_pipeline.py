@@ -63,6 +63,10 @@ MAPPING_ADJUDICATION_BUSINESS_PREFIX = (
 )
 _ADJUDICATION_GENERATION_RE = re.compile(r":g(\d{2}):")
 _ADJUDICATION_MAX_GENERATIONS = 2
+
+
+def _adjudication_generation_is_running(states: Sequence[str]) -> bool:
+    return any(state in {"queued", "running"} for state in states)
 _REMOTE_UNAVAILABLE_FAILURES = frozenset({
     "ai_not_configured",
     "ai_transport_rejected",
@@ -1165,10 +1169,7 @@ class AdmissionMappingPipeline:
                 "job_count": len(jobs),
                 **self._adjudication_payload(jobs),
             }
-        if states and not any(
-            state in {"failed", "blocked", "stale_input", "cancelled"}
-            for state in states
-        ):
+        if states and _adjudication_generation_is_running(states):
             return {
                 "state": "running",
                 "generation": generation,
