@@ -1244,9 +1244,19 @@ def _current_monitoring_ai_revision(job):
     )
 
 
+def _monitoring_evidence_tool_factory(job, input_payload):
+    from .monitoring_evidence_toolset import open_monitoring_evidence_toolset
+    return open_monitoring_evidence_toolset(
+        job, input_payload,
+        workspace_dir=RUNTIME_DIR / "medical_monitoring_r7" / str(job.project_id),
+        document_resolver=monitoring_document_evidence_resolver,
+    )
+
+
 monitoring_ai_service = MonitoringAiService(
     monitoring_ai_repository,
     current_revision_resolver=_current_monitoring_ai_revision,
+    evidence_tool_factory=_monitoring_evidence_tool_factory,
 )
 monitoring_ai_worker = MonitoringAiWorker(
     monitoring_ai_service,
@@ -1261,6 +1271,7 @@ monitoring_ai_verifier_service = MonitoringAiService(
     monitoring_ai_repository,
     runtime_resolver=resolve_monitoring_verifier_ai_runtime,
     current_revision_resolver=_current_monitoring_ai_revision,
+    evidence_tool_factory=_monitoring_evidence_tool_factory,
 )
 monitoring_ai_verifier_worker = MonitoringAiWorker(
     monitoring_ai_verifier_service,

@@ -1534,6 +1534,10 @@ def _resolve_monitoring_role_runtime(
         )
 
 
+class MonitoringAiEvidenceChangedError(RuntimeError):
+    pass
+
+
 class MonitoringAiService:
     """Product-AI service for medical monitoring candidate generation.
 
@@ -1553,10 +1557,12 @@ class MonitoringAiService:
             configured_ai_provider_from_env
         ),
         current_revision_resolver: Optional[Callable[[MonitoringAiJob], str]] = None,
+        evidence_tool_factory: Optional[Callable[..., Any]] = None,
     ):
         self.repository = repository
         self.runtime_resolver = runtime_resolver
         self.provider_factory = provider_factory
+        self.evidence_tool_factory = evidence_tool_factory
         self.current_revision_resolver = current_revision_resolver or (
             lambda job: job.input_revision_sha256
         )
@@ -2387,11 +2393,14 @@ class MonitoringAiService:
             self._validate_provider_matches_job(job, provider)
 
             envelope = self._build_prompt_envelope(job, input_payload)
-            initial_output = self._run_with_heartbeat(
+            evidence_state = {"model_turns": 0, "receipts": [], "bytes": 0}
+            initial_output = self._run_with_evidence_tools(
                 job,
                 owner,
                 provider,
                 envelope,
+                input_payload=input_payload,
+                evidence_state=evidence_state,
             )
             outputs: List[Any] = [initial_output]
             stale_result = self._fail_if_revision_changed(
@@ -2457,11 +2466,13 @@ class MonitoringAiService:
                     validation_errors,
                     validation_diagnostics,
                 )
-                repaired_output = self._run_with_heartbeat(
+                repaired_output = self._run_with_evidence_tools(
                     job,
                     owner,
                     provider,
                     repair_envelope,
+                    input_payload=input_payload,
+                    evidence_state=evidence_state,
                 )
                 outputs.append(repaired_output)
                 stale_result = self._fail_if_revision_changed(
@@ -2560,6 +2571,12 @@ class MonitoringAiService:
                 candidates=candidates,
             )
             return MonitoringAiRunResult(job=completed, processed=True)
+        except MonitoringAiEvidenceChangedError:
+            return self._stale_claimed_job(
+                job, owner=owner, request_payload={"job_id": job.job_id},
+                response_payload=None, failure_message="evidence changed during tool loop",
+                outcome="stale_input",
+            )
         except MonitoringAiStateConflictError:
             return MonitoringAiRunResult(
                 job=self._current_job_or_claim(job),
@@ -3237,7 +3254,10 @@ class MonitoringAiService:
                 "不足以单独构成用户决定；只有该缺口确实导致下游医学分类"
                 "无法确定并会改变分析结果时，才可标为true。"
             )
-            if job.prompt_version == _C3_VERIFIER_PROMPT_VERSION:
+            if job.prompt_version in {
+                _C3_VERIFIER_PROMPT_VERSION,
+                "monitoring-listing-field-mapping-verifier-v2-tools-v1",
+            }:
                 system_prompt += (
                     " 你现在是全量盲核harness，不是主分析的复述者。输入中不会"
                     "提供主分析答案；必须逐字段独立查漏、寻找反证和替代解释，"
@@ -3284,9 +3304,10 @@ class MonitoringAiService:
                         " adjudication_contract.first_pass_mappings记录需要复核的"
                         "既有解释；不得机械附和，应以冻结证据重新判断。"
                     )
-                if job.prompt_version == (
-                    "monitoring-listing-field-mapping-adjudication-verifier-v2"
-                ):
+                if job.prompt_version in {
+                    "monitoring-listing-field-mapping-adjudication-verifier-v2",
+                    "monitoring-listing-field-mapping-adjudication-verifier-v3-tools-v1",
+                }:
                     system_prompt += (
                         " 你是与另一复核harness隔离运行的第二裁决者。不得推测或复述"
                         "另一裁决者的答案；必须独立寻找反证、遗漏和更保守解释。"
@@ -7570,6 +7591,50 @@ class MonitoringAiService:
             prompt_version=job.prompt_version,
             created_at=created_at,
         )
+
+    def _run_with_evidence_tools(
+        self, job, owner, provider, envelope, *, input_payload, evidence_state,
+    ):
+        from .monitoring_evidence_tool_loop import (
+            EVIDENCE_TOOL_PROMPT_VERSIONS, EvidenceToolLoopError, run_evidence_tool_loop,
+        )
+        if job.prompt_version not in EVIDENCE_TOOL_PROMPT_VERSIONS:
+            return self._run_with_heartbeat(job, owner, provider, envelope)
+        if self.evidence_tool_factory is None:
+            raise MonitoringAiRuntimeUnavailableError("frozen evidence tools are not configured")
+        remaining_turns = 8 - evidence_state["model_turns"]
+        remaining_bytes = 1_000_000 - evidence_state["bytes"]
+        if remaining_turns <= 0 or remaining_bytes <= 0:
+            raise EvidenceToolLoopError("evidence_tool_budget_exhausted")
+
+        def validate_current():
+            if self.current_revision_resolver(job) != job.input_revision_sha256:
+                raise MonitoringAiEvidenceChangedError()
+
+        def record(receipt):
+            evidence_state["receipts"].append(receipt)
+            evidence_state["bytes"] += len(canonical_json(receipt["result"]).encode("utf-8"))
+            self.repository.heartbeat(job.project_id, job.job_id, owner)
+            self.repository.record_evidence_read(
+                job, owner=owner, receipt=receipt,
+                response_model=self._response_model(provider, job),
+            )
+
+        def model_turn():
+            evidence_state["model_turns"] += 1
+
+        with self.evidence_tool_factory(job, input_payload) as toolkit:
+            result = run_evidence_tool_loop(
+                envelope, input_revision=job.input_revision_sha256,
+                call_model=lambda current: self._run_with_heartbeat(job, owner, provider, current),
+                validate_current=validate_current,
+                validate_model=lambda: self._response_model(provider, job),
+                tool_schemas=toolkit.schemas, execute_tool=toolkit.execute,
+                max_model_turns=remaining_turns,
+                max_tool_calls=16 - len(evidence_state["receipts"]),
+                max_evidence_bytes=remaining_bytes, on_receipt=record, on_model_turn=model_turn,
+            )
+        return result.output
 
     def _run_with_heartbeat(
         self,
