@@ -115,3 +115,13 @@ def test_dependency_prompt_and_receipt_namespace_do_not_reuse_tool_v1():
     assert _adjudication_reconciliation_sha256({}, prompt_versions=old.adjudication_prompt_versions) != _adjudication_reconciliation_sha256({}, prompt_versions=new.adjudication_prompt_versions)
     with pytest.raises(ValueError):
         AdmissionMappingPipeline(explicit_mapping_dependencies=True)
+
+
+def test_optional_reference_note_does_not_create_a_missing_key_dependency():
+    a, b = verdict(), verdict()
+    del b['standards_reference']
+    assert compare_mapping_dependencies(a, b)['dependencies_agreed']
+    b['standards_reference'] = None
+    assert compare_mapping_dependencies(a, b)['dependencies_agreed']
+    b['standards_reference'] = {'ctcae_version': '5'}
+    assert not compare_mapping_dependencies(a, b)['dependencies_agreed']

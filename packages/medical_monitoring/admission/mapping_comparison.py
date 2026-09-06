@@ -37,9 +37,12 @@ def _project(verdict: Mapping[str, Any]):
         notes = {key: reference[key] for key in _NOTE_KEYS if key in reference}
         remaining = {key: value for key, value in reference.items() if key not in _NOTE_KEYS}
         annotations["standards_reference"] = notes
-        core["standards_reference"] = (
-            None if set(remaining) == {"reference_only"} else remaining
-        )
+        if set(remaining) == {"reference_only"}:
+            core.pop("standards_reference", None)
+        else:
+            core["standards_reference"] = remaining
+    elif reference is None:
+        core.pop("standards_reference", None)
     return core, annotations
 
 
