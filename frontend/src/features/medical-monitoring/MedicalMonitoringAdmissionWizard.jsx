@@ -111,7 +111,7 @@ function DocumentReadinessPanel({ state, onFiles, onRetry }) {
 // Step three: a plain summary of what the system recognized plus one card per
 // medically substantive ambiguity. The per-field engineering list stays
 // collapsed; the user only meets the questions that change medical analysis.
-function MappingConfirmPanel({ mappingState, onAnswerCard }) {
+export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
   const [noteKey, setNoteKey] = useState("");
   const [noteText, setNoteText] = useState("");
   const candidates = mappingState.payload?.candidates || [];
@@ -181,6 +181,13 @@ function MappingConfirmPanel({ mappingState, onAnswerCard }) {
                   <strong>请做一个医学选择</strong>
                 </div>
                 <p className="monitoring-admission-question-text">{card.question}</p>
+                {card.priorUserAction ? (
+                  <details className="monitoring-admission-question-evidence">
+                    <summary>查看上次确认</summary>
+                    <p>资料已更新，这是您此前的回答：</p>
+                    <p>{card.priorUserAction.replace(/^用户已(?:确认|核对)：/, "")}</p>
+                  </details>
+                ) : null}
                 {card.evidenceText ? (
                   <details className="monitoring-admission-question-evidence">
                     <summary>查看系统判断依据</summary>
@@ -191,13 +198,13 @@ function MappingConfirmPanel({ mappingState, onAnswerCard }) {
                   <p className="monitoring-admission-question-done" role="status">已完成确认</p>
                 ) : drafting ? (
                   <div className="monitoring-admission-question-actions">
-                    <button
+                    {card.suggestedAnswer || card.reusablePriorAnswer ? <button
                       type="button"
                       className="monitoring-admission-secondary"
-                      onClick={() => onAnswerCard?.(card, null)}
+                      onClick={() => onAnswerCard?.(card, card.suggestedAnswer ? null : card.reusablePriorAnswer)}
                     >
-                      {card.suggestedAnswer ? `确认：${card.suggestedAnswer}` : "系统判断正确"}
-                    </button>
+                      {card.suggestedAnswer ? `确认：${card.suggestedAnswer}` : `仍是：${card.reusablePriorAnswer}`}
+                    </button> : null}
                     {noteKey === card.key ? (
                       <span className="monitoring-admission-question-note">
                         <textarea
@@ -224,7 +231,7 @@ function MappingConfirmPanel({ mappingState, onAnswerCard }) {
                           setNoteText("");
                         }}
                       >
-                        不是，说明实际含义
+                        {card.suggestedAnswer || card.reusablePriorAnswer ? "不是，说明实际含义" : "说明实际含义"}
                       </button>
                     )}
                   </div>
@@ -926,8 +933,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           domain: card.domain,
           source_field: card.sourceField,
           patch: {
-            // The server gate resolves a question only when user_action
-            // carries the explicit user-decision prefix written here.
+            // The server atomically binds this answer to the question's
+            // evidence generation using the draft version below.
             user_action: note === null
               ? "用户已确认：采用系统判断，无需修改。"
               : `用户已核对：${note}`,

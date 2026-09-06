@@ -269,6 +269,7 @@ _PUBLIC_MAPPING_FIELD_FIELDS = frozenset({
     "confidence",
     "uncertainty",
     "user_action",
+    "prior_user_action",
     "user_decision_required",
     "related_fields",
     "standards_reference",

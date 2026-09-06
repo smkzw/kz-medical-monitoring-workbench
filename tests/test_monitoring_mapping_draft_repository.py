@@ -2667,3 +2667,44 @@ def test_accepted_candidate_is_not_a_formal_mapping(repositories) -> None:
             ).fetchone()[0]
         )
         assert len(serialized) == 3
+
+
+def test_user_answer_binds_atomically_to_displayed_question_version(repositories):
+    _, ai_repository, repository = repositories
+    _seed_complete_source(ai_repository)
+    draft = repository.assemble("project-alpha", "batch-001", PROFILE_HASH)
+    pair = dict(domain="AE", source_field="AETERM")
+    question = repository.edit_field(
+        draft.project_id, draft.draft_id, **pair, expected_version=draft.version,
+        actor="system_harness", idempotency_key="question-r1",
+        patch={"user_action": "记录的是原始描述吗？", "user_decision_required": True,
+               "question_reconciliation_sha256": "1" * 64},
+    )
+    args = dict(**pair, expected_version=question.version, actor="medical-manager",
+                idempotency_key="answer-r1", patch={"user_action": "用户已确认：原始描述。"})
+    answer = repository.edit_field(draft.project_id, draft.draft_id, **args)
+    field = next(f for f in answer.fields if f.source_field == "AETERM")
+    assert field.decision_reconciliation_sha256 == "1" * 64
+    assert repository.edit_field(draft.project_id, draft.draft_id, **args) == answer
+    renewed = repository.edit_field(
+        draft.project_id, draft.draft_id, **pair, expected_version=answer.version,
+        actor="system_harness", idempotency_key="question-r2",
+        patch={"user_action": "新资料中的记录是原始描述吗？", "prior_user_action": field.user_action,
+               "question_reconciliation_sha256": "2" * 64, "decision_reconciliation_sha256": ""},
+    )
+    with pytest.raises(MonitoringMappingStateConflictError, match="CAS"):
+        repository.edit_field(draft.project_id, draft.draft_id,
+                              **{**args, "idempotency_key": "late-answer-r1"})
+    saved = repository.edit_field(
+        draft.project_id, draft.draft_id,
+        **{**args, "expected_version": renewed.version, "idempotency_key": "answer-r2"},
+    )
+    field = next(f for f in saved.fields if f.source_field == "AETERM")
+    assert field.decision_reconciliation_sha256 == "2" * 64
+    assert field.prior_user_action == "用户已确认：原始描述。"
+    with pytest.raises(ValueError, match="provenance"):
+        repository.edit_field(
+            draft.project_id, draft.draft_id, **pair, expected_version=saved.version,
+            actor="medical-manager", idempotency_key="wrong-binding",
+            patch={"decision_reconciliation_sha256": "3" * 64},
+        )

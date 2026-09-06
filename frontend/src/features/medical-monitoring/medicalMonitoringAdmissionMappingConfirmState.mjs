@@ -164,6 +164,11 @@ function draftQuestionCards(draft) {
     sourceField: String(item?.source_field || ""),
     attentionReason: String(item?.attention_reason || "需要确认"),
     question: questionText(item),
+    priorUserAction: String(item?.prior_user_action || ""),
+    reusablePriorAnswer: (() => {
+      const answer = String(item?.prior_user_action || "").replace(/^用户已(?:确认|核对)：/, "").trim();
+      return answer && answer.length <= 80 && answer !== "采用系统判断，无需修改。" ? answer : "";
+    })(),
     evidenceText: mappingEvidenceText(item?.evidence_summary),
     confidence: item?.confidence,
     suggestedAnswer: DOSE_SEMANTICS_TEXTS[String(item?.dose_semantics || "")] || "",
@@ -192,6 +197,10 @@ export function mappingConfirmationReason(mappingState) {
 
 function projectDraftState(state, draft, message = "") {
   const questions = draftQuestionCards(draft);
+  const answeredKeys = { ...state.answeredKeys };
+  // A server question is unresolved for this draft, even if the same field
+  // was answered against an earlier evidence generation.
+  for (const question of questions || []) delete answeredKeys[question.key];
   const payload = questions === null ? state.payload : {
     ...state.payload,
     questionCount: questions.length,
@@ -210,6 +219,7 @@ function projectDraftState(state, draft, message = "") {
     phase: "drafting",
     payload,
     draft,
+    answeredKeys,
     message: message || ((payload?.questionCount || 0) > 0
       ? "系统识别结果已就绪，请回答下方需要您确认的问题。"
       : ""),
