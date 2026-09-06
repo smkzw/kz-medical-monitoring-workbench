@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator, model_serializer
 
 from .monitoring_ai_contracts import (
     MonitoringAiCandidate,
@@ -42,6 +42,8 @@ _EDITABLE_FIELD_KEYS = frozenset(
         "user_action",
         "user_decision_required",
         "related_fields",
+        "dependency_fields",
+        "comparison_annotations",
         "standards_reference",
         "derivation_lineage",
         "value_constraints",
@@ -150,6 +152,8 @@ class MonitoringMappingField(BaseModel):
     decision_reconciliation_sha256: str = Field(default="", pattern=r"^(?:[0-9a-f]{64})?$")
     prior_user_action: str = Field(default="", max_length=2_000)
     related_fields: tuple[str, ...] = Field(default_factory=tuple, max_length=100)
+    dependency_fields: Optional[tuple[dict[str, str], ...]] = Field(default=None, max_length=100)
+    comparison_annotations: Optional[dict[str, Any]] = None
     evidence_ids: tuple[str, ...] = Field(min_length=1, max_length=50)
     standards_reference: Optional[dict[str, Any]] = None
     derivation_lineage: Optional[dict[str, Any]] = None
@@ -185,6 +189,28 @@ class MonitoringMappingField(BaseModel):
         default_factory=tuple,
         max_length=24,
     )
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_field_shape(self, handler):
+        result = handler(self)
+        for key in ("dependency_fields", "comparison_annotations"):
+            if result.get(key) is None:
+                result.pop(key, None)
+        return result
+
+    @field_validator("dependency_fields")
+    @classmethod
+    def validate_dependencies(cls, value):
+        if value is None:
+            return value
+        pairs = []
+        for item in value:
+            if set(item) != {"domain", "source_field"} or any(not text.strip() for text in item.values()):
+                raise ValueError("invalid dependency field reference")
+            pairs.append((item["domain"], item["source_field"]))
+        if len(pairs) != len(set(pairs)):
+            raise ValueError("duplicate dependency field reference")
+        return value
 
     @field_validator("domain", "source_field", "recommended_role")
     @classmethod

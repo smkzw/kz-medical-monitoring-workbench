@@ -63,6 +63,7 @@ from .monitoring_ai_contracts import (
     validate_candidates_for_job,
 )
 from .monitoring_evidence_tool_loop import EvidenceToolLoopError
+from packages.medical_monitoring.admission.evidence_tool_contract import DEPENDENCY_MAPPING_PROMPT_VERSIONS
 from .monitoring_ai_repository import (
     MonitoringAiRepository,
     MonitoringAiStateConflictError,
@@ -1135,6 +1136,12 @@ class _TreatmentIdentityBinding(BaseModel):
     join_keys: List[str] = Field(min_length=1, max_length=12)
 
 
+class _MappingDependencyReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    domain: str = Field(min_length=1, max_length=80)
+    source_field: str = Field(min_length=1, max_length=240)
+
+
 class _FieldMappingItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1147,6 +1154,7 @@ class _FieldMappingItem(BaseModel):
     user_action: str = Field(min_length=1, max_length=2_000)
     user_decision_required: StrictBool
     related_fields: List[str] = Field(default_factory=list, max_length=100)
+    dependency_fields: Optional[List[_MappingDependencyReference]] = Field(default=None, max_length=100)
     evidence_ids: List[str] = Field(default_factory=list, max_length=50)
     standards_reference: Optional[_StandardsReference] = None
     derivation_lineage: Optional[Dict[str, Any]] = None
@@ -3065,6 +3073,10 @@ class MonitoringAiService:
                 else self._structured_payload_schema(job.task_type)
             ),
         }
+        if job.prompt_version in DEPENDENCY_MAPPING_PROMPT_VERSIONS:
+            candidate_schema["structured_payload"]["field_mappings"][0]["dependency_fields"] = [
+                {"domain": "exact source domain", "source_field": "exact dependency field"}
+            ]
         if job.task_type not in {
             MonitoringAiTaskType.LISTING_FIELD_MAPPING,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
@@ -3273,6 +3285,7 @@ class MonitoringAiService:
             if job.prompt_version in {
                 _C3_VERIFIER_PROMPT_VERSION,
                 "monitoring-listing-field-mapping-verifier-v2-tools-v1",
+                "monitoring-listing-field-mapping-verifier-v3-tools-v2",
             }:
                 system_prompt += (
                     " 你现在是全量盲核harness，不是主分析的复述者。输入中不会"
@@ -3323,6 +3336,7 @@ class MonitoringAiService:
                 if job.prompt_version in {
                     "monitoring-listing-field-mapping-adjudication-verifier-v2",
                     "monitoring-listing-field-mapping-adjudication-verifier-v4-tools-v1",
+                    "monitoring-listing-field-mapping-adjudication-verifier-v5-tools-v2",
                 }:
                     system_prompt += (
                         " 你是与另一复核harness隔离运行的第二裁决者。不得推测或复述"
@@ -3542,6 +3556,14 @@ class MonitoringAiService:
                 "不得建议study_treatment_regimen等当前无安全确定性规则族的事实。"
                 "工作台会在候选入库前使用真实确定性编译器预编译；不能编译的DSL"
                 "将被拒绝并仅允许一次受控修复。"
+            )
+        if job.prompt_version in DEPENDENCY_MAPPING_PROMPT_VERSIONS:
+            system_prompt += (
+                " 每个字段必须显式给出dependency_fields，列出解释该值或确定对象、单位、日期、编码、"
+                "派生关系所必需的原始字段，使用精确domain/source_field，确实不依赖其他字段才给空数组。"
+                "related_fields仅保留有用的关联说明，不能替代dependency_fields或据此建立连接。"
+                "缺少实际依赖证据先调用冻结工具补读，不得把未知依赖写成空数组。"
+                "参考标准说明不能代替项目锁定的标准版本。系统不会用列名或代表值替你改写量表语义。"
             )
         return AiPromptEnvelope(
             task_id=job.job_id,
@@ -4468,14 +4490,17 @@ class MonitoringAiService:
                     raise MonitoringAiOutputValidationError(
                         "provider must not generate mapping provenance"
                     )
+                dependency_contract = job.prompt_version in DEPENDENCY_MAPPING_PROMPT_VERSIONS
+                if dependency_contract:
+                    self._validate_explicit_mapping_dependencies(normalized, input_payload)
                 self._merge_deterministic_metadata_mappings(
                     normalized,
                     input_payload,
                 )
-                self._apply_field_mapping_post_quality_gate(
-                    normalized,
-                    input_payload,
-                )
+                if dependency_contract:
+                    self._validate_without_semantic_rewrite(normalized, input_payload)
+                else:
+                    self._apply_field_mapping_post_quality_gate(normalized, input_payload)
                 self._materialize_field_profile_evidence(
                     job,
                     candidate,
@@ -6737,9 +6762,47 @@ class MonitoringAiService:
         return {domain for domain in domains if domain}
 
     @staticmethod
+    def _validate_explicit_mapping_dependencies(structured_payload, input_payload):
+        profile = input_payload["field_profile"]
+        fields = [field for key in (
+            "fields", "read_only_domain_context_profiles", "read_only_table_context_profiles",
+            "read_only_cross_table_context_profiles", "read_only_adjudication_context_profiles",
+        ) for field in profile.get(key, ()) if isinstance(field, dict)]
+        allowed = {(str(field.get("domain", "")), str(field.get("field", ""))) for field in fields}
+        for mapping in structured_payload.get("field_mappings", ()):
+            dependencies = mapping.get("dependency_fields")
+            if not isinstance(dependencies, list):
+                raise MonitoringAiOutputValidationError("explicit dependency_fields required for every mapping")
+            pairs = [(item["domain"], item["source_field"]) for item in dependencies]
+            target = (mapping["domain"], mapping["source_field"])
+            if len(pairs) != len(set(pairs)) or any(pair not in allowed or pair == target for pair in pairs):
+                raise MonitoringAiOutputValidationError("dependency_fields must reference unique other frozen fields")
+
+    @staticmethod
+    def _validate_without_semantic_rewrite(structured_payload, input_payload):
+        checked = deepcopy(structured_payload)
+        MonitoringAiService._apply_field_mapping_post_quality_gate(
+            checked, input_payload, allow_scale_inference=False,
+        )
+        semantic_keys = (
+            "recommended_role", "field_kind", "derivation_lineage", "object_identity",
+            "object_identity_evidence_fields", "object_identity_binding_id", "dose_semantics",
+        )
+        for original, guarded in zip(structured_payload["field_mappings"], checked["field_mappings"]):
+            if any(original.get(key) != guarded.get(key) for key in semantic_keys):
+                raise MonitoringAiOutputValidationError(
+                    "source support for declared treatment/dose semantics is unresolved; "
+                    "reread frozen evidence and independently revise or retain an unevaluable interpretation; "
+                    "the system will not substitute another role"
+                )
+            if guarded.get("validated_treatment_identity_binding") is not None:
+                original["validated_treatment_identity_binding"] = guarded["validated_treatment_identity_binding"]
+
+    @staticmethod
     def _apply_field_mapping_post_quality_gate(
         structured_payload: Dict[str, Any],
         input_payload: Dict[str, Any],
+        *, allow_scale_inference: bool = True,
     ) -> None:
         """Conservatively normalize treatment identity and dose ambiguity.
 
@@ -6976,11 +7039,10 @@ class MonitoringAiService:
             mappings,
             profile_fields,
         )
-        MonitoringAiService._normalize_scale_total_mappings(
-            mappings,
-            profile,
-            context_by_domain,
-        )
+        if allow_scale_inference:
+            MonitoringAiService._normalize_scale_total_mappings(
+                mappings, profile, context_by_domain,
+            )
 
     @staticmethod
     def _normalize_scale_total_mappings(

@@ -4,12 +4,19 @@ from copy import deepcopy
 from .document_evidence import MonitoringDocumentEvidencePacket
 from ..intelligence.primitives import content_hash
 
+DEPENDENCY_MAPPING_PROMPT_VERSIONS = frozenset({
+    "monitoring-listing-field-mapping-v21-tools-v2",
+    "monitoring-listing-field-mapping-verifier-v3-tools-v2",
+    "monitoring-listing-field-mapping-adjudication-v7-tools-v2",
+    "monitoring-listing-field-mapping-adjudication-verifier-v5-tools-v2",
+})
+
 EVIDENCE_TOOL_PROMPT_VERSIONS = frozenset({
     "monitoring-listing-field-mapping-v20-tools-v1",
     "monitoring-listing-field-mapping-verifier-v2-tools-v1",
     "monitoring-listing-field-mapping-adjudication-v6-tools-v1",
     "monitoring-listing-field-mapping-adjudication-verifier-v4-tools-v1",
-})
+}) | DEPENDENCY_MAPPING_PROMPT_VERSIONS
 
 
 def bind_frozen_document_sources(profile):

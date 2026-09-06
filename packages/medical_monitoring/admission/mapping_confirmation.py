@@ -814,6 +814,7 @@ class AdmissionMappingConfirmationService:
                         )
 
         second_review = reconcile_mapping_cohorts(
+            comparison_policy_version=getattr(self.mapping_pipeline, "adjudication_comparison_policy", RECONCILIATION_SCHEMA_VERSION),
             profile_fields=[
                 {
                     "domain": field.get("domain"),
@@ -932,7 +933,7 @@ class AdmissionMappingConfirmationService:
                     key: item[key]
                     for key in (
                         "recommended_role", "field_kind", "confidence",
-                        "related_fields", "evidence_ids", "standards_reference",
+                        "related_fields", "dependency_fields", "evidence_ids", "standards_reference",
                         "derivation_lineage", "value_constraints", "object_identity",
                         "object_identity_evidence_fields", "object_identity_binding_id",
                         "validated_treatment_identity_binding", "dose_semantics",
@@ -940,6 +941,12 @@ class AdmissionMappingConfirmationService:
                     )
                     if key in item
                 }
+                if "dependency_comparison" in review_row:
+                    patch["comparison_annotations"] = {
+                        **review_row["dependency_comparison"],
+                        "left_evidence_ids": list(primary_item.get("evidence_ids") or ()),
+                        "right_evidence_ids": list(verifier_item.get("evidence_ids") or ()),
+                    }
                 # Candidates accepted before the upstream list validator was
                 # added can contain exact duplicate relationship labels.  The
                 # draft contract is stricter; collapse only exact duplicates
