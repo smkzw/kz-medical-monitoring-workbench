@@ -11241,3 +11241,44 @@ def test_visual_source_is_delivered_and_persisted_as_image_not_native_quote(tmp_
     visual=[e for e in candidate.evidence if e.raw_fields.get('source_representation')=='image']
     assert visual and visual[0].quote == ''
     assert visual[0].raw_fields['native_text_quote_verified'] is False
+
+
+def test_role_declaration_is_bound_to_exact_anonymous_input_before_persistence(tmp_path):
+    from contextlib import contextmanager
+    from packages.medical_monitoring.admission.mapping_pipeline import _anonymous_review_rows
+    from packages.medical_monitoring.admission.role_equivalence import DIMENSIONS
+    profile=_field_profile(1)
+    field=profile['fields'][0]
+    pair={'domain':field['domain'],'source_field':field['field']}
+    rows=_anonymous_review_rows([{**pair,'primary':{'semantic_verdict':{'recommended_role':'reading.code'}},
+                                 'verifier':{'semantic_verdict':{'recommended_role':'reading.category'}}}],include_option_ids=True)
+    profile['adjudication_contract']={'first_pass_mappings':[],'candidate_options_review':rows}
+    def output(envelope):
+        result=_valid_output(envelope)
+        for candidate in result['candidates']:
+            for evidence in candidate['evidence']:evidence['locator']='profile://statistics'
+            for mapping in candidate['structured_payload']['field_mappings']:
+                mapping['dependency_fields']=[]
+                mapping['recommended_role']='reading.code'
+                mapping['role_equivalence']={
+                    'judgment':'equivalent','option_ids':[o['option_id'] for o in rows[0]['candidate_options']],
+                    'dimensions':{axis:{'relation':'equivalent','evidence_ids':mapping['evidence_ids'],
+                                        'rationale':'合成来源对照，不代表真实医学等价。'} for axis in DIMENSIONS},
+                    'counterevidence_summary':'合成测试检查了各维可能差异。'}
+        return result
+    provider=FakeProvider([output,output]);service=_service(tmp_path,provider)
+    @contextmanager
+    def factory(*_):yield SimpleNamespace(schemas={},execute=lambda *_:None)
+    service.evidence_tool_factory=factory
+    job=service.submit_listing_field_mapping(project_id='project-alpha',input_revision=_revision(),field_profile=profile,
+        prompt_version='monitoring-listing-field-mapping-adjudication-v9-tools-v4')
+    result=service.run_next('role-proof-test')
+    assert result.job.status==MonitoringAiJobStatus.COMPLETED,result.job.failure_message
+    item=service.repository.candidates(job.project_id,job.job_id)[0].structured_payload['field_mappings'][0]
+    proof=item['role_equivalence']
+    assert proof['domain']==pair['domain'] and proof['source_field']==pair['source_field']
+    assert len(proof['bound_options'])==2 and proof['binding_sha256']
+    assert item['recommended_role']=='reading.code'
+    from services.api.app.monitoring_ai_service import MonitoringAiOutputValidationError
+    with pytest.raises(MonitoringAiOutputValidationError):
+        MonitoringAiService._bind_role_equivalence_declarations({'field_mappings':[item]}, {'field_profile':profile})

@@ -947,6 +947,9 @@ class AdmissionMappingConfirmationService:
                         "left_evidence_ids": list(primary_item.get("evidence_ids") or ()),
                         "right_evidence_ids": list(verifier_item.get("evidence_ids") or ()),
                     }
+                    canonical = review_row["dependency_comparison"].get("canonical_role")
+                    if canonical and review_row["dependency_comparison"].get("dependencies_agreed") is True:
+                        patch["recommended_role"] = canonical
                 # Candidates accepted before the upstream list validator was
                 # added can contain exact duplicate relationship labels.  The
                 # draft contract is stricter; collapse only exact duplicates

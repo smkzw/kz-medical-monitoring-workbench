@@ -132,6 +132,7 @@ def _completed_payload_equivalent_cohort(
 
 def _anonymous_review_rows(
     rows: Sequence[Mapping[str, Any]], *, include_difference_paths: bool = False,
+    include_option_ids: bool = False,
 ) -> list[dict[str, Any]]:
     """Remove model identity while preserving the two evidence-bound options."""
 
@@ -161,6 +162,11 @@ def _anonymous_review_rows(
             "source_field": str(row.get("source_field") or ""),
             "candidate_options": options,
         })
+    if include_option_ids:
+        from .role_equivalence import option_identity
+        for row in projected:
+            for option in row["candidate_options"]:
+                option["option_id"] = option_identity(row["domain"], row["source_field"], option)
     if include_difference_paths:
         from .mapping_reconciliation import semantic_difference_paths
         for row in projected:
@@ -264,6 +270,7 @@ class AdmissionMappingPipeline:
         adjudication_tool_reads: bool = False,
         explicit_mapping_dependencies: bool = False,
         visual_tool_reads: bool = False,
+        role_equivalence: bool = False,
     ) -> None:
         self._service = ai_service
         self._repository = ai_repository
@@ -285,11 +292,17 @@ class AdmissionMappingPipeline:
         self._visual_tool_reads = bool(visual_tool_reads)
         if self._visual_tool_reads and not self._explicit_mapping_dependencies:
             raise ValueError("visual evidence requires explicit mapping dependencies")
+        self._role_equivalence = bool(role_equivalence)
+        if self._role_equivalence and not self._visual_tool_reads:
+            raise ValueError("role equivalence requires the current visual evidence contract")
 
     @property
     def adjudication_comparison_policy(self):
         from .mapping_comparison import DEPENDENCY_COMPARISON_VERSION
         from .mapping_reconciliation import RECONCILIATION_SCHEMA_VERSION
+        if self._role_equivalence:
+            from .role_equivalence import ROLE_EQUIVALENCE_POLICY
+            return ROLE_EQUIVALENCE_POLICY
         return DEPENDENCY_COMPARISON_VERSION if self._explicit_mapping_dependencies else RECONCILIATION_SCHEMA_VERSION
 
     @property
@@ -299,6 +312,9 @@ class AdmissionMappingPipeline:
 
     def _adjudication_prompt_version(self, cohort):
         verifier = cohort == MONITORING_MAPPING_COHORT_VERIFIER
+        if self._role_equivalence:
+            return ("monitoring-listing-field-mapping-adjudication-verifier-v7-tools-v4" if verifier
+                    else "monitoring-listing-field-mapping-adjudication-v9-tools-v4")
         if self._visual_tool_reads:
             return ("monitoring-listing-field-mapping-adjudication-verifier-v6-tools-v3" if verifier
                     else "monitoring-listing-field-mapping-adjudication-v8-tools-v3")
@@ -1151,6 +1167,7 @@ class AdmissionMappingPipeline:
                 raise AdmissionMappingPipelineError("mapping_bridge_failed")
             dual_rows = _anonymous_review_rows(
                 raw_rows, include_difference_paths=self._adjudication_tool_reads,
+                include_option_ids=self._role_equivalence,
             )
         digest = hashlib.sha256(
             json.dumps(
