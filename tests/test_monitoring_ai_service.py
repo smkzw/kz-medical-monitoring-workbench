@@ -11136,3 +11136,58 @@ def test_tool_protocol_failure_is_bounded_and_not_a_worker_error(tmp_path, exhau
         assert second.job.status == MonitoringAiJobStatus.FAILED
         assert second.job.attempt_count == 2
         assert second.job.failure_code == "evidence_tool_protocol"
+
+
+@pytest.mark.parametrize('version', [
+    'monitoring-listing-field-mapping-v21-tools-v2',
+    'monitoring-listing-field-mapping-adjudication-verifier-v5-tools-v2',
+])
+def test_dependency_contract_persists_explicit_dependencies_on_real_service_path(tmp_path, version):
+    from contextlib import contextmanager
+    def output(envelope):
+        result = _valid_output(envelope)
+        for candidate in result['candidates']:
+            for mapping in candidate['structured_payload']['field_mappings']:
+                mapping['dependency_fields'] = []
+            for evidence in candidate.get('evidence', []):
+                evidence['locator'] = 'profile://statistics'
+        return result
+    provider = FakeProvider([output, output])
+    service = _service(tmp_path, provider)
+    @contextmanager
+    def factory(job, payload):
+        yield SimpleNamespace(schemas={}, execute=lambda *_: None)
+    service.evidence_tool_factory = factory
+    profile = _field_profile(1)
+    if 'adjudication' in version:
+        profile['adjudication_contract'] = {'first_pass_mappings': []}
+    job = service.submit_listing_field_mapping(project_id='project-alpha', input_revision=_revision(),
+                                               field_profile=profile, prompt_version=version)
+    result = service.run_next('dependency-contract-test')
+    assert result.job.status == MonitoringAiJobStatus.COMPLETED, result.job.failure_message
+    item = service.repository.candidates(job.project_id, job.job_id)[0].structured_payload['field_mappings'][0]
+    assert item['dependency_fields'] == []
+    assert 'dependency_fields' in str(provider.envelopes[0].payload['output_schema'])
+
+
+def test_dependency_contract_rejects_missing_or_invented_dependencies():
+    from services.api.app.monitoring_ai_service import MonitoringAiOutputValidationError
+    profile = {'field_profile': {'fields': [{'domain': 'D', 'field': 'VALUE'}, {'domain': 'D', 'field': 'UNIT'}]}}
+    item = {'domain': 'D', 'source_field': 'VALUE'}
+    for dependencies in (None, [{'domain': 'D', 'source_field': 'MISSING'}], [{'domain': 'D', 'source_field': 'VALUE'}]):
+        with pytest.raises(MonitoringAiOutputValidationError):
+            MonitoringAiService._validate_explicit_mapping_dependencies(
+                {'field_mappings': [{**item, 'dependency_fields': dependencies}]}, profile)
+    MonitoringAiService._validate_explicit_mapping_dependencies(
+        {'field_mappings': [{**item, 'dependency_fields': [{'domain': 'D', 'source_field': 'UNIT'}]}]}, profile)
+
+
+def test_new_validation_does_not_collapse_distinct_scale_interpretations():
+    profile = {'field_profile': {'fields': [{'domain': 'D', 'field': name, 'representative_values': ['量表评分']}
+                                         for name in ('FOO1', 'FOO2', 'FOONUM')]}}
+    for role in ('assessment.instance_number', 'scale.total_score'):
+        output = {'field_mappings': [{'domain': 'D', 'source_field': 'FOONUM', 'recommended_role': role,
+                                     'field_kind': 'source_collected', 'confidence': 0.9, 'related_fields': []}]}
+        before = deepcopy(output)
+        MonitoringAiService._validate_without_semantic_rewrite(output, profile)
+        assert output == before

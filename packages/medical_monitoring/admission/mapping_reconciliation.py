@@ -252,6 +252,7 @@ def _verdict_projection(item: Mapping[str, Any]) -> dict[str, Any]:
             "recommended_role",
             "field_kind",
             "related_fields",
+            "dependency_fields",
             "standards_reference",
             "derivation_lineage",
             "value_constraints",
@@ -296,7 +297,7 @@ def semantic_difference_paths(left: Mapping[str, Any], right: Mapping[str, Any])
                     paths.append(child)
                 else:
                     visit(a[key], b[key], child)
-        elif a != b:
+        elif type(a) is not type(b) or a != b:
             paths.append(path)
     visit(left, right, "")
     return paths
@@ -400,6 +401,7 @@ def reconcile_mapping_cohorts(
     primary_evidence_ids: Collection[str] = (),
     verifier_evidence_ids: Collection[str] = (),
     primary_execution_route: str = MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY,
+    comparison_policy_version: str = RECONCILIATION_SCHEMA_VERSION,
 ) -> Mapping[str, Any]:
     """Reconcile the primary and verifier cohorts field by field.
 
@@ -413,6 +415,9 @@ def reconcile_mapping_cohorts(
     dual-model confirmation.
     """
 
+    from .mapping_comparison import DEPENDENCY_COMPARISON_VERSION, compare_mapping_dependencies
+    if comparison_policy_version not in {RECONCILIATION_SCHEMA_VERSION, DEPENDENCY_COMPARISON_VERSION}:
+        raise MappingReconciliationError("unsupported_mapping_comparison_policy")
     executed_route = str(
         primary_execution_route or MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY
     ).strip()
@@ -550,7 +555,18 @@ def reconcile_mapping_cohorts(
             row["system_review_required"] = True
         elif primary is not None and verifier is not None:
             agreed = primary["semantic_verdict"] == verifier["semantic_verdict"]
-            row["result"] = RESULT_AGREED if agreed else RESULT_DIVERGED
+            if comparison_policy_version == DEPENDENCY_COMPARISON_VERSION:
+                try:
+                    comparison = compare_mapping_dependencies(primary["semantic_verdict"], verifier["semantic_verdict"])
+                except ValueError as exc:
+                    agreed = False
+                    row["violations"].append({"cohort": "both", "domain": domain, "source_field": field,
+                                              "code": "mapping_dependency_contract_invalid", "detail": str(exc)})
+                else:
+                    row["dependency_comparison"] = comparison
+                    agreed = comparison["dependencies_agreed"]
+            row["result"] = (RESULT_BLOCKED if row["violations"] else
+                             RESULT_AGREED if agreed else RESULT_DIVERGED)
             # A model disagreement first returns to the harness for focused
             # evidence adjudication. Only the later medically substantive
             # residue may become a user question.
@@ -578,7 +594,7 @@ def reconcile_mapping_cohorts(
     else:
         state = STATE_AGREED
     return {
-        "schema_version": RECONCILIATION_SCHEMA_VERSION,
+        "schema_version": comparison_policy_version,
         "state": state,
         # The dual-model pass is only honest when the primary cohort ran on
         # its remote route; a local fallback can never masquerade as one.

@@ -262,6 +262,7 @@ class AdmissionMappingPipeline:
         require_document_evidence: bool = False,
         document_evidence_resolver: Optional[Callable[..., Any]] = None,
         adjudication_tool_reads: bool = False,
+        explicit_mapping_dependencies: bool = False,
     ) -> None:
         self._service = ai_service
         self._repository = ai_repository
@@ -277,6 +278,15 @@ class AdmissionMappingPipeline:
         self._require_document_evidence = bool(require_document_evidence)
         self._document_evidence_resolver = document_evidence_resolver
         self._adjudication_tool_reads = bool(adjudication_tool_reads)
+        self._explicit_mapping_dependencies = bool(explicit_mapping_dependencies)
+        if self._explicit_mapping_dependencies and not self._adjudication_tool_reads:
+            raise ValueError("explicit mapping dependencies require evidence tools")
+
+    @property
+    def adjudication_comparison_policy(self):
+        from .mapping_comparison import DEPENDENCY_COMPARISON_VERSION
+        from .mapping_reconciliation import RECONCILIATION_SCHEMA_VERSION
+        return DEPENDENCY_COMPARISON_VERSION if self._explicit_mapping_dependencies else RECONCILIATION_SCHEMA_VERSION
 
     @property
     def adjudication_prompt_versions(self):
@@ -285,6 +295,9 @@ class AdmissionMappingPipeline:
 
     def _adjudication_prompt_version(self, cohort):
         verifier = cohort == MONITORING_MAPPING_COHORT_VERIFIER
+        if self._explicit_mapping_dependencies:
+            return ("monitoring-listing-field-mapping-adjudication-verifier-v5-tools-v2" if cohort == "verifier"
+                    else "monitoring-listing-field-mapping-adjudication-v7-tools-v2")
         if self._adjudication_tool_reads:
             return ("monitoring-listing-field-mapping-adjudication-verifier-v4-tools-v1" if verifier
                     else "monitoring-listing-field-mapping-adjudication-v6-tools-v1")
