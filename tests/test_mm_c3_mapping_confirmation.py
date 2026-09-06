@@ -785,6 +785,7 @@ def test_completed_candidates_deep_verify_each_shared_revision_once() -> None:
     ],
 )
 @pytest.mark.parametrize("saved_answer", [False, True])
+@pytest.mark.parametrize("crash_mode", ["none", "after_edit", "answered_after_edit"])
 def test_dual_disagreement_is_adjudicated_before_any_user_question(
     adjudicated_role: str,
     verifier_role: str,
@@ -792,6 +793,7 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
     resolved_count: int,
     resolution: str | None,
     saved_answer: bool,
+    crash_mode: str,
 ) -> None:
     field = {
         "domain": "AE",
@@ -832,12 +834,17 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         state["version"] += 1
         return draft
 
+    pending_crash = [crash_mode != "none" and resolution is not None]
+    def record_receipt(*_args, **kwargs):
+        if pending_crash[0]:
+            pending_crash[0] = False
+            raise RuntimeError("crash after field edit")
+        receipts.append(SimpleNamespace(**kwargs))
+
     mapping_repo = SimpleNamespace(
         get_draft=lambda *_args: draft,
         edit_field=edit_field,
-        record_adjudication=lambda *_args, **kwargs: receipts.append(
-            SimpleNamespace(**kwargs)
-        ),
+        record_adjudication=record_receipt,
         adjudication_receipts=lambda *_args: tuple(receipts),
         semantic_quality=lambda *_args: SimpleNamespace(
             as_payload=lambda: {"confirmable": True}
@@ -946,6 +953,17 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         resolution="escalated",
     ))
 
+    answered_during_recovery = crash_mode == "answered_after_edit" and needs_user
+    crashed = crash_mode != "none" and resolution is not None
+    if crashed:
+        with pytest.raises(RuntimeError, match="crash after field edit"):
+            service.adjudicate_draft(project_id="p1", attempt_id="attempt-1", draft_id="draft-1", workspace_dir="/generated/non-real")
+        if answered_during_recovery:
+            state["field"]["user_action"] = "用户已核对：本次仍为原始描述。"
+            state["field"]["decision_reconciliation_sha256"] = state["field"]["question_reconciliation_sha256"]
+            state["version"] += 1
+        version_before_recovery = state["version"]
+
     payload = service.adjudicate_draft(
         project_id="p1",
         attempt_id="attempt-1",
@@ -953,6 +971,8 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         workspace_dir="/generated/non-real",
     )
 
+    if crashed:
+        assert state["version"] == version_before_recovery
     assert calls[0]["review_context"] == {"divergences": [divergence]}
     if saved_answer and resolution is None:
         assert state == {"version": 1, "field": field}
@@ -963,9 +983,10 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         return
     if saved_answer:
         assert state["field"]["prior_user_action"] == field["user_action"]
-        assert not state["field"]["user_action"].startswith("用户已确认：")
-        assert state["field"]["decision_reconciliation_sha256"] == ""
-        if needs_user:
+        if not answered_during_recovery:
+            assert not state["field"]["user_action"].startswith("用户已确认：")
+            assert state["field"]["decision_reconciliation_sha256"] == ""
+        if needs_user and not answered_during_recovery:
             assert payload["user_questions"][0]["prior_user_action"] == field["user_action"]
             assert state["field"]["question_reconciliation_sha256"] == receipts[1].reconciliation_sha256
     if resolution is not None:
@@ -977,7 +998,7 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         assert payload["adjudication"]["state"] == "blocked"
         assert payload["adjudication"]["remaining_system_review_count"] == 1
     assert payload["adjudication"]["resolved_count"] == resolved_count
-    assert payload["review_summary"]["user_question_count"] == int(needs_user)
+    assert payload["review_summary"]["user_question_count"] == int(needs_user and not answered_during_recovery)
     assert state["field"]["recommended_role"] == (
         "ae_term" if needs_user or resolution is None else adjudicated_role
     )
@@ -997,7 +1018,7 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
     )
     assert state["version"] == version_after_first_pass
     assert len(receipts) == (1 if resolution is None else 2)
-    assert len(calls) == (4 if resolution is None else 2)
+    assert len(calls) == (4 if resolution is None else 2) + (2 if crashed else 0)
     assert replay["adjudication"]["resolved_count"] == resolved_count
 
 

@@ -227,6 +227,19 @@ function projectDraftState(state, draft, message = "") {
   };
 }
 
+export function mappingConfirmationFailureAction(error, draft) {
+  if (error?.detail?.code === "mapping_reconciliation_required") {
+    return { type: "adjudication-start", payload: draft };
+  }
+  return {
+    type: "draft-error",
+    error: {
+      serverText: error?.detail?.message || error?.message || "字段识别结果保存失败。",
+      guidance: ["请点击重试；系统不会要求您重新逐项核对。"],
+    },
+  };
+}
+
 export function admissionMappingConfirmReducer(state, action) {
   switch (action?.type) {
     case "load-start":
