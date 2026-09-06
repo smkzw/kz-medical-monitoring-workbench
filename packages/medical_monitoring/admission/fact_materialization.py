@@ -150,7 +150,10 @@ def _fact_sets_available(
     return (
         row_count == int(summary.get("rows") or 0)
         and value_count == int(summary.get("values") or 0)
-        and value_count == int(summary.get("source_values_verified") or value_count)
+        and (
+            summary.get("source_values_verified") is None
+            or value_count == summary["source_values_verified"]
+        )
     )
 
 
@@ -500,10 +503,8 @@ class FactMaterializationService:
         summary = {
             key: int(internal_summary.get(key) or 0)
             for key in ("tables", "rows", "values", "source_values_verified")
-            if key in internal_summary
+            if key in internal_summary and internal_summary[key] is not None
         }
-        if ready and "source_values_verified" not in summary:
-            summary["source_values_verified"] = int(summary.get("values") or 0)
         return {
             "state": payload.get("state", "not_generated"),
             "facts_generated": ready,

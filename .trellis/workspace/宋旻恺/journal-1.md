@@ -1288,3 +1288,9 @@ Introduced generation-neutral application and route entry points without changin
 - 状态查询新增显式lightweight投影，既有默认深校验保持，只有jobs列表及复核调度选择轻量；get/candidates/执行/接受仍深检。本机同571jobs两个独立只读进程一次测量：完整11.009s/1791.7MiB峰值，轻量0.136s/39.0MiB；不是多次性能保证，也不代表所有重证据调用已消除。
 - 最新用户明确旧禁用执行/会商已失效。采用execution：主线程拥有queue/API/admission，E03前端Workspace的零变化/趋势修复独立写入范围交ZCode GLM-5.3-Flash:max，runner硬等7200s，不加manager。任务mm-p1-display-20260906，运行句柄69599；最近观察仍运行，不能因空stdout重派。guard默认在根context/plans/reviews生成6文件，派发前仅将这6新文件及内部路径迁入Trellis task/execution，产品workdir保留，未移动任何旧记录。最终须audit实际路由与输出，不把派发当完成。
 - P1尚需执行节点回报整合与视觉检查、持久队列完整恢复后真实验证；自主补证据裁决和真实MG风险闭环仍未完成。任务持续active，无新增用户暂停点。
+
+### 2026-09-06 P1显示整合与独立审阅
+- E03执行已终态返回，ZCode/GLM-5.3-Flash:max，无fallback；audit-execution通过。执行产出数值比例与比较状态模块；主线程发现其范围之外的ProductLoop尚未传比较结论，以及CSS最小柱高仍会夸大小值，已补接后端comparison_text/loading及独立140px绘图区。单位逐点保留；不同单位/负值暂列原始数值，不假画可比柱图。尚未视作完整时间趋势体验完成。
+- 已核对数量缺失/None不再由总量补齐；历史artifact可读但公开核对数保持未知，明确0与总量不符会拒绝ready校验。10项fact测试通过；实际JSX渲染验证缺失/null/0/640四种状态。
+- 浏览器挂载真实SubjectWorkspaceView（合成fixture，不是临床E2E）：0/20/100/300/null实测柱高0/9.328125/46.6640625/140/不画柱。首次截图超时，视觉检查尚未完成。相邻流向108、journey673、continuity192检查通过，均不等于医学验收。
+- 独立C01只读审阅已实际派发，runner session55160，冻结b017261相对d6a1a20队列/身份/裁决工件，ZCode/GLM-5.3-Flash:max，任务mm-p1-queue-review-20260906，工件仅task/queue-review。当前pending；不能以初始化或未返回结果冒充审阅通过。

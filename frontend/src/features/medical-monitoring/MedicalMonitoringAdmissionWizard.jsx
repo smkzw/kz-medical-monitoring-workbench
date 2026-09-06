@@ -338,10 +338,11 @@ export function MedicalMonitoringAdmissionWizardView({
               <p className="monitoring-admission-fact-summary">
                 已整理 {resolvedFactState.payload.summary.tables || 0} 张数据表、
                 {resolvedFactState.payload.summary.rows || 0} 条记录、
-                {resolvedFactState.payload.summary.values || 0} 个数据项；系统已自动核对
-                {resolvedFactState.payload.summary.source_values_verified
-                  ?? resolvedFactState.payload.summary.values
-                  ?? 0} 个原始数据位置
+                {resolvedFactState.payload.summary.values || 0} 个数据项；
+                {Number.isInteger(resolvedFactState.payload.summary.source_values_verified)
+                  && resolvedFactState.payload.summary.source_values_verified >= 0
+                  ? `已核对 ${resolvedFactState.payload.summary.source_values_verified} 个原始数据位置`
+                  : "原始数据位置的核对数量尚未记录"}
               </p>
             ) : null}
             <p className="monitoring-admission-minor">
