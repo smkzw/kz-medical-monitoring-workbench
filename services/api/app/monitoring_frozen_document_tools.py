@@ -92,8 +92,12 @@ class FrozenDocumentEvidenceTools:
             try:
                 total = sum(sheet.max_row or 0 for sheet in workbook.worksheets)
                 base = 0
+                inventory["sheets"] = []
                 for sheet in workbook.worksheets:
                     row_total = sheet.max_row or 0
+                    inventory["sheets"].append({"sheet": sheet.title, "state": sheet.sheet_state,
+                        "unit_start": base, "unit_end_exclusive": base + row_total,
+                        "row_count": row_total, "column_count": sheet.max_column or 0})
                     start = max(0, offset - base)
                     end = min(row_total, offset + limit - base)
                     if start < end:
@@ -106,7 +110,7 @@ class FrozenDocumentEvidenceTools:
                                                min_col=column_start + 1, max_col=maximum)
                         for row_number, (row, cached_row) in enumerate(zip(rows, cached_rows), start=start + 1):
                             cells = [{"coordinate": f"{openpyxl.utils.get_column_letter(column_start + cell_index + 1)}{row_number}", "value": self._value(cell.value),
-                                      "data_type": cell.data_type,
+                                      "data_type": cell.data_type, "number_format": cell.number_format,
                                       "cached_value": self._value(cache.value) if cell.data_type == "f" else None}
                                      for cell_index, (cell, cache) in enumerate(zip(row, cached_row))]
                             units.append({"locator": f"xlsx:sheet:{sheet.title}:row:{row_number}",

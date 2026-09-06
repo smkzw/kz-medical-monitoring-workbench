@@ -126,3 +126,23 @@ def test_word_notes_and_tracked_changes_remain_explicit_source_fragments(tmp_pat
     assert {u["text"] for u in revisions} == {"old instruction", "new instruction"}
     assert all(u["accepted_as_current_text"] is False for u in revisions)
     assert result["physical_inventory"]["revision_fragments"] == 2
+
+
+def test_excel_sheet_directory_locates_hidden_second_sheet_without_scanning_first(tmp_path):
+    workbook = openpyxl.Workbook()
+    workbook.active.title = "First"
+    workbook.active.cell(500, 1, "end")
+    second = workbook.create_sheet("Hidden detail")
+    second.sheet_state = "hidden"
+    second.append([0.25])
+    second["A1"].number_format = "0%"
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    reader, binding, _, _ = freeze(tmp_path, buffer.getvalue(), ".xlsx")
+    directory = reader.read_document_units(binding=binding, limit=1)["physical_inventory"]["sheets"]
+    assert directory[1] == {"sheet": "Hidden detail", "state": "hidden", "unit_start": 500,
+                            "unit_end_exclusive": 501, "row_count": 1, "column_count": 1}
+    result = reader.read_document_units(binding=binding, offset=directory[1]["unit_start"], limit=1)
+    assert result["units"][0]["sheet"] == "Hidden detail"
+    assert result["units"][0]["cells"][0]["value"] == 0.25
+    assert result["units"][0]["cells"][0]["number_format"] == "0%"
