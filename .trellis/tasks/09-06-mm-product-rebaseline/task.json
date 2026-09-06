@@ -1,0 +1,13 @@
+{
+  "id": "mm-product-rebaseline",
+  "name": "mm-product-rebaseline",
+  "title": "医学监查接管审阅与真实可用性重建",
+  "status": "in_progress",
+  "priority": "P0",
+  "creator": "宋旻恺",
+  "assignee": "宋旻恺",
+  "createdAt": "2026-09-06",
+  "completedAt": null,
+  "children": [],
+  "notes": "新目标已由应用确认为active。按最新全局AGENTS选择执行方式，先由主线程完成共享队列事务及API，避免并发修改同一控制边界。第一批身份/裁决修复和持久暂停仓储/API已实现；用户端及分片恢复仍在实施。"
+}

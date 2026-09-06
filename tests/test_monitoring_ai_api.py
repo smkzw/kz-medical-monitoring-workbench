@@ -405,6 +405,31 @@ def _service(
     return repository, service
 
 
+def test_queue_controls_persist_and_resume_wakes_both_cohorts(tmp_path: Path) -> None:
+    batch_repository = FakeBatchRepository()
+    repository, service = _service(tmp_path, batch_repository)
+    wakes = []
+    app = FastAPI()
+    app.include_router(create_monitoring_ai_router(
+        repository=repository, service=service, batch_repository=batch_repository,
+        require_server_principal=False,
+        worker_wake=lambda: wakes.append("primary"),
+        queue_worker_wake=lambda: wakes.extend(("primary", "verifier")),
+    ))
+    client = TestClient(app)
+    url = "/api/projects/project-api/modules/medical-monitoring/ai/queue"
+    assert client.get(url).json()["state"] == "enabled"
+    assert client.post(url + "/pause").json()["state"] == "paused"
+    assert client.get(url).json()["pause_requested"] is True
+    assert wakes == []
+    reopened = MonitoringAiRepository(repository.path)
+    assert reopened.queue_state("project-api")["state"] == "paused"
+    response = client.post(url + "/resume")
+    assert response.status_code == 200
+    assert response.json()["state"] == "enabled"
+    assert wakes == ["primary", "verifier"]
+
+
 def test_field_mapping_api_submits_runs_and_accepts_candidate(
     tmp_path: Path,
 ) -> None:

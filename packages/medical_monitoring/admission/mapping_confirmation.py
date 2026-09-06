@@ -104,14 +104,19 @@ def _effective_adjudication_receipts(
     receipts: Iterable[Any],
     reconciliation_sha256: str,
 ) -> dict[tuple[str, str], Any]:
-    """Keep prior system decisions, but never let an old escalation block re-review."""
+    """Accept only current-evidence receipts with a supported resolution.
+
+    Legacy primary-retained receipts remain history, not proof of agreement.
+    Changed evidence requires a fresh review rather than inheriting a verdict.
+    """
 
     selected: dict[tuple[str, str], Any] = {}
     for receipt in receipts:
         pair = (receipt.domain, receipt.source_field)
-        if receipt.reconciliation_sha256 == reconciliation_sha256:
-            selected[pair] = receipt
-        elif pair not in selected and receipt.resolution != "escalated":
+        if (
+            receipt.reconciliation_sha256 == reconciliation_sha256
+            and receipt.resolution in {"escalated", "adjudicated_mapping"}
+        ):
             selected[pair] = receipt
     return selected
 
@@ -668,7 +673,7 @@ class AdmissionMappingConfirmationService:
                     continue
                 if (
                     receipt.resolution
-                    in {"primary_retained", "adjudicated_mapping"}
+                    == "adjudicated_mapping"
                     and not _model_flag(field)
                     and str(field.get("user_action") or "").startswith(
                         _SYSTEM_ADJUDICATION_PREFIX
@@ -826,6 +831,7 @@ class AdmissionMappingConfirmationService:
             for field in unresolved
         }
         resolved = previously_resolved
+        remaining_system_review_count = 0
         cohort_maps = {
             cohort: {
                 (str(item.get("domain") or ""), str(item.get("source_field") or "")): item
@@ -846,12 +852,8 @@ class AdmissionMappingConfirmationService:
             agreed = review_row.get("result") == "agreed"
             item = primary_item
             rationale = str(item.get("user_action") or "").strip()
-            # MiniMax is the declared primary analyst and this focused pass
-            # already includes the anonymous GLM blind-review challenge.  A
-            # remaining reviewer disagreement is therefore durable dissent,
-            # not user work by itself.  Escalate only when either evidence-
-            # bound reviewer explicitly says that medical context is still
-            # insufficient for a system decision.
+            # Dissent is neither agreement nor automatically user work.
+            # Preserve the field until evidence review resolves the conflict.
             requires_user = (
                 _model_flag(item)
                 or _model_flag(verifier_item)
@@ -859,6 +861,9 @@ class AdmissionMappingConfirmationService:
                 or "?" in rationale
                 or "？" in rationale
             )
+            if not agreed and not requires_user:
+                remaining_system_review_count += 1
+                continue
             current = self.mapping_repository.get_draft(project_id, draft_id)
             current_payload = current.model_dump(mode="json")
             current_field = next(
@@ -875,6 +880,11 @@ class AdmissionMappingConfirmationService:
             )
             # A saved user answer always wins over a later system result.
             if current_field is None:
+                continue
+            if _decision_recorded(current_field):
+                # A changed evidence generation needs a fresh binding, never
+                # an automatic rewrite of the monitor's earlier answer.
+                remaining_system_review_count += 1
                 continue
             if (
                 pair not in divergence_pairs
@@ -968,11 +978,7 @@ class AdmissionMappingConfirmationService:
                     resolution=(
                         "escalated"
                         if requires_user
-                        else (
-                            "adjudicated_mapping"
-                            if agreed
-                            else "primary_retained"
-                        )
+                        else "adjudicated_mapping"
                     ),
                     job_id=str(item.get("job_id") or ""),
                     candidate_id=str(item.get("candidate_id") or ""),
@@ -986,8 +992,9 @@ class AdmissionMappingConfirmationService:
         refreshed = self.mapping_repository.get_draft(project_id, draft_id)
         projected = self._draft_payload(refreshed)
         projected["adjudication"] = {
-            "state": "complete",
+            "state": "blocked" if remaining_system_review_count else "complete",
             "resolved_count": resolved,
+            "remaining_system_review_count": remaining_system_review_count,
             "remaining_question_count": projected["review_summary"][
                 "user_question_count"
             ],
@@ -1278,9 +1285,7 @@ class AdmissionMappingConfirmationService:
                 continue
             if (
                 _model_flag(field)
-                or receipt.resolution not in {
-                    "primary_retained", "adjudicated_mapping"
-                }
+                or receipt.resolution != "adjudicated_mapping"
                 or not str(field.get("user_action") or "").startswith(
                     _SYSTEM_ADJUDICATION_PREFIX
                 )

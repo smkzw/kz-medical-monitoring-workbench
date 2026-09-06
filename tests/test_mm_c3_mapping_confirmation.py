@@ -25,12 +25,13 @@ from packages.medical_monitoring.api.r7_product.mapping_candidate_routes import 
 )
 
 
-def test_new_evidence_keeps_prior_system_decisions_but_reopens_escalations() -> None:
+@pytest.mark.parametrize("resolution", ["primary_retained", "adjudicated_mapping"])
+def test_new_evidence_requires_fresh_system_review(resolution: str) -> None:
     prior_system = SimpleNamespace(
         domain="AE",
         source_field="AETERM",
         reconciliation_sha256="a" * 64,
-        resolution="primary_retained",
+        resolution=resolution,
     )
     prior_escalation = SimpleNamespace(
         domain="EX",
@@ -44,7 +45,7 @@ def test_new_evidence_keeps_prior_system_decisions_but_reopens_escalations() -> 
         "b" * 64,
     )
 
-    assert effective == {("AE", "AETERM"): prior_system}
+    assert effective == {}
 
 
 def test_attention_reason_adopts_sound_candidates_and_questions_substantive_ones() -> None:
@@ -578,6 +579,7 @@ def test_second_pass_only_clears_an_unchanged_evidence_supported_mapping() -> No
     assert payload["adjudication"] == {
         "state": "complete",
         "resolved_count": 1,
+        "remaining_system_review_count": 0,
         "remaining_question_count": 0,
     }
     assert payload["review_summary"]["system_adjudicated_count"] == 1
@@ -778,16 +780,18 @@ def test_completed_candidates_deep_verify_each_shared_revision_once() -> None:
     ),
     [
         ("ae_term_text", "ae_term_text", False, 1, "adjudicated_mapping"),
-        ("ae_term_text", "ae_term", False, 1, "primary_retained"),
+        ("ae_term_text", "ae_term", False, 0, None),
         ("ae_term_text", "ae_term", True, 0, "escalated"),
     ],
 )
+@pytest.mark.parametrize("saved_answer", [False, True])
 def test_dual_disagreement_is_adjudicated_before_any_user_question(
     adjudicated_role: str,
     verifier_role: str,
     needs_user: bool,
     resolved_count: int,
-    resolution: str,
+    resolution: str | None,
+    saved_answer: bool,
 ) -> None:
     field = {
         "domain": "AE",
@@ -799,6 +803,8 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         "user_action": "系统已按建议采用，无需额外操作。",
         "user_decision_required": False,
     }
+    if saved_answer:
+        field["user_action"] = "用户已确认：此列为原始记录。"
     state = {"version": 1, "field": dict(field)}
     receipts = []
 
@@ -948,17 +954,30 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
     )
 
     assert calls[0]["review_context"] == {"divergences": [divergence]}
-    assert receipts[1].resolution == resolution
-    assert receipts[1].reconciliation_sha256 != legacy_reconciliation_sha256
+    if saved_answer:
+        assert state == {"version": 1, "field": field}
+        assert len(receipts) == 1
+        assert payload["adjudication"]["state"] == "blocked"
+        assert payload["adjudication"]["resolved_count"] == 0
+        assert payload["review_summary"]["user_question_count"] == 0
+        return
+    if resolution is not None:
+        assert receipts[1].resolution == resolution
+        assert receipts[1].reconciliation_sha256 != legacy_reconciliation_sha256
+    else:
+        assert len(receipts) == 1
+        assert state["field"] == field
+        assert payload["adjudication"]["state"] == "blocked"
+        assert payload["adjudication"]["remaining_system_review_count"] == 1
     assert payload["adjudication"]["resolved_count"] == resolved_count
     assert payload["review_summary"]["user_question_count"] == int(needs_user)
     assert state["field"]["recommended_role"] == (
-        "ae_term" if needs_user else adjudicated_role
+        "ae_term" if needs_user or resolution is None else adjudicated_role
     )
     assert state["field"]["user_decision_required"] is needs_user
     if needs_user:
         assert "模型" not in state["field"]["user_action"]
-    else:
+    elif resolution is not None:
         assert state["field"]["user_action"].startswith("系统复核：")
         if verifier_role != adjudicated_role:
             assert state["field"]["related_fields"] == ["AEDECOD"]
@@ -970,12 +989,13 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         workspace_dir="/generated/non-real",
     )
     assert state["version"] == version_after_first_pass
-    assert len(receipts) == 2
-    assert len(calls) == 2
+    assert len(receipts) == (1 if resolution is None else 2)
+    assert len(calls) == (4 if resolution is None else 2)
     assert replay["adjudication"]["resolved_count"] == resolved_count
 
 
-def test_confirm_accepts_a_durable_system_resolution_of_dual_disagreement() -> None:
+@pytest.mark.parametrize("resolution", ["adjudicated_mapping", "primary_retained"])
+def test_confirm_requires_agreement_not_primary_retention(resolution: str) -> None:
     reconciliation = {
         "state": "diverged",
         "auto_pass": False,
@@ -1006,7 +1026,7 @@ def test_confirm_accepts_a_durable_system_resolution_of_dual_disagreement() -> N
                 domain="AE",
                 source_field="AETERM",
                 reconciliation_sha256=reconciliation_sha256,
-                resolution="primary_retained",
+                resolution=resolution,
             ),
         ),
         confirm=lambda *_args, **_kwargs: SimpleNamespace(
@@ -1026,7 +1046,7 @@ def test_confirm_accepts_a_durable_system_resolution_of_dual_disagreement() -> N
         "reconciliation": reconciliation
     }
 
-    payload = service.confirm_draft(
+    kwargs = dict(
         project_id="p1",
         attempt_id="attempt-1",
         draft_id="draft-1",
@@ -1035,6 +1055,10 @@ def test_confirm_accepts_a_durable_system_resolution_of_dual_disagreement() -> N
         confirmation_reason="系统已完成盲核差异裁决。",
         idempotency_key="confirm-dual-adjudicated",
     )
-
+    if resolution == "primary_retained":
+        with pytest.raises(AdmissionMappingPipelineError, match="mapping_reconciliation_required"):
+            service.confirm_draft(**kwargs)
+        return
+    payload = service.confirm_draft(**kwargs)
     assert payload["mapping_revision"] == "revision-1"
     assert payload["facts_generated"] is False
