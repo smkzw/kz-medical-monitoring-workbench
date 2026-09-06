@@ -11049,10 +11049,53 @@ def test_tool_enabled_verifier_preserves_independent_challenge_contract(tmp_path
         profile["adjudication_contract"] = {
             "schema_version": "monitoring_mapping_dual_adjudication_v1", "first_pass_mappings": [],
         }
-    prompt_version = ("monitoring-listing-field-mapping-adjudication-verifier-v3-tools-v1"
+    prompt_version = ("monitoring-listing-field-mapping-adjudication-verifier-v4-tools-v1"
                       if adjudication else "monitoring-listing-field-mapping-verifier-v2-tools-v1")
     job = service.submit_listing_field_mapping(project_id="project-alpha", input_revision=_revision(),
                                                field_profile=profile, prompt_version=prompt_version)
     envelope = service._build_prompt_envelope(job, service.repository.input_payload(job.project_id, job.job_id))
     assert ("隔离运行的第二裁决者" if adjudication else "全量盲核harness") in envelope.system_prompt
     assert "反证" in envelope.system_prompt
+
+
+def test_tools_bind_actual_document_sources_without_relabelling_them_as_listing(tmp_path: Path):
+    from contextlib import contextmanager
+    from dataclasses import replace
+    from tests.test_mm_c3_document_evidence import _packet
+    profile = _field_profile(field_count=1)
+    packet = replace(_packet(), project_id="project-alpha")
+    profile["document_evidence"] = packet.to_dict()
+    document = next(role.binding for role in packet.roles if role.binding is not None)
+    original = deepcopy(profile)
+    def output(envelope):
+        result = _valid_output(envelope)
+        evidence = result["candidates"][0]["evidence"][0]
+        evidence.update(source_entry_id=document.source_entry_id,
+                        source_content_sha256=document.content_sha256,
+                        locator="pdf:page:1", quote="frozen document text")
+        return result
+    def request(envelope):
+        return {"schema_version": "mm-evidence-tool-request-v1", "task_id": envelope.task_id,
+                "input_revision_sha256": envelope.payload["input_revision_sha256"],
+                "tool_requests": [{"request_id": "document-1", "name": "read_document_units", "arguments": {}}]}
+    provider = FakeProvider([request, output])
+    service = _service(tmp_path, provider)
+    @contextmanager
+    def factory(job, _payload):
+        yield SimpleNamespace(schemas={"read_document_units": {}}, execute=lambda *_: {
+            "input_revision_sha256": job.input_revision_sha256, "source_entry_id": document.source_entry_id,
+            "source_content_sha256": document.content_sha256, "coverage": "partial",
+            "units": [{"locator": "pdf:page:1", "text": "frozen document text"}],
+        })
+    service.evidence_tool_factory = factory
+    job = service.submit_listing_field_mapping(project_id="project-alpha", input_revision=_revision(),
+        field_profile=profile, prompt_version="monitoring-listing-field-mapping-v20-tools-v1")
+    assert profile == original
+    assert (document.source_entry_id, document.content_sha256) in job.input_revision.source_pairs
+    result = service.run_next("tools-document-test")
+    assert result.job.status == MonitoringAiJobStatus.COMPLETED
+    candidate = service.repository.candidates(job.project_id, job.job_id)[0]
+    assert candidate.evidence[0].source_entry_id == document.source_entry_id
+    legacy = service.submit_listing_field_mapping(project_id="project-alpha", input_revision=_revision(),
+        field_profile=profile, prompt_version="monitoring-listing-field-mapping-v19")
+    assert (document.source_entry_id, document.content_sha256) not in legacy.input_revision.source_pairs

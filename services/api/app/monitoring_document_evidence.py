@@ -137,37 +137,8 @@ class MonitoringDocumentEvidenceResolver:
         retrieval for every file in the set.
         """
 
-        if binding.role not in DOCUMENT_ROLES:
-            raise ValueError("monitoring document role is unsupported")
-        binding_kind = (
-            "supplementary" if binding.main_source_entry_id else "main"
-        )
-        packet = self.resolve(
-            project_id=project_id,
-            selected_entry_ids={
-                binding.role: (
-                    binding.main_source_entry_id
-                    if binding_kind == "supplementary"
-                    else binding.source_entry_id
-                ),
-            },
-        )
-        evidence = next(
-            item for item in packet.roles if item.role == binding.role
-        )
-        still_current = (
-            evidence.status == "current"
-            and (
-                evidence.binding == binding
-                if binding_kind == "main"
-                else any(
-                    item == binding
-                    for item in evidence.supplementary_bindings
-                )
-            )
-        )
-        if not still_current:
-            raise ValueError("monitoring document binding is no longer current")
+        self.assert_current_binding(project_id=project_id, binding=binding)
+        binding_kind = "supplementary" if binding.main_source_entry_id else "main"
         matches = self.source_registry.search_document_spans(
             project_id,
             binding.source_entry_id,
@@ -204,6 +175,40 @@ class MonitoringDocumentEvidenceResolver:
             **payload,
             "packet_sha256": content_hash(payload),
         }
+
+    def assert_current_binding(self, *, project_id: str, binding: CurrentDocumentBinding) -> None:
+        """Check the complete frozen authority before any document read."""
+        if binding.role not in DOCUMENT_ROLES:
+            raise ValueError("monitoring document role is unsupported")
+        binding_kind = (
+            "supplementary" if binding.main_source_entry_id else "main"
+        )
+        packet = self.resolve(
+            project_id=project_id,
+            selected_entry_ids={
+                binding.role: (
+                    binding.main_source_entry_id
+                    if binding_kind == "supplementary"
+                    else binding.source_entry_id
+                ),
+            },
+        )
+        evidence = next(
+            item for item in packet.roles if item.role == binding.role
+        )
+        still_current = (
+            evidence.status == "current"
+            and (
+                evidence.binding == binding
+                if binding_kind == "main"
+                else any(
+                    item == binding
+                    for item in evidence.supplementary_bindings
+                )
+            )
+        )
+        if not still_current:
+            raise ValueError("monitoring document binding is no longer current")
 
     def _role_evidence(
         self,
