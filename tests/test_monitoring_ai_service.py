@@ -455,6 +455,61 @@ def _service(
     )
 
 
+@pytest.mark.parametrize("with_tools", [False, True])
+def test_product_worker_evidence_reads_preserve_candidate_validation_and_receipts(
+    tmp_path: Path, with_tools: bool,
+) -> None:
+    from contextlib import contextmanager
+    from services.api.app.monitoring_evidence_tool_loop import TOOL_REQUEST_SCHEMA
+
+    reads = []
+    closed = []
+
+    def request(envelope):
+        return {
+            "schema_version": TOOL_REQUEST_SCHEMA,
+            "task_id": envelope.task_id,
+            "input_revision_sha256": envelope.payload["input_revision_sha256"],
+            "tool_requests": [{"request_id": "read-1", "name": "read_source_region",
+                               "arguments": {"row_start": 0}}],
+        }
+
+    provider = FakeProvider([request, _valid_output] if with_tools else [_valid_output])
+    service = _service(tmp_path, provider)
+
+    @contextmanager
+    def factory(job, payload):
+        def execute(name, arguments):
+            reads.append((name, arguments))
+            return {"input_revision_sha256": job.input_revision_sha256,
+                    "coverage": "partial", "cells": [{"raw_value": 0}]}
+        try:
+            yield SimpleNamespace(schemas={"read_source_region": {}}, execute=execute)
+        finally:
+            closed.append(True)
+
+    service.evidence_tool_factory = factory
+    job = service.submit_listing_field_mapping(
+        project_id="project-alpha", input_revision=_revision(),
+        field_profile=_field_profile(field_count=2),
+        prompt_version="monitoring-listing-field-mapping-v20-tools-v1" if with_tools else "",
+    )
+    result = service.run_next("worker-tools")
+    assert result.job.status == MonitoringAiJobStatus.COMPLETED
+    assert len(service.repository.candidates(job.project_id, job.job_id)) == 1
+    receipts = service.repository.evidence_reads(job.project_id, job.job_id)
+    assert len(service.repository.attempts(job.project_id, job.job_id)) == 1
+    assert len(receipts) == int(with_tools)
+    assert len(reads) == int(with_tools)
+    assert len(closed) == int(with_tools)
+    assert len(provider.envelopes) == (2 if with_tools else 1)
+    if with_tools:
+        tool_result = provider.envelopes[1].payload["evidence_tool_results"][0]["result"]
+        assert tool_result["cells"][0]["raw_value"] == 0
+        assert tool_result["coverage"] == "partial"
+        assert receipts[0]["response_model"] == "test-model"
+
+
 def test_normal_output_preserves_all_field_profiles_and_response_identity(
     tmp_path: Path,
 ) -> None:
@@ -10984,3 +11039,20 @@ def test_v7_visit_sdtm_assertion_candidate_indexed(tmp_path: Path) -> None:
         service.repository.candidates("project-alpha", result.job.job_id)
         == ()
     )
+
+
+@pytest.mark.parametrize("adjudication", [False, True])
+def test_tool_enabled_verifier_preserves_independent_challenge_contract(tmp_path: Path, adjudication):
+    service = _service(tmp_path, FakeProvider([_valid_output]))
+    profile = _field_profile(field_count=1)
+    if adjudication:
+        profile["adjudication_contract"] = {
+            "schema_version": "monitoring_mapping_dual_adjudication_v1", "first_pass_mappings": [],
+        }
+    prompt_version = ("monitoring-listing-field-mapping-adjudication-verifier-v3-tools-v1"
+                      if adjudication else "monitoring-listing-field-mapping-verifier-v2-tools-v1")
+    job = service.submit_listing_field_mapping(project_id="project-alpha", input_revision=_revision(),
+                                               field_profile=profile, prompt_version=prompt_version)
+    envelope = service._build_prompt_envelope(job, service.repository.input_payload(job.project_id, job.job_id))
+    assert ("隔离运行的第二裁决者" if adjudication else "全量盲核harness") in envelope.system_prompt
+    assert "反证" in envelope.system_prompt

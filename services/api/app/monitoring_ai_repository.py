@@ -188,6 +188,18 @@ class MonitoringAiRepository:
                     )
                 );
 
+                CREATE TABLE IF NOT EXISTS monitoring_ai_evidence_reads (
+                    read_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL,
+                    attempt_number INTEGER NOT NULL,
+                    input_revision_sha256 TEXT NOT NULL,
+                    receipt_json TEXT NOT NULL,
+                    receipt_sha256 TEXT NOT NULL,
+                    response_model TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_monitoring_ai_evidence_reads_job
+                    ON monitoring_ai_evidence_reads(job_id, read_id);
                 CREATE TABLE IF NOT EXISTS monitoring_ai_attempts (
                     attempt_id TEXT PRIMARY KEY,
                     job_id TEXT NOT NULL,
@@ -793,6 +805,48 @@ class MonitoringAiRepository:
                 ),
             )
         return attempt_id
+
+    def record_evidence_read(self, job: MonitoringAiJob, *, owner: str,
+                             receipt: dict[str, Any], response_model: str) -> None:
+        """Persist each frozen read without consuming/replacing an execution attempt."""
+        if receipt.get("result", {}).get("input_revision_sha256") != job.input_revision_sha256:
+            raise MonitoringAiStateConflictError("evidence read revision mismatch")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = connection.execute(
+                "SELECT status, lease_owner, lease_expires_at, attempt_count "
+                "FROM monitoring_ai_jobs WHERE job_id = ?", (job.job_id,),
+            ).fetchone()
+            if (current is None or current["status"] != MonitoringAiJobStatus.RUNNING.value
+                    or current["lease_owner"] != owner
+                    or current["lease_expires_at"] < _iso(self.clock())
+                    or int(current["attempt_count"]) != job.attempt_count):
+                raise MonitoringAiStateConflictError("evidence read lost lease or CAS")
+            connection.execute(
+                "INSERT INTO monitoring_ai_evidence_reads "
+                "(job_id, attempt_number, input_revision_sha256, receipt_json, "
+                "receipt_sha256, response_model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (job.job_id, job.attempt_count, job.input_revision_sha256,
+                 canonical_json(receipt), content_sha256(receipt), response_model, _iso(self.clock())),
+            )
+
+    def evidence_reads(self, project_id: str, job_id: str) -> tuple[dict[str, Any], ...]:
+        job = self.get(project_id, job_id)
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM monitoring_ai_evidence_reads WHERE job_id = ? ORDER BY read_id",
+                (job.job_id,),
+            ).fetchall()
+        result = []
+        for row in rows:
+            receipt = json.loads(row["receipt_json"])
+            if (content_sha256(receipt) != row["receipt_sha256"]
+                    or row["input_revision_sha256"] != job.input_revision_sha256
+                    or receipt.get("result", {}).get("input_revision_sha256") != job.input_revision_sha256):
+                raise MonitoringAiRepositoryError("stored evidence read identity mismatch")
+            result.append({"receipt": receipt, "response_model": row["response_model"],
+                           "attempt_number": row["attempt_number"], "read_id": row["read_id"]})
+        return tuple(result)
 
     def attempts(
         self,

@@ -714,6 +714,33 @@ def test_late_worker_cannot_record_or_complete_after_lease_reclaim(
         )
 
 
+def test_evidence_read_receipts_survive_reclaim_without_consuming_attempts(tmp_path: Path) -> None:
+    clock = MutableClock()
+    repository = MonitoringAiRepository(tmp_path / "evidence.sqlite3", lease_seconds=10, clock=clock)
+    repository.create_or_get(_request())
+    first = repository.claim_next("worker-a")
+    receipt = {"request": {"request_id": "one"},
+               "result": {"input_revision_sha256": first.input_revision_sha256, "value": 0}}
+    for _ in range(2):
+        repository.record_evidence_read(first, owner="worker-a", receipt=receipt, response_model="test-model")
+    assert len(repository.evidence_reads(first.project_id, first.job_id)) == 2
+    assert repository.attempts(first.project_id, first.job_id) == ()
+    clock.advance(seconds=11)
+    second = repository.claim_next("worker-b")
+    assert second.attempt_count == 2
+    with pytest.raises(MonitoringAiStateConflictError, match="lease or CAS"):
+        repository.record_evidence_read(first, owner="worker-a", receipt=receipt, response_model="test-model")
+    with pytest.raises(MonitoringAiStateConflictError, match="revision mismatch"):
+        repository.record_evidence_read(second, owner="worker-b", receipt={"result": {}}, response_model="test-model")
+    repository.record_evidence_read(second, owner="worker-b", receipt=receipt, response_model="test-model")
+    reopened = MonitoringAiRepository(tmp_path / "evidence.sqlite3", clock=clock)
+    assert [r["attempt_number"] for r in reopened.evidence_reads(first.project_id, first.job_id)] == [1, 1, 2]
+    with sqlite3.connect(tmp_path / "evidence.sqlite3") as connection:
+        connection.execute("UPDATE monitoring_ai_evidence_reads SET receipt_json = '{}' WHERE read_id = 1")
+    with pytest.raises(MonitoringAiRepositoryError, match="identity mismatch"):
+        reopened.evidence_reads(first.project_id, first.job_id)
+
+
 def test_expired_final_attempt_becomes_explicitly_retryable_terminal(
     tmp_path: Path,
 ) -> None:
