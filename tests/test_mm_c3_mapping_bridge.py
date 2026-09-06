@@ -104,6 +104,30 @@ def test_adjudication_pipeline_retries_only_failed_shard_without_new_generation(
     assert len(wakes) == (0 if active else 1)
 
 
+@pytest.mark.parametrize("retired", [True, False])
+def test_adjudication_retry_conflict_remains_a_visible_failed_shard(retired):
+    from services.api.app.monitoring_ai_repository import MonitoringAiStateConflictError
+    job = SimpleNamespace(
+        job_id="failed-one", project_id=PROJECT_ID, business_key="review:g01:chunk-1",
+        status="failed", input_payload_sha256="b" * 64, input_revision_sha256="a" * 64,
+        prompt_version="current", profile_id="primary", provider="primary", requested_model="primary",
+        contract_retirement_code="superseded_job_contract" if retired else "",
+    )
+    def conflict(*args, **kwargs):
+        if retired:
+            pytest.fail("already retired shard was retried")
+        raise MonitoringAiStateConflictError("concurrent retirement")
+    pipeline = AdmissionMappingPipeline(
+        ai_service=SimpleNamespace(current_revision_resolver=lambda _: "a" * 64),
+        ai_repository=SimpleNamespace(list_jobs=lambda *args, **kwargs: [job], retry_terminal=conflict),
+        input_revision_factory=lambda value: value, task_type="mapping",
+    )
+    result = pipeline.adjudicate_candidates(
+        project_id=PROJECT_ID, attempt_id="attempt", draft_id="draft",
+        draft_fields=[{"domain": "AE", "source_field": "TERM"}], workspace_dir=Path("/unused"))
+    assert result["state"] == "failed"
+
+
 def _xlsx_bytes() -> bytes:
     openpyxl = pytest.importorskip("openpyxl")
     workbook = openpyxl.Workbook()
@@ -426,6 +450,49 @@ def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path
         jobs[0],
         workspace_dir=workspace.parent / "missing-workspace",
     ) == ""
+
+
+@pytest.mark.parametrize("evidence_changed", [False, True])
+def test_second_pass_revision_change_gets_one_new_evidence_namespace(
+    tmp_path: Path, evidence_changed: bool,
+) -> None:
+    attempt_id, workspace = _admit(tmp_path)
+    repository = MonitoringAiRepository(tmp_path / "queue.sqlite3")
+    upgraded = False
+    def profiler(**kwargs):
+        result = _stub_profiler(**kwargs)
+        if upgraded:
+            result["profiler_contract"] = "new-relationship-evidence-v2"
+        return result
+    service = MonitoringAiService(repository, runtime_resolver=_runtime)
+    service.current_revision_resolver = lambda job: current_admission_mapping_revision(
+        repository, job, workspace_dir=workspace, relationship_profiler=profiler)
+    pipeline = AdmissionMappingPipeline(
+        ai_service=service, ai_repository=repository,
+        input_revision_factory=MonitoringAiInputRevision.model_validate,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING, relationship_profiler=profiler,
+    )
+    options = dict(project_id=PROJECT_ID, attempt_id=attempt_id, draft_id="draft-evidence",
+                   draft_fields=[{"domain": "生命体征", "source_field": "SYSBP",
+                                  "recommended_role": "vital_sign_systolic_blood_pressure",
+                                  "field_kind": "source_collected"}], workspace_dir=workspace)
+    pipeline.adjudicate_candidates(**options)
+    original = repository.list_jobs(PROJECT_ID)[0]
+    claimed = repository.claim_next("worker")
+    repository.fail(claimed, owner="worker", failure_code="synthetic_failure",
+                    failure_message="fixture", retryable=False)
+    upgraded = evidence_changed
+    if not evidence_changed:
+        service.current_revision_resolver = lambda _: ""
+    result = pipeline.adjudicate_candidates(**options)
+    assert result["state"] == ("running" if evidence_changed else "failed")
+    pipeline.adjudicate_candidates(**options)
+    jobs = repository.list_jobs(PROJECT_ID)
+    assert len(jobs) == (2 if evidence_changed else 1)
+    assert repository.get(PROJECT_ID, original.job_id).status.value == "failed"
+    if evidence_changed:
+        assert len({job.business_key for job in jobs}) == 2
+        assert len({job.input_revision_sha256 for job in jobs}) == 2
 
 
 def test_pipeline_second_pass_submits_only_questions_with_full_table_context(

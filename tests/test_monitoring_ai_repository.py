@@ -97,6 +97,32 @@ def _request(
     )
 
 
+def test_resume_expires_lost_final_attempt_without_restarting_server(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from services.api.app.monitoring_ai_router import create_monitoring_ai_router
+
+    clock = MutableClock()
+    repo = MonitoringAiRepository(tmp_path / "resume.sqlite3", clock=clock)
+    job = repo.create_or_get(_request(max_attempts=1))
+    repo.claim_next("lost-worker")
+    repo.set_queue_paused(job.project_id, paused=True)
+    clock.advance(hours=1)
+    wakes = []
+    app = FastAPI()
+    app.include_router(create_monitoring_ai_router(
+        repository=repo, service=SimpleNamespace(), batch_repository=SimpleNamespace(),
+        require_server_principal=False, worker_wake=lambda: wakes.append(True),
+    ))
+    response = TestClient(app).post(
+        f"/api/projects/{job.project_id}/modules/medical-monitoring/ai/queue/resume")
+    assert response.status_code == 200
+    assert repo.get(job.project_id, job.job_id).status == MonitoringAiJobStatus.FAILED
+    assert repo.get(job.project_id, job.job_id).failure_code == "worker_lease_expired"
+    assert wakes == [True]
+
+
 def test_queue_pause_survives_reopen_and_preserves_inflight_result(tmp_path: Path) -> None:
     clock = MutableClock()
     path = tmp_path / "queue.sqlite3"

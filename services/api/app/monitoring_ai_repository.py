@@ -640,7 +640,7 @@ class MonitoringAiRepository:
             connection.commit()
         return self._job(current)
 
-    def expire_exhausted_leases(self, *, project_id: str = "") -> int:
+    def expire_exhausted_leases(self, *, project_id: str = "", retire_legacy_workflows: bool = True) -> int:
         """Move expired final-attempt leases to a retryable terminal state.
 
         A worker can disappear after claiming its last allowed attempt. Such a
@@ -650,17 +650,18 @@ class MonitoringAiRepository:
         whether to grant additional attempts.
         """
 
-        self.supersede_payload_workflows_except(
-            task_type=MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING,
-            business_key_prefix=PROTOCOL_PREPARATION_BUSINESS_KEY_PREFIX,
-            current_workflow=PROTOCOL_PREPARATION_CONTRACT_VERSION,
-            project_id=project_id,
-            reason=(
-                "方案监查准备合同已升级为 "
-                f"{PROTOCOL_PREPARATION_CONTRACT_VERSION}；"
-                "旧作业与候选仅保留审计，不得在启动恢复中重新执行。"
-            ),
-        )
+        if retire_legacy_workflows:
+            self.supersede_payload_workflows_except(
+                task_type=MonitoringAiTaskType.PROTOCOL_CLAUSE_STRUCTURING,
+                business_key_prefix=PROTOCOL_PREPARATION_BUSINESS_KEY_PREFIX,
+                current_workflow=PROTOCOL_PREPARATION_CONTRACT_VERSION,
+                project_id=project_id,
+                reason=(
+                    "方案监查准备合同已升级为 "
+                    f"{PROTOCOL_PREPARATION_CONTRACT_VERSION}；"
+                    "旧作业与候选仅保留审计，不得在启动恢复中重新执行。"
+                ),
+            )
         now = self.clock()
         clauses = [
             "status = ?",
