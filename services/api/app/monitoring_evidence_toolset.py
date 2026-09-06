@@ -14,9 +14,10 @@ def _schema(properties, required):
 
 
 class MonitoringEvidenceToolset:
-    def __init__(self, reader, *, document_resolver=None):
+    def __init__(self, reader, *, document_resolver=None, document_reader=None):
         self.reader = reader
         self.document_resolver = document_resolver
+        self.document_reader = document_reader
         self.schemas = {
             "sample_rows": _schema({
                 "table_binding_id": {"type": "string"},
@@ -53,6 +54,16 @@ class MonitoringEvidenceToolset:
                 for binding in (role.binding, *role.supplementary_bindings):
                     self.document_bindings[binding.source_entry_id] = binding
             if self.document_bindings:
+                if document_reader is not None:
+                    self.schemas["read_document_units"] = _schema({
+                        "source_entry_id": {"type": "string", "enum": sorted(self.document_bindings)},
+                        "offset": {"type": "integer", "minimum": 0, "default": 0},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 8, "default": 4},
+                        "text_offset": {"type": "integer", "minimum": 0, "default": 0},
+                        "text_limit": {"type": "integer", "minimum": 1, "maximum": 24000, "default": 16000},
+                        "column_start": {"type": "integer", "minimum": 0, "default": 0},
+                        "column_count": {"type": "integer", "minimum": 1, "maximum": 24, "default": 12},
+                    }, ["source_entry_id"])
                 self.schemas["search_document"] = _schema({
                     "source_entry_id": {"type": "string", "enum": sorted(self.document_bindings)},
                     "query_terms": {"type": "array", "minItems": 1, "maxItems": 12,
@@ -68,6 +79,12 @@ class MonitoringEvidenceToolset:
                 or not set(schema["required"]).issubset(arguments)):
             raise SourceToolError("source_tool_arguments_invalid")
         try:
+            if name == "read_document_units":
+                binding = self.document_bindings.get(arguments["source_entry_id"])
+                if binding is None:
+                    raise SourceToolError("document_not_bound")
+                return self.document_reader.read_document_units(
+                    binding=binding, **{key: value for key, value in arguments.items() if key != "source_entry_id"})
             if name == "search_document":
                 binding = self.document_bindings.get(arguments["source_entry_id"])
                 terms = arguments["query_terms"]
@@ -102,6 +119,12 @@ def open_monitoring_evidence_toolset(job, input_payload, *, workspace_dir: Path,
             store, project_id=job.project_id, input_revision=job.input_revision_sha256,
             field_profile=input_payload["field_profile"],
         )
-        yield MonitoringEvidenceToolset(reader, document_resolver=document_resolver)
+        from .monitoring_frozen_document_tools import FrozenDocumentEvidenceTools
+        documents = FrozenDocumentEvidenceTools(
+            candidate_root=workspace_dir / "document_authority_candidates",
+            project_id=job.project_id, input_revision=job.input_revision_sha256,
+            resolver=document_resolver,
+        ) if document_resolver is not None else None
+        yield MonitoringEvidenceToolset(reader, document_resolver=document_resolver, document_reader=documents)
     finally:
         store.close()

@@ -1793,13 +1793,25 @@ class MonitoringAiService:
             "role_catalog": ROLE_CATALOG_VERSION,
             "semantic_rules": RULE_CATALOG_VERSION,
         }
-        effective_revision = monitoring_revision_with_field_profile(
-            input_revision,
-            effective_field_profile["profile_sha256"],
-        )
         effective_prompt_version = (
             prompt_version.strip()
             or PROMPT_VERSION_BY_TASK[MonitoringAiTaskType.LISTING_FIELD_MAPPING]
+        )
+        from packages.medical_monitoring.admission.evidence_tool_contract import (
+            EVIDENCE_TOOL_PROMPT_VERSIONS, bind_frozen_document_sources,
+        )
+        if effective_prompt_version in EVIDENCE_TOOL_PROMPT_VERSIONS:
+            effective_field_profile = bind_frozen_document_sources(effective_field_profile)
+            sources = {source.source_entry_id: source for source in input_revision.sources}
+            for item in effective_field_profile["source_bindings"]:
+                source = MonitoringAiSourceBinding.model_validate(item)
+                if source.source_entry_id in sources and sources[source.source_entry_id] != source:
+                    raise ValueError("tool source revision conflict")
+                sources[source.source_entry_id] = source
+            input_revision = input_revision.model_copy(update={"sources": tuple(sources.values())})
+        effective_revision = monitoring_revision_with_field_profile(
+            input_revision,
+            effective_field_profile["profile_sha256"],
         )
         self._validate_input_payload(
             MonitoringAiTaskType.LISTING_FIELD_MAPPING,
@@ -3306,7 +3318,7 @@ class MonitoringAiService:
                     )
                 if job.prompt_version in {
                     "monitoring-listing-field-mapping-adjudication-verifier-v2",
-                    "monitoring-listing-field-mapping-adjudication-verifier-v3-tools-v1",
+                    "monitoring-listing-field-mapping-adjudication-verifier-v4-tools-v1",
                 }:
                     system_prompt += (
                         " 你是与另一复核harness隔离运行的第二裁决者。不得推测或复述"
@@ -6384,13 +6396,25 @@ class MonitoringAiService:
                 MonitoringAiService._controlled_validation_error_text(exc)
             ) from exc
 
-    @staticmethod
     def _materialize_field_profile_evidence(
+        self,
         job: MonitoringAiJob,
         candidate: _ProviderCandidate,
         structured_payload: Dict[str, Any],
         input_payload: Dict[str, Any],
     ) -> None:
+        from packages.medical_monitoring.admission.evidence_tool_contract import EVIDENCE_TOOL_PROMPT_VERSIONS
+        from .monitoring_tool_evidence import verified_tool_evidence
+        verified = {}
+        if job.prompt_version in EVIDENCE_TOOL_PROMPT_VERSIONS:
+            try:
+                verified = verified_tool_evidence(
+                    [item.model_dump(mode="json") for item in candidate.evidence],
+                    self.repository.evidence_reads(job.project_id, job.job_id),
+                    job.input_revision.source_pairs,
+                )
+            except ValueError as exc:
+                raise MonitoringAiOutputValidationError(str(exc)) from exc
         profile = input_payload["field_profile"]
         provenance = structured_payload["mapping_provenance"]
         origin_by_pair = {
@@ -6429,8 +6453,8 @@ class MonitoringAiService:
             for item in profile.get("table_bindings", [])
             if isinstance(item, dict)
         }
-        evidence: List[_ProviderEvidence] = []
-        all_evidence_ids: List[str] = []
+        evidence: List[_ProviderEvidence] = [_ProviderEvidence.model_validate(item) for item in verified.values()]
+        all_evidence_ids: List[str] = list(verified)
         profile_source = monitoring_field_profile_source_binding(
             profile["profile_sha256"]
         )
@@ -6455,7 +6479,7 @@ class MonitoringAiService:
                     }
                 )
             ]
-            mapping_evidence_ids = []
+            mapping_evidence_ids = [value for value in mapping.get("evidence_ids", ()) if value in verified]
             evidence_id = "profile_" + content_sha256(
                 {
                     "input_revision_sha256": job.input_revision_sha256,

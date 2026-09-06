@@ -1803,3 +1803,50 @@ def test_retrieval_covers_each_file_of_composite_authority() -> None:
             binding=replace(erratum_binding, content_sha256="f" * 64),
             query_terms=["bounded"],
         )
+
+
+@pytest.mark.parametrize("prompt_version", [
+    "monitoring-listing-field-mapping-v20-tools-v1",
+    "monitoring-listing-field-mapping-verifier-v2-tools-v1",
+])
+def test_tool_shard_current_revision_tracks_document_only_changes(tmp_path, prompt_version):
+    from packages.medical_monitoring.admission.mapping_pipeline import current_admission_mapping_revision
+
+    record, workspace = _admission_record(tmp_path)
+    repository = MonitoringAiRepository(tmp_path / "tool-identity.sqlite3")
+    current_packet = [_packet()]
+    resolver = lambda **kwargs: current_packet[0]
+    pipeline = AdmissionMappingPipeline(
+        relationship_profiler=build_relationship_profile,
+        document_evidence_resolver=resolver,
+        require_document_evidence=True,
+    )
+    frozen = pipeline._frozen_harness_input(
+        project_id=PROJECT_ID, attempt_id=record["attempt_id"],
+        record=record, workspace_dir=workspace,
+    )
+    service = MonitoringAiService(repository, runtime_resolver=lambda: MonitoringAiRuntimeBinding(
+        profile_id=MONITORING_C3_MAPPING_PROFILE_ID, provider=MONITORING_C3_MAPPING_PROVIDER,
+        model=MONITORING_C3_MAPPING_MODEL, env={}, available=True,
+    ))
+    jobs = service.submit_listing_field_mapping_chunks(
+        project_id=PROJECT_ID,
+        input_revision=MonitoringAiInputRevision.model_validate(frozen.input_revision),
+        field_profile=frozen.field_profile, prompt_version=prompt_version,
+    )
+    assert jobs
+    for job in jobs:
+        assert current_admission_mapping_revision(
+            repository, job, workspace_dir=workspace,
+            relationship_profiler=build_relationship_profile,
+            document_evidence_resolver=resolver,
+        ) == job.input_revision_sha256
+    roles = list(current_packet[0].roles)
+    roles[0] = replace(roles[0], binding=_binding("protocol", "e"))
+    current_packet[0] = replace(current_packet[0], roles=tuple(roles))
+    for job in jobs:
+        assert current_admission_mapping_revision(
+            repository, job, workspace_dir=workspace,
+            relationship_profiler=build_relationship_profile,
+            document_evidence_resolver=resolver,
+        ) == ""

@@ -10,14 +10,9 @@ from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping
 
 from packages.medical_monitoring.intelligence.primitives import canonical_json, content_hash
+from packages.medical_monitoring.admission.evidence_tool_contract import EVIDENCE_TOOL_PROMPT_VERSIONS
 
 TOOL_REQUEST_SCHEMA = "mm-evidence-tool-request-v1"
-EVIDENCE_TOOL_PROMPT_VERSIONS = frozenset({
-    "monitoring-listing-field-mapping-v20-tools-v1",
-    "monitoring-listing-field-mapping-verifier-v2-tools-v1",
-    "monitoring-listing-field-mapping-adjudication-v3-tools-v1",
-    "monitoring-listing-field-mapping-adjudication-verifier-v3-tools-v1",
-})
 
 
 class EvidenceToolLoopError(ValueError):

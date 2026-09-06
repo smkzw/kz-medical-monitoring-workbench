@@ -1586,11 +1586,16 @@ def current_admission_mapping_revision(
                 current_input, stored_receipt
             )
         current = current_input.field_profile
+        from .evidence_tool_contract import EVIDENCE_TOOL_PROMPT_VERSIONS, bind_frozen_document_sources
+        source_profile = (
+            bind_frozen_document_sources(current)
+            if job.prompt_version in EVIDENCE_TOOL_PROMPT_VERSIONS else current
+        )
         source_identity = {
             "project_id": job.project_id,
             "batch_id": attempt_id,
-            "source_bindings": current["source_bindings"],
-            "source_sha256s": current["source_sha256s"],
+            "source_bindings": source_profile["source_bindings"],
+            "source_sha256s": source_profile["source_sha256s"],
             "document_evidence": current.get("document_evidence"),
         }
         if any(
