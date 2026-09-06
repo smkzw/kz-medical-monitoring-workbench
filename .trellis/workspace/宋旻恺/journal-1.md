@@ -1294,3 +1294,12 @@ Introduced generation-neutral application and route entry points without changin
 - 已核对数量缺失/None不再由总量补齐；历史artifact可读但公开核对数保持未知，明确0与总量不符会拒绝ready校验。10项fact测试通过；实际JSX渲染验证缺失/null/0/640四种状态。
 - 浏览器挂载真实SubjectWorkspaceView（合成fixture，不是临床E2E）：0/20/100/300/null实测柱高0/9.328125/46.6640625/140/不画柱。首次截图超时，视觉检查尚未完成。相邻流向108、journey673、continuity192检查通过，均不等于医学验收。
 - 独立C01只读审阅已实际派发，runner session55160，冻结b017261相对d6a1a20队列/身份/裁决工件，ZCode/GLM-5.3-Flash:max，任务mm-p1-queue-review-20260906，工件仅task/queue-review。当前pending；不能以初始化或未返回结果冒充审阅通过。
+- 显示整合已提交f1a2dc4；最终隔离build通过（1939模块，既有bundle体积警告）。增加原始字符串（如<5）保留，不将其丢成missing；不把负值列表回退称完整趋势。后端fact及admission相邻41通过；浏览器确认零变化有比较基线显示五项0，首轮有新风险仍显示无基线；混合单位逐点保留，负值逐点保留。截图通道故障未解除；改用同一ego页面PrintToPDF并检查实际渲染，限概览打印外观，不能替代全屏交互视觉验收。临时Vite已停止，测试空间已关闭，无真实backend/model启动。
+- P2准备单元选择execution：混合PDF覆盖检测有独立两文件边界、可用合成反例验证，与冻结队列审阅无共享修改；独立执行可减轻主线程文档上下文负担。已派发mm-p2-pdf-coverage-20260906，session11824，ZCode/GLM-5.3-Flash:max，当前pending。仅monitoring_document_candidates.py及其测试，不动写作，不增加实际OCR调用预算，不冒称完整全文工具循环。流程目录task/document-coverage。主线程继续负责产品harness工具循环与审阅整合；P1视觉/独立队列结论待收，不因并行准备而标关闭。
+
+### 2026-09-06 独立审阅反馈处置与P2工具骨架
+- C01审阅终态完成，实际ZCode/GLM-5.3-Flash:max、无fallback；validate-conference通过仅证明packet结构，审阅结论本身仍按反例逐项处理。审阅报告位于task/queue-review/runs/conference/mm-p1-queue-review-20260906/general_single_object.md。独立复跑177+40检查（报告所列），临床/产品验收未完成。
+- F2已修：退役分片不自动重试，CAS状态冲突保留为failed而不令轮询5xx；F3已修：终态当前证据校验失败时，只有冻结全画像摘要实际改变才建立独立证据命名空间；验证器临时失败但证据相同不获得新预算。旧job、candidate保留，重复调用复用新namespace；兼顾旧completed分片的当前证据检查。F4已修：显式resume处理本项目耗尽尝试的过期lease，不触发无关旧workflow退役。实际8文件回归222通过（既有弃用警告）；加入真实仓储恢复及证据变化/未变化对照反例。
+- F1观察有效，但“旧用户答案直接补当前escalated收据”或“无收据也放行”建议不采纳：会把用户过去的决定无证据绑定到更新资料。需补用户决定的再验证/当前证据显式确认路径，旧答案完整保留；不允许持久阻塞无解释，也不能用同义/多数票绕过。仍待闭合。
+- F5轻量revision解析保留：必要身份元数据，本地实测已降至0.136s/39MiB；不为字面去掉元数据校验。F6已用实际87对逐项相等性+更高代数核实，不扩展至不同payload重复退役。F7新增权限功能不采纳（用户明确排除安全功能扩建）。F8未声明别名不猜；F9不是阻塞重点。
+- P2源工具与工具回合骨架已写入工作树、尚未完成组合根接线/真实调用。冻结表补读/列分布与纯协议23项合成测试通过；服务仅显式-tools-v1新prompt版本启用，新旧合同分开；每次补读独立记录receipt并复查输入/模型身份，回合预算贯穿格式修复。不得宣称完整文档工具集或MG闭环已完成。

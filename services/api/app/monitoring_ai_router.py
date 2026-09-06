@@ -489,6 +489,10 @@ def create_monitoring_ai_router(
             http_request, canonical_id, request_id=f"ai-queue-control:{canonical_id}",
             action=MonitoringAction.REVIEW_AI_CANDIDATE, require_write=True,
         )
+        if not paused:
+            repository.expire_exhausted_leases(
+                project_id=canonical_id, retire_legacy_workflows=False,
+            )
         repository.set_queue_paused(canonical_id, paused=paused)
         if not paused:
             (queue_worker_wake or worker_wake)()

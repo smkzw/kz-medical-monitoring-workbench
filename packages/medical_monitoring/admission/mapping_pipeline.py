@@ -1073,6 +1073,8 @@ class AdmissionMappingPipeline:
         workspace_dir: Path,
         review_context: Optional[Mapping[str, Any]] = None,
         cohort: str = MONITORING_MAPPING_COHORT_PRIMARY,
+        _evidence_revision_key: str = "",
+        _prepared_harness: Any = None,
     ) -> Mapping[str, Any]:
         """Run one cohort's anonymous, evidence-bound second review."""
 
@@ -1109,6 +1111,8 @@ class AdmissionMappingPipeline:
                     "draft_id": draft_id,
                     "fields": identity,
                     "dual_review": dual_rows,
+                    **({"evidence_profile_sha256": _evidence_revision_key}
+                       if _evidence_revision_key else {}),
                     "prompt_version": (
                         MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION
                         if contract.cohort == MONITORING_MAPPING_COHORT_VERIFIER
@@ -1168,6 +1172,38 @@ class AdmissionMappingPipeline:
                 )
                 generation = int(match.group(1)) if match is not None else 0
                 states = [str(_value(job.status)) for job in jobs]
+        resolver = getattr(service, "current_revision_resolver", None)
+        if (states and not _adjudication_generation_is_running(states)
+                and callable(resolver)):
+            stale_jobs = [job for job in jobs
+                          if not getattr(job, "contract_retirement_code", "")
+                          and resolver(job) != job.input_revision_sha256]
+            if stale_jobs:
+                # A technical retry keeps its old identity; changed evidence
+                # must get a distinct namespace. Never grant a fresh budget
+                # merely because revision verification is temporarily failing.
+                if not _evidence_revision_key:
+                    record = self._ready_record(project_id=project_id, attempt_id=attempt_id,
+                                                workspace_dir=workspace_dir)
+                    fresh = self._frozen_harness_input(
+                        project_id=project_id, attempt_id=attempt_id, record=record,
+                        workspace_dir=workspace_dir,
+                    )
+                    fresh_hash = fresh.field_profile["profile_sha256"]
+                    old_profiles = [self._repository.input_payload(project_id, job.job_id)
+                                    .get("field_profile", {}) for job in stale_jobs]
+                    if all(profile.get("full_profile_sha256")
+                           and profile["full_profile_sha256"] != fresh_hash
+                           for profile in old_profiles):
+                        return self.adjudicate_candidates(
+                            project_id=project_id, attempt_id=attempt_id, draft_id=draft_id,
+                            draft_fields=draft_fields, workspace_dir=workspace_dir,
+                            review_context=review_context, cohort=cohort,
+                            _evidence_revision_key=fresh_hash, _prepared_harness=fresh,
+                        )
+                return {"state": "failed", "generation": generation,
+                        "job_count": len(jobs), "mappings": [],
+                        "reason": "evidence_revision_unavailable"}
         if states and all(state == "completed" for state in states):
             return {
                 "state": "ready",
@@ -1190,18 +1226,25 @@ class AdmissionMappingPipeline:
             resumed = []
             if callable(resolver) and callable(retry):
                 for job in jobs:
-                    if str(_value(job.status)) != "failed":
+                    if (str(_value(job.status)) != "failed"
+                            or getattr(job, "contract_retirement_code", "")):
                         resumed.append(job)
                         continue
                     current_revision = resolver(job)
                     if current_revision != job.input_revision_sha256:
                         resumed.append(job)
                         continue
-                    resumed.append(retry(
-                        project_id, job.job_id,
-                        current_input_revision_sha256=current_revision,
-                        automatic_recovery_limit=_ADJUDICATION_AUTO_RECOVERY_LIMIT,
-                    ))
+                    from services.api.app.monitoring_ai_repository import MonitoringAiStateConflictError
+                    try:
+                        resumed.append(retry(
+                            project_id, job.job_id,
+                            current_input_revision_sha256=current_revision,
+                            automatic_recovery_limit=_ADJUDICATION_AUTO_RECOVERY_LIMIT,
+                        ))
+                    except MonitoringAiStateConflictError:
+                        # A concurrent retirement/recovery must not turn a
+                        # project status request into an unhandled exception.
+                        resumed.append(job)
             if _adjudication_generation_is_running([
                 str(_value(job.status)) for job in resumed
             ]):
@@ -1225,7 +1268,7 @@ class AdmissionMappingPipeline:
         if not self._cohort_runtime_ready(service, contract):
             raise AdmissionMappingPipelineError("mapping_model_not_configured")
         try:
-            harness_input = self._frozen_harness_input(
+            harness_input = _prepared_harness or self._frozen_harness_input(
                 project_id=project_id,
                 attempt_id=attempt_id,
                 record=record,
