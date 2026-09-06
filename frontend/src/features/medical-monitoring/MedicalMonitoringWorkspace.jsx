@@ -27,6 +27,15 @@ import {
   monitoringJourneyDrawerCurrentRow,
   monitoringJourneyTruncationText,
 } from "./medicalMonitoringJourneyChanges.mjs";
+import {
+  MONITORING_COMPARISON_STATE_COMPARED,
+  MONITORING_COMPARISON_STATE_UNCERTAIN,
+  monitoringComparisonState,
+} from "./medicalMonitoringComparisonState.mjs";
+import {
+  MONITORING_TREND_MODE_BARS,
+  monitoringTrendScaleView,
+} from "./medicalMonitoringTrendScale.mjs";
 import "./medicalMonitoringWorkspace.css";
 
 const VIEW_LABELS = Object.freeze({
@@ -1369,7 +1378,7 @@ export function SubjectFlowSection({
   );
 }
 
-function OverviewView({
+export function OverviewView({
   payload,
   route,
   selectedRiskInstanceRef,
@@ -1386,6 +1395,8 @@ function OverviewView({
   suppressVersionClaim = false,
   flowTableOpen = true,
   continuityCounts = null,
+  continuityComparisonText = "",
+  continuityLoading = false,
 }) {
   const projection = payload.projection;
   const flow = normalizeSubjectFlowView(projection);
@@ -1404,22 +1415,26 @@ function OverviewView({
   ];
   // Live continuity counts are the public comparable signal. prior_snapshot_ref is forbidden
   // on public result envelopes (*_snapshot_ref), so incremental pages must not depend on it.
-  const liveContinuity = Boolean(continuityCounts)
-    && keyCountItems.some((item) => Number(continuityCounts?.[item.key] || 0) > 0);
-  const compared = liveContinuity || changes.some((item) => item.prior_snapshot_ref);
-  const comparable = liveContinuity
-    || (compared && !changes.every((item) => item.change_kind === "not_comparable"));
+  // The note follows the actual comparison evidence: counts that prove prior-state
+  // transitions mean "compared"; when the counts record cannot prove a baseline either
+  // way (first analysis vs. zero-change round), the note stays neutral instead of guessing.
+  const comparisonState = monitoringComparisonState({ continuityCounts, changes, comparisonText: continuityComparisonText, loading: continuityLoading });
+  const compared = comparisonState.state === MONITORING_COMPARISON_STATE_COMPARED;
+  const comparable = compared
+    && (comparisonState.basis === "continuity"
+      || !changes.every((item) => item.change_kind === "not_comparable"));
+  const comparisonUncertain = comparisonState.state === MONITORING_COMPARISON_STATE_UNCERTAIN;
   const scopedCenter = payload.identity?.site_ref ? projection.centers.find((center) => center.siteRef === payload.identity.site_ref) : null;
   const scopedMeasure = scopedCenter?.measures?.[0] || null;
   const scopedAffectedSubjects = new Set((scopedCenter?.risks || []).map((risk) => risk.subjectRef).filter(Boolean)).size;
   const scopedEventCount = (scopedCenter?.risks || []).length;
-  const showContinuityKpis = liveContinuity && !suppressVersionClaim;
+  const showContinuityKpis = compared && comparisonState.basis === "continuity" && !suppressVersionClaim;
   return (
     <div className="monitoring-view-stack">
       {!suppressVersionClaim ? (
-        <section className="monitoring-comparison-note" data-comparable={comparable ? "yes" : compared ? "no" : "initial"}>
-          <strong>{comparable ? "已与上一数据版本比较" : compared ? "本次暂不作增减比较" : "当前为首个监查版本"}</strong>
-          <span>{comparable ? "变化类别与原因已逐项标示。" : compared ? "前后数据覆盖范围不一致，以下仅展示当前风险。" : "以下展示当前全部中高风险，后续版本将保留增量变化。"}</span>
+        <section className="monitoring-comparison-note" data-comparable={comparable ? "yes" : compared ? "no" : comparisonUncertain ? "unknown" : "initial"}>
+          <strong>{comparable ? "已与上次监查结果比较" : compared ? "本次暂不作增减比较" : comparisonUncertain ? (continuityLoading ? "正在读取本轮比较结果…" : "本轮比较状态暂无法判断") : "当前为首个监查版本"}</strong>
+          <span>{comparable ? "变化类别与原因已逐项标示。" : compared ? "前后数据覆盖范围不一致，以下仅展示当前风险。" : comparisonUncertain ? (continuityLoading ? "当前风险可先查看，比较结果稍后显示。" : "暂无法确认本轮是否已与上次监查结果比较；变化明细以下方“本轮变化”为准。") : "以下展示当前全部中高风险，后续版本将保留增量变化。"}</span>
         </section>
       ) : null}
       {showContinuityKpis ? (
@@ -1575,7 +1590,7 @@ function EventDetailPanel({ event }) {
   );
 }
 
-function SubjectWorkspaceView({
+export function SubjectWorkspaceView({
   payload,
   route,
   view,
@@ -1593,6 +1608,7 @@ function SubjectWorkspaceView({
   const [trendIndicator, setTrendIndicator] = useState(0);
   const [selectedJourneyRowRef, setSelectedJourneyRowRef] = useState("");
   const indicators = projection.indicators;
+  const trendView = monitoringTrendScaleView(indicators?.[trendIndicator] || null);
   const selectedEvent = (projection.events || []).find((event) => event.eventRef === route.event_ref)
     || (projection.events || []).find((event) => route.risk_anchor_ref && event.riskAnchorRefs?.includes(route.risk_anchor_ref))
     || null;
@@ -1733,11 +1749,36 @@ function SubjectWorkspaceView({
           {view === "profile" ? indicators?.length ? (
             <section className="monitoring-indicator-panel" aria-label="指标趋势">
               <div className="monitoring-axis-heading monitoring-trend-window"><div><span className="monitoring-eyebrow">共享时间轴</span><h2 id={journeyEnabled ? MONITORING_JOURNEY_AXIS_TITLE_ID : undefined} tabIndex={journeyEnabled ? -1 : undefined}>{text(projection.temporalSpine.axisMode, "calendar") === "study_day" ? "研究日" : "日历日期"}</h2></div><span className="monitoring-axis-window">{text(projection.temporalSpine.windowStart, "起点待确认")} — {text(projection.temporalSpine.windowEnd, "终点待确认")}</span></div>
-              <div className="monitoring-section-heading"><span className="monitoring-eyebrow">指标趋势</span><h2>{text(indicators[trendIndicator]?.label, "指标待确认")}</h2></div>
+              <div className="monitoring-section-heading"><span className="monitoring-eyebrow">指标趋势</span><h2>{text(indicators[trendIndicator]?.label, "指标待确认")}{trendView.unit ? `（单位：${trendView.unit}）` : ""}</h2></div>
               <div className="monitoring-indicator-switcher">{indicators.map((indicator, index) => <button type="button" key={indicator.indicator_ref || indicator.label} className={index === trendIndicator ? "is-active" : ""} onClick={() => setTrendIndicator(index)}>{indicator.label}</button>)}</div>
-              <div className="monitoring-trend-chart" role="img" aria-label="指标趋势图">
-                {(indicators[trendIndicator]?.points || []).map((point) => <div className="monitoring-trend-point" key={`${point.date}-${point.value}`}><span style={{ "--point-height": `${Math.max(14, Math.min(92, Number(point.value) * 8 || 14))}%` }} /><strong>{numberText(point.value)}</strong><small>{text(point.date, "日期待确认")}</small></div>)}
+              <div
+                className="monitoring-trend-chart"
+                role="img"
+                aria-label={trendView.mode === MONITORING_TREND_MODE_BARS
+                  ? `指标趋势图：真实数值标尺 0 至 ${trendView.max}${trendView.unit ? `（${trendView.unit}）` : ""}，柱高按数值等比绘制，缺数值不画柱`
+                  : "指标趋势数值列表：该指标数值无法共用同一真实标尺，仅逐点列出原始数值"}
+              >
+                {trendView.items.map((item) => (
+                  <div className="monitoring-trend-point" key={`${item.index}-${item.date}`}>
+                    <div style={{ height: 140, width: 28, display: "flex", alignItems: "end", flexShrink: 0 }}>
+                      {trendView.mode === MONITORING_TREND_MODE_BARS && item.value !== null ? (
+                        <span style={{ "--point-height": `${item.heightPercent}%`, minHeight: 0, flexShrink: 0 }} />
+                      ) : null}
+                    </div>
+                    <strong>{numberText(item.displayValue)}{item.unit ? ` ${item.unit}` : ""}</strong>
+                    <small>{text(item.date, "日期待确认")}</small>
+                  </div>
+                ))}
               </div>
+              {trendView.mode === MONITORING_TREND_MODE_BARS ? (
+                <p className="monitoring-trend-scale-note">标尺 0 — {trendView.max}{trendView.unit ? `（${trendView.unit}）` : ""}；柱高按真实数值等比绘制，缺数值不画柱。</p>
+              ) : trendView.reason === "mixed_units" ? (
+                <p className="monitoring-trend-scale-note">该指标各点单位不一致，不能合并到同一标尺，暂逐点列出数值；缺数值待确认。</p>
+              ) : trendView.reason === "negative" ? (
+                <p className="monitoring-trend-scale-note">该指标含负值，暂逐点列出原始数值。</p>
+              ) : (
+                <p className="monitoring-trend-scale-note">该指标暂无可绘制的数值，待数据补齐后按真实标尺绘制。</p>
+              )}
             </section>
           ) : <div className="monitoring-empty-state">当前范围未提供指标趋势。</div>
           : (

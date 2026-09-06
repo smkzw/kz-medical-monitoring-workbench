@@ -358,3 +358,29 @@ export const renders = {
     },
   ])),
 };
+
+// Historical summaries must not turn an unrecorded verification count into full coverage.
+export const verificationCountRenders = [undefined, null, 0, 640].map((verified) => render(
+  wizardState([
+    { type: "source-dir-change", value: "/data/synthetic" },
+    { type: "import-start" },
+    { type: "import-created", payload: profilePayload },
+    { type: "profile-loaded", payload: profilePayload },
+    { type: "advance" },
+    { type: "finish" },
+  ]),
+  mappingFrom([{ type: "confirm-ready", payload: { mapping_revision: "rev-1" } }]),
+  { phase: "ready", payload: { summary: {
+    tables: 3, rows: 128, values: 640, source_values_verified: verified,
+  } } },
+));
+for (const html of verificationCountRenders.slice(0, 2)) {
+  if (!html.includes("核对数量尚未记录") || html.includes("已核对 640")) {
+    throw new Error("Unknown source verification coverage was presented as completed");
+  }
+}
+for (const [index, count] of [[2, 0], [3, 640]]) {
+  if (!verificationCountRenders[index].includes(`已核对 ${count} 个原始数据位置`)) {
+    throw new Error("Explicit source verification count was lost");
+  }
+}

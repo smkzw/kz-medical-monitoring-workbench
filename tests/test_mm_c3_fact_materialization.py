@@ -281,8 +281,10 @@ def test_ready_status_rejects_a_changed_fact_artifact(tmp_path: Path) -> None:
     assert exc.value.code == "facts_snapshot_digest_mismatch"
 
 
+@pytest.mark.parametrize("count_patch", [{"values": 9}, {"source_values_verified": 0}])
 def test_ready_status_rejects_summary_counts_that_do_not_match_fact_sets(
     tmp_path: Path,
+    count_patch: dict,
 ) -> None:
     workspace, attempt_id = _admit(tmp_path)
     service = FactMaterializationService(_mapping(attempt_id))
@@ -294,7 +296,7 @@ def test_ready_status_rejects_summary_counts_that_do_not_match_fact_sets(
         persisted = store.get_domain_object(FACT_MATERIALIZATION_KIND, attempt_id)
         assert persisted is not None
         payload = dict(persisted[1])
-        payload["summary"] = {**payload["summary"], "values": 9}
+        payload["summary"] = {**payload["summary"], **count_patch}
         store.put_domain_object(FACT_MATERIALIZATION_KIND, attempt_id, payload)
     finally:
         store.close()
@@ -304,3 +306,27 @@ def test_ready_status_rejects_summary_counts_that_do_not_match_fact_sets(
             project_id=PROJECT_ID, attempt_id=attempt_id, workspace_dir=workspace
         )
     assert exc.value.code == "facts_snapshot_digest_mismatch"
+
+
+@pytest.mark.parametrize("missing_count", [None, "absent"])
+def test_legacy_ready_status_does_not_invent_source_verification_count(
+    tmp_path: Path, missing_count,
+) -> None:
+    workspace, attempt_id = _admit(tmp_path)
+    service = FactMaterializationService(_mapping(attempt_id))
+    service.materialize(project_id=PROJECT_ID, attempt_id=attempt_id, workspace_dir=workspace)
+    store = _store(workspace)
+    try:
+        payload = dict(store.get_domain_object(FACT_MATERIALIZATION_KIND, attempt_id)[1])
+        payload["summary"] = dict(payload["summary"])
+        if missing_count == "absent":
+            payload["summary"].pop("source_values_verified")
+        else:
+            payload["summary"]["source_values_verified"] = None
+        store.put_domain_object(FACT_MATERIALIZATION_KIND, attempt_id, payload)
+    finally:
+        store.close()
+    result = service.status(project_id=PROJECT_ID, attempt_id=attempt_id, workspace_dir=workspace)
+    assert result["facts_generated"] is True
+    assert result["summary"]["values"] == 8
+    assert "source_values_verified" not in result["summary"]
