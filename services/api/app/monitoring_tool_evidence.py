@@ -22,6 +22,18 @@ def verified_tool_evidence(evidence, reads, allowed_sources):
             digest = source.get("source_content_sha256", source.get("content_sha256"))
             units = list(source.get("units", ())) + list(source.get("excerpts", ()))
             if (source_id, digest) == pair:
+                raw = item.get("raw_fields") or {}
+                if (source.get("visual_ref") and raw.get("tool_visual_ref") == source["visual_ref"]
+                        and source.get("locator") == item["locator"]
+                        and not item.get("quote", "").strip()
+                        and source.get("image_sha256")
+                        and source.get("semantic_interpretation") == "not_performed"):
+                    matched = receipt
+                    verified_value = {"tool_visual_ref": source["visual_ref"],
+                                      "image_sha256": source["image_sha256"],
+                                      "source_representation": "image",
+                                      "native_text_quote_verified": False}
+                    break
                 for unit in units:
                     if unit.get("locator") != item["locator"]:
                         continue

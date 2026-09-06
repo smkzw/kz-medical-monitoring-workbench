@@ -63,7 +63,7 @@ from .monitoring_ai_contracts import (
     validate_candidates_for_job,
 )
 from .monitoring_evidence_tool_loop import EvidenceToolLoopError
-from packages.medical_monitoring.admission.evidence_tool_contract import DEPENDENCY_MAPPING_PROMPT_VERSIONS
+from packages.medical_monitoring.admission.evidence_tool_contract import DEPENDENCY_MAPPING_PROMPT_VERSIONS, VISUAL_MAPPING_PROMPT_VERSIONS
 from .monitoring_ai_repository import (
     MonitoringAiRepository,
     MonitoringAiStateConflictError,
@@ -2401,6 +2401,9 @@ class MonitoringAiService:
             provider = self.provider_factory(
                 self._monitoring_provider_env(runtime.env)
             )
+            if job.prompt_version in VISUAL_MAPPING_PROMPT_VERSIONS:
+                from .monitoring_visual_tool_bridge import visual_provider
+                provider = visual_provider(provider)
             if isinstance(provider, DisabledAiProvider):
                 raise MonitoringAiRuntimeUnavailableError(
                     "configured independent AI provider is unavailable"
@@ -3286,6 +3289,7 @@ class MonitoringAiService:
                 _C3_VERIFIER_PROMPT_VERSION,
                 "monitoring-listing-field-mapping-verifier-v2-tools-v1",
                 "monitoring-listing-field-mapping-verifier-v3-tools-v2",
+                "monitoring-listing-field-mapping-verifier-v4-tools-v3",
             }:
                 system_prompt += (
                     " 你现在是全量盲核harness，不是主分析的复述者。输入中不会"
@@ -3337,6 +3341,7 @@ class MonitoringAiService:
                     "monitoring-listing-field-mapping-adjudication-verifier-v2",
                     "monitoring-listing-field-mapping-adjudication-verifier-v4-tools-v1",
                     "monitoring-listing-field-mapping-adjudication-verifier-v5-tools-v2",
+                    "monitoring-listing-field-mapping-adjudication-verifier-v6-tools-v3",
                 }:
                     system_prompt += (
                         " 你是与另一复核harness隔离运行的第二裁决者。不得推测或复述"
@@ -3564,6 +3569,13 @@ class MonitoringAiService:
                 "related_fields仅保留有用的关联说明，不能替代dependency_fields或据此建立连接。"
                 "缺少实际依赖证据先调用冻结工具补读，不得把未知依赖写成空数组。"
                 "参考标准说明不能代替项目锁定的标准版本。系统不会用列名或代表值替你改写量表语义。"
+            )
+        if job.prompt_version in VISUAL_MAPPING_PROMPT_VERSIONS:
+            system_prompt += (
+                " PDF图表或Word嵌图可请求视觉工具；visual_image_inputs按image_index对应实际附图。"
+                "仅查看所请求的页或区域，不可声称其余区域已覆盖。图像引用须quote留空，"
+                "raw_fields.tool_visual_ref逐字填visual_ref，并保留source_entry_id/content_sha256/locator。"
+                "图中读出的内容是你的视觉解释，不能冒充已经验证的原生文字引文；看不清要缩小区域补读或保留未知。"
             )
         return AiPromptEnvelope(
             task_id=job.job_id,
@@ -7717,9 +7729,19 @@ class MonitoringAiService:
             evidence_state["protocol_repairs"] = evidence_state.get("protocol_repairs", 0) + 1
 
         with self.evidence_tool_factory(job, input_payload) as toolkit:
+            if job.prompt_version in VISUAL_MAPPING_PROMPT_VERSIONS and hasattr(toolkit, "visual_inputs"):
+                toolkit.visual_inputs = evidence_state.setdefault("visual_inputs", {})
+            def call_model(current):
+                if job.prompt_version in VISUAL_MAPPING_PROMPT_VERSIONS:
+                    from .monitoring_visual_tool_bridge import attach_visual_inputs
+                    images = evidence_state.setdefault("visual_inputs", {})
+                    images.update(getattr(toolkit, "visual_inputs", {}))
+                    current = attach_visual_inputs(current, images)
+                return self._run_with_heartbeat(job, owner, provider, current)
+
             result = run_evidence_tool_loop(
                 envelope, input_revision=job.input_revision_sha256,
-                call_model=lambda current: self._run_with_heartbeat(job, owner, provider, current),
+                call_model=call_model,
                 validate_current=validate_current,
                 validate_model=lambda: self._response_model(provider, job),
                 tool_schemas=toolkit.schemas, execute_tool=toolkit.execute,

@@ -1360,3 +1360,5 @@ P2显式依赖接线：新增v21/verifier-v3、adjudication-v7/verifier-v5 tools
 P2视觉输入执行完成：实际ZCode/GLM-5.3-Flash:max，无fallback，执行审计通过；新增PDF页/区域渲染及Word精确嵌图提取。主线程补Word字节上限和实际渲染像素检查，旋转PDF像素位置回归通过；聚焦及相邻85项、最终视觉9项通过（重叠不累加）。执行节点额外尝试了不必要的全仓测试，遇既有写作导入错误，未修改写作代码；不据此宣称全仓通过。此提交仅提供冻结图像输入，尚未接入模型视觉传输或OCR，不代表图表内容已识别。
 
 P2 4792bc5同会话GLM独立审阅完成：264项聚焦与探针，未发现语义后处理静默调和；确认确定性metadata仅追加、不覆盖模型项。修正审阅推论：semantic_difference_paths的bool/int严格性仅影响诊断及新比较器，legacy最终接受仍直接比较semantic_verdict（mapping_reconciliation.py实际代码核查），不宣称改了旧政策。画像缺锚点导致分片拒绝属明确限制，新增真实12字段v2均一次完成、0工具读取，3一致/9分歧，暂未出现该失分片；仍不可认为覆盖或医学理解已完整。修复reference_only纯说明对无standard_reference的伪差异，结构化版本等继续硬比较，51项相关测试通过。原MG/main尚未切换新代。
+
+P2视觉裸API接线：新E03高峰实际pi/opencode-go/muse-spark-1.3-contributor:xhigh完成两文件执行，无fallback。主线程读代码并补监查专用桥接、job-local图缓存、provider配置原样转接、可选工具/回执及图像引用区分；不改共享ai_gateway/写作。新v22/verifier-v4/adjudication-v8/verifier-v6 tools-v3命名空间默认关闭，旧版本不获得视觉工具；修正新代related_fields提示冲突。75项视觉/gateway聚焦、503项服务/工具相邻、97项命名空间/确认、5项新服务路径通过（集合重叠，不累加）。真实两路合成image-only探针均返回A=17/B=43且实际model匹配，证据runs/mm_p2_tool_trial_20260906/visual_probe；只证明真实视觉传输，不是医学理解验收。新增完整服务合成链证明请求图→实际附图→图像来源证据入候选，quote为空且native_text_quote_verified=false。
