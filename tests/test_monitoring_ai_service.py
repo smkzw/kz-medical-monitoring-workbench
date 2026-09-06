@@ -11141,6 +11141,8 @@ def test_tool_protocol_failure_is_bounded_and_not_a_worker_error(tmp_path, exhau
 @pytest.mark.parametrize('version', [
     'monitoring-listing-field-mapping-v21-tools-v2',
     'monitoring-listing-field-mapping-adjudication-verifier-v5-tools-v2',
+    'monitoring-listing-field-mapping-v22-tools-v3',
+    'monitoring-listing-field-mapping-adjudication-verifier-v6-tools-v3',
 ])
 def test_dependency_contract_persists_explicit_dependencies_on_real_service_path(tmp_path, version):
     from contextlib import contextmanager
@@ -11191,3 +11193,51 @@ def test_new_validation_does_not_collapse_distinct_scale_interpretations():
         before = deepcopy(output)
         MonitoringAiService._validate_without_semantic_rewrite(output, profile)
         assert output == before
+
+
+def test_visual_source_is_delivered_and_persisted_as_image_not_native_quote(tmp_path):
+    from contextlib import contextmanager
+    from services.api.app.monitoring_visual_transport import MonitoringVisualPromptEnvelope
+    from tests.test_monitoring_visual_toolset import toolkit
+    tools, source = toolkit(tmp_path)
+    packet = deepcopy(tools.reader.profile['document_evidence'])
+    # Rebuild the valid packet hash for this synthetic service project.
+    from dataclasses import replace
+    from packages.medical_monitoring.admission.document_evidence import MonitoringDocumentEvidencePacket
+    packet = replace(MonitoringDocumentEvidencePacket.from_dict(packet),project_id='project-alpha').to_dict()
+    profile = _field_profile(1)
+    profile['document_evidence'] = packet
+    def request(envelope):
+        return {'schema_version':'mm-evidence-tool-request-v1','task_id':envelope.task_id,
+                'input_revision_sha256':envelope.payload['input_revision_sha256'],
+                'tool_requests':[{'request_id':'image-1','name':'render_pdf_region',
+                                  'arguments':{'source_entry_id':source,'page_index':0,'dpi':72}}]}
+    def output(envelope):
+        assert isinstance(envelope,MonitoringVisualPromptEnvelope)
+        image=envelope.payload['visual_image_inputs'][0]
+        result=_valid_output(envelope)
+        for candidate in result['candidates']:
+            for mapping in candidate['structured_payload']['field_mappings']:
+                mapping['dependency_fields']=[]
+            for evidence in candidate['evidence']:
+                evidence.update(source_entry_id=image['source_entry_id'],source_content_sha256=image['source_content_sha256'],
+                                locator=image['locator'],quote='',raw_fields={'tool_visual_ref':image['visual_ref']})
+        return result
+    provider=FakeProvider([request,output,output])
+    service=_service(tmp_path,provider)
+    @contextmanager
+    def factory(job,payload):
+        tools.reader.project_id=job.project_id
+        tools.reader.input_revision=job.input_revision_sha256
+        tools.visual_reader.project_id=job.project_id
+        tools.visual_reader.input_revision=job.input_revision_sha256
+        yield tools
+    service.evidence_tool_factory=factory
+    job=service.submit_listing_field_mapping(project_id='project-alpha',input_revision=_revision(),field_profile=profile,
+                                             prompt_version='monitoring-listing-field-mapping-v22-tools-v3')
+    result=service.run_next('visual-source-test')
+    assert result.job.status == MonitoringAiJobStatus.COMPLETED, result.job.failure_message
+    candidate=service.repository.candidates(job.project_id,job.job_id)[0]
+    visual=[e for e in candidate.evidence if e.raw_fields.get('source_representation')=='image']
+    assert visual and visual[0].quote == ''
+    assert visual[0].raw_fields['native_text_quote_verified'] is False

@@ -14,10 +14,12 @@ def _schema(properties, required):
 
 
 class MonitoringEvidenceToolset:
-    def __init__(self, reader, *, document_resolver=None, document_reader=None):
+    def __init__(self, reader, *, document_resolver=None, document_reader=None, visual_reader=None):
         self.reader = reader
         self.document_resolver = document_resolver
         self.document_reader = document_reader
+        self.visual_reader = visual_reader
+        self.visual_inputs = {}
         self.schemas = {
             "sample_rows": _schema({
                 "table_binding_id": {"type": "string"},
@@ -54,6 +56,18 @@ class MonitoringEvidenceToolset:
                 for binding in (role.binding, *role.supplementary_bindings):
                     self.document_bindings[binding.source_entry_id] = binding
             if self.document_bindings:
+                if visual_reader is not None:
+                    self.schemas["render_pdf_region"] = _schema({
+                        "source_entry_id": {"type": "string", "enum": sorted(self.document_bindings)},
+                        "page_index": {"type": "integer", "minimum": 0},
+                        "bbox": {"type": "array", "minItems": 4, "maxItems": 4,
+                                 "items": {"type": "number"}},
+                        "dpi": {"type": "integer", "minimum": 36, "maximum": 300, "default": 150},
+                    }, ["source_entry_id", "page_index"])
+                    self.schemas["extract_word_embedded_image"] = _schema({
+                        "source_entry_id": {"type": "string", "enum": sorted(self.document_bindings)},
+                        "source_locator": {"type": "string"},
+                    }, ["source_entry_id", "source_locator"])
                 if document_reader is not None:
                     self.schemas["read_document_units"] = _schema({
                         "source_entry_id": {"type": "string", "enum": sorted(self.document_bindings)},
@@ -79,6 +93,33 @@ class MonitoringEvidenceToolset:
                 or not set(schema["required"]).issubset(arguments)):
             raise SourceToolError("source_tool_arguments_invalid")
         try:
+            if name in {"render_pdf_region", "extract_word_embedded_image"}:
+                binding = self.document_bindings.get(arguments["source_entry_id"])
+                if binding is None:
+                    raise SourceToolError("document_not_bound")
+                extraction = getattr(self.visual_reader, name)(
+                    binding=binding, **{key: value for key, value in arguments.items() if key != "source_entry_id"})
+                from .monitoring_visual_transport import (
+                    MonitoringVisualImage, MonitoringVisualValidationError,
+                    MONITORING_VISUAL_MAX_IMAGES, MONITORING_VISUAL_MAX_TOTAL_IMAGE_BYTES,
+                )
+                try:
+                    MonitoringVisualImage(data=extraction.image.image_bytes,
+                                          sha256=extraction.image.image_sha256,
+                                          media_type=extraction.image.media_type, locator=extraction.locator)
+                except MonitoringVisualValidationError as exc:
+                    raise SourceToolError(str(exc).split(":", 1)[0]) from exc
+                pending = {**self.visual_inputs, extraction.extraction_sha256: extraction}
+                if (len(pending) > MONITORING_VISUAL_MAX_IMAGES
+                        or sum(len(item.image.image_bytes) for item in pending.values()) > MONITORING_VISUAL_MAX_TOTAL_IMAGE_BYTES):
+                    raise SourceToolError("visual_input_attempt_budget_exhausted")
+                # Pixels remain in this job-local object, never in a durable
+                # JSON receipt. The model transport must attach these exact
+                # bytes before this tool can be enabled for a product job.
+                self.visual_inputs[extraction.extraction_sha256] = extraction
+                return {**extraction.public_dict(), "visual_ref": extraction.extraction_sha256,
+                        "coverage": "partial", "coverage_scope": extraction.extraction_kind,
+                        "absence_claim_supported": False}
             if name == "read_document_units":
                 binding = self.document_bindings.get(arguments["source_entry_id"])
                 if binding is None:
@@ -125,6 +166,16 @@ def open_monitoring_evidence_toolset(job, input_payload, *, workspace_dir: Path,
             project_id=job.project_id, input_revision=job.input_revision_sha256,
             resolver=document_resolver,
         ) if document_resolver is not None else None
-        yield MonitoringEvidenceToolset(reader, document_resolver=document_resolver, document_reader=documents)
+        from packages.medical_monitoring.admission.evidence_tool_contract import VISUAL_MAPPING_PROMPT_VERSIONS
+        visuals = None
+        if document_resolver is not None and job.prompt_version in VISUAL_MAPPING_PROMPT_VERSIONS:
+            from .monitoring_document_visual_regions import FrozenDocumentVisualRegionTools
+            visuals = FrozenDocumentVisualRegionTools(
+                candidate_root=workspace_dir / "document_authority_candidates",
+                project_id=job.project_id, input_revision=job.input_revision_sha256,
+                resolver=document_resolver,
+            )
+        yield MonitoringEvidenceToolset(reader, document_resolver=document_resolver,
+                                        document_reader=documents, visual_reader=visuals)
     finally:
         store.close()

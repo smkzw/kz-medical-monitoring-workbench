@@ -263,6 +263,7 @@ class AdmissionMappingPipeline:
         document_evidence_resolver: Optional[Callable[..., Any]] = None,
         adjudication_tool_reads: bool = False,
         explicit_mapping_dependencies: bool = False,
+        visual_tool_reads: bool = False,
     ) -> None:
         self._service = ai_service
         self._repository = ai_repository
@@ -281,6 +282,9 @@ class AdmissionMappingPipeline:
         self._explicit_mapping_dependencies = bool(explicit_mapping_dependencies)
         if self._explicit_mapping_dependencies and not self._adjudication_tool_reads:
             raise ValueError("explicit mapping dependencies require evidence tools")
+        self._visual_tool_reads = bool(visual_tool_reads)
+        if self._visual_tool_reads and not self._explicit_mapping_dependencies:
+            raise ValueError("visual evidence requires explicit mapping dependencies")
 
     @property
     def adjudication_comparison_policy(self):
@@ -295,8 +299,11 @@ class AdmissionMappingPipeline:
 
     def _adjudication_prompt_version(self, cohort):
         verifier = cohort == MONITORING_MAPPING_COHORT_VERIFIER
+        if self._visual_tool_reads:
+            return ("monitoring-listing-field-mapping-adjudication-verifier-v6-tools-v3" if verifier
+                    else "monitoring-listing-field-mapping-adjudication-v8-tools-v3")
         if self._explicit_mapping_dependencies:
-            return ("monitoring-listing-field-mapping-adjudication-verifier-v5-tools-v2" if cohort == "verifier"
+            return ("monitoring-listing-field-mapping-adjudication-verifier-v5-tools-v2" if verifier
                     else "monitoring-listing-field-mapping-adjudication-v7-tools-v2")
         if self._adjudication_tool_reads:
             return ("monitoring-listing-field-mapping-adjudication-verifier-v4-tools-v1" if verifier
@@ -1440,6 +1447,13 @@ class AdmissionMappingPipeline:
                         "也不能为追求一致照抄任一选项。证据仍不足时保留未解决与受影响能力。"
                     ),
                 }
+                if self._visual_tool_reads:
+                    policy = profile["adjudication_contract"]["difference_review_policy"]
+                    policy["schema_version"] = "mapping-difference-review-v2"
+                    policy["instruction"] = policy["instruction"].replace(
+                        "related_fields只列对解释必要且有来源支持的依赖。",
+                        "dependency_fields声明解释值所必需且有来源支持的精确字段依赖；related_fields仅为关联说明，不能建立连接。",
+                    )
             generation += 1
             jobs = service.submit_listing_field_mapping_chunks(
                 project_id=project_id,

@@ -125,3 +125,13 @@ def test_optional_reference_note_does_not_create_a_missing_key_dependency():
     assert compare_mapping_dependencies(a, b)['dependencies_agreed']
     b['standards_reference'] = {'ctcae_version': '5'}
     assert not compare_mapping_dependencies(a, b)['dependencies_agreed']
+
+
+def test_visual_prompt_namespace_preserves_prior_dependency_jobs():
+    from packages.medical_monitoring.admission.mapping_pipeline import AdmissionMappingPipeline
+    old=AdmissionMappingPipeline(adjudication_tool_reads=True, explicit_mapping_dependencies=True)
+    new=AdmissionMappingPipeline(adjudication_tool_reads=True, explicit_mapping_dependencies=True, visual_tool_reads=True)
+    assert old.adjudication_prompt_versions.isdisjoint(new.adjudication_prompt_versions)
+    assert new.adjudication_comparison_policy == old.adjudication_comparison_policy
+    with pytest.raises(ValueError):
+        AdmissionMappingPipeline(visual_tool_reads=True)
