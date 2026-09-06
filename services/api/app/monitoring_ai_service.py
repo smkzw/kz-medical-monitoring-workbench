@@ -63,7 +63,7 @@ from .monitoring_ai_contracts import (
     validate_candidates_for_job,
 )
 from .monitoring_evidence_tool_loop import EvidenceToolLoopError
-from packages.medical_monitoring.admission.evidence_tool_contract import DEPENDENCY_MAPPING_PROMPT_VERSIONS, VISUAL_MAPPING_PROMPT_VERSIONS
+from packages.medical_monitoring.admission.evidence_tool_contract import DEPENDENCY_MAPPING_PROMPT_VERSIONS, VISUAL_MAPPING_PROMPT_VERSIONS, ROLE_EQUIVALENCE_PROMPT_VERSIONS
 from .monitoring_ai_repository import (
     MonitoringAiRepository,
     MonitoringAiStateConflictError,
@@ -1155,6 +1155,7 @@ class _FieldMappingItem(BaseModel):
     user_decision_required: StrictBool
     related_fields: List[str] = Field(default_factory=list, max_length=100)
     dependency_fields: Optional[List[_MappingDependencyReference]] = Field(default=None, max_length=100)
+    role_equivalence: Optional[Dict[str, Any]] = None
     evidence_ids: List[str] = Field(default_factory=list, max_length=50)
     standards_reference: Optional[_StandardsReference] = None
     derivation_lineage: Optional[Dict[str, Any]] = None
@@ -3080,6 +3081,17 @@ class MonitoringAiService:
             candidate_schema["structured_payload"]["field_mappings"][0]["dependency_fields"] = [
                 {"domain": "exact source domain", "source_field": "exact dependency field"}
             ]
+        if job.prompt_version in ROLE_EQUIVALENCE_PROMPT_VERSIONS:
+            from packages.medical_monitoring.admission.role_equivalence import DIMENSIONS
+            candidate_schema["structured_payload"]["field_mappings"][0]["role_equivalence"] = {
+                "judgment": "equivalent | distinct | insufficient",
+                "option_ids": ["exact first option_id", "exact second option_id"],
+                "dimensions": {axis: {"relation": "equivalent | distinct | insufficient",
+                                      "evidence_ids": ["evidence ID cited by this mapping"],
+                                      "rationale": "source-grounded comparison, including possible distinctions"}
+                               for axis in DIMENSIONS},
+                "counterevidence_summary": "what contrary source evidence was examined and its limits",
+            }
         if job.task_type not in {
             MonitoringAiTaskType.LISTING_FIELD_MAPPING,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
@@ -3342,6 +3354,7 @@ class MonitoringAiService:
                     "monitoring-listing-field-mapping-adjudication-verifier-v4-tools-v1",
                     "monitoring-listing-field-mapping-adjudication-verifier-v5-tools-v2",
                     "monitoring-listing-field-mapping-adjudication-verifier-v6-tools-v3",
+                    "monitoring-listing-field-mapping-adjudication-verifier-v7-tools-v4",
                 }:
                     system_prompt += (
                         " 你是与另一复核harness隔离运行的第二裁决者。不得推测或复述"
@@ -3576,6 +3589,17 @@ class MonitoringAiService:
                 "仅查看所请求的页或区域，不可声称其余区域已覆盖。图像引用须quote留空，"
                 "raw_fields.tool_visual_ref逐字填visual_ref，并保留source_entry_id/content_sha256/locator。"
                 "图中读出的内容是你的视觉解释，不能冒充已经验证的原生文字引文；看不清要缩小区域补读或保留未知。"
+            )
+        if job.prompt_version in ROLE_EQUIVALENCE_PROMPT_VERSIONS:
+            system_prompt += (
+                " 对匿名选项独立逐项裁决。若使用原有含义，recommended_role逐字复用相应选项编码，"
+                "不要为相同含义另造新编码；证据支持新含义时仍可提出，但不得借同义机制抹掉实质分歧。"
+                "只有需要判断两个选项是否仅角色命名不同，才填写role_equivalence（否则省略）。"
+                "option_ids必须逐字绑定本字段的两个选项。逐一比较对象、测量概念、作用对象、原值类型/编码、"
+                "标准粒度五维：任一不同为distinct，证据不足为insufficient，全部有依据的等价才为equivalent。"
+                "每维引用本映射真实证据并说明可能反例；缺少证据要补读。概念相近、目录别名、置信度高或"
+                "任一选项排在前面都不能证明同义。unmapped不能提升为确定含义。系统将独立比较双方证书及"
+                "全部其他硬属性，不使用你的声明单独放行。不输出bound_options/binding_sha256等系统绑定字段。"
             )
         return AiPromptEnvelope(
             task_id=job.job_id,
@@ -4505,6 +4529,8 @@ class MonitoringAiService:
                 dependency_contract = job.prompt_version in DEPENDENCY_MAPPING_PROMPT_VERSIONS
                 if dependency_contract:
                     self._validate_explicit_mapping_dependencies(normalized, input_payload)
+                if job.prompt_version in ROLE_EQUIVALENCE_PROMPT_VERSIONS:
+                    self._bind_role_equivalence_declarations(normalized, input_payload)
                 self._merge_deterministic_metadata_mappings(
                     normalized,
                     input_payload,
@@ -6789,6 +6815,27 @@ class MonitoringAiService:
             target = (mapping["domain"], mapping["source_field"])
             if len(pairs) != len(set(pairs)) or any(pair not in allowed or pair == target for pair in pairs):
                 raise MonitoringAiOutputValidationError("dependency_fields must reference unique other frozen fields")
+
+    @staticmethod
+    def _bind_role_equivalence_declarations(structured_payload, input_payload):
+        from packages.medical_monitoring.admission.role_equivalence import bind_role_declaration
+        from packages.medical_monitoring.intelligence.primitives import content_hash
+        rows = input_payload["field_profile"].get("adjudication_contract", {}).get("candidate_options_review", ())
+        by_field = {(row["domain"], row["source_field"]): row["candidate_options"] for row in rows}
+        for mapping in structured_payload.get("field_mappings", ()):
+            declaration = mapping.get("role_equivalence")
+            if declaration is None:
+                continue
+            pair = (mapping["domain"], mapping["source_field"])
+            try:
+                mapping["role_equivalence"] = bind_role_declaration(
+                    declaration, domain=pair[0], source_field=pair[1], options=by_field.get(pair, ()),
+                    evidence_ids=mapping.get("evidence_ids", ()),
+                    source_scope_sha256=content_hash({"project_id": input_payload["field_profile"].get("project_id"),
+                        "sources": input_payload["field_profile"].get("source_bindings", ())}),
+                )
+            except (ValueError, TypeError, KeyError) as exc:
+                raise MonitoringAiOutputValidationError(str(exc)) from exc
 
     @staticmethod
     def _validate_without_semantic_rewrite(structured_payload, input_payload):

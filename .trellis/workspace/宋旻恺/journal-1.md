@@ -1362,3 +1362,8 @@ P2视觉输入执行完成：实际ZCode/GLM-5.3-Flash:max，无fallback，执�
 P2 4792bc5同会话GLM独立审阅完成：264项聚焦与探针，未发现语义后处理静默调和；确认确定性metadata仅追加、不覆盖模型项。修正审阅推论：semantic_difference_paths的bool/int严格性仅影响诊断及新比较器，legacy最终接受仍直接比较semantic_verdict（mapping_reconciliation.py实际代码核查），不宣称改了旧政策。画像缺锚点导致分片拒绝属明确限制，新增真实12字段v2均一次完成、0工具读取，3一致/9分歧，暂未出现该失分片；仍不可认为覆盖或医学理解已完整。修复reference_only纯说明对无standard_reference的伪差异，结构化版本等继续硬比较，51项相关测试通过。原MG/main尚未切换新代。
 
 P2视觉裸API接线：新E03高峰实际pi/opencode-go/muse-spark-1.3-contributor:xhigh完成两文件执行，无fallback。主线程读代码并补监查专用桥接、job-local图缓存、provider配置原样转接、可选工具/回执及图像引用区分；不改共享ai_gateway/写作。新v22/verifier-v4/adjudication-v8/verifier-v6 tools-v3命名空间默认关闭，旧版本不获得视觉工具；修正新代related_fields提示冲突。75项视觉/gateway聚焦、503项服务/工具相邻、97项命名空间/确认、5项新服务路径通过（集合重叠，不累加）。真实两路合成image-only探针均返回A=17/B=43且实际model匹配，证据runs/mm_p2_tool_trial_20260906/visual_probe；只证明真实视觉传输，不是医学理解验收。新增完整服务合成链证明请求图→实际附图→图像来源证据入候选，quote为空且native_text_quote_verified=false。
+
+P2角色等价会商已结束并由主线程决策：一步加入逐字段/逐维双路证书，避免只改prompt反复跑；保留硬属性、unmapped隔离、匿名来源绑定及双方声明。拒绝以封闭词表声称零误判及旧别名目录代替医学同义判断，改为结构化五维关系与来源依据，通用语义仍由产品两模型独立判断。spec6.2为待实现默认关闭合同；视觉8f11114已冻结交原GLM会话复核中。
+
+P2等价证书新代已接线：仅v9/v7 tools-v4裁决轮可绑定字段匿名选项hash，证书包含五维关系/证据/反证说明、服务器重建的选项绑定和项目来源集合hash。双路相同绑定且各维等价、角色属于集合、角色之外所有硬属性相等，才在草稿采用确定性编码；两路候选原role不改。distict/insufficient或未知角色不通过，证书随双方comparison_annotations持久化；新/旧策略及prompt隔离，主项目默认未开启。679项聚焦联合通过，服务真实存储路径验证系统绑定字段不得从provider伪造。下一步冻结复核与隔离9剩余字段真实调用，并补草稿canonical持久化完整回归。
+视觉8f11114独立复核294项通过：确认实际附图、修复预算、图像引用区别及旧路径隔离；不采纳修改旧v1/v2提示（会破坏冻结版本），新v3/v4已修正。远程最大请求体上限未知，需按实际大图413观测和有界拒绝处理；当前小合成视觉探针不证明最大体量可用。

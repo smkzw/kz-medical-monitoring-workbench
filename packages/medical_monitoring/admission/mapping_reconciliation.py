@@ -253,6 +253,7 @@ def _verdict_projection(item: Mapping[str, Any]) -> dict[str, Any]:
             "field_kind",
             "related_fields",
             "dependency_fields",
+            "role_equivalence",
             "standards_reference",
             "derivation_lineage",
             "value_constraints",
@@ -416,7 +417,8 @@ def reconcile_mapping_cohorts(
     """
 
     from .mapping_comparison import DEPENDENCY_COMPARISON_VERSION, compare_mapping_dependencies
-    if comparison_policy_version not in {RECONCILIATION_SCHEMA_VERSION, DEPENDENCY_COMPARISON_VERSION}:
+    from .role_equivalence import ROLE_EQUIVALENCE_POLICY, compare_role_equivalence
+    if comparison_policy_version not in {RECONCILIATION_SCHEMA_VERSION, DEPENDENCY_COMPARISON_VERSION, ROLE_EQUIVALENCE_POLICY}:
         raise MappingReconciliationError("unsupported_mapping_comparison_policy")
     executed_route = str(
         primary_execution_route or MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY
@@ -555,9 +557,12 @@ def reconcile_mapping_cohorts(
             row["system_review_required"] = True
         elif primary is not None and verifier is not None:
             agreed = primary["semantic_verdict"] == verifier["semantic_verdict"]
-            if comparison_policy_version == DEPENDENCY_COMPARISON_VERSION:
+            if comparison_policy_version in {DEPENDENCY_COMPARISON_VERSION, ROLE_EQUIVALENCE_POLICY}:
                 try:
-                    comparison = compare_mapping_dependencies(primary["semantic_verdict"], verifier["semantic_verdict"])
+                    compare = compare_role_equivalence if comparison_policy_version == ROLE_EQUIVALENCE_POLICY else compare_mapping_dependencies
+                    comparison = compare(primary["semantic_verdict"], verifier["semantic_verdict"],
+                                         **({"domain": domain, "source_field": field}
+                                            if comparison_policy_version == ROLE_EQUIVALENCE_POLICY else {}))
                 except ValueError as exc:
                     agreed = False
                     row["violations"].append({"cohort": "both", "domain": domain, "source_field": field,
