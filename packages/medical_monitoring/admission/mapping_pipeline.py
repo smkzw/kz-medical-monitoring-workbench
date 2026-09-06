@@ -130,7 +130,9 @@ def _completed_payload_equivalent_cohort(
     )
 
 
-def _anonymous_review_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+def _anonymous_review_rows(
+    rows: Sequence[Mapping[str, Any]], *, include_difference_paths: bool = False,
+) -> list[dict[str, Any]]:
     """Remove model identity while preserving the two evidence-bound options."""
 
     projected = []
@@ -159,6 +161,15 @@ def _anonymous_review_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, 
             "source_field": str(row.get("source_field") or ""),
             "candidate_options": options,
         })
+    if include_difference_paths:
+        from .mapping_reconciliation import semantic_difference_paths
+        for row in projected:
+            options = row["candidate_options"]
+            if len(options) == 2:
+                row["difference_paths"] = semantic_difference_paths(
+                    options[0].get("semantic_verdict", {}),
+                    options[1].get("semantic_verdict", {}),
+                )
     return sorted(
         projected,
         key=lambda row: (row["domain"], row["source_field"]),
@@ -1118,7 +1129,9 @@ class AdmissionMappingPipeline:
             raw_rows = review_context.get("divergences") or []
             if not isinstance(raw_rows, list):
                 raise AdmissionMappingPipelineError("mapping_bridge_failed")
-            dual_rows = _anonymous_review_rows(raw_rows)
+            dual_rows = _anonymous_review_rows(
+                raw_rows, include_difference_paths=self._adjudication_tool_reads,
+            )
         digest = hashlib.sha256(
             json.dumps(
                 {
@@ -1402,6 +1415,18 @@ class AdmissionMappingPipeline:
                     "remain unchanged and the independent evidence is sufficient."
                 ),
             }
+            if self._adjudication_tool_reads and dual_rows:
+                profile["adjudication_contract"]["difference_review_policy"] = {
+                    "schema_version": "mapping-difference-review-v1",
+                    "instruction": (
+                        "difference_paths仅标出两个匿名解释在哪些属性不同，不是系统裁决。"
+                        "逐项核查差异是否改变原始值含义、依赖关系、对象、日期、单位或标准版本。"
+                        "参考说明措辞不得冒充标准适用性；related_fields只列对解释必要且有来源支持的依赖。"
+                        "无法由当前画像排除的替代解释应调用冻结来源工具补读原始行、邻列或相关文件，"
+                        "不得重复自信表态代替补证据。不能因为role相同就忽略其他实质属性差异，"
+                        "也不能为追求一致照抄任一选项。证据仍不足时保留未解决与受影响能力。"
+                    ),
+                }
             generation += 1
             jobs = service.submit_listing_field_mapping_chunks(
                 project_id=project_id,
