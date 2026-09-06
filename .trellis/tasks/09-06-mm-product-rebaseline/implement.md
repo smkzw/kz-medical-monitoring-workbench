@@ -104,3 +104,30 @@
 其他C1/C3文件按本次review记录列出；前端 `npm --prefix frontend run build` 使用明确隔离outDir。交互以ego(lite)测真正挂载/effect/导航，不以源码字符串匹配替代。
 
 每阶段开始写用户目标/检查点，结束写实际证据/缺陷/下一阶段顺序。进度只写本计划、journal、Git；不新增context/reviews过程文件。遇到更高优先级风险先调整本计划并记录原因，不重开整套门序。
+
+
+## 2026-09-06 用户要求无损暂停（当前有效检查点）
+
+已完成当前证据编号修复批次后暂停；不启动新模型任务、服务或下一阶段。任务与goal未完成，Trellis保留in_progress，paused为用户要求的运行状态。
+
+### 本批结果与审阅处置
+
+- 视觉裸API接线及413有界拒绝已提交（8f11114、2b79e57）；两路小型合成图片真实识别通过，仅证明传输，不代表医学图表理解或最大请求体性能验收。
+- frozen-2214961的GLM独立审阅已完成，报告位于tool-review/runs/conference/mm-p2-tools-review-20260906/role_contract_review.md。其P2-a有效：轴证据原先校验模型自报编号，而materialize之后可能删除该编号。现改为先物化最终证据、再绑定证书；拒绝任何未闭合轴引用。新v10/v8 tools-v5提示预先提供同算法生成的字段画像证据编号，区分source_entry_id和evidence_id，不由Codex替模型填语义或转换证据。
+- 仅空standards_reference对象规范为null，非空残缺标准继续拒绝，不臆造标准版本。诊断补字段/轴定位；审阅所述重复except死代码当前源码不存在，不另改。大小写min规则保持原选项token，不采用casefold改写；说明长度上限及额外草稿下游场景留待复核，不作为已完成。
+- 最新完整受影响回归：692 passed，5项既有SWIG相关弃用警告，15.70秒；git diff --check通过。日志evidence/pause-current-batch-20260906-pytest.log。此前50项草稿持久化/用户答案/中断重放验证保留；不同测试集合不累计。
+- 新v10/v8修复尚未接受独立新版本审阅、尚未真实双模型验证，默认主项目未启用。旧v4隔离9字段：MiniMax任务monai_cf5d5b5c58b95b5304fad9ee0ca3失败（空可选标准对象后修复输出不完整），GLM任务monai_f809c902b9d755bfa352ddcf64f6完成但9项均未声明等价证书；不称双路通过、未生成facts。原始attempt与证书审计保留在runs/mm_p2_tool_trial_20260906/，不得手工补声明。
+
+### 暂停状态与保留
+
+- 实测8911未监听；原MG库monitoring_ai_queue_control中proj_mgk10_sar_real paused=1，更新时间2026-09-06T00:30:13.659860+00:00。当前工具试验/会商runner进程检查无存活匹配；本轮未启动服务。
+- 原库runs/phase_c_mgk10_authority_v2_20260905/runtime/medical_monitoring_ai.sqlite3仅读取。先前571 jobs/321候选及recovery/20260906-before-queue-repair.sqlite3备份保留；本次未重新统计候选数。历史持久running行不代表活跃调用，恢复时先核实租约再通过repository恢复，不直接改SQL。
+- 未提交过程目录及原始回执完整保留，不批量纳入Git，不清理真实输入、隔离试验、失败输出、恢复备份或session历史。五真实项目原件和医学写作子系统未改。
+
+### 恢复后的严格顺序
+
+1. 读取当前全局AGENTS及本检查点，检查Git/进程/队列，核实当前修复提交；不要重建历史A/B门序。
+2. 对v10/v8证据闭合修复补独立复核；关注可选证书单路缺失但原角色字符串一致时是否不必要阻断、说明长度及canonical草稿下游/跨代场景。未完成设计判断不得静默放宽。
+3. 使用新的隔离命名空间开展v10/v8两路真实9字段验证，保留v4失败证据。读取工具、冲突解释与裁决由产品MiniMax/GLM独立完成，Codex只改harness及验证工程合同；不得手工补语义，也不把GLM单路完成称双核对通过。
+4. 证据/真实双路验收通过后，才按repository恢复原MG未解决分片；不重启全部首轮，不自动将未闭合结果产facts。
+5. P2仍待完整图片/标准lookup及证据覆盖验收；P3正确MG facts→真实AE/MH及反证→看板→旅程→来源→Query尚未闭环。P4医学扩域与兼容增量、P5三模式报告/五项目真实全量及适用增量、P6备份恢复/一键启动/性能与用户验收继续按既有v3计划。不得因本批测试通过宣称项目完成。

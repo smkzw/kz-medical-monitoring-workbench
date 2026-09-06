@@ -11243,7 +11243,8 @@ def test_visual_source_is_delivered_and_persisted_as_image_not_native_quote(tmp_
     assert visual[0].raw_fields['native_text_quote_verified'] is False
 
 
-def test_role_declaration_is_bound_to_exact_anonymous_input_before_persistence(tmp_path):
+@pytest.mark.parametrize('use_published_ref', [True, False])
+def test_role_declaration_is_bound_to_exact_anonymous_input_before_persistence(tmp_path,use_published_ref):
     from contextlib import contextmanager
     from packages.medical_monitoring.admission.mapping_pipeline import _anonymous_review_rows
     from packages.medical_monitoring.admission.role_equivalence import DIMENSIONS
@@ -11262,7 +11263,7 @@ def test_role_declaration_is_bound_to_exact_anonymous_input_before_persistence(t
                 mapping['recommended_role']='reading.code'
                 mapping['role_equivalence']={
                     'judgment':'equivalent','option_ids':[o['option_id'] for o in rows[0]['candidate_options']],
-                    'dimensions':{axis:{'relation':'equivalent','evidence_ids':mapping['evidence_ids'],
+                    'dimensions':{axis:{'relation':'equivalent','evidence_ids':([envelope.payload['role_equivalence_evidence'][0]['evidence_id']] if use_published_ref else mapping['evidence_ids']),
                                         'rationale':'合成来源对照，不代表真实医学等价。'} for axis in DIMENSIONS},
                     'counterevidence_summary':'合成测试检查了各维可能差异。'}
         return result
@@ -11271,14 +11272,19 @@ def test_role_declaration_is_bound_to_exact_anonymous_input_before_persistence(t
     def factory(*_):yield SimpleNamespace(schemas={},execute=lambda *_:None)
     service.evidence_tool_factory=factory
     job=service.submit_listing_field_mapping(project_id='project-alpha',input_revision=_revision(),field_profile=profile,
-        prompt_version='monitoring-listing-field-mapping-adjudication-v9-tools-v4')
+        prompt_version='monitoring-listing-field-mapping-adjudication-v10-tools-v5')
     result=service.run_next('role-proof-test')
+    if not use_published_ref:
+        assert result.job.status==MonitoringAiJobStatus.FAILED
+        assert not service.repository.candidates(job.project_id,job.job_id)
+        return
     assert result.job.status==MonitoringAiJobStatus.COMPLETED,result.job.failure_message
     item=service.repository.candidates(job.project_id,job.job_id)[0].structured_payload['field_mappings'][0]
     proof=item['role_equivalence']
     assert proof['domain']==pair['domain'] and proof['source_field']==pair['source_field']
     assert len(proof['bound_options'])==2 and proof['binding_sha256']
     assert item['recommended_role']=='reading.code'
+    assert all(set(axis['evidence_ids']).issubset(item['evidence_ids']) for axis in proof['dimensions'].values())
     from services.api.app.monitoring_ai_service import MonitoringAiOutputValidationError
     with pytest.raises(MonitoringAiOutputValidationError):
         MonitoringAiService._bind_role_equivalence_declarations({'field_mappings':[item]}, {'field_profile':profile})
@@ -11299,3 +11305,31 @@ def test_visual_body_rejection_does_not_retry_the_same_oversized_request(tmp_pat
     result=service.run_next('body-limit-test')
     assert result.job.retryable is retryable
     assert result.job.failure_code==('visual_request_too_large' if status==413 else 'provider_runtime_error')
+
+
+@pytest.mark.parametrize('reference,completed', [({},True),({'reference_name':'Named standard'},False),({'ctcae_version':'5.0'},False)])
+def test_empty_optional_reference_is_format_only_and_never_invents_a_standard(tmp_path,reference,completed):
+    from contextlib import contextmanager
+    def output(envelope):
+        result=_valid_output(envelope)
+        for candidate in result['candidates']:
+            for mapping in candidate['structured_payload']['field_mappings']:
+                mapping['dependency_fields']=[]
+                mapping['standards_reference']=reference
+            for evidence in candidate['evidence']:evidence['locator']='profile://statistics'
+        return result
+    provider=FakeProvider([output,output]);service=_service(tmp_path,provider)
+    @contextmanager
+    def factory(*_):yield SimpleNamespace(schemas={},execute=lambda *_:None)
+    service.evidence_tool_factory=factory
+    profile=_field_profile(1);profile['adjudication_contract']={'first_pass_mappings':[]}
+    job=service.submit_listing_field_mapping(project_id='project-alpha',input_revision=_revision(),field_profile=profile,
+        prompt_version='monitoring-listing-field-mapping-adjudication-v9-tools-v4')
+    result=service.run_next('empty-reference-test')
+    assert (result.job.status==MonitoringAiJobStatus.COMPLETED) is completed,result.job.failure_message
+    if completed:
+        item=service.repository.candidates(job.project_id,job.job_id)[0].structured_payload['field_mappings'][0]
+        assert item.get('standards_reference') is None
+        assert len(provider.envelopes)==1
+    else:
+        assert not service.repository.candidates(job.project_id,job.job_id)

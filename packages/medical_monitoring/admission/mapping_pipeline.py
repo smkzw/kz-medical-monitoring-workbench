@@ -313,8 +313,8 @@ class AdmissionMappingPipeline:
     def _adjudication_prompt_version(self, cohort):
         verifier = cohort == MONITORING_MAPPING_COHORT_VERIFIER
         if self._role_equivalence:
-            return ("monitoring-listing-field-mapping-adjudication-verifier-v7-tools-v4" if verifier
-                    else "monitoring-listing-field-mapping-adjudication-v9-tools-v4")
+            return ("monitoring-listing-field-mapping-adjudication-verifier-v8-tools-v5" if verifier
+                    else "monitoring-listing-field-mapping-adjudication-v10-tools-v5")
         if self._visual_tool_reads:
             return ("monitoring-listing-field-mapping-adjudication-verifier-v6-tools-v3" if verifier
                     else "monitoring-listing-field-mapping-adjudication-v8-tools-v3")

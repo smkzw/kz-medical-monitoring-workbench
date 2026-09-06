@@ -50,14 +50,14 @@ def bind_role_declaration(declaration, *, domain, source_field, options, evidenc
     if not isinstance(dimensions, dict) or set(dimensions) != set(DIMENSIONS):
         raise ValueError('role_equivalence_dimensions_incomplete')
     allowed = set(evidence_ids)
-    for axis in dimensions.values():
+    for axis_name, axis in dimensions.items():
         if (not isinstance(axis, dict) or set(axis) != {'relation', 'evidence_ids', 'rationale'}
                 or axis['relation'] not in RELATIONS
                 or not isinstance(axis['rationale'], str) or not axis['rationale'].strip()
                 or not isinstance(axis['evidence_ids'], list)
                 or any(not isinstance(item, str) or item not in allowed for item in axis['evidence_ids'])
                 or (axis['relation'] == 'equivalent' and not axis['evidence_ids'])):
-            raise ValueError('role_equivalence_axis_invalid')
+            raise ValueError('role_equivalence_axis_invalid:' + axis_name)
     if (not isinstance(declaration['counterevidence_summary'], str)
             or not declaration['counterevidence_summary'].strip()):
         raise ValueError('role_equivalence_counterevidence_missing')

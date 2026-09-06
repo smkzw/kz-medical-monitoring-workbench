@@ -63,7 +63,7 @@ from .monitoring_ai_contracts import (
     validate_candidates_for_job,
 )
 from .monitoring_evidence_tool_loop import EvidenceToolLoopError
-from packages.medical_monitoring.admission.evidence_tool_contract import DEPENDENCY_MAPPING_PROMPT_VERSIONS, VISUAL_MAPPING_PROMPT_VERSIONS, ROLE_EQUIVALENCE_PROMPT_VERSIONS
+from packages.medical_monitoring.admission.evidence_tool_contract import DEPENDENCY_MAPPING_PROMPT_VERSIONS, VISUAL_MAPPING_PROMPT_VERSIONS, ROLE_EQUIVALENCE_PROMPT_VERSIONS, ROLE_EQUIVALENCE_EVIDENCE_PROMPT_VERSIONS
 from .monitoring_ai_repository import (
     MonitoringAiRepository,
     MonitoringAiStateConflictError,
@@ -3359,6 +3359,7 @@ class MonitoringAiService:
                     "monitoring-listing-field-mapping-adjudication-verifier-v5-tools-v2",
                     "monitoring-listing-field-mapping-adjudication-verifier-v6-tools-v3",
                     "monitoring-listing-field-mapping-adjudication-verifier-v7-tools-v4",
+                    "monitoring-listing-field-mapping-adjudication-verifier-v8-tools-v5",
                 }:
                     system_prompt += (
                         " 你是与另一复核harness隔离运行的第二裁决者。不得推测或复述"
@@ -3605,6 +3606,13 @@ class MonitoringAiService:
                 "任一选项排在前面都不能证明同义。unmapped不能提升为确定含义。系统将独立比较双方证书及"
                 "全部其他硬属性，不使用你的声明单独放行。不输出bound_options/binding_sha256等系统绑定字段。"
             )
+        if job.prompt_version in ROLE_EQUIVALENCE_EVIDENCE_PROMPT_VERSIONS:
+            system_prompt += (
+                " role_equivalence_evidence提供本次每个字段可引用的画像证据编号，按domain/source_field精确选择。"
+                "各维evidence_ids可引用本字段提供的evidence_id，或实际补读并列入本映射的工具证据编号。"
+                "source_entry_id是来源编号而非证据编号，不得混用；不需猜测harness之后生成的编号。"
+                "画像证据只证明提供的字段分布/语境，不能冒充未读文档、完整单元格核查或医学结论。"
+            )
         return AiPromptEnvelope(
             task_id=job.job_id,
             task_type=AI_TASK_TYPE_BY_MONITORING_TASK[job.task_type],
@@ -3723,6 +3731,13 @@ class MonitoringAiService:
                     for item in job.input_revision.sources
                 ],
                 "output_schema": output_schema,
+                **({"role_equivalence_evidence": [
+                    {"domain": item["domain"], "source_field": item["field"],
+                     "evidence_id": self._mapping_profile_evidence_id(
+                         job, input_payload["field_profile"], item["domain"], item["field"]),
+                     "scope": "provided_field_profile_only"}
+                    for item in input_payload["field_profile"]["fields"]
+                ]} if job.prompt_version in ROLE_EQUIVALENCE_EVIDENCE_PROMPT_VERSIONS else {}),
             },
             reasoning_effort="high",
             max_output_tokens=(
@@ -4406,6 +4421,15 @@ class MonitoringAiService:
                         "system_generated_mapping_provenance",
                         None,
                     )
+                    if job.prompt_version in ROLE_EQUIVALENCE_PROMPT_VERSIONS:
+                        # An exactly empty optional reference carries no named
+                        # standard, version or applicability assertion. Normalize
+                        # only this JSON representation; retain every nonempty
+                        # object for strict validation and preserve the raw reply.
+                        structured_payload = deepcopy(structured_payload)
+                        for mapping in structured_payload.get("field_mappings", ()):
+                            if isinstance(mapping, dict) and mapping.get("standards_reference") == {}:
+                                mapping["standards_reference"] = None
                 try:
                     structured = model_type.model_validate(
                         structured_payload
@@ -4533,8 +4557,6 @@ class MonitoringAiService:
                 dependency_contract = job.prompt_version in DEPENDENCY_MAPPING_PROMPT_VERSIONS
                 if dependency_contract:
                     self._validate_explicit_mapping_dependencies(normalized, input_payload)
-                if job.prompt_version in ROLE_EQUIVALENCE_PROMPT_VERSIONS:
-                    self._bind_role_equivalence_declarations(normalized, input_payload)
                 self._merge_deterministic_metadata_mappings(
                     normalized,
                     input_payload,
@@ -4549,6 +4571,8 @@ class MonitoringAiService:
                     normalized,
                     input_payload,
                 )
+                if job.prompt_version in ROLE_EQUIVALENCE_PROMPT_VERSIONS:
+                    self._bind_role_equivalence_declarations(normalized, input_payload)
                 if not _contains_cjk(candidate.title) or any(
                     (
                         not _contains_cjk(
@@ -6551,14 +6575,7 @@ class MonitoringAiService:
                 )
             ]
             mapping_evidence_ids = [value for value in mapping.get("evidence_ids", ()) if value in verified]
-            evidence_id = "profile_" + content_sha256(
-                {
-                    "input_revision_sha256": job.input_revision_sha256,
-                    "profile_sha256": profile["profile_sha256"],
-                    "domain": pair[0],
-                    "field": pair[1],
-                }
-            )[:28]
+            evidence_id = self._mapping_profile_evidence_id(job, profile, pair[0], pair[1])
             evidence.append(
                 _ProviderEvidence(
                     evidence_id=evidence_id,
@@ -6821,6 +6838,13 @@ class MonitoringAiService:
                 raise MonitoringAiOutputValidationError("dependency_fields must reference unique other frozen fields")
 
     @staticmethod
+    def _mapping_profile_evidence_id(job, profile, domain, field):
+        return "profile_" + content_sha256({
+            "input_revision_sha256": job.input_revision_sha256,
+            "profile_sha256": profile["profile_sha256"], "domain": domain, "field": field,
+        })[:28]
+
+    @staticmethod
     def _bind_role_equivalence_declarations(structured_payload, input_payload):
         from packages.medical_monitoring.admission.role_equivalence import bind_role_declaration
         from packages.medical_monitoring.intelligence.primitives import content_hash
@@ -6839,7 +6863,7 @@ class MonitoringAiService:
                         "sources": input_payload["field_profile"].get("source_bindings", ())}),
                 )
             except (ValueError, TypeError, KeyError) as exc:
-                raise MonitoringAiOutputValidationError(str(exc)) from exc
+                raise MonitoringAiOutputValidationError(f"{pair[0]}/{pair[1]}: {exc}") from exc
 
     @staticmethod
     def _validate_without_semantic_rewrite(structured_payload, input_payload):
