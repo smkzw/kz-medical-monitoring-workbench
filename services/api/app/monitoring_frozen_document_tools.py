@@ -148,8 +148,15 @@ class FrozenDocumentEvidenceTools:
                 unit.update(text=original[text_offset:text_offset + text_limit], text_offset=text_offset,
                             total_text_characters=len(original), text_sha256=content_hash(original),
                             next_text_offset=(text_offset + text_limit if text_offset + text_limit < len(original) else None))
+        for unit in units:
+            text = unit.get("text", "")
+            if text.strip() and len(text) <= 8000:
+                unit["quote_ref"] = "quote-" + content_hash({
+                    "source": binding.source_entry_id, "digest": binding.content_sha256,
+                    "locator": unit["locator"], "text_offset": unit["text_offset"], "text": text,
+                })[:20]
         self.resolver.assert_current_binding(project_id=self.project_id, binding=binding)
-        result = {"schema_version": "mm-frozen-document-units-v1", "project_id": self.project_id,
+        result = {"schema_version": "mm-frozen-document-units-v2", "project_id": self.project_id,
                   "input_revision_sha256": self.input_revision, "source_entry_id": binding.source_entry_id,
                   "source_content_sha256": binding.content_sha256, "locator_index_sha256": binding.locator_index_sha256,
                   "coverage": "partial", "coverage_scope": "physical_document_units",

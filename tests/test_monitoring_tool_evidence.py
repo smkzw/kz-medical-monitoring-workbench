@@ -38,3 +38,15 @@ def test_exact_cell_value_does_not_approve_an_unverified_quote_or_coerce_zero():
     assert result["ev-doc"]["raw_fields"]["raw_value"] == 0
     with pytest.raises(ValueError):
         verified_tool_evidence([{**item, "raw_fields": {"coordinate": "B2", "raw_value": "0"}}], reads, {("doc-1", "a" * 64)})
+
+
+def test_tool_quote_reference_materializes_exact_unicode_source_without_copying():
+    source = '原文：“quoted”\n保留换行。'
+    receipt = read(units=[{"locator": "pdf:page:2", "text": source, "quote_ref": "quote-frozen", "text_offset": 40}])
+    item = evidence(quote="", raw_fields={"tool_quote_ref": "quote-frozen"})
+    result = verified_tool_evidence([item], [receipt], {("doc-1", "a" * 64)})
+    assert result["ev-doc"]["quote"] == source
+    assert result["ev-doc"]["raw_fields"]["text_offset"] == 40
+    for change in ({"quote": "invented"}, {"locator": "pdf:page:3"}, {"raw_fields": {"tool_quote_ref": "unknown"}}):
+        with pytest.raises(ValueError):
+            verified_tool_evidence([{**item, **change}], [receipt], {("doc-1", "a" * 64)})
