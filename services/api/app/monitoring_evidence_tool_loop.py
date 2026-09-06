@@ -15,10 +15,19 @@ from packages.medical_monitoring.admission.evidence_tool_contract import EVIDENC
 TOOL_REQUEST_SCHEMA = "mm-evidence-tool-request-v1"
 
 
+def _bounded_failure_output(output):
+    encoded = canonical_json(output).encode("utf-8")
+    if len(encoded) <= 65_536:
+        return deepcopy(output)
+    return {"truncated": True, "byte_count": len(encoded),
+            "content_sha256": content_hash(output),
+            "preview": encoded[:65_536].decode("utf-8", errors="replace")}
+
+
 class EvidenceToolLoopError(ValueError):
     def __init__(self, code, output=None):
         super().__init__(code)
-        self.output = deepcopy(output)
+        self.output = _bounded_failure_output(output)
 
 
 def _validate_requests(output, task_id, revision, schemas, seen_ids):
@@ -110,13 +119,13 @@ def run_evidence_tool_loop(
         validate_model()
         validate_current()
         if not isinstance(output, dict):
-            raise EvidenceToolLoopError("tool_loop_output_not_object")
+            raise EvidenceToolLoopError("tool_loop_output_not_object", output)
         if "tool_requests" not in output:
             return EvidenceToolLoopResult(output, tuple(receipts), turn)
         try:
             requests = _validate_requests(output, envelope.task_id, input_revision, tool_schemas, seen_ids)
         except EvidenceToolLoopError as exc:
-            exc.output = deepcopy(output)
+            exc.output = _bounded_failure_output(output)
             if protocol_repairs >= max_protocol_repairs or turn == max_model_turns:
                 raise
             protocol_repairs += 1

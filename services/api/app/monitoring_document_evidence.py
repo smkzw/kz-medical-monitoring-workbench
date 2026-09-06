@@ -53,21 +53,15 @@ class MonitoringDocumentEvidenceResolver:
     def __init__(self, source_registry: Any) -> None:
         self.source_registry = source_registry
 
-    def resolve(
-        self,
-        *,
-        project_id: str,
-        listing_admission_date: str | None = None,
-        selected_entry_ids: Mapping[str, str] | None = None,
-    ) -> MonitoringDocumentEvidencePacket:
+    def _verified_entries(self, project_id: str, roles=DOCUMENT_ROLES) -> list[Any]:
         project_entries = self.source_registry.list_entries(project_id)
-        entries = [
+        return [
             entry
             for entry in project_entries
             if entry.module == "medical_monitoring"
             and any(
                 entry.source_kind in source_kinds
-                for source_kinds in _SOURCE_KINDS_BY_ROLE.values()
+                for source_kinds in (_SOURCE_KINDS_BY_ROLE[role] for role in roles)
             )
             and (
                 self.source_registry.monitoring_authority_entry_is_verified(entry)
@@ -81,6 +75,15 @@ class MonitoringDocumentEvidenceResolver:
                 )
             )
         ]
+
+    def resolve(
+        self,
+        *,
+        project_id: str,
+        listing_admission_date: str | None = None,
+        selected_entry_ids: Mapping[str, str] | None = None,
+    ) -> MonitoringDocumentEvidencePacket:
+        entries = self._verified_entries(project_id)
         spans = self.source_registry.list_spans(project_id)
         registry_revision = content_hash([
             {
@@ -183,18 +186,18 @@ class MonitoringDocumentEvidenceResolver:
         binding_kind = (
             "supplementary" if binding.main_source_entry_id else "main"
         )
-        packet = self.resolve(
-            project_id=project_id,
-            selected_entry_ids={
-                binding.role: (
-                    binding.main_source_entry_id
-                    if binding_kind == "supplementary"
-                    else binding.source_entry_id
-                ),
-            },
-        )
-        evidence = next(
-            item for item in packet.roles if item.role == binding.role
+        # A byte-read guard verifies its selected role and every supplementary
+        # binding. The outer job revision check still verifies the full packet.
+        # Avoid reconstructing three unrelated roles on both sides of each read.
+        evidence = self._role_evidence(
+            binding.role,
+            self._verified_entries(project_id, (binding.role,)),
+            self.source_registry.list_spans(project_id),
+            selected_entry_id=(
+                binding.main_source_entry_id
+                if binding_kind == "supplementary"
+                else binding.source_entry_id
+            ),
         )
         still_current = (
             evidence.status == "current"
