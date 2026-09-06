@@ -370,3 +370,17 @@ test("confirm-ready blocks fact generation and finishes", () => {
 test("transport focus stays on the full candidate list", () => {
   assert.equal(MAPPING_FOCUS_ALL, "all");
 });
+
+test("renewed server question cannot inherit an old local answered marker", () => {
+  const initial = { ...createAdmissionMappingConfirmState(), answeredKeys: { "AE::AETERM": true } };
+  const next = admissionMappingConfirmReducer(initial, {
+    type: "adjudication-ready",
+    payload: { draft_id: "d1", version: 4, user_questions: [{
+      domain: "AE", source_field: "AETERM", question_text: "新资料记录的是原始描述吗？",
+      prior_user_action: "用户已确认：原始描述。",
+    }] },
+  });
+  assert.equal(mappingUnansweredCount(next), 1);
+  assert.equal(next.answeredKeys["AE::AETERM"], undefined);
+  assert.equal(mappingQuestionCards(next)[0].priorUserAction, "用户已确认：原始描述。");
+});

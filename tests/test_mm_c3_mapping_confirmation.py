@@ -954,13 +954,20 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
     )
 
     assert calls[0]["review_context"] == {"divergences": [divergence]}
-    if saved_answer:
+    if saved_answer and resolution is None:
         assert state == {"version": 1, "field": field}
         assert len(receipts) == 1
         assert payload["adjudication"]["state"] == "blocked"
         assert payload["adjudication"]["resolved_count"] == 0
         assert payload["review_summary"]["user_question_count"] == 0
         return
+    if saved_answer:
+        assert state["field"]["prior_user_action"] == field["user_action"]
+        assert not state["field"]["user_action"].startswith("用户已确认：")
+        assert state["field"]["decision_reconciliation_sha256"] == ""
+        if needs_user:
+            assert payload["user_questions"][0]["prior_user_action"] == field["user_action"]
+            assert state["field"]["question_reconciliation_sha256"] == receipts[1].reconciliation_sha256
     if resolution is not None:
         assert receipts[1].resolution == resolution
         assert receipts[1].reconciliation_sha256 != legacy_reconciliation_sha256
@@ -1062,3 +1069,36 @@ def test_confirm_requires_agreement_not_primary_retention(resolution: str) -> No
     payload = service.confirm_draft(**kwargs)
     assert payload["mapping_revision"] == "revision-1"
     assert payload["facts_generated"] is False
+
+
+@pytest.mark.parametrize("question_bound,answer_bound,accepted", [
+    (True, True, True), (True, False, False), (False, True, False), (False, False, False),
+])
+def test_saved_answer_requires_same_current_evidence_as_question_and_receipt(
+    question_bound, answer_bound, accepted,
+):
+    reconciliation = {"state": "diverged", "auto_pass": False, "divergences": [
+        {"domain": "AE", "source_field": "AETERM", "result": "diverged"}]}
+    current = _adjudication_reconciliation_sha256(reconciliation)
+    repo = SimpleNamespace(adjudication_receipts=lambda *_: (SimpleNamespace(
+        domain="AE", source_field="AETERM", reconciliation_sha256=current, resolution="escalated"),))
+    service = AdmissionMappingConfirmationService(
+        mapping_pipeline=SimpleNamespace(), mapping_repository=repo, ai_repository=SimpleNamespace(),
+        prompt_version="prompt", accepted_status="accepted", proposed_status="proposed",
+    )
+    field = {"domain": "AE", "source_field": "AETERM", "user_action": "用户已确认：原始描述。",
+             "question_reconciliation_sha256": current if question_bound else "1" * 64,
+             "decision_reconciliation_sha256": current if answer_bound else ""}
+    assert service._resolved_dual_review(project_id="p1", draft_id="d1", draft_fields=[field],
+                                         reconciliation=reconciliation) is accepted
+
+
+def test_reconfirmation_history_survives_product_api_projection():
+    from packages.medical_monitoring.api.r7_product.mapping_candidate_routes import _public_draft
+    result = _public_draft({"draft_id": "draft-1", "version": 4,
+        "user_questions": [{"domain": "AE", "source_field": "AETERM",
+                            "question_text": "新资料记录的是原始描述吗？",
+                            "prior_user_action": "用户已确认：原始描述。",
+                            "question_reconciliation_sha256": "1" * 64}]})
+    assert result["user_questions"][0]["prior_user_action"] == "用户已确认：原始描述。"
+    assert "question_reconciliation_sha256" not in result["user_questions"][0]

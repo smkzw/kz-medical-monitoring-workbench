@@ -52,6 +52,9 @@ _EDITABLE_FIELD_KEYS = frozenset(
         "validated_treatment_identity_binding",
         "dose_semantics",
         "quality_gate_actions",
+        "question_reconciliation_sha256",
+        "decision_reconciliation_sha256",
+        "prior_user_action",
     }
 )
 _RECORDED_USER_DECISION_PREFIXES = ("用户已确认：", "用户已核对：")
@@ -143,6 +146,9 @@ class MonitoringMappingField(BaseModel):
     # Default False only covers legacy candidates recorded before the v17
     # mapping contract; every new AI output must carry the explicit flag.
     user_decision_required: bool = False
+    question_reconciliation_sha256: str = Field(default="", pattern=r"^(?:[0-9a-f]{64})?$")
+    decision_reconciliation_sha256: str = Field(default="", pattern=r"^(?:[0-9a-f]{64})?$")
+    prior_user_action: str = Field(default="", max_length=2_000)
     related_fields: tuple[str, ...] = Field(default_factory=tuple, max_length=100)
     evidence_ids: tuple[str, ...] = Field(min_length=1, max_length=50)
     standards_reference: Optional[dict[str, Any]] = None
@@ -1284,6 +1290,9 @@ class MonitoringMappingDraftRepository:
                 "only the system harness may revise the decision requirement"
             )
         provenance_keys = {
+            "question_reconciliation_sha256",
+            "decision_reconciliation_sha256",
+            "prior_user_action",
             "evidence_ids",
             "object_identity",
             "object_identity_evidence_fields",
@@ -1376,6 +1385,13 @@ class MonitoringMappingDraftRepository:
             index = matches[0]
             payload = fields[index].model_dump(mode="json")
             payload.update(patch)
+            if actor != "system_harness" and "user_action" in patch:
+                # The CAS version is the card the monitor actually saw. Bind
+                # its answer atomically to that card, never to a newer source.
+                answered = str(patch["user_action"]).strip().startswith(_RECORDED_USER_DECISION_PREFIXES)
+                payload["decision_reconciliation_sha256"] = (
+                    fields[index].question_reconciliation_sha256 if answered else ""
+                )
             payload["domain"] = domain
             payload["source_field"] = source_field
             fields[index] = MonitoringMappingField.model_validate(payload)

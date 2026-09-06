@@ -250,6 +250,7 @@ def _question_card(row: Mapping[str, Any]) -> dict[str, Any]:
         "attention_reason": row.get("attention_reason"),
         "question_text": row.get("question_text"),
         "evidence_summary": row.get("evidence_summary") or [],
+        "prior_user_action": row.get("prior_user_action") or "",
     }
 
 
@@ -663,6 +664,9 @@ class AdmissionMappingConfirmationService:
                     pending.append(field)
                     continue
                 if receipt.resolution == "escalated":
+                    if field.get("question_reconciliation_sha256") != reconciliation_sha256:
+                        pending.append(field)
+                        continue
                     if (
                         classify_user_question(field) is None
                         and not _decision_recorded(field)
@@ -878,23 +882,22 @@ class AdmissionMappingConfirmationService:
                 ),
                 None,
             )
-            # A saved user answer always wins over a later system result.
             if current_field is None:
                 continue
-            if _decision_recorded(current_field):
-                # A changed evidence generation needs a fresh binding, never
-                # an automatic rewrite of the monitor's earlier answer.
-                remaining_system_review_count += 1
-                continue
+            prior_answer = (
+                str(current_field.get("user_action") or "")
+                if _decision_recorded(current_field)
+                else str(current_field.get("prior_user_action") or "")
+            )
             if (
                 pair not in divergence_pairs
                 and classify_user_question(current_field) is None
             ):
                 continue
             uncertainty = str(item.get("uncertainty") or "").strip()
-            operation_id = "adjudicate-" + hashlib.sha256(
+            operation_id = "adjudicate-bound-v2-" + hashlib.sha256(
                 (
-                    f"{RECONCILIATION_SCHEMA_VERSION}|{draft_id}|"
+                    f"{RECONCILIATION_SCHEMA_VERSION}|{reconciliation_sha256}|{draft_id}|"
                     f"{item.get('candidate_id')}|"
                     f"{pair[0]}|{pair[1]}"
                 ).encode("utf-8")
@@ -910,6 +913,9 @@ class AdmissionMappingConfirmationService:
                     f"请确认「{pair[0]}·{pair[1]}」记录的实际医学含义。"
                 )
                 patch = {
+                    "question_reconciliation_sha256": reconciliation_sha256,
+                    "decision_reconciliation_sha256": "",
+                    "prior_user_action": prior_answer,
                     "user_decision_required": True,
                     "uncertainty": (
                         f"系统复核后仍需医学确认：{uncertainty or '现有证据支持不止一种解释。'}"
@@ -938,6 +944,9 @@ class AdmissionMappingConfirmationService:
                         dict.fromkeys(patch["related_fields"])
                     )
                 patch.update({
+                    "question_reconciliation_sha256": "",
+                    "decision_reconciliation_sha256": "",
+                    "prior_user_action": prior_answer,
                     "user_decision_required": False,
                     "uncertainty": (
                         f"第二轮独立复核：{uncertainty or '当前证据支持原字段对应。'}"
@@ -1280,7 +1289,9 @@ class AdmissionMappingConfirmationService:
             if field is None or receipt is None:
                 return False
             if _decision_recorded(field):
-                if receipt.resolution != "escalated":
+                if (receipt.resolution != "escalated"
+                        or field.get("question_reconciliation_sha256") != reconciliation_sha256
+                        or field.get("decision_reconciliation_sha256") != reconciliation_sha256):
                     return False
                 continue
             if (

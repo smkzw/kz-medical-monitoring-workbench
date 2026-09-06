@@ -1309,3 +1309,10 @@ Introduced generation-neutral application and route entry points without changin
 - 冻结Excel读取器支持区域分页、完整列值分布、精确原值筛选后的分散行/邻列上下文；0、字符串0、false不混同，无命中不称医学事实不存在。13项实际合成admission仓储测试通过。
 - 显式新tools提示版本的服务组合接线已在工作树验证，旧版本仍走原路径。实际run_next测试发现尝试表有(job_id,attempt_number)唯一约束，不能复用为逐次工具凭据；已新增独立evidence_reads表，保留原重试语义、revision/hash与lease/CAS验证。两回合完成后仍只有一条执行尝试，模型读取凭据单独保留；重新claim后旧worker写入拒绝，重开仓储凭据保留。服务/仓储/源工具/协议570项通过（之后新增精确采样2项、凭据生命周期1项分别通过，不重复累计）。
 - 新工具版本尚未晋升默认；文档全文分页/图片补读、标准版本工具、盲核对新版本分支以及MG真实工具执行仍待接通验证。没有启动8911或真实MG模型任务。F1用户回答生命周期同一审阅session追问仍运行，未重派、未以等待制造任务断点。
+
+### 2026-09-06 F1回答版本绑定及实际显示回归
+- 同一ZCode/GLM审阅session追加审阅已终态返回、无fallback，冻结6a03b5d复跑222通过。F2/F3/F4修复被确认；F3文档变化但profile摘要不变的推演还需按真实profile组成核查，未当实证缺陷处理。用户答案方案仅采纳显式代际绑定和保留历史的目标，不采纳修改旧模型收据、先写答案后写收据的非原子方案，以及旧文本+escalated兼容放行。
+- 实施采用现有草稿字段与edit事务：系统问题记录question_reconciliation_sha256；用户操作在expected_version CAS同一事务内从已展示问题生成decision_reconciliation_sha256。不是客户端提供的新版本号。分歧确认要求当前模型升级收据、问题版本、答案版本三者一致。旧答案保留prior_user_action及原编辑记录；仍需用户判断才重新提问，两路已一致则系统更新判断并保留旧回答，未一致但没提问仍系统阻塞，不转交大量人工。
+- 前端新代问题清除同字段旧answeredKeys；旧回答可展开查看。没有明确建议时移除含糊的“系统判断正确”按钮；有明确旧答案时提供“仍是：…”主动确认，通用“采用系统判断”旧文本不作为具体答案复用。API公开投影保留旧答案，不外露证据摘要标识。
+- 后端确认/仓储94通过；相邻facts/bridge/dual/API/batch/router144通过；前端状态18通过；Vite build通过（原有大bundle警告）。真实ego页面挂载实际MappingConfirmPanel、合成640字段1问题：展开旧回答、点击“仍是：原始描述。”得到明确note=原始描述，而非自动回答。截图恢复可用（captureScreenshot传文件路径），已查看当前确认面板和实际SubjectWorkspaceView数值趋势截图，保存task/evidence。仅证明组件显示/交互及P1数值尺度，不冒称真实临床全链E2E、完整真实时间趋势或用户验收。
+- P1修复仍需对最新F1冻结改动独立核查；主线程连续进入P2完整文档读取与裸API工具合同，真实MG队列未启动。
