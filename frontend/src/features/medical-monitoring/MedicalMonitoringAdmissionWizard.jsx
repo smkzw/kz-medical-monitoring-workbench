@@ -18,6 +18,7 @@ import {
   createAdmissionMappingConfirmState,
   mappingCandidateKey,
   mappingConfirmationReason,
+  mappingConfirmationFailureAction,
   mappingQuestionCards,
   mappingUnansweredCount,
 } from "./medicalMonitoringAdmissionMappingConfirmState.mjs";
@@ -816,13 +817,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       dispatch({ type: "finish" });
     } catch (error) {
       confirmInFlight.current = false;
-      mappingDispatch({
-        type: "draft-error",
-        error: {
-          serverText: error?.detail?.message || error?.message || "字段识别结果保存失败。",
-          guidance: ["请点击重试；系统不会要求您重新逐项核对。"],
-        },
-      });
+      mappingDispatch(mappingConfirmationFailureAction(error, mappingState.draft));
     }
   }, [api, mappingState, state.attemptId, state.projectId]);
 

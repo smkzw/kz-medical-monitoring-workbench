@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createMedicalMonitoringProductApi } from "./medicalMonitoringProductApi.mjs";
 
 import {
   MAPPING_FOCUS_ALL,
@@ -7,6 +8,7 @@ import {
   admissionMappingPrimaryAction,
   createAdmissionMappingConfirmState,
   mappingConfirmationReason,
+  mappingConfirmationFailureAction,
   mappingEvidenceText,
   mappingQuestionCards,
   mappingUnansweredCount,
@@ -383,4 +385,23 @@ test("renewed server question cannot inherit an old local answered marker", () =
   assert.equal(mappingUnansweredCount(next), 1);
   assert.equal(next.answeredKeys["AE::AETERM"], undefined);
   assert.equal(mappingQuestionCards(next)[0].priorUserAction, "用户已确认：原始描述。");
+});
+
+
+test("changed evidence returns confirmation to automatic review instead of repeating confirm", async () => {
+  const draft = { draft_id: "d1", version: 3 };
+  const api = createMedicalMonitoringProductApi({fetchImpl: async () => new Response(
+    JSON.stringify({code: "mapping_reconciliation_required", message: "系统需要重新核实"}),
+    {status: 409, headers: {"Content-Type": "application/json"}},
+  )});
+  let failure;
+  try { await api.confirmDataAdmissionMappingDraft("project-1", "attempt-1", draft); }
+  catch (error) { failure = error; }
+  assert.equal(failure.status, 409);
+  const action = mappingConfirmationFailureAction(failure, draft);
+  const state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), action);
+  assert.equal(state.phase, "adjudicating");
+  assert.equal(state.draft, draft);
+  assert.equal(admissionMappingPrimaryAction(state).disabled, true);
+  assert.equal(mappingConfirmationFailureAction({message:"network unavailable"}, draft).type, "draft-error");
 });

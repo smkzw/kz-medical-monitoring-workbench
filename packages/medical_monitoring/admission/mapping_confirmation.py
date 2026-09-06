@@ -667,6 +667,10 @@ class AdmissionMappingConfirmationService:
                     if field.get("question_reconciliation_sha256") != reconciliation_sha256:
                         pending.append(field)
                         continue
+                    if (_decision_recorded(field)
+                            and field.get("decision_reconciliation_sha256") != reconciliation_sha256):
+                        pending.append(field)
+                        continue
                     if (
                         classify_user_question(field) is None
                         and not _decision_recorded(field)
@@ -897,7 +901,7 @@ class AdmissionMappingConfirmationService:
             uncertainty = str(item.get("uncertainty") or "").strip()
             operation_id = "adjudicate-bound-v2-" + hashlib.sha256(
                 (
-                    f"{RECONCILIATION_SCHEMA_VERSION}|{reconciliation_sha256}|{draft_id}|"
+                    f"{RECONCILIATION_SCHEMA_VERSION}|{reconciliation_sha256}|{draft_id}|{current.version}|"
                     f"{item.get('candidate_id')}|"
                     f"{pair[0]}|{pair[1]}"
                 ).encode("utf-8")
@@ -953,16 +957,22 @@ class AdmissionMappingConfirmationService:
                     ),
                     "user_action": f"{_SYSTEM_ADJUDICATION_PREFIX}{rationale}",
                 })
-            self.mapping_repository.edit_field(
-                project_id,
-                draft_id,
-                domain=pair[0],
-                source_field=pair[1],
-                patch=patch,
-                expected_version=int(current.version),
-                actor="system_harness",
-                idempotency_key=operation_id,
+            answered_current_question = (
+                requires_user and _decision_recorded(current_field)
+                and current_field.get("question_reconciliation_sha256") == reconciliation_sha256
+                and current_field.get("decision_reconciliation_sha256") == reconciliation_sha256
             )
+            if not answered_current_question and any(current_field.get(key) != value for key, value in patch.items()):
+                self.mapping_repository.edit_field(
+                    project_id,
+                    draft_id,
+                    domain=pair[0],
+                    source_field=pair[1],
+                    patch=patch,
+                    expected_version=int(current.version),
+                    actor="system_harness",
+                    idempotency_key=operation_id,
+                )
             if pair in divergence_pairs:
                 review_sources = tuple(
                     {
