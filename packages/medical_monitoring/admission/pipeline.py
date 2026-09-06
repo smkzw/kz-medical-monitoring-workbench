@@ -100,7 +100,14 @@ def _candidate_roles(column: Any) -> list[str]:
 
 
 def _normalized_identifier(value: Any) -> str:
-    return re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+    identifier = str(value or "").upper().strip()
+    # Export environments are annotations, not arbitrary study-ID prefixes.
+    # Strip only an explicit, bracketed environment suffix before comparing
+    # the complete study identifier. Unknown suffixes remain significant.
+    identifier = re.sub(
+        r"\s*\[(?:PROD|PRODUCTION|UAT|TEST|DEV)\]\s*$", "", identifier
+    )
+    return re.sub(r"[^A-Z0-9]", "", identifier)
 
 
 def _normalized_header(value: Any) -> str:
@@ -143,12 +150,7 @@ def _project_identity_assessment(
         }
     )
     compatible = bool(expected and observed) and all(
-        any(
-            expected_id == observed_id
-            or expected_id.startswith(observed_id)
-            or observed_id.startswith(expected_id)
-            for expected_id in expected
-        )
+        observed_id in expected
         for observed_id in observed
     )
     status = (
@@ -161,7 +163,7 @@ def _project_identity_assessment(
         else "conflict"
     )
     return {
-        "schema_version": "mm-admission-project-identity-v1",
+        "schema_version": "mm-admission-project-identity-v2",
         "status": status,
         "expected_count": len(expected),
         "observed_count": len(observed),

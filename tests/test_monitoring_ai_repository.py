@@ -97,6 +97,57 @@ def _request(
     )
 
 
+def test_queue_pause_survives_reopen_and_preserves_inflight_result(tmp_path: Path) -> None:
+    clock = MutableClock()
+    path = tmp_path / "queue.sqlite3"
+    repo = MonitoringAiRepository(path, clock=clock)
+    job = repo.create_or_get(_request())
+    running = repo.claim_next("worker")
+    waiting = repo.create_or_get(_request(business_key="next"))
+    repo.set_queue_paused(job.project_id, paused=True)
+    reopened = MonitoringAiRepository(path, clock=clock)
+    assert reopened.queue_state(job.project_id)["state"] == "pausing"
+    assert reopened.claim_next("other") is None
+    candidate = _candidate(running, clock)
+    reopened.complete(
+        running, owner="worker", response_model="test-model",
+        raw_output={"candidates": [candidate.model_dump(mode="json")]},
+        candidates=(candidate,),
+    )
+    assert repo.queue_state(job.project_id)["state"] == "paused"
+    assert repo.candidates(job.project_id, job.job_id) == (candidate,)
+    assert repo.get(waiting.project_id, waiting.job_id).attempt_count == 0
+    reopened.set_queue_paused(job.project_id, paused=False)
+    assert repo.claim_next("resumed").job_id == waiting.job_id
+    assert repo.claim_next("resumed") is None
+
+
+def test_pause_blocks_expired_lease_reclaim_but_not_other_projects(tmp_path: Path) -> None:
+    clock = MutableClock()
+    repo = MonitoringAiRepository(tmp_path / "queue.sqlite3", clock=clock)
+    first = repo.create_or_get(_request())
+    repo.claim_next("worker")
+    repo.set_queue_paused(first.project_id, paused=True)
+    clock.advance(seconds=301)
+    other = repo.create_or_get(_request(project_id="other"))
+    assert repo.queue_state(first.project_id)["state"] == "paused"
+    assert repo.claim_next("other-worker").job_id == other.job_id
+    assert repo.claim_next("reclaimer") is None
+    repo.set_queue_paused(first.project_id, paused=False)
+    assert repo.claim_next("reclaimer").job_id == first.job_id
+
+
+def test_parallel_claimers_cannot_cross_committed_pause(tmp_path: Path) -> None:
+    repo = MonitoringAiRepository(tmp_path / "queue.sqlite3")
+    for number in range(8):
+        repo.create_or_get(_request(business_key=f"chunk-{number}"))
+    repo.set_queue_paused("project-alpha", paused=True)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        claims = list(pool.map(lambda number: repo.claim_next(f"worker-{number}"), range(8)))
+    assert claims == [None] * 8
+    assert all(job.attempt_count == 0 for job in repo.list_jobs("project-alpha"))
+
+
 def test_job_create_rejects_boolean_max_attempts() -> None:
     with pytest.raises(ValidationError):
         _request(max_attempts=True)  # type: ignore[arg-type]

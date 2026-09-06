@@ -146,6 +146,12 @@ class MonitoringAiRepository:
         with self._connect() as connection:
             connection.executescript(
                 """
+                CREATE TABLE IF NOT EXISTS monitoring_ai_queue_control (
+                    project_id TEXT PRIMARY KEY,
+                    paused INTEGER NOT NULL CHECK(paused IN (0, 1)),
+                    updated_at TEXT NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS monitoring_ai_jobs (
                     job_id TEXT PRIMARY KEY,
                     project_id TEXT NOT NULL,
@@ -453,6 +459,43 @@ class MonitoringAiRepository:
         # identity path in ``get``/``input_payload``.
         return tuple(self._job(row, strict_input_identity=False) for row in rows)
 
+    def set_queue_paused(self, project_id: str, *, paused: bool) -> None:
+        """Persist the project stop boundary without cancelling in-flight work."""
+        project_id = project_id.strip()
+        if not project_id or not isinstance(paused, bool):
+            raise ValueError("project and boolean pause state are required")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """INSERT INTO monitoring_ai_queue_control(project_id, paused, updated_at)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(project_id) DO UPDATE SET
+                       paused = excluded.paused, updated_at = excluded.updated_at""",
+                (project_id, int(paused), _iso(self.clock())),
+            )
+
+    def queue_state(self, project_id: str) -> dict[str, Any]:
+        """A small read-only projection; an expired lease is recoverable work."""
+        with self._connect() as connection:
+            connection.execute("BEGIN")
+            control = connection.execute(
+                "SELECT paused FROM monitoring_ai_queue_control WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+            active = connection.execute(
+                """SELECT COUNT(*) FROM monitoring_ai_jobs
+                   WHERE project_id = ? AND status = ?
+                     AND (lease_expires_at = '' OR lease_expires_at >= ?)""",
+                (project_id, MonitoringAiJobStatus.RUNNING.value, _iso(self.clock())),
+            ).fetchone()[0]
+        paused = bool(control and control["paused"])
+        return {
+            "project_id": project_id,
+            "pause_requested": paused,
+            "state": "pausing" if paused and active else "paused" if paused else "enabled",
+            "in_flight_count": active,
+        }
+
     def claim_next(
         self,
         owner: str,
@@ -534,6 +577,11 @@ class MonitoringAiRepository:
                     )
                 )
                 AND candidate.attempt_count < candidate.max_attempts
+                AND NOT EXISTS (
+                    SELECT 1 FROM monitoring_ai_queue_control AS control
+                    WHERE control.project_id = candidate.project_id
+                      AND control.paused = 1
+                )
                 {identity_clause}
                 ORDER BY (
                     SELECT COUNT(*)

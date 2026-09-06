@@ -348,6 +348,7 @@ def create_monitoring_ai_router(
     source_span_searcher: Optional[Callable[..., Any]] = None,
     risk_packet_resolver: Optional[Callable[[str, str], Any]] = None,
     worker_wake: Callable[[], Any] = lambda: None,
+    queue_worker_wake: Optional[Callable[[], Any]] = None,
     project_resolver: Callable[[str], str] = lambda value: value,
     principal_resolver: Callable[[Request], MonitoringAuthenticatedPrincipal | None]
     | None = None,
@@ -472,6 +473,34 @@ def create_monitoring_ai_router(
                 },
             )
         return principal.server_actor
+
+    @router.get("/queue")
+    def queue_status(project_id: str, http_request: Request):
+        canonical_id = project_resolver(project_id)
+        authorize_route(
+            http_request, canonical_id, request_id=f"ai-queue:{canonical_id}",
+            action=MonitoringAction.READ_AI_RUN, require_write=False,
+        )
+        return repository.queue_state(canonical_id)
+
+    def change_queue(project_id: str, http_request: Request, *, paused: bool):
+        canonical_id = project_resolver(project_id)
+        authorize_route(
+            http_request, canonical_id, request_id=f"ai-queue-control:{canonical_id}",
+            action=MonitoringAction.REVIEW_AI_CANDIDATE, require_write=True,
+        )
+        repository.set_queue_paused(canonical_id, paused=paused)
+        if not paused:
+            (queue_worker_wake or worker_wake)()
+        return repository.queue_state(canonical_id)
+
+    @router.post("/queue/pause")
+    def pause_queue(project_id: str, http_request: Request):
+        return change_queue(project_id, http_request, paused=True)
+
+    @router.post("/queue/resume")
+    def resume_queue(project_id: str, http_request: Request):
+        return change_queue(project_id, http_request, paused=False)
 
     @router.get("/evidence-spans/search")
     def search_evidence_spans(

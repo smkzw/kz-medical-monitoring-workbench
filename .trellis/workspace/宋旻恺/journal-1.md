@@ -1257,3 +1257,22 @@ Introduced generation-neutral application and route entry points without changin
 - One early MiniMax g01 failure exposed a scheduler defect: g02 was created while g01 still had queued/running work. The generic gate now treats any active job as a running generation even if a peer has failed; mapping bridge and confirmation regression is `43 passed`. The mistakenly created 87 queued MiniMax g02 jobs remain preserved as evidence.
 - Per the user's request, work paused at the completed-first-pass boundary rather than leaving a long process active. There is no runner/worker and 8911 remains stopped. Focused review is explicitly incomplete: MiniMax g01 is 7 completed/6 failed/72 queued/2 expired-reclaimable, MiniMax g02 is 87 queued, and GLM g01 is 4 completed/2 failed/80 queued/1 expired-reclaimable. No correct-project mapping confirmation or facts exist.
 - Complete recovery provenance, requirement history, refactors, identifiers, hashes, exact pause state and GPT-6 next steps are in `.trellis/workspace/宋旻恺/HANDOFF_TO_GPT6_20260905.md`. The original parent JSONL was deleted; this is evidence-reconstructed continuity, not a line-by-line conversation restoration.
+
+## 2026-09-06 — 接管审阅、设计v2/计划v3及首批正确性修复
+
+- 按本轮用户授权主线程执行，原生前端只读review完成；下游原生review容量失败后主线程补查。未使用外部执行/会商。完整证据记录在同目录 `MM_ENGINEERING_REVIEW_20260905.md`。
+- 新完整设计在 `.trellis/spec/medical-monitoring-system-design-v2.md`，计划/PRD/goal prompt在 `.trellis/tasks/09-06-mm-product-rebaseline/`。优先一个真实研究从数据理解到风险、来源、Query闭环；最终五研究和三种监查模式目标不删减。
+- 识别关键缺口：身份前缀误接受、二轮分歧默认主分析正确、队列误增代/重复证据重载、混合PDF及Word覆盖不足、真实发布链未接通、部分域行为测试在迁移删除、前端趋势失真/零变化误判/导入重挂载风险。
+- 第一批改动仅监查admission：规范化完整研究ID匹配；持续二轮分歧保留为内部未解决，不写成功裁决、不仅因分歧增加用户问题；旧primary_retained及旧证据裁决不能放行；保存过的用户回答不被新模型结果覆盖，跨代需重新绑定而非篡改历史。
+- 最终90项身份/bridge/confirmation/接入endpoint回归与182项相邻结构/关系/材料化/双路/文档回归分别通过，共272项本次非重叠测试；30项既有FastAPI弃用warning。Vite build通过；ego合成临时runtime做入口检查，不冒称真实医学E2E。18911/15174和浏览器空间已关闭，8911未启动，真实队列/库/原文件未改，医学写作未改。
+- 三文档成文后create_goal被未完成旧goal阻挡；旧目标确未完成，不能误标complete。已请用户界面替换新prompt；应用goal尚未更新，本地实施已按授权开始。
+- 下一步：P1队列选择性恢复/持久暂停/前端准确性；P2工具化证据补读与自主裁决；P3正确MG真实风险至Query闭环。当前不应恢复真实长队列或声称Phase C/整体工程已完成。未清理历史证据。
+
+### 2026-09-06 连续实施：持久暂停控制
+
+- 上轮判定为进展：新设计/计划、身份和裁决修复及验证已改变权威文件。本轮get_goal确认新目标active，目标替换不再阻塞。
+- 执行方式选择direct：领取、lease、暂停与恢复共用事务和API，当前切片由一个所有者修改；依据明确的事务/重启测试，不作独立医学或视觉验收。下一独立前端切片再评估并行收益，遵循最新全局AGENTS。
+- 新增monitoring_ai_queue_control项目级持久状态，claim_next的BEGIN IMMEDIATE内过滤paused项目，涵盖两路模型及确定性任务；在途heartbeat/完成不取消。queue_state只查小状态/活跃lease，不加载模型payload；expired lease不冒充活进程。
+- 新增GET ai/queue及POST ai/queue/pause、resume；继续通过组合根唤醒两路worker；复用既有路由权限，不新增安全功能。GET不唤醒、不重试。enabled仅表示允许领取，不表示存在运行任务。
+- 新增实际SQLite重开、暂停时落盘、过期lease恢复、并发领取和跨项目隔离回归；API测试确认恢复两路。repository/worker/API共109 passed；无真实模型、真实库或原始文件写入。
+- 后续立即接用户侧暂停/继续及选择性恢复，完善队列集成验证，再处理前端显示准确性；当前仅后台暂停完成，不宣称可用性/全局goal完成。

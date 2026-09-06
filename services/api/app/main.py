@@ -3808,6 +3808,7 @@ app.include_router(
         source_packet_resolver=monitoring_ai_source_packet_resolver.resolve,
         risk_packet_resolver=monitoring_ai_risk_packet_resolver.resolve,
         worker_wake=monitoring_ai_worker.wake,
+        queue_worker_wake=_wake_monitoring_mapping_workers,
         project_resolver=lambda project_id: _canonical_module_project_id(
             project_id,
             "medical_monitoring",
