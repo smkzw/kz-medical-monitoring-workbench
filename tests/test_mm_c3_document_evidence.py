@@ -1850,3 +1850,11 @@ def test_tool_shard_current_revision_tracks_document_only_changes(tmp_path, prom
             relationship_profiler=build_relationship_profile,
             document_evidence_resolver=resolver,
         ) == ""
+
+
+def test_tool_source_binding_handles_an_empty_revision_without_indexing_a_source():
+    from packages.medical_monitoring.admission.evidence_tool_contract import bind_tool_revision_sources
+    revision = MonitoringAiInputRevision(project_id=PROJECT_ID, batch_revision="b1", sources=())
+    result = bind_tool_revision_sources(revision, {"source_bindings": [{"source_entry_id": "source-doc", "source_content_sha256": "a" * 64}]})
+    assert len(result.sources) == 1
+    assert result.sources[0].source_entry_id == "source-doc"

@@ -2582,7 +2582,7 @@ class MonitoringAiService:
             exhausted = str(exc) == "evidence_tool_budget_exhausted"
             return self._fail_claimed_job(
                 job, owner=owner, request_payload={"job_id": job.job_id},
-                response_payload=None,
+                response_payload={"invalid_tool_output": exc.output},
                 failure_code="evidence_tool_budget_exhausted" if exhausted else "evidence_tool_protocol",
                 failure_message=str(exc), retryable=not exhausted,
                 outcome="evidence_tool_error",

@@ -82,6 +82,7 @@ _OFFENDING_EXECUTION_ROUTES = frozenset({
 
 def _adjudication_reconciliation_sha256(
     reconciliation: Mapping[str, Any],
+    *, prompt_versions=None,
 ) -> str:
     """Bind a durable resolution to the evidence/prompt generation that made it."""
 
@@ -90,7 +91,7 @@ def _adjudication_reconciliation_sha256(
             {
                 "reconciliation": reconciliation,
                 "adjudication_prompt_versions": sorted(
-                    MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS
+                    MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS if prompt_versions is None else prompt_versions
                 ),
             },
             ensure_ascii=False,
@@ -624,7 +625,7 @@ class AdmissionMappingConfirmationService:
                 }
                 return projected
             reconciliation_sha256 = _adjudication_reconciliation_sha256(
-                reconciliation
+                reconciliation, prompt_versions=getattr(self.mapping_pipeline, "adjudication_prompt_versions", None)
             )
             divergence_pairs = {
                 (
@@ -1278,7 +1279,7 @@ class AdmissionMappingConfirmationService:
             for item in draft_fields
         }
         reconciliation_sha256 = _adjudication_reconciliation_sha256(
-            reconciliation
+            reconciliation, prompt_versions=getattr(self.mapping_pipeline, "adjudication_prompt_versions", None)
         )
         if not hasattr(self.mapping_repository, "adjudication_receipts"):
             return False

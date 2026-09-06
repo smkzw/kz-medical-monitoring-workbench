@@ -50,11 +50,11 @@ def bind_frozen_document_sources(profile):
 
 def bind_tool_revision_sources(revision, profile):
     """Extend one revision using the same frozen source set at submit/recheck."""
-    source_type = type(revision.sources[0])
-    sources = {item.source_entry_id: item for item in revision.sources}
-    for item in profile["source_bindings"]:
-        source = source_type.model_validate(item)
-        if source.source_entry_id in sources and sources[source.source_entry_id] != source:
+    sources = {item.source_entry_id: item.model_dump(mode="json") for item in revision.sources}
+    for source in profile["source_bindings"]:
+        source = dict(source)
+        entry_id = source["source_entry_id"]
+        if entry_id in sources and sources[entry_id] != source:
             raise ValueError("tool source revision conflict")
-        sources[source.source_entry_id] = source
-    return revision.model_copy(update={"sources": tuple(sources.values())})
+        sources[entry_id] = source
+    return revision.model_validate({**revision.model_dump(mode="json"), "sources": list(sources.values())})
