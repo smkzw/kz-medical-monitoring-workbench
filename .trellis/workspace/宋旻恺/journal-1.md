@@ -1346,3 +1346,5 @@ P2核心工具循环已提交b9e7510；本批增加冻结副本PDF全文分页�
 真实MiniMax协议现场表明仅多回显remaining_tool_calls/remaining_model_turns；兼容这两个非负整数遥测字段，绝不读取它们作为预算值，其余额外字段仍拒绝。单测以999999证明不能扩预算。更换quote_ref后，GLM和MiniMax分别真实2轮/1读通过原文引用挑战，保存于runs/mm_p2_tool_trial_20260906/quote_refs_v2；历次失败现场保留在独立attempt副本，未冒称此前失败成功。
 
 新增adjudication_tool_reads显式opt-in：默认v5/v3不变；开启时选择v6-tools-v1/v4-tools-v1，业务摘要和裁决回执按实际版本对绑定。默认历史回执摘要不变，切换后不能继承旧版本的回答证明。生产main尚未启用；隔离12字段AE已通过真实pipeline创建两条新工具裁决任务并运行，MiniMax/GLM上下文分开，不由Codex选边。当前联合645项通过，协议现场保存额外2项通过；新namespace/quote_ref/回显兼容等将补交同会话定向复核。原MG仍paused，未开始全量恢复。
+
+2026-09-06 P2隔离AE二轮真实双路均完成：12字段3一致、9分歧，无覆盖/引用闭合违例，未生成facts。确认分歧包含role、依赖、标准参考文字等属性；不由Codex代裁决。为工具版匿名复核增加对称difference_paths和聚焦补读策略，原默认匿名包/接受比较器保持不变；101项关联回归通过。准备仅剩余9字段一次聚焦补读，原MG持久暂停与旧成功证据保留。3f7b9e2工具接入改动正在原GLM审阅会话独立复核。

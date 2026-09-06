@@ -697,3 +697,29 @@ def test_service_reconciliation_refuses_cohorts_mapped_on_different_inputs() -> 
             workspace_dir=None,
         )
     assert exc.value.code == "mapping_cohort_input_mismatch"
+
+
+def test_difference_paths_locate_nested_disagreements_without_resolving_them():
+    from packages.medical_monitoring.admission.mapping_reconciliation import semantic_difference_paths
+    left = {'recommended_role': 'ae_term', 'standards_reference': {'version': '27.1'}, 'related_fields': ['A']}
+    right = {'recommended_role': 'ae_term', 'standards_reference': {'version': '28.0'}, 'related_fields': ['B']}
+    expected = ['related_fields', 'standards_reference.version']
+    assert semantic_difference_paths(left, right) == expected
+    assert semantic_difference_paths(right, left) == expected
+    primary, verifier = _primary_verdicts(), _verifier_verdicts()
+    primary[0].update(left)
+    verifier[0].update(right)
+    report = _reconcile(primary_mappings=primary, verifier_mappings=verifier)
+    assert report['auto_pass'] is False
+    assert 'difference_paths' not in report['divergences'][0]
+
+
+def test_anonymous_review_keeps_difference_paths_without_model_identity():
+    from packages.medical_monitoring.admission.mapping_pipeline import _anonymous_review_rows
+    rows = [{'domain': 'AE', 'source_field': 'X', 'difference_paths': ['dose_semantics'],
+             'primary': {'recommended_role': 'dose', 'candidate_id': 'private-a', 'semantic_verdict': {'dose_semantics': 'mass'}},
+             'verifier': {'recommended_role': 'volume', 'job_id': 'private-b', 'semantic_verdict': {'dose_semantics': 'volume'}}}]
+    assert 'difference_paths' not in _anonymous_review_rows(rows)[0]
+    projected = _anonymous_review_rows(rows, include_difference_paths=True)[0]
+    assert projected['difference_paths'] == ['dose_semantics']
+    assert all('candidate_id' not in option and 'job_id' not in option for option in projected['candidate_options'])

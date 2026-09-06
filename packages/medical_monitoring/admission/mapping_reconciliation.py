@@ -285,6 +285,23 @@ def _verdict_projection(item: Mapping[str, Any]) -> dict[str, Any]:
     return projection
 
 
+def semantic_difference_paths(left: Mapping[str, Any], right: Mapping[str, Any]) -> list[str]:
+    """Locate disagreements without interpreting, accepting or dropping either side."""
+    paths: list[str] = []
+    def visit(a: Any, b: Any, path: str) -> None:
+        if isinstance(a, Mapping) and isinstance(b, Mapping):
+            for key in sorted(set(a) | set(b)):
+                child = f"{path}.{key}" if path else str(key)
+                if key not in a or key not in b:
+                    paths.append(child)
+                else:
+                    visit(a[key], b[key], child)
+        elif a != b:
+            paths.append(path)
+    visit(left, right, "")
+    return paths
+
+
 def _index_cohort(
     *,
     cohort: str,
