@@ -11282,3 +11282,20 @@ def test_role_declaration_is_bound_to_exact_anonymous_input_before_persistence(t
     from services.api.app.monitoring_ai_service import MonitoringAiOutputValidationError
     with pytest.raises(MonitoringAiOutputValidationError):
         MonitoringAiService._bind_role_equivalence_declarations({'field_mappings':[item]}, {'field_profile':profile})
+
+
+@pytest.mark.parametrize('status,retryable',[(413,False),(429,True),(503,True)])
+def test_visual_body_rejection_does_not_retry_the_same_oversized_request(tmp_path,status,retryable):
+    from contextlib import contextmanager
+    from services.api.app.ai_gateway import AiProviderRuntimeError
+    def reject(_):
+        raise AiProviderRuntimeError('synthetic HTTP rejection',diagnostics={'failure_code':'provider_http_error','http_status':status})
+    provider=FakeProvider([reject]);service=_service(tmp_path,provider)
+    @contextmanager
+    def factory(*_):yield SimpleNamespace(schemas={},execute=lambda *_:None)
+    service.evidence_tool_factory=factory
+    service.submit_listing_field_mapping(project_id='project-alpha',input_revision=_revision(),field_profile=_field_profile(1),
+        prompt_version='monitoring-listing-field-mapping-v22-tools-v3')
+    result=service.run_next('body-limit-test')
+    assert result.job.retryable is retryable
+    assert result.job.failure_code==('visual_request_too_large' if status==413 else 'provider_runtime_error')

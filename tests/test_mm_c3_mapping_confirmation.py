@@ -776,12 +776,13 @@ def test_completed_candidates_deep_verify_each_shared_revision_once() -> None:
 @pytest.mark.parametrize(
     (
         "adjudicated_role", "verifier_role", "needs_user",
-        "resolved_count", "resolution",
+        "resolved_count", "resolution", "use_equivalence",
     ),
     [
-        ("ae_term_text", "ae_term_text", False, 1, "adjudicated_mapping"),
-        ("ae_term_text", "ae_term", False, 0, None),
-        ("ae_term_text", "ae_term", True, 0, "escalated"),
+        ("ae_term_text", "ae_term_text", False, 1, "adjudicated_mapping", False),
+        ("ae_term_text", "ae_term", False, 0, None, False),
+        ("ae_term_text", "ae_term", True, 0, "escalated", False),
+        ("ae_term_text", "ae_term", False, 1, "adjudicated_mapping", True),
     ],
 )
 @pytest.mark.parametrize("saved_answer", [False, True])
@@ -794,6 +795,7 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
     resolution: str | None,
     saved_answer: bool,
     crash_mode: str,
+    use_equivalence: bool,
 ) -> None:
     field = {
         "domain": "AE",
@@ -899,6 +901,29 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
             }],
         },
     )
+    if use_equivalence:
+        from packages.medical_monitoring.admission.mapping_pipeline import _anonymous_review_rows
+        from packages.medical_monitoring.admission.role_equivalence import DIMENSIONS, ROLE_EQUIVALENCE_POLICY, bind_role_declaration
+        options = _anonymous_review_rows([{
+            'domain': 'AE', 'source_field': 'AETERM',
+            'primary': {'semantic_verdict': {'recommended_role': adjudicated_role}},
+            'verifier': {'semantic_verdict': {'recommended_role': verifier_role}},
+        }], include_option_ids=True)[0]['candidate_options']
+        original_adjudicate = pipeline.adjudicate_candidates
+        def with_certificate(**kwargs):
+            result = original_adjudicate(**kwargs)
+            item = result['mappings'][0]
+            item['dependency_fields'] = []
+            item['role_equivalence'] = bind_role_declaration({
+                'judgment': 'equivalent', 'option_ids': [o['option_id'] for o in options],
+                'dimensions': {axis: {'relation': 'equivalent', 'evidence_ids': item['evidence_ids'],
+                                      'rationale': '合成等价测试依据。'} for axis in DIMENSIONS},
+                'counterevidence_summary': '合成测试反证检查。',
+            }, domain='AE', source_field='AETERM', options=options,
+               evidence_ids=item['evidence_ids'], source_scope_sha256='a'*64)
+            return result
+        pipeline.adjudicate_candidates = with_certificate
+        pipeline.adjudication_comparison_policy = ROLE_EQUIVALENCE_POLICY
     service = AdmissionMappingConfirmationService(
         mapping_pipeline=pipeline,
         mapping_repository=mapping_repo,
@@ -1000,7 +1025,7 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
     assert payload["adjudication"]["resolved_count"] == resolved_count
     assert payload["review_summary"]["user_question_count"] == int(needs_user and not answered_during_recovery)
     assert state["field"]["recommended_role"] == (
-        "ae_term" if needs_user or resolution is None else adjudicated_role
+        "ae_term" if needs_user or resolution is None else (min(adjudicated_role, verifier_role) if use_equivalence else adjudicated_role)
     )
     assert state["field"]["user_decision_required"] is needs_user
     if needs_user:
@@ -1020,6 +1045,13 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
     assert len(receipts) == (1 if resolution is None else 2)
     assert len(calls) == (4 if resolution is None else 2) + (2 if crashed else 0)
     assert replay["adjudication"]["resolved_count"] == resolved_count
+
+    if use_equivalence:
+        certificate = state['field']['comparison_annotations']['role_equivalence_certificate']
+        assert certificate['left_declaration'] != certificate['right_declaration']
+        assert certificate['canonical_role'] == min(adjudicated_role, verifier_role)
+        assert state['field']['comparison_annotations']['left_evidence_ids'] == ['ev-dual-primary']
+        assert state['field']['comparison_annotations']['right_evidence_ids'] == ['ev-dual-verifier']
 
 
 @pytest.mark.parametrize("resolution", ["adjudicated_mapping", "primary_retained"])

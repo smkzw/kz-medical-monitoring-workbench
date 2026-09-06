@@ -2663,6 +2663,10 @@ class MonitoringAiService:
             identity_error = (
                 provider_failure_code == "provider_response_model_mismatch"
             )
+            visual_body_rejected = (
+                job.prompt_version in VISUAL_MAPPING_PROMPT_VERSIONS
+                and diagnostics.get("http_status") == 413
+            )
             return self._fail_claimed_job(
                 job,
                 owner=owner,
@@ -2671,10 +2675,10 @@ class MonitoringAiService:
                 failure_code=(
                     "response_model_identity"
                     if identity_error
-                    else "provider_runtime_error"
+                    else "visual_request_too_large" if visual_body_rejected else "provider_runtime_error"
                 ),
                 failure_message=str(exc),
-                retryable=not identity_error,
+                retryable=not (identity_error or visual_body_rejected),
                 outcome="provider_error",
             )
         except Exception as exc:
