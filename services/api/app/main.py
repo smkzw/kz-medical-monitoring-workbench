@@ -3809,11 +3809,8 @@ app.include_router(
         risk_packet_resolver=monitoring_ai_risk_packet_resolver.resolve,
         worker_wake=monitoring_ai_worker.wake,
         queue_worker_wake=_wake_monitoring_mapping_workers,
-        project_resolver=lambda project_id: _canonical_module_project_id(
-            project_id,
-            "medical_monitoring",
-        ),
-        principal_resolver=resolve_monitoring_principal_from_request,
+        project_resolver=_resolve_r7_product_project,
+        principal_resolver=_resolve_synthetic_product_principal,
         require_server_principal=True,
         allow_legacy_field_mapping=False,
     )

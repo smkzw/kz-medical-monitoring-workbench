@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -317,6 +318,11 @@ class MonitoringAiRepository:
                     "PRAGMA table_info(monitoring_ai_jobs)"
                 ).fetchall()
             }
+            if "automatic_recovery_count" not in job_columns:
+                connection.execute(
+                    "ALTER TABLE monitoring_ai_jobs "
+                    "ADD COLUMN automatic_recovery_count INTEGER NOT NULL DEFAULT 0"
+                )
             if "contract_retirement_code" not in job_columns:
                 connection.execute(
                     "ALTER TABLE monitoring_ai_jobs "
@@ -438,6 +444,7 @@ class MonitoringAiRepository:
         *,
         task_type: str = "",
         business_key_prefix: str = "",
+        lightweight: bool = False,
     ) -> tuple[MonitoringAiJob, ...]:
         clauses = ["project_id = ?"]
         parameters: list[Any] = [project_id]
@@ -447,8 +454,12 @@ class MonitoringAiRepository:
         if business_key_prefix.strip():
             clauses.append("business_key LIKE ?")
             parameters.append(f"{business_key_prefix.strip()}%")
+        columns = ", ".join(
+            "input_revision_json" if name == "input_revision" else name
+            for name in MonitoringAiJob.model_fields
+        ) if lightweight else "*"
         query = (
-            "SELECT * FROM monitoring_ai_jobs WHERE "
+            f"SELECT {columns} FROM monitoring_ai_jobs WHERE "
             + " AND ".join(clauses)
             + " ORDER BY created_at, job_id"
         )
@@ -457,7 +468,7 @@ class MonitoringAiRepository:
         # Status/list views must retain the persisted revision token so callers
         # can exclude deliberately stale jobs; execution reads use the strict
         # identity path in ``get``/``input_payload``.
-        return tuple(self._job(row, strict_input_identity=False) for row in rows)
+        return tuple(self._job(row, strict_input_identity=False, validate_payload=not lightweight) for row in rows)
 
     def set_queue_paused(self, project_id: str, *, paused: bool) -> None:
         """Persist the project stop boundary without cancelling in-flight work."""
@@ -1299,20 +1310,80 @@ class MonitoringAiRepository:
                 )
         return self.get(job.project_id, job.job_id)
 
+    def retire_unstarted_duplicate(
+        self, project_id: str, duplicate_job_id: str, retained_job_id: str,
+    ) -> MonitoringAiJob:
+        """Retire only a never-executed, byte-equivalent extra generation.
+
+        This is an explicit recovery operation, not a status-poll side effect.
+        Both immutable inputs are verified before changing queue eligibility.
+        """
+        if duplicate_job_id == retained_job_id:
+            raise ValueError("duplicate and retained jobs must differ")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            rows = [connection.execute(
+                "SELECT * FROM monitoring_ai_jobs WHERE project_id = ? AND job_id = ?",
+                (project_id, job_id),
+            ).fetchone() for job_id in (duplicate_job_id, retained_job_id)]
+            if any(row is None for row in rows):
+                raise MonitoringAiRepositoryError("monitoring AI job not found")
+            duplicate, retained = rows
+            for row in rows:
+                self._validated_job_inputs(row)
+            reason = f"Equivalent unstarted generation; retained job {retained_job_id}"
+            if (duplicate["contract_retirement_code"] == "duplicate_unstarted_generation"
+                    and duplicate["contract_retirement_reason"] == reason):
+                connection.commit()
+                return self.get(project_id, duplicate_job_id)
+            same_input = all(duplicate[key] == retained[key] for key in (
+                "task_type", "input_revision_sha256", "input_payload_sha256",
+                "prompt_version", "profile_id", "provider", "requested_model",
+            ))
+            keys = [str(row["business_key"]) for row in rows]
+            generations = [re.search(r":g(\d{2}):", key) for key in keys]
+            same_work = (
+                all(generations)
+                and int(generations[0].group(1)) > int(generations[1].group(1))
+                and re.sub(r":g\d{2}:", ":g:", keys[0]) == re.sub(r":g\d{2}:", ":g:", keys[1])
+            )
+            if (not same_input or not same_work
+                    or duplicate["status"] != MonitoringAiJobStatus.QUEUED.value
+                    or int(duplicate["attempt_count"]) != 0
+                    or duplicate["lease_owner"] or duplicate["contract_retirement_code"]
+                    or retained["contract_retirement_code"]):
+                raise MonitoringAiStateConflictError("duplicate generation is not safely retireable")
+            now = _iso(self.clock())
+            connection.execute(
+                """UPDATE monitoring_ai_jobs
+                   SET status = ?, contract_retirement_code = ?,
+                       contract_retirement_reason = ?, contract_retired_at = ?, updated_at = ?
+                   WHERE project_id = ? AND job_id = ?""",
+                (MonitoringAiJobStatus.BLOCKED.value, "duplicate_unstarted_generation",
+                 reason, now, now, project_id, duplicate_job_id),
+            )
+        return self.get(project_id, duplicate_job_id)
+
     def retry_terminal(
         self,
         project_id: str,
         job_id: str,
         *,
         current_input_revision_sha256: str,
+        automatic_recovery_limit: int | None = None,
     ) -> MonitoringAiJob:
+        if automatic_recovery_limit is not None and (
+            isinstance(automatic_recovery_limit, bool)
+            or automatic_recovery_limit < 1
+        ):
+            raise ValueError("automatic recovery limit must be positive")
         now = self.clock()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 """
                 SELECT status, input_revision_sha256, attempt_count, failure_code,
-                       contract_retirement_code
+                       contract_retirement_code, automatic_recovery_count
                 FROM monitoring_ai_jobs
                 WHERE project_id = ? AND job_id = ?
                 """,
@@ -1321,6 +1392,14 @@ class MonitoringAiRepository:
             if row is None:
                 connection.rollback()
                 raise MonitoringAiRepositoryError("monitoring AI job not found")
+            if automatic_recovery_limit is not None and (
+                int(row["automatic_recovery_count"]) >= automatic_recovery_limit
+                or row["status"] not in {"failed", "blocked", "stale_input"}
+            ):
+                # An automatic poll cannot expand its budget, and concurrent
+                # recovery calls cannot requeue the same work twice.
+                connection.commit()
+                return self.get(project_id, job_id)
             if row["status"] not in {
                 MonitoringAiJobStatus.FAILED.value,
                 MonitoringAiJobStatus.BLOCKED.value,
@@ -1362,6 +1441,7 @@ class MonitoringAiRepository:
                 """
                 UPDATE monitoring_ai_jobs
                 SET status = ?, max_attempts = ?, retryable = 0,
+                    automatic_recovery_count = automatic_recovery_count + ?,
                     failure_code = '', failure_message = '',
                     lease_owner = '', lease_expires_at = '', updated_at = ?
                 WHERE project_id = ? AND job_id = ?
@@ -1375,6 +1455,7 @@ class MonitoringAiRepository:
                         else MonitoringAiJobStatus.QUEUED.value
                     ),
                     next_max_attempts,
+                    int(automatic_recovery_limit is not None),
                     _iso(now),
                     project_id,
                     job_id,
@@ -2340,6 +2421,7 @@ class MonitoringAiRepository:
         row: sqlite3.Row,
         *,
         strict_input_identity: bool = True,
+        validate_payload: bool = True,
     ) -> MonitoringAiJob:
         try:
             job_id = _required_text(row["job_id"], "job_id")
@@ -2361,10 +2443,14 @@ class MonitoringAiRepository:
                 "requested_model",
             )
             output_sha256 = _optional_sha256(row["output_sha256"], "output_sha256")
-            input_revision, _ = MonitoringAiRepository._validated_job_inputs(
-                row,
-                strict_input_identity=strict_input_identity,
-            )
+            if validate_payload:
+                input_revision, _ = MonitoringAiRepository._validated_job_inputs(
+                    row, strict_input_identity=strict_input_identity,
+                )
+            else:
+                # Status projection only. Execution and candidate acceptance
+                # continue through get()/candidates() with full validation.
+                input_revision = MonitoringAiInputRevision.model_validate_json(row["input_revision_json"])
             task_type = MonitoringAiTaskType(row["task_type"])
             status = MonitoringAiJobStatus(row["status"])
             attempt_count = _sqlite_int(

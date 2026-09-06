@@ -489,4 +489,11 @@ check(
   "document resolution path helper remains deterministic",
 );
 
+await api.getQueueState("proj/01");
+await api.setQueuePaused("proj/01", true);
+await api.setQueuePaused("proj/01", false);
+check(calls.at(-3).options.method === "GET", "queue status has no write side effect");
+check(calls.at(-2).url.endsWith("/proj%2F01/modules/medical-monitoring/ai/queue/pause"), "pause encodes project identity");
+check(calls.at(-1).url.endsWith("/ai/queue/resume") && calls.at(-1).options.method === "POST", "resume is explicit");
+assert.throws(() => api.setQueuePaused("project", "false"), TypeError);
 console.log(`medicalMonitoringProductApi: ${passed} passed`);

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from threading import Lock, Thread
+from threading import Lock, Thread, current_thread
 from uuid import uuid4
 
 from .monitoring_ai_service import MonitoringAiService
@@ -23,9 +23,11 @@ class MonitoringAiWorker:
         self.identity_bound = identity_bound
         self._lock = Lock()
         self._threads: list[Thread] = []
+        self._wake_generation = 0
 
     def wake(self) -> int:
         with self._lock:
+            self._wake_generation += 1
             self._threads = [thread for thread in self._threads if thread.is_alive()]
             started = 0
             while len(self._threads) < self.parallelism:
@@ -58,6 +60,8 @@ class MonitoringAiWorker:
             if claim_identity is None:
                 return
         while True:
+            with self._lock:
+                wake_generation = self._wake_generation
             if self.identity_bound:
                 result = self.service.run_next(owner, claim_identity=claim_identity)
             else:
@@ -68,4 +72,11 @@ class MonitoringAiWorker:
                 # expected and must not strand the newer durable queue.
                 continue
             if not result.processed:
-                return
+                with self._lock:
+                    if wake_generation != self._wake_generation:
+                        continue
+                    # Retire atomically with wake's active-thread check. A
+                    # resume arriving as an idle drain exits must not strand
+                    # queued work behind an apparently still-live thread.
+                    self._threads = [thread for thread in self._threads if thread is not current_thread()]
+                    return

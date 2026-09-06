@@ -62,7 +62,7 @@ MAPPING_ADJUDICATION_BUSINESS_PREFIX = (
     "listing-field-mapping-adjudication"
 )
 _ADJUDICATION_GENERATION_RE = re.compile(r":g(\d{2}):")
-_ADJUDICATION_MAX_GENERATIONS = 2
+_ADJUDICATION_AUTO_RECOVERY_LIMIT = 1
 
 
 def _adjudication_generation_is_running(states: Sequence[str]) -> bool:
@@ -1128,6 +1128,11 @@ class AdmissionMappingPipeline:
             project_id,
             task_type=str(_value(self._task_type)),
             business_key_prefix=query_prefix,
+            lightweight=True,
+        )
+        existing = tuple(
+            job for job in existing
+            if getattr(job, "contract_retirement_code", "") != "duplicate_unstarted_generation"
         )
         generation = max(
             (
@@ -1153,6 +1158,7 @@ class AdmissionMappingPipeline:
                         f"{MAPPING_ADJUDICATION_BUSINESS_PREFIX}:"
                         f"{contract.cohort}:{attempt_id}:"
                     ),
+                    lightweight=True,
                 ),
             )
             if equivalent:
@@ -1176,7 +1182,34 @@ class AdmissionMappingPipeline:
                 "job_count": len(jobs),
                 "mappings": [],
             }
-        if generation >= _ADJUDICATION_MAX_GENERATIONS:
+        if generation:
+            # A failed shard is retried in place. Successful siblings retain
+            # their job/candidate identity; polling must never create g02.
+            resolver = getattr(service, "current_revision_resolver", None)
+            retry = getattr(self._repository, "retry_terminal", None)
+            resumed = []
+            if callable(resolver) and callable(retry):
+                for job in jobs:
+                    if str(_value(job.status)) != "failed":
+                        resumed.append(job)
+                        continue
+                    current_revision = resolver(job)
+                    if current_revision != job.input_revision_sha256:
+                        resumed.append(job)
+                        continue
+                    resumed.append(retry(
+                        project_id, job.job_id,
+                        current_input_revision_sha256=current_revision,
+                        automatic_recovery_limit=_ADJUDICATION_AUTO_RECOVERY_LIMIT,
+                    ))
+            if _adjudication_generation_is_running([
+                str(_value(job.status)) for job in resumed
+            ]):
+                self._worker_wake()
+                return {
+                    "state": "running", "generation": generation,
+                    "job_count": len(jobs), "mappings": [],
+                }
             return {
                 "state": "failed",
                 "generation": generation,

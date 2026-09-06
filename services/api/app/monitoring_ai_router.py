@@ -999,6 +999,7 @@ def create_monitoring_ai_router(
             canonical_id,
             task_type=task_type.value if task_type is not None else "",
             business_key_prefix=business_key_prefix,
+            lightweight=True,
         )
         return {
             "project_id": canonical_id,
