@@ -94,14 +94,21 @@ class FrozenDocumentEvidenceTools:
                 with zipfile.ZipFile(io.BytesIO(content)) as archive:
                     for sheet in workbook.worksheets:
                         rows = columns = 0
+                        row_index = column_index = 0
                         with archive.open(sheet._worksheet_path) as stream:
-                            for _, element in ElementTree.iterparse(stream, events=("end",)):
-                                if element.tag.endswith("}row"):
-                                    rows = max(rows, int(element.get("r", "0")))
-                                elif element.tag.endswith("}c") and element.get("r"):
-                                    row, column = openpyxl.utils.cell.coordinate_to_tuple(element.get("r"))
-                                    rows, columns = max(rows, row), max(columns, column)
-                                element.clear()
+                            for event, element in ElementTree.iterparse(stream, events=("start", "end")):
+                                if event == "start" and element.tag.endswith("}row"):
+                                    row_index = int(element.get("r", str(row_index + 1)))
+                                    column_index = 0
+                                    rows = max(rows, row_index)
+                                elif event == "end" and element.tag.endswith("}c"):
+                                    if element.get("r"):
+                                        row, column_index = openpyxl.utils.cell.coordinate_to_tuple(element.get("r"))
+                                    else:
+                                        row, column_index = row_index, column_index + 1
+                                    rows, columns = max(rows, row), max(columns, column_index)
+                                if event == "end":
+                                    element.clear()
                         dimensions[sheet.title] = (rows, columns)
                         if rows > (sheet.max_row or 0) or columns > (sheet.max_column or 0):
                             limitations.append("spreadsheet_declared_dimension_understates_content")
@@ -163,7 +170,7 @@ class FrozenDocumentEvidenceTools:
                   "absence_claim_supported": False, "units": units, "total_units": total,
                   "physical_inventory": inventory,
                   "next_offset": offset + len(units) if offset + len(units) < total else None,
-                  "limitation_codes": limitations}
+                  "limitation_codes": list(dict.fromkeys(limitations))}
         if len(canonical_json(result).encode("utf-8")) > 256000:
             raise SourceToolError("document_result_too_large_request_smaller_region")
         return {**result, "result_sha256": content_hash(result)}

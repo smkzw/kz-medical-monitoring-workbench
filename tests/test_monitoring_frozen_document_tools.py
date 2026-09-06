@@ -151,7 +151,8 @@ def test_excel_sheet_directory_locates_hidden_second_sheet_without_scanning_firs
     assert result["units"][0]["cells"][0]["number_format"] == "0%"
 
 
-def test_excel_underdeclared_dimension_cannot_hide_physical_rows_or_columns(tmp_path):
+@pytest.mark.parametrize("implicit_coordinates", [False, True])
+def test_excel_underdeclared_dimension_cannot_hide_physical_rows_or_columns(tmp_path, implicit_coordinates):
     import zipfile
     import re
     workbook = openpyxl.Workbook()
@@ -164,6 +165,8 @@ def test_excel_underdeclared_dimension_cannot_hide_physical_rows_or_columns(tmp_
             data = source.read(name)
             if name == "xl/worksheets/sheet1.xml":
                 data = re.sub(rb'<dimension ref="[^"]+"', b'<dimension ref="A1:B2"', data)
+                if implicit_coordinates:
+                    data = re.sub(rb' r="[A-Z]*[0-9]+"', b'', data)
             dest.writestr(name, data)
     reader, binding, _, _ = freeze(tmp_path, patched.getvalue(), ".xlsx")
     result = reader.read_document_units(binding=binding, offset=2, limit=3, column_start=3)

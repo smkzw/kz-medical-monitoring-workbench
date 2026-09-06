@@ -318,7 +318,7 @@ class FakeProvider:
                     "evidence_id": evidence_id,
                     "source_entry_id": source["source_entry_id"],
                     "source_content_sha256": source["source_content_sha256"],
-                    "locator": f"{field['domain']}.{field['field']}",
+                    "locator": ("profile://" if "evidence_tool_protocol" in envelope.payload else "") + f"{field['domain']}.{field['field']}",
                     "quote": "",
                     "raw_fields": {
                         "domain": field["domain"],
@@ -430,11 +430,37 @@ def test_queue_controls_persist_and_resume_wakes_both_cohorts(tmp_path: Path) ->
     assert wakes == ["primary", "verifier"]
 
 
+@pytest.mark.parametrize("tool_version", [False, True])
 def test_field_mapping_api_submits_runs_and_accepts_candidate(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch, tool_version,
 ) -> None:
     batch_repository = FakeBatchRepository()
     repository, service = _service(tmp_path, batch_repository)
+    from dataclasses import replace
+    from contextlib import contextmanager
+    from tests.test_mm_c3_document_evidence import _packet
+    from services.api.app.monitoring_ai_field_profiler import MonitoringFieldProfileSnapshot
+    from services.api.app.monitoring_ai_service import PROMPT_VERSION_BY_TASK
+    packet = replace(_packet(), project_id="project-api")
+    resolver_calls = []
+    def composite(job):
+        resolver_calls.append(job.job_id)
+        return current_monitoring_ai_revision(repository, batch_repository, job,
+            document_evidence_resolver=lambda **kwargs: packet)
+    if tool_version:
+        monkeypatch.setitem(PROMPT_VERSION_BY_TASK, MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+                            "monitoring-listing-field-mapping-v20-tools-v1")
+        original_payload = MonitoringFieldProfileSnapshot.to_ai_payload
+        def with_documents(snapshot):
+            result = original_payload(snapshot)
+            result["document_evidence"] = packet.to_dict()
+            return result
+        monkeypatch.setattr(MonitoringFieldProfileSnapshot, "to_ai_payload", with_documents)
+        @contextmanager
+        def toolkit(job, payload):
+            yield SimpleNamespace(schemas={}, execute=lambda *args: None)
+        service.evidence_tool_factory = toolkit
+    service.current_revision_resolver = composite
     mapping_repository = MonitoringMappingDraftRepository(repository.path)
     activation_service = MonitoringMappingActivationService(mapping_repository)
     wake_count = {"value": 0}
@@ -444,6 +470,7 @@ def test_field_mapping_api_submits_runs_and_accepts_candidate(
             repository=repository,
             service=service,
             batch_repository=batch_repository,
+            current_revision_resolver=composite,
             require_server_principal=False,
             mapping_repository=mapping_repository,
             mapping_activation_service=activation_service,
@@ -490,6 +517,7 @@ def test_field_mapping_api_submits_runs_and_accepts_candidate(
     assert result.processed is True
     assert result.job is not None
     assert batch_repository.profile_load_count == 1
+    assert result.job.status.value == "completed", result.job.failure_message
     job_id = result.job.job_id
 
     details = client.get(
@@ -502,6 +530,7 @@ def test_field_mapping_api_submits_runs_and_accepts_candidate(
     assert completed_status.status_code == 200
     assert len(completed_status.json()["job_details"][0]["candidates"]) == 1
 
+    before_adopt_checks = len(resolver_calls)
     assembled = client.post(
         "/api/projects/project-api/modules/medical-monitoring/ai/"
         "field-mapping-runs/adopt",
@@ -513,6 +542,7 @@ def test_field_mapping_api_submits_runs_and_accepts_candidate(
         },
     )
     assert assembled.status_code == 201, assembled.text
+    assert len(resolver_calls) > before_adopt_checks
     assert repository.candidates(
         "project-api",
         job_id,

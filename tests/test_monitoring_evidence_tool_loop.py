@@ -122,3 +122,13 @@ def test_one_protocol_repair_uses_existing_turn_budget_without_executing_invalid
     assert calls[1].payload["evidence_tool_protocol"]["remaining_model_turns"] == 2
     with pytest.raises(EvidenceToolLoopError):
         run([request(task_id="wrong"), request(task_id="wrong")], max_protocol_repairs=1)
+
+
+def test_echoed_budget_counters_never_expand_harness_budgets():
+    echoed = request(remaining_tool_calls=999999, remaining_model_turns=999999)
+    result, _, _, reads = run([echoed, {"candidates": []}], max_model_turns=2, max_tool_calls=1)
+    assert len(reads) == 1 and result.model_turns == 2
+    with pytest.raises(EvidenceToolLoopError, match="budget_exhausted"):
+        run([echoed], max_model_turns=1)
+    with pytest.raises(EvidenceToolLoopError):
+        run([request(remaining_tool_calls="unlimited")])

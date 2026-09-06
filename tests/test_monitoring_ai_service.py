@@ -11127,6 +11127,9 @@ def test_tool_protocol_failure_is_bounded_and_not_a_worker_error(tmp_path, exhau
     assert result.job.status == (MonitoringAiJobStatus.FAILED if exhaust_budget else MonitoringAiJobStatus.QUEUED)
     assert result.job.failure_code == ("evidence_tool_budget_exhausted" if exhaust_budget else "evidence_tool_protocol")
     assert result.job.retryable is (not exhaust_budget)
+    failure = service.repository.attempts(job.project_id, job.job_id)[0]["response"]["invalid_tool_output"]
+    assert failure["task_id"] == job.job_id
+    assert len(failure["tool_requests"]) == (17 if exhaust_budget else 1)
     assert service.repository.candidates(job.project_id, job.job_id) == ()
     if not exhaust_budget:
         second = service.run_next("protocol-check-again")

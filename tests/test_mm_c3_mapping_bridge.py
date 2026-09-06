@@ -495,8 +495,9 @@ def test_second_pass_revision_change_gets_one_new_evidence_namespace(
         assert len({job.input_revision_sha256 for job in jobs}) == 2
 
 
+@pytest.mark.parametrize("tool_reads", [False, True])
 def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
-    tmp_path: Path,
+    tmp_path: Path, tool_reads,
 ) -> None:
     attempt_id, workspace = _admit(tmp_path)
     repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
@@ -515,6 +516,7 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
         input_revision_factory=MonitoringAiInputRevision.model_validate,
         task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
         relationship_profiler=_stub_profiler,
+        adjudication_tool_reads=tool_reads,
     )
 
     result = pipeline.adjudicate_candidates(
@@ -609,6 +611,7 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
         for field in profile["read_only_adjudication_context_profiles"]
     } >= {"SUBJID", "VISIT", "VSDAT"}
     assert jobs[0].prompt_version == (
+        "monitoring-listing-field-mapping-adjudication-v6-tools-v1" if tool_reads else
         "monitoring-listing-field-mapping-adjudication-v5"
     )
     verifier_jobs = repository.list_jobs(
@@ -620,6 +623,7 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
     )
     assert len(verifier_jobs) == 1
     assert verifier_jobs[0].prompt_version == (
+        "monitoring-listing-field-mapping-adjudication-verifier-v4-tools-v1" if tool_reads else
         "monitoring-listing-field-mapping-adjudication-verifier-v3"
     )
     verifier_profile = repository.input_payload(
@@ -1271,3 +1275,12 @@ def test_pipeline_refuses_relationship_evidence_not_bound_to_frozen_rows(
         )
     assert exc_info.value.code == "mapping_bridge_failed"
     assert repository.list_jobs(PROJECT_ID) == ()
+
+
+def test_tool_opt_in_changes_receipt_generation_without_invalidating_default_history():
+    from packages.medical_monitoring.admission.mapping_confirmation import _adjudication_reconciliation_sha256
+    plain = AdmissionMappingPipeline()
+    tools = AdmissionMappingPipeline(adjudication_tool_reads=True)
+    original = _adjudication_reconciliation_sha256({"fields": []})
+    assert _adjudication_reconciliation_sha256({"fields": []}, prompt_versions=plain.adjudication_prompt_versions) == original
+    assert _adjudication_reconciliation_sha256({"fields": []}, prompt_versions=tools.adjudication_prompt_versions) != original

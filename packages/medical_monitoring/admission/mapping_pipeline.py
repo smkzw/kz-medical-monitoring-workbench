@@ -250,6 +250,7 @@ class AdmissionMappingPipeline:
         relationship_profiler: Optional[Callable[..., Any]] = None,
         require_document_evidence: bool = False,
         document_evidence_resolver: Optional[Callable[..., Any]] = None,
+        adjudication_tool_reads: bool = False,
     ) -> None:
         self._service = ai_service
         self._repository = ai_repository
@@ -264,6 +265,19 @@ class AdmissionMappingPipeline:
         self._relationship_profiler_override = relationship_profiler
         self._require_document_evidence = bool(require_document_evidence)
         self._document_evidence_resolver = document_evidence_resolver
+        self._adjudication_tool_reads = bool(adjudication_tool_reads)
+
+    @property
+    def adjudication_prompt_versions(self):
+        return frozenset(self._adjudication_prompt_version(cohort) for cohort in (
+            MONITORING_MAPPING_COHORT_PRIMARY, MONITORING_MAPPING_COHORT_VERIFIER))
+
+    def _adjudication_prompt_version(self, cohort):
+        verifier = cohort == MONITORING_MAPPING_COHORT_VERIFIER
+        if self._adjudication_tool_reads:
+            return ("monitoring-listing-field-mapping-adjudication-verifier-v4-tools-v1" if verifier
+                    else "monitoring-listing-field-mapping-adjudication-v6-tools-v1")
+        return MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION if verifier else MAPPING_ADJUDICATION_PROMPT_VERSION
 
     def _resolve_relationship_profiler(self) -> Optional[Callable[..., Any]]:
         """Return the deterministic relationship profiler for submissions.
@@ -1113,11 +1127,7 @@ class AdmissionMappingPipeline:
                     "dual_review": dual_rows,
                     **({"evidence_profile_sha256": _evidence_revision_key}
                        if _evidence_revision_key else {}),
-                    "prompt_version": (
-                        MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION
-                        if contract.cohort == MONITORING_MAPPING_COHORT_VERIFIER
-                        else MAPPING_ADJUDICATION_PROMPT_VERSION
-                    ),
+                    "prompt_version": self._adjudication_prompt_version(contract.cohort),
                 },
                 ensure_ascii=False,
                 sort_keys=True,
@@ -1400,11 +1410,7 @@ class AdmissionMappingPipeline:
                 ),
                 field_profile=profile,
                 chunk_size=12,
-                prompt_version=(
-                    MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION
-                    if contract.cohort == MONITORING_MAPPING_COHORT_VERIFIER
-                    else MAPPING_ADJUDICATION_PROMPT_VERSION
-                ),
+                prompt_version=self._adjudication_prompt_version(contract.cohort),
                 business_key_prefix=(
                     f"{query_prefix}g{generation:02d}"
                 ),

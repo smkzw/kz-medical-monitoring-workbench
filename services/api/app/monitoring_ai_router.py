@@ -675,13 +675,17 @@ def create_monitoring_ai_router(
                 preferred_revision,
                 selected_profile_sha256,
             ).revision_sha256
+        from packages.medical_monitoring.admission.evidence_tool_contract import EVIDENCE_TOOL_PROMPT_VERSIONS
         selected_jobs = [
             (job, profile)
             for job, profile, profile_sha256 in matching_jobs
             if profile_sha256 == selected_profile_sha256
             and (
-                not preferred_revision_sha256
-                or job.input_revision_sha256 == preferred_revision_sha256
+                (current_revision_resolver is not None
+                 and current_revision_resolver(job) == job.input_revision_sha256)
+                if job.prompt_version in EVIDENCE_TOOL_PROMPT_VERSIONS else
+                (not preferred_revision_sha256
+                 or job.input_revision_sha256 == preferred_revision_sha256)
             )
         ]
         include_candidate_payloads = bool(selected_jobs) and all(
@@ -710,7 +714,7 @@ def create_monitoring_ai_router(
                 selected_profile.get("full_input_sha256"),
                 "field_profile.full_input_sha256",
             )
-            if selected_profile_sha256
+            if selected_profile
             else ""
         )
         full_field_count = int(
@@ -1317,11 +1321,8 @@ def create_monitoring_ai_router(
                             actor=actor,
                             reason=request.reason,
                             current_input_revision_sha256=(
-                                current_monitoring_ai_revision(
-                                    repository,
-                                    batch_repository,
-                                    job,
-                                )
+                                current_revision_resolver(job) if current_revision_resolver else
+                                current_monitoring_ai_revision(repository, batch_repository, job)
                             ),
                         )
                     elif (
