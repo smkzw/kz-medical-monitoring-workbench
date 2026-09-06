@@ -380,6 +380,13 @@ export function createMedicalMonitoringProductApi({
   };
 
   const api = {
+    getQueueState(projectId, { signal } = {}) {
+      return get(`${API_PREFIX}/${encodeSegment(projectId)}/modules/medical-monitoring/ai/queue`, { signal });
+    },
+    setQueuePaused(projectId, paused, { signal } = {}) {
+      if (typeof paused !== "boolean") throw new TypeError("paused must be boolean");
+      return post(`${API_PREFIX}/${encodeSegment(projectId)}/modules/medical-monitoring/ai/queue/${paused ? "pause" : "resume"}`, undefined, { signal });
+    },
     bootstrapWorkspace(projectId, { signal } = {}) {
       return post(MEDICAL_MONITORING_PRODUCT_PATHS.workspaceBootstrap(
         requireId(projectId, "projectId"),

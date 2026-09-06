@@ -148,6 +148,86 @@ def test_parallel_claimers_cannot_cross_committed_pause(tmp_path: Path) -> None:
     assert all(job.attempt_count == 0 for job in repo.list_jobs("project-alpha"))
 
 
+def test_automatic_shard_recovery_budget_survives_restart_and_concurrent_calls(tmp_path: Path) -> None:
+    path = tmp_path / "recovery.sqlite3"
+    repo = MonitoringAiRepository(path)
+    created = repo.create_or_get(_request(max_attempts=1))
+    job = repo.claim_next("worker")
+    repo.fail(job, owner="worker", failure_code="provider_runtime_error",
+              failure_message="temporary", retryable=False)
+
+    def recover(_number):
+        return repo.retry_terminal(created.project_id, created.job_id,
+            current_input_revision_sha256=created.input_revision_sha256,
+            automatic_recovery_limit=1)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        assert all(item.status == MonitoringAiJobStatus.QUEUED for item in pool.map(recover, range(4)))
+    rerun = repo.claim_next("retry-worker")
+    repo.fail(rerun, owner="retry-worker", failure_code="provider_runtime_error",
+              failure_message="still unavailable", retryable=False)
+    reopened = MonitoringAiRepository(path)
+    exhausted = reopened.retry_terminal(created.project_id, created.job_id,
+        current_input_revision_sha256=created.input_revision_sha256,
+        automatic_recovery_limit=1)
+    assert exhausted.status == MonitoringAiJobStatus.FAILED
+    assert exhausted.attempt_count == 2
+    assert reopened.claim_next("extra") is None
+    assert len(reopened.list_jobs(created.project_id)) == 1
+
+
+def test_retire_only_unstarted_equivalent_generation_and_keep_history(tmp_path: Path) -> None:
+    repo = MonitoringAiRepository(tmp_path / "duplicates.sqlite3")
+    original = repo.create_or_get(_request(business_key="review:g01:chunk-01"))
+    duplicate = repo.create_or_get(_request(business_key="review:g02:chunk-01"))
+    retired = repo.retire_unstarted_duplicate(original.project_id, duplicate.job_id, original.job_id)
+    assert retired.contract_retirement_code == "duplicate_unstarted_generation"
+    assert retired.input_payload_sha256 == duplicate.input_payload_sha256
+    assert len(repo.list_jobs(original.project_id)) == 2
+    assert repo.retire_unstarted_duplicate(original.project_id, duplicate.job_id, original.job_id) == retired
+    assert repo.claim_next("worker").job_id == original.job_id
+    assert repo.claim_next("other") is None
+    with pytest.raises(MonitoringAiStateConflictError, match="superseded contract"):
+        repo.retry_terminal(original.project_id, duplicate.job_id,
+                            current_input_revision_sha256=original.input_revision_sha256)
+
+
+@pytest.mark.parametrize("mismatch", ["revision", "chunk", "started"])
+def test_duplicate_retirement_rejects_non_equivalent_or_executed_work(tmp_path: Path, mismatch: str) -> None:
+    clock = MutableClock()
+    repo = MonitoringAiRepository(tmp_path / "duplicates.sqlite3", clock=clock)
+    # Create the would-be duplicate first so the claimed job is deterministic.
+    duplicate = repo.create_or_get(_request(
+        business_key="review:g02:chunk-02" if mismatch == "chunk" else "review:g02:chunk-01",
+        suffix="002" if mismatch == "revision" else "001"))
+    clock.advance(seconds=1)
+    original = repo.create_or_get(_request(business_key="review:g01:chunk-01"))
+    if mismatch == "started":
+        assert repo.claim_next("worker").job_id == duplicate.job_id
+    with pytest.raises(MonitoringAiStateConflictError, match="not safely retireable"):
+        repo.retire_unstarted_duplicate(original.project_id, duplicate.job_id, original.job_id)
+    assert repo.get(original.project_id, duplicate.job_id).contract_retirement_code == ""
+
+
+def test_lightweight_status_skips_payload_validation_but_execution_still_validates(tmp_path: Path, monkeypatch) -> None:
+    repo = MonitoringAiRepository(tmp_path / "status.sqlite3")
+    created = repo.create_or_get(_request())
+    validator = MonitoringAiRepository._validated_job_inputs
+    reads = []
+
+    def observe(row, **kwargs):
+        reads.append(row["job_id"])
+        return validator(row, **kwargs)
+
+    monkeypatch.setattr(MonitoringAiRepository, "_validated_job_inputs", staticmethod(observe))
+    assert repo.list_jobs(created.project_id, lightweight=True) == (created,)
+    assert reads == []
+    assert repo.get(created.project_id, created.job_id) == created
+    assert reads == [created.job_id]
+    assert repo.list_jobs(created.project_id) == (created,)
+    assert reads == [created.job_id, created.job_id]
+
+
 def test_job_create_rejects_boolean_max_attempts() -> None:
     with pytest.raises(ValidationError):
         _request(max_attempts=True)  # type: ignore[arg-type]

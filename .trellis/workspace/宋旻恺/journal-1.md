@@ -1276,3 +1276,15 @@ Introduced generation-neutral application and route entry points without changin
 - 新增GET ai/queue及POST ai/queue/pause、resume；继续通过组合根唤醒两路worker；复用既有路由权限，不新增安全功能。GET不唤醒、不重试。enabled仅表示允许领取，不表示存在运行任务。
 - 新增实际SQLite重开、暂停时落盘、过期lease恢复、并发领取和跨项目隔离回归；API测试确认恢复两路。repository/worker/API共109 passed；无真实模型、真实库或原始文件写入。
 - 后续立即接用户侧暂停/继续及选择性恢复，完善队列集成验证，再处理前端显示准确性；当前仅后台暂停完成，不宣称可用性/全局goal完成。
+
+### 2026-09-06 P1队列恢复、用户控制与状态读取
+
+- 已提交首批设计/身份/裁决/后端暂停为51df9e8。新增资料整理页暂停/继续控件，避免旧请求覆盖新操作；GET不触发任务，继续唤醒两模型。合成产品启动时AI路由复用R7既有项目/身份解析器，真实配置仍委托原解析器。
+- ego(lite)空间2、隔离后端18911/前端15174：实际点击暂停→收起再展开→继续→再暂停→后端重启，UI与持久队列一致。宽屏已查看，控制条一行右侧按钮。截图保留在任务evidence/queue-paused-20260906.png。空间及临时服务均已关闭；8911未启。
+- 修复结构预览错误触发onAdmitted导致父层重载。浏览器实际挂载原Wizard、使用合成transport，当前源码profile读取1次、父通知0次、预览可见；早期缓存模块仍有旧通知，换新模块URL确认修复。此为组件行为测试，不假称真实导入E2E；合成项目拒绝本机数据导入的既有边界保持。
+- 分歧复核失败只在原job重试一次有界恢复，次数存SQLite；未完代次不补新代。并发恢复、重启后预算、wake与idle退出竞态均有回归。映射/仓储/worker/API先161 passed，新增重复退役及轻量读取后受影响仓储/映射/API160 passed（组合重叠，不相加）。客户端API125项检查、Vite build通过。
+- 已只读核对正确MG的87个g02均与g01同输入/提示/model且未开始。在线备份为runs/phase_c_mgk10_authority_v2_20260905/recovery/20260906-before-queue-repair.sqlite3（约1.1GB）。先持久暂停，再仓储逐项退役；未SQL改任务状态，未删除jobs或候选，未运行模型。恢复报告evidence/queue-recovery-20260906.json。
+- 备份回读（冻结备份用immutable只读以避WAL读取问题）确认仅87个重复任务状态/退役信息变化、其余484不变、321候选内容与状态digest保留：ef41a7261bbe734a584362aa27b02ad80042be532d0b47ee213099d782d3782e。输入身份digest保留。新代选择排除已明确退役重复，不再被g02抢占。
+- 状态查询新增显式lightweight投影，既有默认深校验保持，只有jobs列表及复核调度选择轻量；get/candidates/执行/接受仍深检。本机同571jobs两个独立只读进程一次测量：完整11.009s/1791.7MiB峰值，轻量0.136s/39.0MiB；不是多次性能保证，也不代表所有重证据调用已消除。
+- 最新用户明确旧禁用执行/会商已失效。采用execution：主线程拥有queue/API/admission，E03前端Workspace的零变化/趋势修复独立写入范围交ZCode GLM-5.3-Flash:max，runner硬等7200s，不加manager。任务mm-p1-display-20260906，运行句柄69599；最近观察仍运行，不能因空stdout重派。guard默认在根context/plans/reviews生成6文件，派发前仅将这6新文件及内部路径迁入Trellis task/execution，产品workdir保留，未移动任何旧记录。最终须audit实际路由与输出，不把派发当完成。
+- P1尚需执行节点回报整合与视觉检查、持久队列完整恢复后真实验证；自主补证据裁决和真实MG风险闭环仍未完成。任务持续active，无新增用户暂停点。

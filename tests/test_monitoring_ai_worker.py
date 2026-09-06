@@ -70,6 +70,37 @@ def test_worker_drains_durable_queue_with_bounded_parallelism() -> None:
     assert len(service.owners) <= 4
 
 
+def test_resume_during_idle_exit_does_not_lose_wakeup() -> None:
+    idle_observed = Event()
+    release_idle = Event()
+    processed = Event()
+
+    class Service:
+        calls = 0
+
+        def run_next(self, owner):
+            self.calls += 1
+            if self.calls == 1:
+                idle_observed.set()
+                assert release_idle.wait(2)
+                return SimpleNamespace(processed=False)
+            if self.calls == 2:
+                processed.set()
+                return SimpleNamespace(processed=True)
+            return SimpleNamespace(processed=False)
+
+    service = Service()
+    worker = MonitoringAiWorker(service, parallelism=1)
+    worker.wake()
+    assert idle_observed.wait(2)
+    assert worker.wake() == 0
+    release_idle.set()
+    assert processed.wait(2)
+    for thread in list(worker._threads):
+        thread.join(timeout=2)
+    assert worker.running() == 0
+
+
 def test_worker_continues_after_superseded_inflight_job_loses_lease() -> None:
     service = LeaseLostService()
     worker = MonitoringAiWorker(service, parallelism=1)

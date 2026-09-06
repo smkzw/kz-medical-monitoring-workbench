@@ -66,6 +66,44 @@ def test_adjudication_waits_for_active_jobs_before_new_generation() -> None:
     )
 
 
+@pytest.mark.parametrize("active", [True, False])
+def test_adjudication_pipeline_retries_only_failed_shard_without_new_generation(active: bool) -> None:
+    jobs = [SimpleNamespace(
+        job_id=f"job-{index}", project_id=PROJECT_ID,
+        business_key=f"review:g01:chunk-{index}", status=status,
+        input_payload_sha256=str(index) * 64, input_revision_sha256="a" * 64,
+        prompt_version="current", profile_id="primary", provider="primary",
+        requested_model="primary",
+    ) for index, status in enumerate(["completed", "failed"] + (["queued"] if active else []))]
+    retried = []
+    wakes = []
+
+    def retry(_project, job_id, **kwargs):
+        retried.append((job_id, kwargs))
+        job = next(job for job in jobs if job.job_id == job_id)
+        job.status = "queued"
+        return job
+
+    service = SimpleNamespace(current_revision_resolver=lambda job: job.input_revision_sha256)
+    pipeline = AdmissionMappingPipeline(
+        ai_service=service,
+        ai_repository=SimpleNamespace(list_jobs=lambda *args, **kwargs: jobs, retry_terminal=retry),
+        input_revision_factory=lambda value: value, task_type="mapping",
+        worker_wake=lambda: wakes.append(True),
+    )
+    kwargs = dict(project_id=PROJECT_ID, attempt_id="attempt", draft_id="draft",
+                  draft_fields=[{"domain": "AE", "source_field": "TERM"}],
+                  workspace_dir=Path("/unused-synthetic"))
+    result = pipeline.adjudicate_candidates(**kwargs)
+    assert result["state"] == "running"
+    assert result["generation"] == 1
+    assert jobs[0].status == "completed"
+    assert [job_id for job_id, _ in retried] == ([] if active else ["job-1"])
+    pipeline.adjudicate_candidates(**kwargs)
+    assert len(retried) == (0 if active else 1)
+    assert len(wakes) == (0 if active else 1)
+
+
 def _xlsx_bytes() -> bytes:
     openpyxl = pytest.importorskip("openpyxl")
     workbook = openpyxl.Workbook()

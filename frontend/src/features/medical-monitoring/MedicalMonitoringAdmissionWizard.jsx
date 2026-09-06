@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createMedicalMonitoringProductApi } from "./medicalMonitoringProductApi.mjs";
+import MedicalMonitoringQueueControl from "./MedicalMonitoringQueueControl.jsx";
 import {
   ADMISSION_SUPPORTED_SUFFIX_TEXT,
   admissionPrimaryAction,
@@ -677,12 +678,13 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         return;
       }
       dispatch({ type: "profile-loaded", payload: result.payload });
-      onAdmitted?.(result.status);
+      // Structural preview belongs to this wizard. Notify the parent only
+      // after facts are ready; its reload otherwise unmounts this preview.
     });
     return () => {
       cancelled = true;
     };
-  }, [api, state.phase, state.attemptId, state.projectId, onAdmitted]);
+  }, [api, state.phase, state.attemptId, state.projectId]);
 
   useEffect(() => {
     if (state.phase !== "ready" || state.stepIndex !== 2) return undefined;
@@ -946,6 +948,10 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   }, [api, mappingState.draft, mappingState.phase, state.attemptId, state.projectId]);
 
   return (
+    <>
+    {state.projectId && typeof api.getQueueState === "function" ? (
+      <MedicalMonitoringQueueControl key={state.projectId} api={api} projectId={state.projectId} />
+    ) : null}
     <MedicalMonitoringAdmissionWizardView
       state={state}
       documentState={documentState}
@@ -959,6 +965,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onDocumentFiles={analyzeDocuments}
       onDocumentRetry={loadDocumentReadiness}
     />
+    </>
   );
 }
 
