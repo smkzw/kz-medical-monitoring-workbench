@@ -354,6 +354,7 @@ def create_monitoring_ai_router(
     | None = None,
     require_server_principal: bool = True,
     allow_legacy_field_mapping: bool = True,
+    current_revision_resolver: Optional[Callable[[Any], str]] = None,
 ) -> APIRouter:
     profiler = MonitoringAIFieldProfiler(batch_repository)
     router = APIRouter(
@@ -1219,10 +1220,9 @@ def create_monitoring_ai_router(
                         "message": "该候选低于工作台置信度阈值；接受前请补充原文核对、数据缺口或医学确认理由。",
                     },
                 )
-            current_revision = _current_revision_for_job(
-                repository,
-                batch_repository,
-                candidate_job,
+            current_revision = (
+                current_revision_resolver(candidate_job) if current_revision_resolver else
+                _current_revision_for_job(repository, batch_repository, candidate_job)
             )
             candidate = repository.decide_candidate(
                 canonical_id,
@@ -1574,14 +1574,17 @@ def current_monitoring_ai_revision(
     repository: MonitoringAiRepository,
     batch_repository: MonitoringBatchRepository,
     job: Any,
+    *, document_evidence_resolver: Optional[Callable[..., Any]] = None,
 ) -> str:
-    return _current_revision_for_job(repository, batch_repository, job)
+    return _current_revision_for_job(repository, batch_repository, job,
+                                   document_evidence_resolver=document_evidence_resolver)
 
 
 def _current_revision_for_job(
     repository: MonitoringAiRepository,
     batch_repository: MonitoringBatchRepository,
     job: Any,
+    *, document_evidence_resolver: Optional[Callable[..., Any]] = None,
 ) -> str:
     if job.task_type != MonitoringAiTaskType.LISTING_FIELD_MAPPING:
         return job.input_revision_sha256
@@ -1627,6 +1630,22 @@ def _current_revision_for_job(
             return ""
         base_revision = monitoring_input_revision_for_batch(batch)
     try:
+        from packages.medical_monitoring.admission.evidence_tool_contract import (
+            EVIDENCE_TOOL_PROMPT_VERSIONS, bind_frozen_document_sources, bind_tool_revision_sources,
+        )
+        if job.prompt_version in EVIDENCE_TOOL_PROMPT_VERSIONS and field_profile.get("document_evidence"):
+            from packages.medical_monitoring.admission.document_evidence import MonitoringDocumentEvidencePacket
+            if document_evidence_resolver is None:
+                return ""
+            frozen = MonitoringDocumentEvidencePacket.from_dict(field_profile["document_evidence"])
+            current = document_evidence_resolver(
+                project_id=job.project_id, listing_admission_date=frozen.listing_admission_date,
+                selected_entry_ids={role.role: role.binding.source_entry_id for role in frozen.roles
+                                    if role.status == "current" and role.binding is not None},
+            )
+            if current.to_dict() != frozen.to_dict():
+                return ""
+            base_revision = bind_tool_revision_sources(base_revision, bind_frozen_document_sources(field_profile))
         return monitoring_revision_with_field_profile(
             base_revision,
             profile_sha256,

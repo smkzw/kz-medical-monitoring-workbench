@@ -46,3 +46,15 @@ def bind_frozen_document_sources(profile):
         result.pop("profile_sha256", None)
         result["profile_sha256"] = content_hash(result)
     return result
+
+
+def bind_tool_revision_sources(revision, profile):
+    """Extend one revision using the same frozen source set at submit/recheck."""
+    source_type = type(revision.sources[0])
+    sources = {item.source_entry_id: item for item in revision.sources}
+    for item in profile["source_bindings"]:
+        source = source_type.model_validate(item)
+        if source.source_entry_id in sources and sources[source.source_entry_id] != source:
+            raise ValueError("tool source revision conflict")
+        sources[source.source_entry_id] = source
+    return revision.model_copy(update={"sources": tuple(sources.values())})

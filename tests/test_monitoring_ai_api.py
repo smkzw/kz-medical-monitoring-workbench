@@ -1397,3 +1397,29 @@ def test_protocol_semantic_job_uses_v12_prompt_contract(
         "monitoring-protocol-clause-structuring-v12"
     )
     assert len(repository.candidates("project-api", result.job.job_id)) == 1
+
+
+def test_generic_tool_revision_binds_documents_and_rejects_document_only_change(tmp_path):
+    from dataclasses import replace
+    from tests.test_mm_c3_document_evidence import _packet, _binding
+    from packages.medical_monitoring.intelligence.primitives import content_hash
+    batch_repository = FakeBatchRepository()
+    repository, service = _service(tmp_path, batch_repository)
+    snapshot = MonitoringAIFieldProfiler(batch_repository).profile_batch('batch-api')
+    profile = snapshot.to_ai_payload()
+    packet = replace(_packet(), project_id='project-api')
+    profile['document_evidence'] = packet.to_dict()
+    profile.pop('profile_sha256', None)
+    profile['profile_sha256'] = content_hash(profile)
+    revision = monitoring_input_revision_for_profile_identity(batch_repository.load_field_profile_cache_identity('batch-api'))
+    job = service.submit_listing_field_mapping(project_id='project-api', input_revision=revision,
+        field_profile=profile, prompt_version='monitoring-listing-field-mapping-v20-tools-v1')
+    current = lambda **kwargs: packet
+    assert current_monitoring_ai_revision(repository, batch_repository, job,
+        document_evidence_resolver=current) == job.input_revision_sha256
+    assert current_monitoring_ai_revision(repository, batch_repository, job) == ''
+    roles = list(packet.roles)
+    roles[0] = replace(roles[0], binding=_binding('protocol', 'e'))
+    packet = replace(packet, roles=tuple(roles))
+    assert current_monitoring_ai_revision(repository, batch_repository, job,
+        document_evidence_resolver=current) == ''

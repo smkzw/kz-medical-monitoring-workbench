@@ -62,6 +62,7 @@ from .monitoring_ai_contracts import (
     content_sha256,
     validate_candidates_for_job,
 )
+from .monitoring_evidence_tool_loop import EvidenceToolLoopError
 from .monitoring_ai_repository import (
     MonitoringAiRepository,
     MonitoringAiStateConflictError,
@@ -1798,17 +1799,11 @@ class MonitoringAiService:
             or PROMPT_VERSION_BY_TASK[MonitoringAiTaskType.LISTING_FIELD_MAPPING]
         )
         from packages.medical_monitoring.admission.evidence_tool_contract import (
-            EVIDENCE_TOOL_PROMPT_VERSIONS, bind_frozen_document_sources,
+            EVIDENCE_TOOL_PROMPT_VERSIONS, bind_frozen_document_sources, bind_tool_revision_sources,
         )
         if effective_prompt_version in EVIDENCE_TOOL_PROMPT_VERSIONS:
             effective_field_profile = bind_frozen_document_sources(effective_field_profile)
-            sources = {source.source_entry_id: source for source in input_revision.sources}
-            for item in effective_field_profile["source_bindings"]:
-                source = MonitoringAiSourceBinding.model_validate(item)
-                if source.source_entry_id in sources and sources[source.source_entry_id] != source:
-                    raise ValueError("tool source revision conflict")
-                sources[source.source_entry_id] = source
-            input_revision = input_revision.model_copy(update={"sources": tuple(sources.values())})
+            input_revision = bind_tool_revision_sources(input_revision, effective_field_profile)
         effective_revision = monitoring_revision_with_field_profile(
             input_revision,
             effective_field_profile["profile_sha256"],
@@ -2583,6 +2578,15 @@ class MonitoringAiService:
                 candidates=candidates,
             )
             return MonitoringAiRunResult(job=completed, processed=True)
+        except EvidenceToolLoopError as exc:
+            exhausted = str(exc) == "evidence_tool_budget_exhausted"
+            return self._fail_claimed_job(
+                job, owner=owner, request_payload={"job_id": job.job_id},
+                response_payload=None,
+                failure_code="evidence_tool_budget_exhausted" if exhausted else "evidence_tool_protocol",
+                failure_message=str(exc), retryable=not exhausted,
+                outcome="evidence_tool_error",
+            )
         except MonitoringAiEvidenceChangedError:
             return self._stale_claimed_job(
                 job, owner=owner, request_payload={"job_id": job.job_id},
@@ -7647,6 +7651,9 @@ class MonitoringAiService:
         def model_turn():
             evidence_state["model_turns"] += 1
 
+        def protocol_repair():
+            evidence_state["protocol_repairs"] = evidence_state.get("protocol_repairs", 0) + 1
+
         with self.evidence_tool_factory(job, input_payload) as toolkit:
             result = run_evidence_tool_loop(
                 envelope, input_revision=job.input_revision_sha256,
@@ -7657,6 +7664,8 @@ class MonitoringAiService:
                 max_model_turns=remaining_turns,
                 max_tool_calls=16 - len(evidence_state["receipts"]),
                 max_evidence_bytes=remaining_bytes, on_receipt=record, on_model_turn=model_turn,
+                max_protocol_repairs=1 - evidence_state.get("protocol_repairs", 0),
+                on_protocol_repair=protocol_repair,
             )
         return result.output
 

@@ -146,3 +146,27 @@ def test_excel_sheet_directory_locates_hidden_second_sheet_without_scanning_firs
     assert result["units"][0]["sheet"] == "Hidden detail"
     assert result["units"][0]["cells"][0]["value"] == 0.25
     assert result["units"][0]["cells"][0]["number_format"] == "0%"
+
+
+def test_excel_underdeclared_dimension_cannot_hide_physical_rows_or_columns(tmp_path):
+    import zipfile
+    import re
+    workbook = openpyxl.Workbook()
+    for number in range(5): workbook.active.append([number, "", "", "last column"])
+    workbook.create_sheet("Empty")
+    buffer = io.BytesIO(); workbook.save(buffer)
+    patched = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as source, zipfile.ZipFile(patched, "w") as dest:
+        for name in source.namelist():
+            data = source.read(name)
+            if name == "xl/worksheets/sheet1.xml":
+                data = re.sub(rb'<dimension ref="[^"]+"', b'<dimension ref="A1:B2"', data)
+            dest.writestr(name, data)
+    reader, binding, _, _ = freeze(tmp_path, patched.getvalue(), ".xlsx")
+    result = reader.read_document_units(binding=binding, offset=2, limit=3, column_start=3)
+    assert result["total_units"] == 5
+    assert [u["row_number"] for u in result["units"]] == [3, 4, 5]
+    assert all(u["cells"][0]["value"] == "last column" for u in result["units"])
+    assert "spreadsheet_declared_dimension_understates_content" in result["limitation_codes"]
+    assert result["next_offset"] is None
+    assert result["physical_inventory"]["sheets"][1]["row_count"] == 0

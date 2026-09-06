@@ -90,18 +90,35 @@ class FrozenDocumentEvidenceTools:
             workbook = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=False)
             cached = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
             try:
-                total = sum(sheet.max_row or 0 for sheet in workbook.worksheets)
+                dimensions = {}
+                with zipfile.ZipFile(io.BytesIO(content)) as archive:
+                    for sheet in workbook.worksheets:
+                        rows = columns = 0
+                        with archive.open(sheet._worksheet_path) as stream:
+                            for _, element in ElementTree.iterparse(stream, events=("end",)):
+                                if element.tag.endswith("}row"):
+                                    rows = max(rows, int(element.get("r", "0")))
+                                elif element.tag.endswith("}c") and element.get("r"):
+                                    row, column = openpyxl.utils.cell.coordinate_to_tuple(element.get("r"))
+                                    rows, columns = max(rows, row), max(columns, column)
+                                element.clear()
+                        dimensions[sheet.title] = (rows, columns)
+                        if rows > (sheet.max_row or 0) or columns > (sheet.max_column or 0):
+                            limitations.append("spreadsheet_declared_dimension_understates_content")
+                        sheet.reset_dimensions()
+                        cached[sheet.title].reset_dimensions()
+                total = sum(size[0] for size in dimensions.values())
                 base = 0
                 inventory["sheets"] = []
                 for sheet in workbook.worksheets:
-                    row_total = sheet.max_row or 0
+                    row_total, column_total = dimensions[sheet.title]
                     inventory["sheets"].append({"sheet": sheet.title, "state": sheet.sheet_state,
                         "unit_start": base, "unit_end_exclusive": base + row_total,
-                        "row_count": row_total, "column_count": sheet.max_column or 0})
+                        "row_count": row_total, "column_count": column_total})
                     start = max(0, offset - base)
                     end = min(row_total, offset + limit - base)
                     if start < end:
-                        maximum = min(sheet.max_column or 0, column_start + column_count)
+                        maximum = min(column_total, column_start + column_count)
                         if maximum <= column_start:
                             raise SourceToolError("document_column_out_of_range")
                         rows = sheet.iter_rows(min_row=start + 1, max_row=end,
@@ -115,8 +132,8 @@ class FrozenDocumentEvidenceTools:
                                      for cell_index, (cell, cache) in enumerate(zip(row, cached_row))]
                             units.append({"locator": f"xlsx:sheet:{sheet.title}:row:{row_number}",
                                           "sheet": sheet.title, "row_number": row_number, "cells": cells,
-                                          "total_columns": sheet.max_column,
-                                          "next_column_start": maximum if maximum < sheet.max_column else None})
+                                          "total_columns": column_total,
+                                          "next_column_start": maximum if maximum < column_total else None})
                     base += row_total
             finally:
                 workbook.close()
