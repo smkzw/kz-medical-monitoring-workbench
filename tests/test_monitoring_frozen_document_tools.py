@@ -54,6 +54,9 @@ def test_word_full_span_text_is_paged_without_silent_truncation(tmp_path):
     assert first["units"][0]["text"] == "A" * 80
     assert first["units"][0]["next_text_offset"] == 80
     assert first["units"][0]["total_text_characters"] == 300
+    assert first["units"][0]["quote_ref"].startswith("quote-")
+    next_part = reader.read_document_units(binding=binding, limit=1, text_offset=80, text_limit=80)
+    assert next_part["units"][0]["quote_ref"] != first["units"][0]["quote_ref"]
     remainder = reader.read_document_units(binding=binding, offset=1)
     assert any("unit in table" in u["text"] for u in remainder["units"])
 

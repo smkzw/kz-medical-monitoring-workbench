@@ -58,6 +58,8 @@ services中的8601行monitoring_ai_service不得继续长大。按“任务仓�
 - Word：OOXML正文、表格、脚注/尾注、文本框、图片、修订和相关部件索引；结构定位与渲染页定位分开。修订接受规则明确；不能把解析器固定page_count=1当真实页数。复杂图表按需渲染/OCR，不把全部Word一律转图片。
 - 提供`read_source_region`、`get_column_profile`、`sample_rows`、`search_document`、`read_document_units`、`lookup_standard`等有限工具契约，返回来源revision、定位、覆盖与截断状态。工具不得任意修改数据；读取预算受控，未读完明确partial。
 
+来源引用优先使用工具回执中的原文片段编号，harness从冻结来源回填逐字文本；模型不必抄写长引文。编号必须绑定文件摘要、定位、片段范围及实际读取回执，错误编号或伴随不实引文不能接受。索引检索与字节正文读取分别保留来源类别和覆盖边界。
+
 上述是待实现能力合同，不宣称当前所有工具已有。先接入最小证据补读循环，再扩展格式能力；不为追求工具数量安装大套件。
 
 ## 6. MiniMax主分析＋GLM全量盲核对

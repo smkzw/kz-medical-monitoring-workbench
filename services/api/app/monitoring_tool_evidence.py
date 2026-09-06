@@ -12,6 +12,7 @@ def verified_tool_evidence(evidence, reads, allowed_sources):
             raise ValueError("tool citation source is not bound")
         matched = None
         verified_value = None
+        canonical_quote = None
         for read in reads:
             receipt = read["receipt"]
             source = receipt["result"]
@@ -29,6 +30,13 @@ def verified_tool_evidence(evidence, reads, allowed_sources):
                         matched = receipt
                         break
                     raw = item.get("raw_fields") or {}
+                    if (not quote.strip() and raw.get("tool_quote_ref")
+                            and raw["tool_quote_ref"] == unit.get("quote_ref")
+                            and isinstance(unit.get("text"), str) and unit["text"].strip()
+                            and len(unit["text"]) <= 8000):
+                        matched, canonical_quote = receipt, unit["text"]
+                        verified_value = {"tool_quote_ref": unit["quote_ref"], "text_offset": unit.get("text_offset", 0)}
+                        break
                     for cell in unit.get("cells", ()):
                         if ("raw_value" in raw and raw.get("coordinate") == cell.get("coordinate")
                                 and canonical_json(raw["raw_value"]) == canonical_json(cell.get("value"))):
@@ -52,5 +60,5 @@ def verified_tool_evidence(evidence, reads, allowed_sources):
                **(verified_value or {})}
         if item["evidence_id"] in result:
             raise ValueError("tool citation evidence IDs must be unique")
-        result[item["evidence_id"]] = {**item, "quote": item.get("quote", "") if verified_value is None else "", "raw_fields": raw}
+        result[item["evidence_id"]] = {**item, "quote": canonical_quote if canonical_quote is not None else (item.get("quote", "") if verified_value is None else ""), "raw_fields": raw}
     return result

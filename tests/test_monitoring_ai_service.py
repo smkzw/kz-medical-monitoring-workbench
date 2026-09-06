@@ -11058,7 +11058,8 @@ def test_tool_enabled_verifier_preserves_independent_challenge_contract(tmp_path
     assert "反证" in envelope.system_prompt
 
 
-def test_tools_bind_actual_document_sources_without_relabelling_them_as_listing(tmp_path: Path):
+@pytest.mark.parametrize("use_quote_ref", [False, True])
+def test_tools_bind_actual_document_sources_without_relabelling_them_as_listing(tmp_path: Path, use_quote_ref):
     from contextlib import contextmanager
     from dataclasses import replace
     from tests.test_mm_c3_document_evidence import _packet
@@ -11072,7 +11073,8 @@ def test_tools_bind_actual_document_sources_without_relabelling_them_as_listing(
         evidence = result["candidates"][0]["evidence"][0]
         evidence.update(source_entry_id=document.source_entry_id,
                         source_content_sha256=document.content_sha256,
-                        locator="pdf:page:1", quote="frozen document text")
+                        locator="pdf:page:1", quote="" if use_quote_ref else "frozen document text",
+                        raw_fields={"tool_quote_ref": "quote-doc"} if use_quote_ref else {})
         return result
     def request(envelope):
         return {"schema_version": "mm-evidence-tool-request-v1", "task_id": envelope.task_id,
@@ -11085,7 +11087,7 @@ def test_tools_bind_actual_document_sources_without_relabelling_them_as_listing(
         yield SimpleNamespace(schemas={"read_document_units": {}}, execute=lambda *_: {
             "input_revision_sha256": job.input_revision_sha256, "source_entry_id": document.source_entry_id,
             "source_content_sha256": document.content_sha256, "coverage": "partial",
-            "units": [{"locator": "pdf:page:1", "text": "frozen document text"}],
+            "units": [{"locator": "pdf:page:1", "text": "frozen document text", "quote_ref": "quote-doc"}],
         })
     service.evidence_tool_factory = factory
     job = service.submit_listing_field_mapping(project_id="project-alpha", input_revision=_revision(),
@@ -11096,6 +11098,8 @@ def test_tools_bind_actual_document_sources_without_relabelling_them_as_listing(
     assert result.job.status == MonitoringAiJobStatus.COMPLETED
     candidate = service.repository.candidates(job.project_id, job.job_id)[0]
     assert candidate.evidence[0].source_entry_id == document.source_entry_id
+    assert candidate.evidence[0].quote == "frozen document text"
+    assert candidate.evidence[0].evidence_id in candidate.structured_payload["field_mappings"][0]["evidence_ids"]
     legacy = service.submit_listing_field_mapping(project_id="project-alpha", input_revision=_revision(),
         field_profile=profile, prompt_version="monitoring-listing-field-mapping-v19")
     assert (document.source_entry_id, document.content_sha256) not in legacy.input_revision.source_pairs
