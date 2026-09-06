@@ -1858,3 +1858,25 @@ def test_tool_source_binding_handles_an_empty_revision_without_indexing_a_source
     result = bind_tool_revision_sources(revision, {"source_bindings": [{"source_entry_id": "source-doc", "source_content_sha256": "a" * 64}]})
     assert len(result.sources) == 1
     assert result.sources[0].source_entry_id == "source-doc"
+
+
+def test_selected_document_guard_rechecks_role_without_rebuilding_other_roles():
+    entries = [_entry(role, i + 1) for i, role in enumerate(DOCUMENT_ROLES)]
+    spans = [_span(entry, i) for entry in entries for i in (1, 2)]
+    registry = _Registry(entries, spans)
+    resolver = MonitoringDocumentEvidenceResolver(registry)
+    binding = next(item.binding for item in resolver.resolve(project_id=PROJECT_ID).roles if item.role == 'protocol')
+    checked = []
+    original = registry.current_content_validation
+    def track(project_id, source_entry_id):
+        checked.append(source_entry_id)
+        return original(project_id, source_entry_id)
+    registry.current_content_validation = track
+    resolver.assert_current_binding(project_id=PROJECT_ID, binding=binding)
+    assert checked == [binding.source_entry_id]
+    # No cross-call cache: a newly registered replacement invalidates the old read.
+    replacement = _entry('protocol', 20)
+    entries.append(replacement)
+    spans.extend(_span(replacement, i) for i in (1, 2))
+    with pytest.raises(ValueError, match='no longer current'):
+        resolver.assert_current_binding(project_id=PROJECT_ID, binding=binding)

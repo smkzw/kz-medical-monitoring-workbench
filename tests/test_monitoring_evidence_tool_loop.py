@@ -119,6 +119,7 @@ def test_one_protocol_repair_uses_existing_turn_budget_without_executing_invalid
     assert result.model_turns == 3
     assert len(reads) == 1
     assert calls[1].payload["evidence_tool_protocol_repair"]["error_code"] == "tool_request_identity_or_shape_mismatch"
+    assert "evidence_tool_protocol_repair" not in calls[2].payload
     assert calls[1].payload["evidence_tool_protocol"]["remaining_model_turns"] == 2
     with pytest.raises(EvidenceToolLoopError):
         run([request(task_id="wrong"), request(task_id="wrong")], max_protocol_repairs=1)
@@ -132,3 +133,16 @@ def test_echoed_budget_counters_never_expand_harness_budgets():
         run([echoed], max_model_turns=1)
     with pytest.raises(EvidenceToolLoopError):
         run([request(remaining_tool_calls="unlimited")])
+
+
+def test_invalid_output_preserves_small_frames_and_bounds_large_diagnostics():
+    from services.api.app.monitoring_evidence_tool_loop import EvidenceToolLoopError
+    from packages.medical_monitoring.intelligence.primitives import content_hash
+    with pytest.raises(EvidenceToolLoopError) as failure:
+        run([["not", "an", "object"]])
+    assert failure.value.output == ["not", "an", "object"]
+    output = {"tool_requests": ["x" * 100_000]}
+    failure = EvidenceToolLoopError("invalid", output)
+    assert failure.output['truncated'] is True
+    assert failure.output['content_sha256'] == content_hash(output)
+    assert len(failure.output['preview']) <= 65_536
