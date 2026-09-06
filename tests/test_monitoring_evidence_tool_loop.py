@@ -110,3 +110,15 @@ def test_model_identity_checked_even_when_it_only_requests_a_tool():
         pytest.fail("read executed after model identity mismatch")
     with pytest.raises(ValueError, match="wrong model"):
         run([request()], validate_model=reject, execute_tool=forbidden)
+
+
+def test_one_protocol_repair_uses_existing_turn_budget_without_executing_invalid_request():
+    final = {"candidates": []}
+    result, calls, _, reads = run([request(task_id="wrong"), request(), final],
+                                 max_protocol_repairs=1, max_model_turns=3)
+    assert result.model_turns == 3
+    assert len(reads) == 1
+    assert calls[1].payload["evidence_tool_protocol_repair"]["error_code"] == "tool_request_identity_or_shape_mismatch"
+    assert calls[1].payload["evidence_tool_protocol"]["remaining_model_turns"] == 2
+    with pytest.raises(EvidenceToolLoopError):
+        run([request(task_id="wrong"), request(task_id="wrong")], max_protocol_repairs=1)

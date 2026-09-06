@@ -11099,3 +11099,33 @@ def test_tools_bind_actual_document_sources_without_relabelling_them_as_listing(
     legacy = service.submit_listing_field_mapping(project_id="project-alpha", input_revision=_revision(),
         field_profile=profile, prompt_version="monitoring-listing-field-mapping-v19")
     assert (document.source_entry_id, document.content_sha256) not in legacy.input_revision.source_pairs
+
+
+@pytest.mark.parametrize("exhaust_budget", [False, True])
+def test_tool_protocol_failure_is_bounded_and_not_a_worker_error(tmp_path, exhaust_budget):
+    from contextlib import contextmanager
+    def bad_request(envelope):
+        request = {"schema_version": "mm-evidence-tool-request-v1", "task_id": envelope.task_id,
+                   "tool_requests": [{"request_id": str(i), "name": "read_source_region", "arguments": {}}
+                                     for i in range(17 if exhaust_budget else 1)]}
+        if exhaust_budget: request["input_revision_sha256"] = envelope.payload["input_revision_sha256"]
+        return request
+    provider = FakeProvider([bad_request, bad_request, bad_request, bad_request])
+    service = _service(tmp_path, provider)
+    @contextmanager
+    def factory(job, payload):
+        def forbidden_read(*args): raise AssertionError("invalid request must not execute a read")
+        yield SimpleNamespace(schemas={"read_source_region": {}}, execute=forbidden_read)
+    service.evidence_tool_factory = factory
+    job = service.submit_listing_field_mapping(project_id="project-alpha", input_revision=_revision(),
+        field_profile=_field_profile(field_count=1), prompt_version="monitoring-listing-field-mapping-v20-tools-v1")
+    result = service.run_next("protocol-check")
+    assert result.job.status == (MonitoringAiJobStatus.FAILED if exhaust_budget else MonitoringAiJobStatus.QUEUED)
+    assert result.job.failure_code == ("evidence_tool_budget_exhausted" if exhaust_budget else "evidence_tool_protocol")
+    assert result.job.retryable is (not exhaust_budget)
+    assert service.repository.candidates(job.project_id, job.job_id) == ()
+    if not exhaust_budget:
+        second = service.run_next("protocol-check-again")
+        assert second.job.status == MonitoringAiJobStatus.FAILED
+        assert second.job.attempt_count == 2
+        assert second.job.failure_code == "evidence_tool_protocol"
