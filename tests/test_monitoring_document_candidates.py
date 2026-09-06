@@ -61,6 +61,58 @@ def _image_only_pdf_bytes() -> bytes:
     return payload
 
 
+def _solid_image_bytes(color: tuple[float, float, float]) -> bytes:
+    source = pymupdf.open()
+    source_page = source.new_page(width=64, height=64)
+    source_page.draw_rect(source_page.rect, fill=color)
+    image = source_page.get_pixmap().tobytes("png")
+    source.close()
+    return image
+
+
+def _header_and_body_image_pdf_bytes() -> bytes:
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Protocol header text")
+    page.insert_image(
+        pymupdf.Rect(72, 120, 523, 700),
+        stream=_solid_image_bytes((0.2, 0.4, 0.8)),
+    )
+    payload = document.tobytes()
+    document.close()
+    return payload
+
+
+def _text_layer_scan_pdf_bytes() -> bytes:
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_image(page.rect, stream=_solid_image_bytes((1, 1, 1)))
+    for line in range(40):
+        page.insert_text(
+            (72, 90 + line * 18),
+            f"Scanned line {line} protocol content " * 10,
+            render_mode=3,
+        )
+    payload = document.tobytes()
+    document.close()
+    return payload
+
+
+def _text_page_with_small_logo_pdf_bytes() -> bytes:
+    source = pymupdf.open()
+    source_page = source.new_page(width=24, height=24)
+    source_page.draw_rect(source_page.rect, fill=(0.1, 0.1, 0.1))
+    logo = source_page.get_pixmap().tobytes("png")
+    source.close()
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Regular native page")
+    page.insert_image(pymupdf.Rect(500, 40, 540, 80), stream=logo)
+    payload = document.tobytes()
+    document.close()
+    return payload
+
+
 def _mixed_pdf_bytes() -> bytes:
     document = pymupdf.open()
     document.new_page().insert_text((72, 72), "Current protocol")
@@ -240,6 +292,8 @@ def test_pdf_candidate_distinguishes_native_text_from_ocr_need(tmp_path: Path) -
         "sap",
     )
     assert native.locator_count == 1
+    assert native.image_region_page_count == 0
+    assert native.uncovered_image_region_page_count == 0
     assert scanned.extraction_status == "needs_ocr"
     assert scanned.technical_status == "ready"
     assert scanned.zero_text_page_count == 1
@@ -248,6 +302,62 @@ def test_pdf_candidate_distinguishes_native_text_from_ocr_need(tmp_path: Path) -
     image_only = decomposer.decompose("scan.pdf", _image_only_pdf_bytes())
     assert image_only.extraction_status == "needs_ocr"
     assert image_only.locator_count == 0
+    # A zero-text image page stays in the zero_text/page-OCR lane; the
+    # uncovered image-region signal is reserved for mixed pages.
+    assert image_only.image_region_page_count == 1
+    assert image_only.uncovered_image_region_page_count == 0
+
+
+def test_pdf_mixed_page_body_image_is_not_claimed_as_read(tmp_path: Path) -> None:
+    decomposer = MonitoringDocumentCandidateDecomposer(tmp_path / "candidates")
+
+    content = _header_and_body_image_pdf_bytes()
+    candidate = decomposer.decompose("protocol.pdf", content)
+    repeat = decomposer.decompose("protocol.pdf", content)
+
+    assert candidate.extraction_status == "parsed"
+    assert candidate.parser_version.endswith("candidate_blocks_v2")
+    # The header keeps the page out of the zero_text lane...
+    assert candidate.zero_text_page_count == 0
+    assert candidate.locator_count == 1
+    assert any(
+        excerpt.text == "Protocol header text" for excerpt in candidate.excerpts
+    )
+    # ...but the body image region without native text overlap is reported
+    # as a real coverage gap, not as read content.
+    assert candidate.image_region_page_count == 1
+    assert candidate.image_region_page_samples == (1,)
+    assert candidate.uncovered_image_region_page_count == 1
+    assert candidate.uncovered_image_region_page_samples == (1,)
+    assert candidate.limitation_codes == ("image_region_native_text_absent",)
+    assert candidate == repeat
+
+
+def test_pdf_text_layer_overlap_does_not_prove_image_content_coverage(tmp_path: Path) -> None:
+    decomposer = MonitoringDocumentCandidateDecomposer(tmp_path / "candidates")
+
+    candidate = decomposer.decompose("scan.pdf", _text_layer_scan_pdf_bytes())
+
+    assert candidate.extraction_status == "parsed"
+    assert candidate.zero_text_page_count == 0
+    assert candidate.image_region_page_count == 1
+    assert candidate.uncovered_image_region_page_count == 0
+    assert candidate.limitation_codes == ()
+    from packages.medical_monitoring.admission.document_authority import _anonymous_candidate
+    projected = _anonymous_candidate(candidate.to_dict())
+    assert projected["physical_image_coverage"]["image_content_assessed"] is False
+    assert projected["physical_image_coverage"]["image_region_page_count"] == 1
+
+
+def test_pdf_small_logo_region_is_not_reported_as_unread(tmp_path: Path) -> None:
+    decomposer = MonitoringDocumentCandidateDecomposer(tmp_path / "candidates")
+
+    candidate = decomposer.decompose("memo.pdf", _text_page_with_small_logo_pdf_bytes())
+
+    assert candidate.extraction_status == "parsed"
+    assert candidate.image_region_page_count == 1
+    assert candidate.uncovered_image_region_page_count == 0
+    assert candidate.limitation_codes == ()
 
 
 def test_pdf_candidate_recovers_zero_text_pages_with_injected_ocr(

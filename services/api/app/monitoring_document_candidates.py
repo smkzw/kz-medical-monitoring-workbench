@@ -8,7 +8,7 @@ import zipfile
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal
 from xml.etree import ElementTree
 
 from openpyxl.utils.exceptions import InvalidFileException
@@ -18,12 +18,22 @@ from packages.contracts.workbench_contracts import WritingReferenceDocumentArtif
 from .listing_file_parser import parse_listing_file
 from .writing_reference_docx import extract_docx_sections
 
+if TYPE_CHECKING:
+    import pymupdf
+
 
 CANDIDATE_MANIFEST_VERSION = "monitoring-document-candidate-v1"
 MAX_EXCERPTS = 12
 MAX_EXCERPT_CHARS = 500
 MAX_OCR_PAGE_SAMPLES = 100
 MAX_CONTENT_FINGERPRINTS = 128
+# Physical image-region floors. Regions below the page-area share are
+# decorative scale (logos/icons) and are never flagged; a larger region counts
+# as having native-text overlap only when extracted text overlaps that share of
+# the region area. The floors bound physical detection only: neither floor
+# promises that any chart or figure content is semantically understood.
+MIN_IMAGE_REGION_AREA_RATIO = 0.01
+MIN_IMAGE_REGION_TEXT_COVERAGE = 0.2
 ROLE_HYPOTHESES_BY_SUFFIX = {
     ".xlsx": ("ecrf",),
     ".docx": ("protocol", "investigator_brochure", "ecrf", "sap"),
@@ -130,6 +140,15 @@ class MonitoringDocumentCandidate:
     limitation_codes: tuple[str, ...] = ()
     evidence_revision_sha256: str = ""
     content_profile: CandidateContentProfile | None = None
+    # Physical image-region inventory. uncovered_* counts only mixed pages
+    # (pages that carry native text) where a significant image region lacks
+    # native text overlap; zero-text image pages stay reported exclusively by
+    # the zero_text_* fields and the page-level OCR evidence above. This is a
+    # physical coverage signal: it never asserts chart semantics.
+    image_region_page_count: int = 0
+    image_region_page_samples: tuple[int, ...] = ()
+    uncovered_image_region_page_count: int = 0
+    uncovered_image_region_page_samples: tuple[int, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -335,10 +354,18 @@ class MonitoringDocumentCandidateDecomposer:
             created_by="monitoring_candidate_decomposer",
             created_at=datetime(1970, 1, 1, tzinfo=timezone.utc),
         )
+        image_region_pages: list[int] = []
+        uncovered_image_region_pages: list[int] = []
         if suffix == ".pdf":
-            parser_name, parser_version, page_count, zero_text_pages, blocks = (
-                _extract_pdf_candidate_blocks(content, candidate_id)
-            )
+            (
+                parser_name,
+                parser_version,
+                page_count,
+                zero_text_pages,
+                blocks,
+                image_region_pages,
+                uncovered_image_region_pages,
+            ) = _extract_pdf_candidate_blocks(content, candidate_id)
             all_blocks = list(blocks)
             ocr_evidence: tuple[CandidateOcrPageEvidence, ...] = ()
             ocr_page_limit = (
@@ -396,6 +423,8 @@ class MonitoringDocumentCandidateDecomposer:
             limitations = ("ocr_evidence_budget_exhausted",)
         else:
             limitations = ("ocr_recovery_empty",)
+        if uncovered_image_region_pages:
+            limitations = limitations + ("image_region_native_text_absent",)
         return MonitoringDocumentCandidate(
             manifest_version=CANDIDATE_MANIFEST_VERSION,
             candidate_id=candidate_id,
@@ -421,6 +450,14 @@ class MonitoringDocumentCandidateDecomposer:
             ocr_recovery_pages=ocr_evidence,
             limitation_codes=limitations,
             content_profile=_content_profile(all_blocks, page_count=page_count),
+            image_region_page_count=len(image_region_pages),
+            image_region_page_samples=tuple(
+                image_region_pages[:MAX_OCR_PAGE_SAMPLES]
+            ),
+            uncovered_image_region_page_count=len(uncovered_image_region_pages),
+            uncovered_image_region_page_samples=tuple(
+                uncovered_image_region_pages[:MAX_OCR_PAGE_SAMPLES]
+            ),
         )
 
     def _unreadable_candidate(
@@ -572,8 +609,21 @@ def _content_profile(
 
 def _extract_pdf_candidate_blocks(
     payload: bytes, candidate_id: str
-) -> tuple[str, str, int, list[int], list[tuple[str, str]]]:
-    """Extract candidate-only native text without loading writing runtime services."""
+) -> tuple[
+    str,
+    str,
+    int,
+    list[int],
+    list[tuple[str, str]],
+    list[int],
+    list[int],
+]:
+    """Extract candidate-only native text and physical image-region coverage.
+
+    Image-region detection is a full-document physical scan, independent of
+    the excerpt budget. It reports where rendered images lack overlapping
+    native text; it never interprets chart content.
+    """
 
     import pymupdf
 
@@ -588,14 +638,25 @@ def _extract_pdf_candidate_blocks(
             )
         blocks: list[tuple[str, str]] = []
         zero_text_pages: list[int] = []
+        image_region_pages: list[int] = []
+        uncovered_image_region_pages: list[int] = []
         for page_number, page in enumerate(document, start=1):
-            page_blocks = [
-                re.sub(r"\s+", " ", str(block[4] or "")).strip()
-                for block in page.get_text("blocks", sort=True)
-                if len(block) >= 5
-                and (len(block) < 7 or block[6] == 0)
-                and str(block[4] or "").strip()
-            ]
+            text_rects: list[pymupdf.Rect] = []
+            page_blocks: list[str] = []
+            for block in page.get_text("blocks", sort=True):
+                if (
+                    len(block) < 5
+                    or (len(block) >= 7 and block[6] != 0)
+                    or not str(block[4] or "").strip()
+                ):
+                    continue
+                text_rects.append(
+                    pymupdf.Rect(block[0], block[1], block[2], block[3])
+                )
+                page_blocks.append(re.sub(r"\s+", " ", str(block[4] or "")).strip())
+            image_rects = _pdf_page_image_rects(page)
+            if image_rects:
+                image_region_pages.append(page_number)
             if not page_blocks:
                 zero_text_pages.append(page_number)
                 continue
@@ -606,10 +667,84 @@ def _extract_pdf_candidate_blocks(
                 )
                 for block_index, text in enumerate(page_blocks)
             )
-        version = f"pymupdf_{pymupdf.__version__}_candidate_blocks_v1"
-        return "pymupdf_candidate_blocks", version, len(document), zero_text_pages, blocks
+            page_area = abs(page.rect)
+            if any(
+                not _image_region_has_native_text_overlap(rect, text_rects, page_area)
+                for rect in image_rects
+            ):
+                uncovered_image_region_pages.append(page_number)
+        version = f"pymupdf_{pymupdf.__version__}_candidate_blocks_v2"
+        return (
+            "pymupdf_candidate_blocks",
+            version,
+            len(document),
+            zero_text_pages,
+            blocks,
+            image_region_pages,
+            uncovered_image_region_pages,
+        )
     finally:
         document.close()
+
+
+def _pdf_page_image_rects(page: pymupdf.Page) -> list[pymupdf.Rect]:
+    """Rendered-image placement rects actually displayed on the page."""
+
+    import pymupdf
+
+    rects: list[pymupdf.Rect] = []
+    for info in page.get_image_info():
+        bbox = info.get("bbox")
+        if not bbox:
+            continue
+        rect = pymupdf.Rect(bbox)
+        if not rect.is_empty and not rect.is_infinite:
+            rects.append(rect)
+    return rects
+
+
+def _image_region_has_native_text_overlap(
+    region: pymupdf.Rect,
+    text_rects: list[pymupdf.Rect],
+    page_area: float,
+) -> bool:
+    """Decide physical native-text overlap of an image region.
+
+    Decorative-scale regions below the page-area floor are never flagged;
+    this does not declare them semantically irrelevant. A flagged region
+    only lacks physical text overlap - the chart content itself stays
+    unread until an image-level read happens.
+    """
+
+    region_area = abs(region)
+    if region_area <= 0 or region_area < page_area * MIN_IMAGE_REGION_AREA_RATIO:
+        return True
+    clipped: list[pymupdf.Rect] = []
+    for text_rect in text_rects:
+        if not region.intersects(text_rect):
+            continue
+        overlap = region & text_rect
+        if not overlap.is_empty:
+            clipped.append(overlap)
+    covered_area = _rects_union_area(clipped)
+    return covered_area >= region_area * MIN_IMAGE_REGION_TEXT_COVERAGE
+
+
+def _rects_union_area(rects: list[pymupdf.Rect]) -> float:
+    if not rects:
+        return 0.0
+    xs = sorted({value for rect in rects for value in (rect.x0, rect.x1)})
+    area = 0.0
+    for x0, x1 in zip(xs, xs[1:]):
+        intervals = sorted((rect.y0, rect.y1) for rect in rects
+                           if rect.x0 < x1 and rect.x1 > x0)
+        height = 0.0
+        end = float("-inf")
+        for y0, y1 in intervals:
+            height += max(0.0, y1 - max(y0, end))
+            end = max(end, y1)
+        area += (x1 - x0) * height
+    return area
 
 
 def _recover_pdf_candidate_pages(

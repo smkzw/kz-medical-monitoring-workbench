@@ -133,6 +133,8 @@ _CANDIDATE_KEYS = frozenset({
     "excerpts", "sheets", "zero_text_page_count", "zero_text_page_samples",
     "ocr_recovery_pages", "limitation_codes", "evidence_revision_sha256",
     "content_profile",
+    "image_region_page_count", "image_region_page_samples",
+    "uncovered_image_region_page_count", "uncovered_image_region_page_samples",
 })
 _EXCERPT_KEYS = frozenset({"locator", "text", "text_sha256"})
 _OCR_PAGE_KEYS = frozenset({
@@ -1740,6 +1742,15 @@ def _anonymous_candidate(raw: Mapping[str, Any]) -> dict[str, Any]:
     profile = raw.get("content_profile")
     if profile is not None:
         candidate["content_profile"] = _project_nested(profile, _CONTENT_PROFILE_KEYS)
+    if "image_region_page_count" in raw:
+        candidate["physical_image_coverage"] = {
+            "image_region_page_count": int(raw["image_region_page_count"]),
+            "image_region_page_samples": list(raw.get("image_region_page_samples", ())),
+            "low_native_overlap_page_count": int(raw.get("uncovered_image_region_page_count", 0)),
+            "low_native_overlap_page_samples": list(raw.get("uncovered_image_region_page_samples", ())),
+            "image_content_assessed": False,
+            "coverage_policy": "Native text overlap and page representation do not prove image content coverage; small images are inventoried even when not prioritized for OCR.",
+        }
     return candidate
 
 
