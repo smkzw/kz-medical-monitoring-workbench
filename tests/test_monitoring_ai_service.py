@@ -11333,3 +11333,50 @@ def test_empty_optional_reference_is_format_only_and_never_invents_a_standard(tm
         assert len(provider.envelopes)==1
     else:
         assert not service.repository.candidates(job.project_id,job.job_id)
+
+
+@pytest.mark.parametrize('repair_succeeds', [True, False])
+def test_strict_mapping_retains_invalid_response_and_repairs_once(tmp_path, repair_succeeds):
+    from contextlib import contextmanager
+
+    broken = '{"candidates":[{"structured_payload":{"field_mappings":[]}}'
+
+    def invalid(envelope):
+        provider.strict_response_diagnostics = {'parse_status': 'invalid_json', 'raw_content': broken}
+        return broken
+
+    def repaired(envelope):
+        provider.strict_response_diagnostics = {'parse_status': 'ok'}
+        result = _valid_output(envelope)
+        for candidate in result['candidates']:
+            for mapping in candidate['structured_payload']['field_mappings']:
+                mapping['dependency_fields'] = []
+                mapping['standards_reference'] = {}
+            for evidence in candidate['evidence']:
+                evidence['locator'] = 'profile://statistics'
+        return result
+
+    provider = FakeProvider([invalid, repaired if repair_succeeds else invalid])
+    service = _service(tmp_path, provider)
+
+    @contextmanager
+    def factory(*_):
+        yield SimpleNamespace(schemas={}, execute=lambda *_: None)
+
+    service.evidence_tool_factory = factory
+    profile = _field_profile(1)
+    profile['adjudication_contract'] = {'first_pass_mappings': []}
+    job = service.submit_listing_field_mapping(
+        project_id='project-alpha', input_revision=_revision(), field_profile=profile,
+        prompt_version='monitoring-listing-field-mapping-adjudication-v11-tools-v6',
+    )
+    result = service.run_next('strict-repair-test')
+    assert len(provider.envelopes) == 2
+    assert (result.job.status == MonitoringAiJobStatus.COMPLETED) is repair_succeeds, result.job.failure_message
+    assert bool(service.repository.candidates(job.project_id, job.job_id)) is repair_succeeds
+    response = service.repository.attempts(job.project_id, job.job_id)[0]['response']
+    assert response['provider_outputs'][0]['invalid_response_text'] == broken
+    assert len(response['provider_response_diagnostics']) == 2
+    assert response['provider_response_diagnostics'][0]['raw_content'] == broken
+    if not repair_succeeds:
+        assert result.job.failure_code == 'invalid_ai_output'

@@ -10,6 +10,21 @@ Wire format: OpenAI chat-completions ``content`` blocks
 (``text`` + ``image_url`` data URLs carrying the original image bytes in the
 actual POST body).  Image bytes only ever enter the outbound POST; they never
 appear in ``repr``, logs, diagnostics, or exception payloads.
+
+Strict response-shape mode (opt-in, default off): set
+``provider.strict_response_shape = True`` (or pass
+``strict_response_shape=True`` to the constructor) or send an envelope whose
+``prompt_version`` exactly equals
+``MONITORING_VISUAL_STRICT_PROMPT_VERSION``.  The strict path reuses the same
+POST / retry / actual-model-identity contract and accepts only one complete
+JSON object — bare or fully fenced.  A truncated outer object never yields an
+inner dict.  Complete structures with an unexpected schema are still returned
+for upstream validation.  When the model output is not a complete object the
+run returns the raw string for upstream repair and records bounded,
+secret-free diagnostics (bounded raw preview, sha256, lengths,
+``finish_reason`` list) on ``provider.strict_response_diagnostics`` (also
+merged into ``provider.response_diagnostics``) for attempt persistence.
+Lenient (default) behavior is unchanged.
 """
 
 from __future__ import annotations
@@ -19,10 +34,11 @@ import hashlib
 import http.client
 import json
 import random
+import re
 import time
 import urllib.error
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.request import Request, urlopen
 
 from . import ai_gateway as _gateway
@@ -44,8 +60,13 @@ __all__ = [
     "MonitoringVisualImage",
     "MonitoringVisualPromptEnvelope",
     "MonitoringVisualValidationError",
+    "MONITORING_VISUAL_STRICT_PROMPT_VERSION",
+    "MONITORING_VISUAL_STRICT_RAW_MAX_CHARS",
     "MonitoringVisualOpenAIProvider",
+    "MonitoringVisualStrictContentError",
     "build_monitoring_visual_envelope",
+    "is_monitoring_visual_strict_envelope",
+    "parse_monitoring_visual_strict_content",
     "build_monitoring_visual_user_content",
     "monitoring_visual_envelope_summary",
 ]
@@ -107,6 +128,147 @@ def _sniff_media_type(data: bytes) -> Optional[str]:
 
 def _is_emf_or_wmf_bytes(data: bytes) -> bool:
     return data.startswith(_EMF_MAGIC) or data.startswith(_WMF_MAGIC)
+
+
+#: Opt-in strict response-shape prompt version.  An envelope whose
+#: ``prompt_version`` exactly equals this value takes the strict response path
+#: even when the provider flag is off.  The main thread owns the wiring.
+MONITORING_VISUAL_STRICT_PROMPT_VERSION = "monitoring_visual_strict_v1"
+
+#: Bound on model-output raw text retained in strict diagnostics.  The full
+#: hash and lengths are always recorded; only the preview is truncated.
+MONITORING_VISUAL_STRICT_RAW_MAX_CHARS = 8000
+
+
+class MonitoringVisualStrictContentError(ValueError):
+    """Strict-shape parse failure; never raised for schema mismatches.
+
+    ``code`` is one of ``empty`` / ``truncated_fence`` / ``invalid_json`` /
+    ``non_object``.  ``raw_content`` is the exact model-output string so the
+    caller can hand it upstream for repair.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str,
+        fenced: bool = False,
+        raw_content: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.fenced = fenced
+        self.raw_content = raw_content
+
+
+def parse_monitoring_visual_strict_content(
+    content: Any,
+) -> Tuple[Dict[str, Any], bool]:
+    """Strictly parse one complete JSON object (bare or fully fenced).
+
+    Returns ``(parsed, fenced)``.  A complete structure with an unexpected
+    schema is still returned — schema validation stays upstream.  Anything
+    else raises :class:`MonitoringVisualStrictContentError`; in particular a
+    truncated outer object never yields an inner dict, and prose wrapped
+    around a fence is rejected rather than salvaged.
+    """
+    if not isinstance(content, str):
+        raise MonitoringVisualStrictContentError(
+            "strict response content must be a string",
+            code="invalid_json",
+            raw_content="",
+        )
+    text = content.strip()
+    if not text:
+        raise MonitoringVisualStrictContentError(
+            "strict response content is empty",
+            code="empty",
+            raw_content=content,
+        )
+    fenced_match = re.fullmatch(
+        r"```(?:json)?\s*(.*?)\s*```", text, flags=re.DOTALL | re.IGNORECASE
+    )
+    if text.startswith("```") and fenced_match is None:
+        raise MonitoringVisualStrictContentError(
+            "strict response fenced block is truncated",
+            code="truncated_fence",
+            raw_content=content,
+        )
+    if fenced_match is not None:
+        inner = fenced_match.group(1).strip()
+        try:
+            parsed = json.loads(inner)
+        except json.JSONDecodeError as exc:
+            raise MonitoringVisualStrictContentError(
+                "strict response fenced block is not a complete JSON object",
+                code="invalid_json",
+                fenced=True,
+                raw_content=content,
+            ) from exc
+        if not isinstance(parsed, dict):
+            raise MonitoringVisualStrictContentError(
+                "strict response fenced block must decode to a JSON object",
+                code="non_object",
+                fenced=True,
+                raw_content=content,
+            )
+        return parsed, True
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise MonitoringVisualStrictContentError(
+            "strict response is not a complete JSON object",
+            code="invalid_json",
+            raw_content=content,
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise MonitoringVisualStrictContentError(
+            "strict response must decode to a JSON object",
+            code="non_object",
+            raw_content=content,
+        )
+    return parsed, False
+
+
+def is_monitoring_visual_strict_envelope(envelope: Any) -> bool:
+    """True when the envelope opts into strict shape via exact prompt version."""
+    return (
+        getattr(envelope, "prompt_version", "")
+        == MONITORING_VISUAL_STRICT_PROMPT_VERSION
+    )
+
+
+def _monitoring_visual_strict_diagnostics(
+    *,
+    content: Any,
+    parse_status: str,
+    fenced: bool,
+    finish_reasons: List[str],
+    failure_code: str = "",
+) -> Dict[str, Any]:
+    """Bounded, secret-free strict diagnostics for attempt persistence.
+
+    Records the bounded raw preview plus full hash/lengths and the response
+    ``finish_reason`` list.  Never includes API keys, request images, or
+    headers — the preview is model-output text only.
+    """
+    text = content if isinstance(content, str) else ""
+    encoded = text.encode("utf-8")
+    diagnostics: Dict[str, Any] = {
+        "strict_response_shape": True,
+        "strict_parse_status": parse_status,
+        "strict_fenced": bool(fenced),
+        "strict_raw_chars": len(text),
+        "strict_raw_bytes": len(encoded),
+        "strict_raw_sha256": hashlib.sha256(encoded).hexdigest(),
+        "strict_raw_preview": text[:MONITORING_VISUAL_STRICT_RAW_MAX_CHARS],
+        "strict_raw_truncated": len(text) > MONITORING_VISUAL_STRICT_RAW_MAX_CHARS,
+        "strict_finish_reasons": list(finish_reasons or []),
+    }
+    if failure_code:
+        diagnostics["strict_failure_code"] = failure_code
+    return diagnostics
 
 
 @dataclass(frozen=True)
@@ -297,18 +459,68 @@ class MonitoringVisualOpenAIProvider(OpenAICompatibleAiProvider):
     multimodal content-block path below.  No global ``urllib`` state is
     touched: this module binds its own ``urlopen``/``Request`` names so tests
     can patch this module alone.
+
+    Strict mode is opt-in only (default off); lenient behavior is unchanged
+    unless :meth:`_strict_response_enabled` fires.  Main-thread API:
+    ``strict_response_shape`` flag (constructor kwarg or plain attribute),
+    exact-``prompt_version`` envelope opt-in, ``run`` returning ``dict`` for a
+    complete object or the raw ``str`` for upstream repair, and
+    ``strict_response_diagnostics`` for attempt persistence.
     """
 
-    def build_request_payload(
-        self, envelope: MonitoringVisualPromptEnvelope
+    #: Opt-in strict response-shape mode.  Default False: every existing
+    #: caller keeps the lenient gateway parse.
+    strict_response_shape: bool
+
+    #: Last strict-run diagnostics (bounded preview/hash/lengths/finish
+    #: reasons/parse status).  Empty until the first strict run; never
+    #: reassigned in lenient mode.
+    strict_response_diagnostics: Dict[str, Any]
+
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        model_name: str,
+        provider_name: str = "openai_compatible",
+        timeout_seconds: float = 120.0,
+        expected_response_model: str = "",
+        max_attempts: Optional[int] = None,
+        default_thinking: Optional[str] = None,
+        default_reasoning_effort: Optional[str] = None,
+        *,
+        strict_response_shape: bool = False,
+    ) -> None:
+        super().__init__(
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            provider_name=provider_name,
+            timeout_seconds=timeout_seconds,
+            expected_response_model=expected_response_model,
+            max_attempts=max_attempts,
+            default_thinking=default_thinking,
+            default_reasoning_effort=default_reasoning_effort,
+        )
+        self.strict_response_shape = bool(strict_response_shape)
+        self.strict_response_diagnostics = {}
+
+    def _strict_response_enabled(self, envelope: AiPromptEnvelope) -> bool:
+        if bool(getattr(self, "strict_response_shape", False)):
+            return True
+        return is_monitoring_visual_strict_envelope(envelope)
+
+    def _build_plain_strict_request_payload(
+        self, envelope: AiPromptEnvelope
     ) -> Dict[str, Any]:
+        """Gateway-identical text payload for strict plain-envelope runs."""
         request_payload: Dict[str, Any] = {
             "model": self.model_name,
             "messages": [
                 {"role": "system", "content": envelope.system_prompt},
                 {
                     "role": "user",
-                    "content": build_monitoring_visual_user_content(envelope),
+                    "content": json.dumps(envelope.payload, ensure_ascii=False),
                 },
             ],
             "temperature": 0,
@@ -324,23 +536,8 @@ class MonitoringVisualOpenAIProvider(OpenAICompatibleAiProvider):
             request_payload["max_tokens"] = int(envelope.max_output_tokens)
         return request_payload
 
-    def _visual_diagnostics_extra(
-        self, envelope: MonitoringVisualPromptEnvelope
-    ) -> Dict[str, Any]:
-        return {
-            "visual_image_count": len(envelope.images),
-            "visual_total_bytes": sum(len(image.data) for image in envelope.images),
-            "visual_image_sha256": [image.sha256 for image in envelope.images],
-            "visual_media_types": [image.media_type for image in envelope.images],
-        }
-
-    def run_visual(
-        self, envelope: MonitoringVisualPromptEnvelope
-    ) -> Dict[str, Any]:
-        total = _check_monitoring_visual_budget(envelope.images)
-        if total <= 0:
-            raise MonitoringVisualValidationError("visual_image_empty")
-        request_payload = self.build_request_payload(envelope)
+    def _run_completion(self, *, envelope, request_payload, visual_extra):
+        """Shared monitoring POST; strict mode only changes response parsing."""
         request = Request(
             f"{self.base_url}/chat/completions",
             data=json.dumps(request_payload, ensure_ascii=False).encode("utf-8"),
@@ -376,7 +573,7 @@ class MonitoringVisualOpenAIProvider(OpenAICompatibleAiProvider):
                         diagnostics={
                             "failure_code": "provider_http_error",
                             "http_status": int(exc.code),
-                            **self._visual_diagnostics_extra(envelope),
+                            **visual_extra,
                         },
                     ) from exc
             except (
@@ -397,7 +594,7 @@ class MonitoringVisualOpenAIProvider(OpenAICompatibleAiProvider):
                         diagnostics={
                             "failure_code": "provider_transport_error",
                             "exception_type": type(exc).__name__,
-                            **self._visual_diagnostics_extra(envelope),
+                            **visual_extra,
                         },
                     ) from exc
             backoff_seconds = (0.5 * (2**attempt)) + random.uniform(0.0, 0.25)
@@ -410,7 +607,7 @@ class MonitoringVisualOpenAIProvider(OpenAICompatibleAiProvider):
                 http_status=response_status,
                 content_type=response_content_type,
             ),
-            **self._visual_diagnostics_extra(envelope),
+            **visual_extra,
         }
         self.response_model = verified_response_model
         if self.expected_response_model and not verified_response_model:
@@ -450,6 +647,8 @@ class MonitoringVisualOpenAIProvider(OpenAICompatibleAiProvider):
                     "failure_code": failure_code,
                 },
             ) from exc
+        if self._strict_response_enabled(envelope):
+            return self._parse_strict_response(content)
         try:
             parsed = _gateway._parse_json_content(content)
         except AiProviderRuntimeError as exc:
@@ -461,8 +660,90 @@ class MonitoringVisualOpenAIProvider(OpenAICompatibleAiProvider):
                 },
             ) from exc
         return parsed
+    def _parse_strict_response(self, content):
+        finish_reasons = list(self.response_diagnostics.get("finish_reasons") or [])
+        try:
+            parsed, fenced = parse_monitoring_visual_strict_content(content)
+        except MonitoringVisualStrictContentError as exc:
+            strict_diagnostics = _monitoring_visual_strict_diagnostics(
+                content=content,
+                parse_status=exc.code,
+                fenced=exc.fenced,
+                finish_reasons=finish_reasons,
+                failure_code=f"strict_response_{exc.code}",
+            )
+            self.strict_response_diagnostics = strict_diagnostics
+            self.response_diagnostics = {
+                **self.response_diagnostics,
+                **strict_diagnostics,
+            }
+            return content
+        strict_diagnostics = _monitoring_visual_strict_diagnostics(
+            content=content,
+            parse_status="ok_fenced" if fenced else "ok",
+            fenced=fenced,
+            finish_reasons=finish_reasons,
+        )
+        self.strict_response_diagnostics = strict_diagnostics
+        self.response_diagnostics = {
+            **self.response_diagnostics,
+            **strict_diagnostics,
+        }
+        return parsed
 
-    def run(self, envelope: AiPromptEnvelope) -> Dict[str, Any]:  # type: ignore[override]
+    def build_request_payload(
+        self, envelope: MonitoringVisualPromptEnvelope
+    ) -> Dict[str, Any]:
+        request_payload: Dict[str, Any] = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": envelope.system_prompt},
+                {
+                    "role": "user",
+                    "content": build_monitoring_visual_user_content(envelope),
+                },
+            ],
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+        }
+        thinking = self.default_thinking or envelope.thinking
+        reasoning_effort = self.default_reasoning_effort or envelope.reasoning_effort
+        if thinking in {"enabled", "disabled"}:
+            request_payload["thinking"] = {"type": thinking}
+        if reasoning_effort:
+            request_payload["reasoning_effort"] = reasoning_effort
+        if envelope.max_output_tokens is not None:
+            request_payload["max_tokens"] = int(envelope.max_output_tokens)
+        return request_payload
+
+    def _visual_diagnostics_extra(
+        self, envelope: MonitoringVisualPromptEnvelope
+    ) -> Dict[str, Any]:
+        return {
+            "visual_image_count": len(envelope.images),
+            "visual_total_bytes": sum(len(image.data) for image in envelope.images),
+            "visual_image_sha256": [image.sha256 for image in envelope.images],
+            "visual_media_types": [image.media_type for image in envelope.images],
+        }
+
+    def run_visual(self, envelope: MonitoringVisualPromptEnvelope) -> Union[Dict[str, Any], str]:
+        total = _check_monitoring_visual_budget(envelope.images)
+        if total <= 0:
+            raise MonitoringVisualValidationError("visual_image_empty")
+        return self._run_completion(
+            envelope=envelope, request_payload=self.build_request_payload(envelope),
+            visual_extra=self._visual_diagnostics_extra(envelope),
+        )
+
+    def run(self, envelope: AiPromptEnvelope) -> Union[Dict[str, Any], str]:  # type: ignore[override]
+        if self._strict_response_enabled(envelope):
+            if isinstance(envelope, MonitoringVisualPromptEnvelope):
+                return self.run_visual(envelope)
+            return self._run_completion(
+                envelope=envelope,
+                request_payload=self._build_plain_strict_request_payload(envelope),
+                visual_extra={},
+            )
         if not isinstance(envelope, MonitoringVisualPromptEnvelope):
             return super().run(envelope)
         return self.run_visual(envelope)
