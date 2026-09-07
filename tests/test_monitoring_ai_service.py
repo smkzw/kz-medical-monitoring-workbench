@@ -11342,11 +11342,11 @@ def test_strict_mapping_retains_invalid_response_and_repairs_once(tmp_path, repa
     broken = '{"candidates":[{"structured_payload":{"field_mappings":[]}}'
 
     def invalid(envelope):
-        provider.strict_response_diagnostics = {'parse_status': 'invalid_json', 'raw_content': broken}
+        provider.strict_response_diagnostics = {'strict_parse_status': 'invalid_json', 'strict_raw_preview': broken}
         return broken
 
     def repaired(envelope):
-        provider.strict_response_diagnostics = {'parse_status': 'ok'}
+        provider.strict_response_diagnostics = {'strict_parse_status': 'ok'}
         result = _valid_output(envelope)
         for candidate in result['candidates']:
             for mapping in candidate['structured_payload']['field_mappings']:
@@ -11377,6 +11377,6 @@ def test_strict_mapping_retains_invalid_response_and_repairs_once(tmp_path, repa
     response = service.repository.attempts(job.project_id, job.job_id)[0]['response']
     assert response['provider_outputs'][0]['invalid_response_text'] == broken
     assert len(response['provider_response_diagnostics']) == 2
-    assert response['provider_response_diagnostics'][0]['raw_content'] == broken
+    assert response['provider_response_diagnostics'][0]['strict_raw_preview'] == broken
     if not repair_succeeds:
         assert result.job.failure_code == 'invalid_ai_output'
