@@ -417,8 +417,8 @@ def reconcile_mapping_cohorts(
     """
 
     from .mapping_comparison import DEPENDENCY_COMPARISON_VERSION, compare_mapping_dependencies
-    from .role_equivalence import ROLE_EQUIVALENCE_POLICY, compare_role_equivalence
-    if comparison_policy_version not in {RECONCILIATION_SCHEMA_VERSION, DEPENDENCY_COMPARISON_VERSION, ROLE_EQUIVALENCE_POLICY}:
+    from .role_equivalence import ROLE_EQUIVALENCE_POLICIES, compare_role_equivalence
+    if comparison_policy_version not in {RECONCILIATION_SCHEMA_VERSION, DEPENDENCY_COMPARISON_VERSION, *ROLE_EQUIVALENCE_POLICIES}:
         raise MappingReconciliationError("unsupported_mapping_comparison_policy")
     executed_route = str(
         primary_execution_route or MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY
@@ -557,12 +557,12 @@ def reconcile_mapping_cohorts(
             row["system_review_required"] = True
         elif primary is not None and verifier is not None:
             agreed = primary["semantic_verdict"] == verifier["semantic_verdict"]
-            if comparison_policy_version in {DEPENDENCY_COMPARISON_VERSION, ROLE_EQUIVALENCE_POLICY}:
+            if comparison_policy_version in {DEPENDENCY_COMPARISON_VERSION, *ROLE_EQUIVALENCE_POLICIES}:
                 try:
-                    compare = compare_role_equivalence if comparison_policy_version == ROLE_EQUIVALENCE_POLICY else compare_mapping_dependencies
+                    compare = compare_role_equivalence if comparison_policy_version in ROLE_EQUIVALENCE_POLICIES else compare_mapping_dependencies
                     comparison = compare(primary["semantic_verdict"], verifier["semantic_verdict"],
-                                         **({"domain": domain, "source_field": field}
-                                            if comparison_policy_version == ROLE_EQUIVALENCE_POLICY else {}))
+                                         **({"domain": domain, "source_field": field, "policy_version": comparison_policy_version}
+                                            if comparison_policy_version in ROLE_EQUIVALENCE_POLICIES else {}))
                 except ValueError as exc:
                     agreed = False
                     row["violations"].append({"cohort": "both", "domain": domain, "source_field": field,

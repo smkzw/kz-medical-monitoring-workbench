@@ -124,3 +124,44 @@ def test_reconciliation_requires_coverage_and_keeps_both_original_roles():
     kwargs['verifier_evidence_ids']={'ev-a'}
     kwargs['verifier_mappings']=[]
     assert reconcile_mapping_cohorts(**kwargs)['auto_pass'] is False
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+def test_same_literal_role_optional_equivalence_is_not_a_new_disagreement(reverse):
+    from packages.medical_monitoring.admission.role_equivalence import compare_role_equivalence
+    options, declaration = inputs()
+    certificate = bind(declaration, options)
+    left = {'recommended_role': 'reading.code', 'dependency_fields': [],
+            'field_kind': 'source_collected', 'role_equivalence': certificate}
+    right = {key: deepcopy(value) for key, value in left.items() if key != 'role_equivalence'}
+    if reverse:
+        left, right = right, left
+    result = compare_role_equivalence(left, right, domain='X', source_field='VALUE')
+    assert result['dependencies_agreed']
+    assert 'canonical_role' not in result
+    assert result['role_equivalence_certificate'] is None
+    assert result['left_annotations']['role_equivalence'] == left.get('role_equivalence')
+    assert result['right_annotations']['role_equivalence'] == right.get('role_equivalence')
+    legacy = compare_role_equivalence(left, right, domain='X', source_field='VALUE',
+                                     policy_version='mm-mapping-role-equivalence-v1')
+    assert not legacy['dependencies_agreed']
+
+
+@pytest.mark.parametrize('defect', ['different_role', 'case_changed', 'distinct', 'insufficient',
+                                   'wrong_scope', 'wrong_hash', 'hard_difference'])
+def test_optional_certificate_never_hides_a_material_or_invalid_claim(defect):
+    from packages.medical_monitoring.admission.role_equivalence import compare_role_equivalence
+    options, declaration = inputs()
+    certificate = bind(declaration, options)
+    left = {'recommended_role': 'reading.code', 'dependency_fields': [],
+            'field_kind': 'source_collected', 'role_equivalence': certificate}
+    right = {key: deepcopy(value) for key, value in left.items() if key != 'role_equivalence'}
+    if defect == 'different_role': right['recommended_role'] = 'reading.category'
+    elif defect == 'case_changed': right['recommended_role'] = 'Reading.code'
+    elif defect in ('distinct', 'insufficient'): certificate['judgment'] = defect
+    elif defect == 'wrong_scope': certificate['source_field'] = 'OTHER'
+    elif defect == 'wrong_hash': certificate['binding_sha256'] = '0' * 64
+    elif defect == 'hard_difference': right['field_kind'] = 'derived'
+    result = compare_role_equivalence(left, right, domain='X', source_field='VALUE')
+    assert not result['dependencies_agreed']
+    assert 'canonical_role' not in result
