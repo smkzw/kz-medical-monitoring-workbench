@@ -149,3 +149,13 @@
 - 47b3e7d 冻结独立复核：59项测试通过，无阻断缺陷；已将服务测试诊断键对齐生产 strict_raw_preview，2项聚焦通过。
 - tools-v6 MiniMax job monai_df027cc76d76896a8abdb331fe58 已完成：首回执严格解析 truncated_fence、finish_reason=length、22494字符；受控修复 ok、stop、16566字符。真实证据确认输出截断存在，严格解析阻止内层误收；GLM仍待完成，未声称双核对或语义闭环。
 - tools-v6 两路最终完成，产品比较 role_v6_reconciliation.json：9字段7一致、2分歧（AEENDAT/AEOUT 的依赖声明），覆盖/合同违规均0、工具读取均0、dual_model_pass=false、facts_generated=false。仅对剩余2字段使用既有独立双路裁决启动新隔离输入（adjudicate_role_residue.py；/tmp/mm-role-v6-residue-20260907.log），保留原候选和全部回执，不由主线程填写语义或放宽依赖比较。
+
+### 2026-09-07 用户要求无损暂停（最新停止点）
+- 用户最新指令“无损暂停”已执行。现有隔离全9字段、残余2字段和独立审阅进程均 exit 0，未遗留本轮运行进程；exit 0只是脚本终态，不代表所有业务job成功。未启动新阶段或tools-v7。
+- 提交历史：5842540 可选角色声明v2；47b3e7d 严格完整回复及诊断；3f702c7 测试诊断字段保真；c983c07 双路真实与残余裁决证据。相关回归517通过，独立冻结复核59通过，测试字段修正2通过。
+- 第一次tools-v6双路终态：MiniMax monai_df027cc76d76896a8abdb331fe58 completed（首回length截断被拒，修复stop成功）；GLM monai_44aa61170fb0972f3460059b361e completed。9字段7一致2分歧；dual_model_pass=false，facts_generated=false。
+- 剩余2字段复核终态：MiniMax monai_22fd3eff03918161fe88ccc51b01 failed/invalid_ai_output，受控修复后 AE/AEENDAT: role_equivalence_option_set_mismatch；GLM monai_a83b6306e70afae593beb8732517 completed。两路工具读0，不声称重新达成一致或来源覆盖闭合。
+- 已查到 _anonymous_review_rows 将前轮 semantic_verdict.role_equivalence 连同旧option_ids嵌入新匿名选项，存在旧新编号混淆风险；这是待验证工程假设，未删证明、未修改语义、未放宽比较。下一安全动作：核对失败回执使用的编号与当前选项绑定，设计版本化的历史证明/本轮选项分离，保持历史证据和原始输入不变；补通用回归及独立复核，再仅用隔离残余输入验证，不能直接恢复MG。
+- 正式MG queue_control paused=1（2026-09-06原暂停时间未改），现场核对8911未监听。原始5项目及医学写作均未改，未启用本地Qwen。本轮Qwen加载追踪见会话说明：oMLX在16:06加载、16:13卸载，具体调用方未证明，不能归因本产品。
+- 隔离DB/比较结果/日志哈希：runs/mm_p2_tool_trial_20260906/pause_20260907_strict_response_manifest.json；临时运行/回归日志已复制至同一隔离目录。既有未跟踪执行/审阅证据目录全部保留，未做清理删除。无需重新建立git基线、重读废止门序或恢复已删除父JSONL。
+- P2尚未完成（映射闭合、标准lookup/证据覆盖等），P3–P6继续沿既有v3计划；任务不标完成。等待用户恢复指令，不再自行派发任务。
