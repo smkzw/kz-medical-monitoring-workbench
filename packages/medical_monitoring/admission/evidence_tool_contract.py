@@ -4,10 +4,15 @@ from copy import deepcopy
 from .document_evidence import MonitoringDocumentEvidencePacket
 from ..intelligence.primitives import content_hash
 
+STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS = frozenset({
+    "monitoring-listing-field-mapping-adjudication-v11-tools-v6",
+    "monitoring-listing-field-mapping-adjudication-verifier-v9-tools-v6",
+})
+
 ROLE_EQUIVALENCE_EVIDENCE_PROMPT_VERSIONS = frozenset({
     "monitoring-listing-field-mapping-adjudication-v10-tools-v5",
     "monitoring-listing-field-mapping-adjudication-verifier-v8-tools-v5",
-})
+}) | STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS
 
 ROLE_EQUIVALENCE_PROMPT_VERSIONS = frozenset({
     "monitoring-listing-field-mapping-adjudication-v9-tools-v4",

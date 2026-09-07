@@ -63,7 +63,7 @@ from .monitoring_ai_contracts import (
     validate_candidates_for_job,
 )
 from .monitoring_evidence_tool_loop import EvidenceToolLoopError
-from packages.medical_monitoring.admission.evidence_tool_contract import DEPENDENCY_MAPPING_PROMPT_VERSIONS, VISUAL_MAPPING_PROMPT_VERSIONS, ROLE_EQUIVALENCE_PROMPT_VERSIONS, ROLE_EQUIVALENCE_EVIDENCE_PROMPT_VERSIONS
+from packages.medical_monitoring.admission.evidence_tool_contract import DEPENDENCY_MAPPING_PROMPT_VERSIONS, VISUAL_MAPPING_PROMPT_VERSIONS, ROLE_EQUIVALENCE_PROMPT_VERSIONS, ROLE_EQUIVALENCE_EVIDENCE_PROMPT_VERSIONS, STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS
 from .monitoring_ai_repository import (
     MonitoringAiRepository,
     MonitoringAiStateConflictError,
@@ -2405,6 +2405,8 @@ class MonitoringAiService:
             if job.prompt_version in VISUAL_MAPPING_PROMPT_VERSIONS:
                 from .monitoring_visual_tool_bridge import visual_provider
                 provider = visual_provider(provider)
+                if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS:
+                    provider.strict_response_shape = True
             if isinstance(provider, DisabledAiProvider):
                 raise MonitoringAiRuntimeUnavailableError(
                     "configured independent AI provider is unavailable"
@@ -2426,7 +2428,7 @@ class MonitoringAiService:
                 job,
                 owner=owner,
                 request_payload={"envelope": envelope.payload},
-                response_payload={"provider_outputs": outputs},
+                response_payload={"provider_outputs": outputs, **({"provider_response_diagnostics": evidence_state.get("response_diagnostics", [])} if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS else {})},
                 stage="after_initial_provider_call",
                 response_model=self._provider_response_model_without_assertion(
                     provider
@@ -2460,7 +2462,7 @@ class MonitoringAiService:
                         job,
                         owner=owner,
                         request_payload={"envelope": envelope.payload},
-                        response_payload={"provider_outputs": outputs},
+                        response_payload={"provider_outputs": outputs, **({"provider_response_diagnostics": evidence_state.get("response_diagnostics", [])} if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS else {})},
                         failure_code="invalid_ai_output",
                         failure_message=(
                             "document authority provider output failed its "
@@ -2501,7 +2503,7 @@ class MonitoringAiService:
                         "envelope": envelope.payload,
                         "repair_envelope": repair_envelope.payload,
                     },
-                    response_payload={"provider_outputs": outputs},
+                    response_payload={"provider_outputs": outputs, **({"provider_response_diagnostics": evidence_state.get("response_diagnostics", [])} if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS else {})},
                     stage="after_repair_provider_call",
                     response_model=(
                         self._provider_response_model_without_assertion(provider)
@@ -2526,6 +2528,8 @@ class MonitoringAiService:
                     response_payload: Dict[str, Any] = {
                         "provider_outputs": outputs
                     }
+                    if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS:
+                        response_payload["provider_response_diagnostics"] = evidence_state.get("response_diagnostics", [])
                     if residual_diagnostics:
                         response_payload["validation_diagnostics"] = (
                             residual_diagnostics
@@ -2564,7 +2568,7 @@ class MonitoringAiService:
                     "envelope": envelope.payload,
                     "repair_used": repaired,
                 },
-                response_payload={"provider_outputs": outputs},
+                response_payload={"provider_outputs": outputs, **({"provider_response_diagnostics": evidence_state.get("response_diagnostics", [])} if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS else {})},
                 stage="before_attempt_and_completion",
                 response_model=response_model,
             )
@@ -2578,7 +2582,7 @@ class MonitoringAiService:
                     "envelope": envelope.payload,
                     "repair_used": repaired,
                 },
-                response_payload={"provider_outputs": outputs},
+                response_payload={"provider_outputs": outputs, **({"provider_response_diagnostics": evidence_state.get("response_diagnostics", [])} if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS else {})},
                 response_model=response_model,
                 outcome="success_repaired" if repaired else "success",
             )
@@ -3360,6 +3364,7 @@ class MonitoringAiService:
                     "monitoring-listing-field-mapping-adjudication-verifier-v6-tools-v3",
                     "monitoring-listing-field-mapping-adjudication-verifier-v7-tools-v4",
                     "monitoring-listing-field-mapping-adjudication-verifier-v8-tools-v5",
+                    "monitoring-listing-field-mapping-adjudication-verifier-v9-tools-v6",
                 }:
                     system_prompt += (
                         " 你是与另一复核harness隔离运行的第二裁决者。不得推测或复述"
@@ -3612,6 +3617,14 @@ class MonitoringAiService:
                 "各维evidence_ids可引用本字段提供的evidence_id，或实际补读并列入本映射的工具证据编号。"
                 "source_entry_id是来源编号而非证据编号，不得混用；不需猜测harness之后生成的编号。"
                 "画像证据只证明提供的字段分布/语境，不能冒充未读文档、完整单元格核查或医学结论。"
+            )
+        if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS:
+            system_prompt += (
+                " 最终输出是整个任务结果，不是单个字段或等价声明。最外层完整输出schema_version、"
+                "task_id、task_type、input_revision_sha256、candidates，逐字使用output_schema中的任务标识。"
+                "candidates恰好一个，所有要求字段放在其structured_payload.field_mappings数组中。"
+                "role_equivalence只是该数组中某一字段的可选属性，不能单独返回。"
+                "需要更多证据则先输出工具请求；完成时逐项核查字段数量及最外层括号完整。"
             )
         return AiPromptEnvelope(
             task_id=job.job_id,
@@ -7812,7 +7825,11 @@ class MonitoringAiService:
                     images = evidence_state.setdefault("visual_inputs", {})
                     images.update(getattr(toolkit, "visual_inputs", {}))
                     current = attach_visual_inputs(current, images)
-                return self._run_with_heartbeat(job, owner, provider, current)
+                output = self._run_with_heartbeat(job, owner, provider, current)
+                if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS:
+                    evidence_state.setdefault("response_diagnostics", []).append(
+                        deepcopy(getattr(provider, "strict_response_diagnostics", {})))
+                return output
 
             result = run_evidence_tool_loop(
                 envelope, input_revision=job.input_revision_sha256,
@@ -7871,6 +7888,11 @@ class MonitoringAiService:
                 f"monitoring AI lease heartbeat failed: {heartbeat_error[0]}"
             )
         self.repository.heartbeat(job.project_id, job.job_id, owner)
+        if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS and isinstance(output, str):
+            # An invalid outer response remains a failed envelope, never a
+            # salvaged inner mapping. The existing one-repair path sees it.
+            return {"invalid_response_text": output,
+                    "response_diagnostics": deepcopy(getattr(provider, "strict_response_diagnostics", {}))}
         if not isinstance(output, dict):
             raise MonitoringAiOutputValidationError(
                 "provider output must be a JSON object"

@@ -139,3 +139,10 @@
 2026-09-07恢复复核：540d2c3独立审阅终态完成（Pi/Cursor default自动路由，底层具体模型未可核实，独立模型身份存在限制；运行session与报告保留于evidence-review-20260907）。审阅源码及15项聚焦验证确认最终物化后证据绑定和公布ID一致；同角色单路equivalent可选声明造成假分歧已复现，后续按新比较策略修复，不放宽不同角色、distinct/insufficient或硬属性冲突。报告R2首轮等价auto_pass的假设不符当前接线：reconcile_with_verifier在mapping_confirmation.py:1150未传等价policy，只有裁决路径:817传入，因此暂不修改首轮草稿。v10/v8真实隔离运行已启动，未修改原MG队列或运行库；待两路终态再统计，不以dispatch当完成。
 
 2026-09-07实测v5：MiniMax monai_a1fe2c38a262d51d8172e874623a失败invalid_ai_output，GLM monai_d2d0c293b8de3990ad207c5f53cd完成，两路0工具读，不能称双路通过。失败记录只保存解析后对象；共享解析器可能从破损外层摘出内层对象，因此尚不能断言原始响应仅返回一个字段。改变假设：先在监查adapter增加opt-in原始响应保真/完整JSON校验/finish_reason，不修改写作共享网关；两文件执行节点有独立写入范围，按当前E03实际派发。主线程修复可选等价声明假分歧（比较v2，保留v1）及上层接线。100项比较/确认回归通过，未产facts。
+
+### 2026-09-07 严格回复解析集成（执行中）
+- 独立复核 optional-proof-review.md 已验证 5842540 的 v2 同角色可选声明处理，并撤回首次分析自动通过丢失声明的 R2（当前路径不会到达该前提）；不扩改该路径。
+- 执行节点完成 transport 严格外层 JSON 解析；主线程合并重复 HTTP 实现，保留默认旧行为，共享 gateway/医学写作未改。
+- 新 tools-v6 裁决提示启用严格解析与原始文本摘要/finish_reason 记录。截断内层对象不再被接受，一次受控修复仍需完整 schema。
+- 服务测试发现并修复二次无效输出失败分支丢失诊断；517 项相关回归通过（/tmp/mm-strict-service-regression-20260907.log）。这不是医学或真实双模型验收。
+- tools-v6 隔离真实任务已启动，日志 /tmp/mm-role-v6-real-20260907.log；正式 MG 队列仍暂停，等待真实回执后接续处理，不重派健康进程。
