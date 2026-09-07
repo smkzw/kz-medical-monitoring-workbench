@@ -148,3 +148,4 @@
 - tools-v6 隔离真实任务已启动，日志 /tmp/mm-role-v6-real-20260907.log；正式 MG 队列仍暂停，等待真实回执后接续处理，不重派健康进程。
 - 47b3e7d 冻结独立复核：59项测试通过，无阻断缺陷；已将服务测试诊断键对齐生产 strict_raw_preview，2项聚焦通过。
 - tools-v6 MiniMax job monai_df027cc76d76896a8abdb331fe58 已完成：首回执严格解析 truncated_fence、finish_reason=length、22494字符；受控修复 ok、stop、16566字符。真实证据确认输出截断存在，严格解析阻止内层误收；GLM仍待完成，未声称双核对或语义闭环。
+- tools-v6 两路最终完成，产品比较 role_v6_reconciliation.json：9字段7一致、2分歧（AEENDAT/AEOUT 的依赖声明），覆盖/合同违规均0、工具读取均0、dual_model_pass=false、facts_generated=false。仅对剩余2字段使用既有独立双路裁决启动新隔离输入（adjudicate_role_residue.py；/tmp/mm-role-v6-residue-20260907.log），保留原候选和全部回执，不由主线程填写语义或放宽依赖比较。
