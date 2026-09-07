@@ -6,7 +6,9 @@ A certificate is not a guarantee against a shared model error.
 from copy import deepcopy
 from ..intelligence.primitives import content_hash
 
-ROLE_EQUIVALENCE_POLICY = 'mm-mapping-role-equivalence-v1'
+LEGACY_ROLE_EQUIVALENCE_POLICY = 'mm-mapping-role-equivalence-v1'
+ROLE_EQUIVALENCE_POLICY = 'mm-mapping-role-equivalence-v2'
+ROLE_EQUIVALENCE_POLICIES = frozenset({LEGACY_ROLE_EQUIVALENCE_POLICY, ROLE_EQUIVALENCE_POLICY})
 DIMENSIONS = ('object', 'measurement_concept', 'action_target', 'value_representation', 'standard_granularity')
 RELATIONS = frozenset({'equivalent', 'distinct', 'insufficient'})
 UNRESOLVED_ROLES = frozenset({'', 'unmapped', 'unresolved', 'unknown'})
@@ -113,8 +115,10 @@ def agreed_role_representation(left, right, *, left_role, right_role):
             'clinical_acceptance': False}
 
 
-def compare_role_equivalence(left, right, *, domain, source_field):
+def compare_role_equivalence(left, right, *, domain, source_field, policy_version=ROLE_EQUIVALENCE_POLICY):
     from .mapping_comparison import compare_mapping_dependencies
+    if policy_version not in ROLE_EQUIVALENCE_POLICIES:
+        raise ValueError("unsupported_role_equivalence_policy")
     a,b=deepcopy(dict(left)),deepcopy(dict(right))
     ca,cb=a.pop('role_equivalence',None),b.pop('role_equivalence',None)
     proof=agreed_role_representation(ca,cb,left_role=a.get('recommended_role'),right_role=b.get('recommended_role'))
@@ -123,10 +127,24 @@ def compare_role_equivalence(left, right, *, domain, source_field):
     if proof is not None:
         a['recommended_role']=b['recommended_role']=proof['canonical_role']
     result=compare_mapping_dependencies(a,b)
-    result['policy_version']=ROLE_EQUIVALENCE_POLICY
-    if (ca is not None or cb is not None) and proof is None:
+    result['policy_version']=policy_version
+    optional_agreement = False
+    if (policy_version == ROLE_EQUIVALENCE_POLICY and (ca is None) != (cb is None)
+            and a.get('recommended_role') == b.get('recommended_role')):
+        declaration = ca if ca is not None else cb
+        # A self-check validates the optional claim's binding only. It never
+        # constitutes a second model opinion or authorizes canonicalization.
+        optional_agreement = (
+            isinstance(declaration, dict)
+            and declaration.get('domain') == domain and declaration.get('source_field') == source_field
+            and agreed_role_representation(declaration, declaration,
+                left_role=a.get('recommended_role'), right_role=b.get('recommended_role')) is not None
+        )
+    if (ca is not None or cb is not None) and proof is None and not optional_agreement:
         result['dependencies_agreed']=False
         result['dependency_differences']=sorted(set(result['dependency_differences'])|{'role_equivalence'})
+    if proof is not None:
+        proof['policy_version'] = policy_version
     result['role_equivalence_certificate']=proof
     if proof is not None and result['dependencies_agreed']:
         result['canonical_role']=proof['canonical_role']
