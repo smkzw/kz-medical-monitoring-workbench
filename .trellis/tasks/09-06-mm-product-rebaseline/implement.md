@@ -164,3 +164,11 @@
 用户已恢复连续构建，前次暂停仅为历史。机制选择conference：本批匿名选项投影影响双路证据绑定，主线程做小范围修复和隔离验证，独立审阅挑战冻结修复；暂无值得分离的执行写入范围。
 已用真实失败回执核实，AEENDAT/AEOUT修复输出option_ids均等于前轮嵌入声明，均不等于当前选项ID。tools-v7投影仅移除新选项内历史role_equivalence，保留原存储证书及其他语义/依赖约束，重新绑定当前完整投影。旧版本请求验证仍兼容。73项角色/确认回归通过；独立审阅和真实隔离验证待完成。正式MG暂不恢复；P2–P6范围不变。
 - tools-v7真实隔离残余2字段：MiniMax monai_b78ea3123b3cd60b39ef6c3c6a8f及GLM monai_53547c1fbf2ab8c0374151eecc55均completed，工具读取0；role_v7_reconciliation.json由现有比较器生成，2一致/0分歧/0覆盖违规/0合同违规，dual_model_pass=true但facts_generated=false，仅本轮2字段。561项受影响回归通过；新冻结独立审阅仍运行。正式组合根尚未启用新裁决标志，未恢复原MG队列。
+
+### 2026-09-08 用户无损暂停（当前停止点）
+- 用户最新暂停指令覆盖连续实施。代码提交1ce29f9（tools-v7当前选项与历史证明分离）及记录10b82a3保留。当前无未提交产品源码修改；既有未跟踪证据目录全部保留。
+- 隔离两路进程50703已exit 0；MiniMax/GLM tools-v7两个job均completed，2字段均agreed，0覆盖/合同违规，0工具读；role_v7_reconciliation.json中dual_model_pass=true仅限此2字段，facts_generated=false。561项服务/角色/确认回归通过，未进行正式MG恢复或后续阶段。
+- 独立审阅：current-options-20260908，当前路线ZCode/GLM-5.3-Flash:max；runner运行约17分钟仍未出正式结果。应用户暂停向本任务runner/子进程发SIGINT，runner exit130，随后核实PID49061/49087/49127/49191均已退出。报告仍PENDING占位，无独立验收结论，不视为模型质量失败；未调用fallback。会话恢复ID未取得，不臆造。恢复时先查ZCode已有会话/回执兼容性，存在可恢复会话则优先原会话继续。
+- 正式MG queue_control仍paused=1，8911未监听；未修改原始5项目或医学写作，未加载本地Qwen。日志副本/隔离DB及结果hash保存在runs/mm_p2_tool_trial_20260906/pause_20260908_manifest.json。
+- 下一安全动作：先恢复/完成1ce29f9独立工程审阅并处理实际意见，确认当前投影不丢硬约束及旧数据兼容；再核查并启用main.py:3629组合根的adjudication_tool_reads/explicit_mapping_dependencies/visual_tool_reads/role_equivalence新裁决配置，以及确认仓储按新命名空间只处理未解决字段的行为。当前main组合根仍旧配置，不可直接运行旧run_mapping_reconciliation.py冒充新合同。原MG队列恢复前保留备份、核查旧lease与重复代，使用repository接口，不能手改SQL或整批重跑。
+- P2标准lookup和完整覆盖等缺口、P3正确MG facts→AE/MH反证→看板/旅程/来源/Query、P4–P6全部继续待办。暂停不是完成，等待用户恢复指令。
