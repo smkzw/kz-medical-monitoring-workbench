@@ -3365,6 +3365,7 @@ class MonitoringAiService:
                     "monitoring-listing-field-mapping-adjudication-verifier-v7-tools-v4",
                     "monitoring-listing-field-mapping-adjudication-verifier-v8-tools-v5",
                     "monitoring-listing-field-mapping-adjudication-verifier-v9-tools-v6",
+                    "monitoring-listing-field-mapping-adjudication-verifier-v10-tools-v7",
                 }:
                     system_prompt += (
                         " 你是与另一复核harness隔离运行的第二裁决者。不得推测或复述"
