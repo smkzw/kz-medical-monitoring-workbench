@@ -5,6 +5,8 @@ from .document_evidence import MonitoringDocumentEvidencePacket
 from ..intelligence.primitives import content_hash
 
 STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS = frozenset({
+    "monitoring-listing-field-mapping-adjudication-v12-tools-v7",
+    "monitoring-listing-field-mapping-adjudication-verifier-v10-tools-v7",
     "monitoring-listing-field-mapping-adjudication-v11-tools-v6",
     "monitoring-listing-field-mapping-adjudication-verifier-v9-tools-v6",
 })

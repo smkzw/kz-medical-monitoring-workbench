@@ -132,7 +132,7 @@ def _completed_payload_equivalent_cohort(
 
 def _anonymous_review_rows(
     rows: Sequence[Mapping[str, Any]], *, include_difference_paths: bool = False,
-    include_option_ids: bool = False,
+    include_option_ids: bool = False, exclude_prior_proofs: bool = False,
 ) -> list[dict[str, Any]]:
     """Remove model identity while preserving the two evidence-bound options."""
 
@@ -148,6 +148,14 @@ def _anonymous_review_rows(
                 for name, value in raw.items()
                 if name not in {"candidate_id", "job_id"}
             }
+            if exclude_prior_proofs and isinstance(option.get("semantic_verdict"), Mapping):
+                # Prior adjudication is audit history, not a new semantic option.
+                # Keep the original stored candidate and every other constraint.
+                option["semantic_verdict"] = {
+                    name: deepcopy(value)
+                    for name, value in option["semantic_verdict"].items()
+                    if name != "role_equivalence"
+                }
             options.append(option)
         options.sort(
             key=lambda value: json.dumps(
@@ -313,8 +321,8 @@ class AdmissionMappingPipeline:
     def _adjudication_prompt_version(self, cohort):
         verifier = cohort == MONITORING_MAPPING_COHORT_VERIFIER
         if self._role_equivalence:
-            return ("monitoring-listing-field-mapping-adjudication-verifier-v9-tools-v6" if verifier
-                    else "monitoring-listing-field-mapping-adjudication-v11-tools-v6")
+            return ("monitoring-listing-field-mapping-adjudication-verifier-v10-tools-v7" if verifier
+                    else "monitoring-listing-field-mapping-adjudication-v12-tools-v7")
         if self._visual_tool_reads:
             return ("monitoring-listing-field-mapping-adjudication-verifier-v6-tools-v3" if verifier
                     else "monitoring-listing-field-mapping-adjudication-v8-tools-v3")
@@ -1168,6 +1176,7 @@ class AdmissionMappingPipeline:
             dual_rows = _anonymous_review_rows(
                 raw_rows, include_difference_paths=self._adjudication_tool_reads,
                 include_option_ids=self._role_equivalence,
+                exclude_prior_proofs=self._role_equivalence,
             )
         digest = hashlib.sha256(
             json.dumps(

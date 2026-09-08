@@ -165,3 +165,21 @@ def test_optional_certificate_never_hides_a_material_or_invalid_claim(defect):
     result = compare_role_equivalence(left, right, domain='X', source_field='VALUE')
     assert not result['dependencies_agreed']
     assert 'canonical_role' not in result
+
+
+def test_current_options_exclude_prior_proof_without_changing_source_or_constraints():
+    from packages.medical_monitoring.admission.mapping_pipeline import _anonymous_review_rows
+    row = {'domain': 'OTHER', 'source_field': 'VALUE',
+           'primary': {'semantic_verdict': {'recommended_role': 'a', 'dependency_fields': [{'domain': 'OTHER', 'source_field': 'UNIT'}], 'role_equivalence': {'option_ids': ['old-a', 'old-b']}}},
+           'verifier': {'semantic_verdict': {'recommended_role': 'b', 'dependency_fields': [], 'role_equivalence': {'option_ids': ['old-a', 'old-b']}}}}
+    original = deepcopy(row)
+    projected = _anonymous_review_rows([row], include_option_ids=True, exclude_prior_proofs=True)
+    assert row == original
+    for option in projected[0]['candidate_options']:
+        assert 'role_equivalence' not in option['semantic_verdict']
+        assert option['option_id'] == option_identity('OTHER', 'VALUE', {k: v for k, v in option.items() if k != 'option_id'})
+    assert sorted(len(o['semantic_verdict']['dependency_fields']) for o in projected[0]['candidate_options']) == [0, 1]
+    legacy = _anonymous_review_rows([row], include_option_ids=True)
+    assert all('role_equivalence' in o['semantic_verdict'] for o in legacy[0]['candidate_options'])
+    swapped = {**row, 'primary': row['verifier'], 'verifier': row['primary']}
+    assert projected == _anonymous_review_rows([swapped], include_option_ids=True, exclude_prior_proofs=True)
