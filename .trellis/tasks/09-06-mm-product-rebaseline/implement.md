@@ -163,3 +163,4 @@
 ### 2026-09-08 恢复连续实施
 用户已恢复连续构建，前次暂停仅为历史。机制选择conference：本批匿名选项投影影响双路证据绑定，主线程做小范围修复和隔离验证，独立审阅挑战冻结修复；暂无值得分离的执行写入范围。
 已用真实失败回执核实，AEENDAT/AEOUT修复输出option_ids均等于前轮嵌入声明，均不等于当前选项ID。tools-v7投影仅移除新选项内历史role_equivalence，保留原存储证书及其他语义/依赖约束，重新绑定当前完整投影。旧版本请求验证仍兼容。73项角色/确认回归通过；独立审阅和真实隔离验证待完成。正式MG暂不恢复；P2–P6范围不变。
+- tools-v7真实隔离残余2字段：MiniMax monai_b78ea3123b3cd60b39ef6c3c6a8f及GLM monai_53547c1fbf2ab8c0374151eecc55均completed，工具读取0；role_v7_reconciliation.json由现有比较器生成，2一致/0分歧/0覆盖违规/0合同违规，dual_model_pass=true但facts_generated=false，仅本轮2字段。561项受影响回归通过；新冻结独立审阅仍运行。正式组合根尚未启用新裁决标志，未恢复原MG队列。
