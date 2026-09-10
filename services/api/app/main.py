@@ -1221,7 +1221,7 @@ def _current_monitoring_ai_revision(job):
             return ""
     business_key = str(getattr(job, "business_key", ""))
     from packages.medical_monitoring.admission.evidence_tool_contract import EVIDENCE_TOOL_PROMPT_VERSIONS
-    if job.prompt_version in EVIDENCE_TOOL_PROMPT_VERSIONS or business_key.startswith((
+    if str(getattr(job, "prompt_version", "")) in EVIDENCE_TOOL_PROMPT_VERSIONS or business_key.startswith((
         f"{MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX}:",
         f"{MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX}:",
         "listing-field-mapping-adjudication:",

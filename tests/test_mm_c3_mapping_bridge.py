@@ -1279,8 +1279,30 @@ def test_pipeline_refuses_relationship_evidence_not_bound_to_frozen_rows(
 
 def test_tool_opt_in_changes_receipt_generation_without_invalidating_default_history():
     from packages.medical_monitoring.admission.mapping_confirmation import _adjudication_reconciliation_sha256
+    from packages.medical_monitoring.admission.mapping_pipeline import (
+        MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS,
+    )
     plain = AdmissionMappingPipeline()
     tools = AdmissionMappingPipeline(adjudication_tool_reads=True)
+    v7 = AdmissionMappingPipeline(
+        adjudication_tool_reads=True,
+        explicit_mapping_dependencies=True,
+        visual_tool_reads=True,
+        role_equivalence=True,
+    )
+    # The module default tracks the current (tools-v7) deployment; flags-off
+    # constructor prompts are legacy namespaces whose receipts hash apart.
     original = _adjudication_reconciliation_sha256({"fields": []})
-    assert _adjudication_reconciliation_sha256({"fields": []}, prompt_versions=plain.adjudication_prompt_versions) == original
-    assert _adjudication_reconciliation_sha256({"fields": []}, prompt_versions=tools.adjudication_prompt_versions) != original
+    assert original == _adjudication_reconciliation_sha256(
+        {"fields": []}, prompt_versions=MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS
+    )
+    assert original == _adjudication_reconciliation_sha256(
+        {"fields": []}, prompt_versions=v7.adjudication_prompt_versions
+    )
+    assert original != _adjudication_reconciliation_sha256(
+        {"fields": []}, prompt_versions=plain.adjudication_prompt_versions
+    )
+    assert original != _adjudication_reconciliation_sha256(
+        {"fields": []}, prompt_versions=tools.adjudication_prompt_versions
+    )
+    assert plain.adjudication_prompt_versions != v7.adjudication_prompt_versions
