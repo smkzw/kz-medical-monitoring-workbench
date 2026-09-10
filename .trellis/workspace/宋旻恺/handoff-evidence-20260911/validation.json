@@ -1,0 +1,405 @@
+{
+  "verified_at": "2026-09-11T01:20:30.302467+08:00",
+  "result": "pass",
+  "checks": {
+    "verbatim_goal_matches_tool_snapshot": true,
+    "goal_paused": true,
+    "no_unexpanded_placeholders": true,
+    "all_local_markdown_links_exist": true,
+    "all_referenced_commit_ids_exist": true,
+    "all_selected_runtime_evidence_exists": true,
+    "formal_queue_paused": true,
+    "port_8911_closed_at_state_capture": true,
+    "frozen_source_rechecks_passed": true,
+    "fenced_blocks_balanced": true,
+    "existing_tracked_changes_only_handoff_records": true,
+    "all_18_sections_present": true
+  },
+  "handoff_path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/workspace/宋旻恺/HANDOFF_MEDICAL_MONITORING_20260911.md",
+  "handoff_sha256": "10911c7120cc48d7eecad0af63f04ee48071b4a64cb353495c002a7d22175b91",
+  "handoff_lines": 672,
+  "handoff_characters": 43810,
+  "goal_objective_characters": 1313,
+  "link_count": 56,
+  "unique_local_targets": [
+    {
+      "path": "/Users/smkzw/.codex/AGENTS.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/AI Cache/Codex x Hermes/runs/medical_workbench_session_recovery_20260731/CONTINUE_MEDICAL_MONITORING.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/AI Cache/Codex x Hermes/runs/medical_workbench_session_recovery_20260731/RECOVERY_MANIFEST.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/spec/medical-monitoring-system-design-v2.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/tasks/09-06-mm-product-rebaseline/current-options-20260908",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/tasks/09-06-mm-product-rebaseline/goal-prompt.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/tasks/09-06-mm-product-rebaseline/implement.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/tasks/09-06-mm-product-rebaseline/prd.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/tasks/09-06-mm-product-rebaseline/task.json",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/workflow.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/workspace/宋旻恺/HANDOFF_TO_GPT6_20260905.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/workspace/宋旻恺/MM_ENGINEERING_REVIEW_20260905.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/workspace/宋旻恺/handoff-evidence-20260911/current-goal.json",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/workspace/宋旻恺/handoff-evidence-20260911/current-state.json",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/workspace/宋旻恺/handoff-evidence-20260911/mg-source-comparison.json",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/workspace/宋旻恺/handoff-evidence-20260911/validation.json",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/workspace/宋旻恺/journal-1.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/AGENTS.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/context/medical_monitoring_ai_native_implementation_plan_v2_20260901.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/packages/medical_monitoring/admission/document_evidence.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/packages/medical_monitoring/admission/evidence_tool_contract.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/packages/medical_monitoring/admission/fact_materialization.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/packages/medical_monitoring/admission/mapping_bridge.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/packages/medical_monitoring/admission/mapping_comparison.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/packages/medical_monitoring/admission/mapping_confirmation.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/packages/medical_monitoring/admission/mapping_pipeline.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/packages/medical_monitoring/admission/mapping_reconciliation.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/packages/medical_monitoring/admission/pipeline.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/packages/medical_monitoring/admission/role_equivalence.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/packages/medical_monitoring/admission/source_tools.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/reviews/medical_monitoring_ai_native_system_design_v1_2_amendment_20260901.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/reviews/medical_monitoring_engineering_review_20260901.md",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/__main__.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/main.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_ai_contracts.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_ai_repository.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_ai_router.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_ai_service.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_ai_worker.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_document_candidates.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_document_visual_regions.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_evidence_tool_loop.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_evidence_toolset.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_frozen_document_tools.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_mapping_semantic_quality.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_project_registry.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_tool_evidence.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_visual_tool_bridge.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/monitoring_visual_transport.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/project_source_manifest.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/tests/test_mm_c3_mapping_bridge.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/tests/test_monitoring_ai_api.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/tests/test_monitoring_ai_repository.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/tests/test_monitoring_ai_worker.py",
+      "exists": true
+    }
+  ],
+  "referenced_commits": [
+    {
+      "ref": "0d580ae",
+      "exists": true
+    },
+    {
+      "ref": "18ddfe3",
+      "exists": true
+    },
+    {
+      "ref": "1ce29f9",
+      "exists": true
+    },
+    {
+      "ref": "1eacd7d",
+      "exists": true
+    },
+    {
+      "ref": "201260a",
+      "exists": true
+    },
+    {
+      "ref": "20d4b85",
+      "exists": true
+    },
+    {
+      "ref": "2214961",
+      "exists": true
+    },
+    {
+      "ref": "2b79e57",
+      "exists": true
+    },
+    {
+      "ref": "3f702c7",
+      "exists": true
+    },
+    {
+      "ref": "3f7b9e2",
+      "exists": true
+    },
+    {
+      "ref": "4792bc5",
+      "exists": true
+    },
+    {
+      "ref": "47b3e7d",
+      "exists": true
+    },
+    {
+      "ref": "51df9e8",
+      "exists": true
+    },
+    {
+      "ref": "540d2c3",
+      "exists": true
+    },
+    {
+      "ref": "5842540",
+      "exists": true
+    },
+    {
+      "ref": "62b75ed",
+      "exists": true
+    },
+    {
+      "ref": "8f11114",
+      "exists": true
+    },
+    {
+      "ref": "b017261",
+      "exists": true
+    },
+    {
+      "ref": "ea84833",
+      "exists": true
+    },
+    {
+      "ref": "f1a2dc4",
+      "exists": true
+    },
+    {
+      "ref": "f768fd3",
+      "exists": true
+    }
+  ],
+  "runtime_evidence_existence": [
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/trial-jobs.sqlite3",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/authority-evidence.sqlite3",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/workspace",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/role_v6_reconciliation.json",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/role_v7_reconciliation.json",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/pause_20260907_strict_response_manifest.json",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/pause_20260908_manifest.json",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/mm-role-v6-real-20260907.log",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/mm-role-v6-residue-20260907.log",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/mm-role-v7-residue-20260908.log",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/mm-strict-service-regression-20260907.log",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/mm-v7-service-regression-20260908.log",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/mm-current-options-review-20260908.log",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/adjudicate_role_equivalence.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/adjudicate_role_residue.py",
+      "exists": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/trial.py",
+      "exists": true
+    }
+  ],
+  "tracked_record_changes": [
+    ".trellis/tasks/09-06-mm-product-rebaseline/implement.md",
+    ".trellis/tasks/09-06-mm-product-rebaseline/task.json",
+    ".trellis/workspace/宋旻恺/journal-1.md"
+  ],
+  "scope_limitations": [
+    "This verifies the handoff artifact and current evidence, not product acceptance.",
+    "Historical product regression results were not rerun.",
+    "No medical model or service was started.",
+    "Independent tools-v7 engineering review remains pending."
+  ]
+}

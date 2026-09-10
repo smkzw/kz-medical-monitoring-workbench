@@ -172,3 +172,12 @@
 - 正式MG queue_control仍paused=1，8911未监听；未修改原始5项目或医学写作，未加载本地Qwen。日志副本/隔离DB及结果hash保存在runs/mm_p2_tool_trial_20260906/pause_20260908_manifest.json。
 - 下一安全动作：先恢复/完成1ce29f9独立工程审阅并处理实际意见，确认当前投影不丢硬约束及旧数据兼容；再核查并启用main.py:3629组合根的adjudication_tool_reads/explicit_mapping_dependencies/visual_tool_reads/role_equivalence新裁决配置，以及确认仓储按新命名空间只处理未解决字段的行为。当前main组合根仍旧配置，不可直接运行旧run_mapping_reconciliation.py冒充新合同。原MG队列恢复前保留备份、核查旧lease与重复代，使用repository接口，不能手改SQL或整批重跑。
 - P2标准lookup和完整覆盖等缺口、P3正确MG facts→AE/MH反证→看板/旅程/来源/Query、P4–P6全部继续待办。暂停不是完成，等待用户恢复指令。
+
+### 2026-09-11 完整交接（保持暂停，未恢复实施）
+
+用户要求交给另一Agent前形成完整、详细、可接管的handoff。机制选择direct：本批仅汇总并核实已存在的工程与暂停证据，不改产品或裁决医学含义，无需派发新执行/会商节点。
+
+- 新入口：`.trellis/workspace/宋旻恺/HANDOFF_MEDICAL_MONITORING_20260911.md`。覆盖需求及其变更、历史A/B与当前P0–P6、实际goal原文、组件地图、已完成/未完成与测试范围、停滞分析、权威文件、逐步接管顺序。附件位于同目录`handoff-evidence-20260911/`。
+- 只读复核：交接前HEAD 18ddfe3，产品逻辑1ce29f9，未提交产品源码变更为零；get_goal仍paused、Trellis仍in_progress；正式MG paused=1、571 jobs/321候选封装，87重复未执行代仍退休，8911未监听。v7隔离2字段一致且未产facts；未完成独立审阅仍需收束。
+- 新来源发现：用户`9. DM`与当前冻结`评分SDV`同名MG listing hash不同；不同的5个sheet中cell坐标/类型/值公式子节点/style比较无差异，但隐藏行、筛选、命名范围/视图等元数据有差异。详细hash及方法/限制见附件。不能直接替换旧来源或宣称全局等价；正式恢复前核对来源选择及覆盖/复用合同，必要时生成新SourceRevision。
+- 未运行模型/服务/产品回归，未修改源码、运行库、原始项目资料、医学写作或goal；未清理既有回执/ignored运行证据。新Agent获继续实施授权后，按handoff第14节完成v7独立审阅、来源/正式接线、MG有界恢复与真实纵向闭环，再承接P4–P6。此前暂停保持有效。
