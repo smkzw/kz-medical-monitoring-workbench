@@ -1,0 +1,139 @@
+{
+  "checked_at": "2026-09-11",
+  "mode": "read_only_no_model_inference",
+  "filename": "【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx",
+  "files": [
+    {
+      "role": "user_named",
+      "path": "/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/9. DM/【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx",
+      "bytes": 17014302,
+      "sha256": "e711c52fa4b41ed77270bfadefa56018a9576afe42fd2ef051e2230c6e03f4a3"
+    },
+    {
+      "role": "current_frozen_staging_source",
+      "path": "/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/13. CFDI核查/自查/评分SDV/【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx",
+      "bytes": 17013973,
+      "sha256": "81f47614ca6ab96c3d0a3e45d72ec49c98690fb49e8b574b1dc6b06f7e8259e3"
+    }
+  ],
+  "zip_member_sets_equal": true,
+  "changed_parts": [
+    "docProps/core.xml",
+    "xl/workbook.xml",
+    "xl/worksheets/sheet1.xml",
+    "xl/worksheets/sheet25.xml",
+    "xl/worksheets/sheet27.xml",
+    "xl/worksheets/sheet28.xml",
+    "xl/worksheets/sheet29.xml"
+  ],
+  "all_other_decompressed_members_byte_equal": true,
+  "cell_comparison": [
+    {
+      "part": "xl/worksheets/sheet1.xml",
+      "dm_cells": 124,
+      "sdv_cells": 124,
+      "added_cell_count": 0,
+      "missing_cell_count": 0,
+      "value_or_formula_xml_differences": 0,
+      "style_differences": 0,
+      "changed_coordinate_samples": []
+    },
+    {
+      "part": "xl/worksheets/sheet25.xml",
+      "dm_cells": 562078,
+      "sdv_cells": 562078,
+      "added_cell_count": 0,
+      "missing_cell_count": 0,
+      "value_or_formula_xml_differences": 0,
+      "style_differences": 0,
+      "changed_coordinate_samples": []
+    },
+    {
+      "part": "xl/worksheets/sheet27.xml",
+      "dm_cells": 27956,
+      "sdv_cells": 27956,
+      "added_cell_count": 0,
+      "missing_cell_count": 0,
+      "value_or_formula_xml_differences": 0,
+      "style_differences": 0,
+      "changed_coordinate_samples": []
+    },
+    {
+      "part": "xl/worksheets/sheet28.xml",
+      "dm_cells": 80556,
+      "sdv_cells": 80556,
+      "added_cell_count": 0,
+      "missing_cell_count": 0,
+      "value_or_formula_xml_differences": 0,
+      "style_differences": 0,
+      "changed_coordinate_samples": []
+    },
+    {
+      "part": "xl/worksheets/sheet29.xml",
+      "dm_cells": 9828,
+      "sdv_cells": 9828,
+      "added_cell_count": 0,
+      "missing_cell_count": 0,
+      "value_or_formula_xml_differences": 0,
+      "style_differences": 0,
+      "changed_coordinate_samples": []
+    }
+  ],
+  "xml_structure_difference_counts": {
+    "docProps/core.xml": {
+      "/coreProperties/modified text": 1
+    },
+    "xl/workbook.xml": {
+      "/workbook/fileVersion @rupBuild": 1,
+      "/workbook/revisionPtr @documentId": 1,
+      "/workbook/bookViews/workbookView @activeTab": 1,
+      "/workbook/bookViews/workbookView @windowWidth": 1,
+      "/workbook/bookViews/workbookView @yWindow": 1,
+      "/workbook/bookViews/workbookView @windowHeight": 1,
+      "/workbook/bookViews/workbookView @firstSheet": 1,
+      "/workbook/bookViews/workbookView @xWindow": 1,
+      "/workbook/definedNames/definedName text": 2
+    },
+    "xl/worksheets/sheet1.xml": {
+      "/worksheet/sheetViews/sheetView @tabSelected": 1,
+      "/worksheet/sheetViews/sheetView/pane @topLeftCell": 1,
+      "/worksheet/sheetViews/sheetView/selection @sqref": 1,
+      "/worksheet/sheetViews/sheetView/selection @activeCell": 1
+    },
+    "xl/worksheets/sheet25.xml": {
+      "/worksheet/sheetViews/sheetView/pane @topLeftCell": 1,
+      "/worksheet/sheetViews/sheetView/selection @sqref": 1,
+      "/worksheet/sheetViews/sheetView/selection @activeCell": 1,
+      "/worksheet/sheetData/row @hidden": 81,
+      "/worksheet/autoFilter child_count": 1
+    },
+    "xl/worksheets/sheet27.xml": {
+      "/worksheet child_count": 1
+    },
+    "xl/worksheets/sheet28.xml": {
+      "/worksheet/sheetViews/sheetView @topLeftCell": 1,
+      "/worksheet/sheetViews/sheetView @tabSelected": 1,
+      "/worksheet/sheetViews/sheetView/pane @topLeftCell": 1,
+      "/worksheet/sheetViews/sheetView/selection @sqref": 1,
+      "/worksheet/sheetViews/sheetView/selection @activeCell": 1,
+      "/worksheet/sheetData/row @hidden": 36,
+      "/worksheet/autoFilter/filterColumn @colId": 1,
+      "/worksheet/autoFilter/filterColumn/filters/filter @val": 1
+    },
+    "xl/worksheets/sheet29.xml": {
+      "/worksheet child_count": 1
+    }
+  },
+  "methods": [
+    "Compare decompressed ZIP member sets and bytes.",
+    "For every changed worksheet compare cell coordinates, c.t (default n), serialized child XML for value/formula/inline text, and c.s style index.",
+    "Compare non-cell structure by expanded XML element/attribute names; values are not persisted. Stop subtree recursion when direct child counts differ."
+  ],
+  "limitations": [
+    "Clinical interpretation was not performed.",
+    "The structural metadata comparison is not exhaustive where child counts differ.",
+    "No global semantic equivalence, source authority choice, evidence reuse, or clinical acceptance is asserted.",
+    "Original sources were read only; patient cell values were not emitted or persisted in this evidence file."
+  ],
+  "next_action": "Verify source authority and effects of hidden rows, filters and defined ranges before any source replacement or compatible evidence reuse. Keep old hashes and source revisions immutable."
+}

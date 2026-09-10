@@ -1,0 +1,203 @@
+{
+  "observed_at": "2026-09-11T01:17:49.592114+08:00",
+  "scope": "handoff only; no product resume or model calls",
+  "repository_root": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench",
+  "git": {
+    "pre_handoff_head": "18ddfe3054ab6b6e1e8ee4230f4b6200c754bc38",
+    "latest_product_logic_commit": "1ce29f972c5bbea8e6146c337e5d317dd5738109",
+    "tracked_changes_before_handoff_record_updates": "",
+    "status_before_handoff_record_updates": [
+      "?? .trellis/tasks/09-06-mm-product-rebaseline/current-options-20260908/",
+      "?? .trellis/tasks/09-06-mm-product-rebaseline/document-coverage/",
+      "?? .trellis/tasks/09-06-mm-product-rebaseline/evidence-review-20260907/",
+      "?? .trellis/tasks/09-06-mm-product-rebaseline/execution/",
+      "?? .trellis/tasks/09-06-mm-product-rebaseline/queue-review/",
+      "?? .trellis/tasks/09-06-mm-product-rebaseline/response-shape-20260907/",
+      "?? .trellis/tasks/09-06-mm-product-rebaseline/tool-review/",
+      "?? .trellis/tasks/09-06-mm-product-rebaseline/visual-regions/",
+      "?? .trellis/tasks/09-06-mm-product-rebaseline/visual-transport/",
+      "?? .trellis/workspace/宋旻恺/HANDOFF_MEDICAL_MONITORING_20260911.md",
+      "?? .trellis/workspace/宋旻恺/handoff-evidence-20260911/"
+    ]
+  },
+  "task": {
+    "id": "mm-product-rebaseline",
+    "status": "in_progress",
+    "goal_snapshot_status": "paused"
+  },
+  "formal_mg": {
+    "database": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/phase_c_mgk10_authority_v2_20260905/runtime/medical_monitoring_ai.sqlite3",
+    "query_mode": "sqlite URI mode=ro",
+    "queue_control": [
+      {
+        "project_id": "proj_mgk10_sar_real",
+        "paused": 1,
+        "updated_at": "2026-09-06T00:30:13.659860+00:00"
+      }
+    ],
+    "job_counts": [
+      {
+        "provider": "cms-smk",
+        "requested_model": "MiniMax-M3",
+        "status": "blocked",
+        "count": 87
+      },
+      {
+        "provider": "cms-smk",
+        "requested_model": "MiniMax-M3",
+        "status": "completed",
+        "count": 158
+      },
+      {
+        "provider": "cms-smk",
+        "requested_model": "MiniMax-M3",
+        "status": "failed",
+        "count": 6
+      },
+      {
+        "provider": "cms-smk",
+        "requested_model": "MiniMax-M3",
+        "status": "queued",
+        "count": 72
+      },
+      {
+        "provider": "cms-smk",
+        "requested_model": "MiniMax-M3",
+        "status": "running",
+        "count": 2
+      },
+      {
+        "provider": "workbench-system",
+        "requested_model": "deterministic-metadata-mapping-v1",
+        "status": "completed",
+        "count": 8
+      },
+      {
+        "provider": "zhipu-coding-plan",
+        "requested_model": "glm-5.3-flash",
+        "status": "completed",
+        "count": 155
+      },
+      {
+        "provider": "zhipu-coding-plan",
+        "requested_model": "glm-5.3-flash",
+        "status": "failed",
+        "count": 2
+      },
+      {
+        "provider": "zhipu-coding-plan",
+        "requested_model": "glm-5.3-flash",
+        "status": "queued",
+        "count": 80
+      },
+      {
+        "provider": "zhipu-coding-plan",
+        "requested_model": "glm-5.3-flash",
+        "status": "running",
+        "count": 1
+      }
+    ],
+    "total_jobs": 571,
+    "candidate_envelopes": 321,
+    "retirement_counts": [
+      {
+        "contract_retirement_code": "",
+        "count": 484
+      },
+      {
+        "contract_retirement_code": "duplicate_unstarted_generation",
+        "count": 87
+      }
+    ],
+    "running_rows_are_not_process_liveness": true
+  },
+  "port_8911_listening_on_ipv4_loopback": false,
+  "isolated_reconciliations": {
+    "role_v6_reconciliation.json": {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/role_v6_reconciliation.json",
+      "sha256": "da4b2910b9b5fc9e3d6ecca150c9feb74cc755c789e19fb5fa68427eeb8e1e0e",
+      "schema_version": "mm-mapping-role-equivalence-v2",
+      "state": "diverged",
+      "dual_model_pass": false,
+      "facts_generated": false,
+      "summary": {
+        "field_count": 9,
+        "agreed_count": 7,
+        "diverged_count": 2,
+        "blocked_count": 0,
+        "coverage_violation_count": 0,
+        "contract_violation_count": 0,
+        "human_decision_count": 0,
+        "system_review_count": 2
+      }
+    },
+    "role_v7_reconciliation.json": {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/mm_p2_tool_trial_20260906/role_v7_reconciliation.json",
+      "sha256": "3b41132825ab91f35ec2d3181f6c8ef0fcba652409484092995bcb57799bbd97",
+      "schema_version": "mm-mapping-role-equivalence-v2",
+      "state": "agreed",
+      "dual_model_pass": true,
+      "facts_generated": false,
+      "summary": {
+        "field_count": 2,
+        "agreed_count": 2,
+        "diverged_count": 0,
+        "blocked_count": 0,
+        "coverage_violation_count": 0,
+        "contract_violation_count": 0,
+        "human_decision_count": 0,
+        "system_review_count": 0
+      }
+    }
+  },
+  "authority_files_before_handoff_updates": [
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/spec/medical-monitoring-system-design-v2.md",
+      "sha256": "f4b2a8b01ac4e991bbb11f68df286f7909186089006cd3dd6266cdfc649694b7"
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/tasks/09-06-mm-product-rebaseline/prd.md",
+      "sha256": "f50200cad65858d576b7c427887a08a1c18c7c164ad6c76375b2118ac66551fe"
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.trellis/tasks/09-06-mm-product-rebaseline/implement.md",
+      "sha256": "0167db523bad824043609b976982d6bdc97ca775ed6462bc1100365531f4cd77"
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/AGENTS.md",
+      "sha256": "1e2caf85467ce65c6e19c89d1224a6ac3cbe4dcbb3ac6555940ef85fe35b1964"
+    },
+    {
+      "path": "/Users/smkzw/.codex/AGENTS.md",
+      "sha256": "e01f795dcdf886743fe6ab7140ff3740654b8eb5eff16281dc6136414bf691b7"
+    }
+  ],
+  "staging": {
+    "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/phase_c_mgk10_authority_v2_20260905/runtime/medical_monitoring_r7/proj_mgk10_sar_real/admissions/staging/stg-e9d5050c73ef44be818e1f44920fdb5f/manifest.json",
+    "file_sha256": "4f46cc15fde750c67cadb3b08de69bf3deffc5ec2e3a7dbc64e7054bd6f1ce58",
+    "schema_version": null,
+    "created_at": "2026-09-05T10:05:35.583450+00:00",
+    "source_root": "/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/13. CFDI核查/自查/评分SDV",
+    "manifest_hash": "d78556f3c7f500a56b2eec3f5bc1813b3a984acc4a2c5ed69a389518cd6fef5b"
+  },
+  "source_rechecks": [
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/9. DM/【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx",
+      "bytes": 17014302,
+      "sha256": "e711c52fa4b41ed77270bfadefa56018a9576afe42fd2ef051e2230c6e03f4a3",
+      "matches_comparison_evidence": true
+    },
+    {
+      "path": "/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/13. CFDI核查/自查/评分SDV/【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx",
+      "bytes": 17013973,
+      "sha256": "81f47614ca6ab96c3d0a3e45d72ec49c98690fb49e8b574b1dc6b06f7e8259e3",
+      "matches_comparison_evidence": true
+    }
+  ],
+  "limitations": [
+    "No product regressions rerun for this documentation task.",
+    "No clinical acceptance or completed MG facts asserted.",
+    "No product runtime, source data or provider configuration writes.",
+    "All existing ignored runs and untracked review evidence preserved."
+  ]
+}
