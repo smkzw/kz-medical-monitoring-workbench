@@ -1412,3 +1412,7 @@ tools-v7两字段隔离双路一致，561项回归通过；独立ZCode审阅被�
 切换执行中发现并修复预存缺陷：启动supersession的current集漏了首轮verifier合同（monitoring-listing-field-mapping-verifier-v1）——retire相位把151个已完成verifier首轮任务+151候选误标stale_input/superseded，_completed_candidates将fail-closed。根因修复79204d5（main.py钩子补入verifier-v1+测试同步19f359b）；受损行从切换前一致性备份逐字节恢复（INSERT OR REPLACE单事务），reconcile复验800一致/695分歧无变化。该缺陷在原常量下同样存在，任何正式app重启都会触发，本次为首次暴露。
 
 正式切换完成：retire（v5/v3未执行任务238个stale_input，87个g02重标记，终态11+8保留）→submit（695分歧字段→v7双cohort各87任务queued，v12/v10-tools-v7）→resume（paused=0，primary 4并行+verifier 2并行执行中）。监控cutover_v7_and_recover.py monitor相位后台运行（30s轮询，≤120min，进程37522为worker宿主）。719项回归全绿。
+
+### 2026-09-11 v7裁决运行诊断（运行继续）
+
+运行~65分钟时primary 5完成/12失败（verifier 4/3），暂停诊断后恢复。失败根因链：初始内容校验拒绝（全空列须unmapped、治疗/剂量锚点、空user_action等）→受控修复要求模型重发完整11-21k字符JSON→修复响应在长输出上JSON格式失误（invalid_json, finish=stop，疑似字符串内未转义控制字符）→包wrapper后记录为误导性"schema_version missing"。5个primary完成证明合同可满足；失败均为保守fail-closed，字段保留未解决。决策：继续跑完获取完整失败分布；并行设计v7.1补丁式修复（修复轮只输出变更字段而非全量重发，需新prompt版本+新工作单元+独立复核）。诊断期间0证据读取与试训一致。
