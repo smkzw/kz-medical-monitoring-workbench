@@ -2,6 +2,7 @@ import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo
 import {
   createMedicalMonitoringWorkspaceApi,
   MedicalMonitoringWorkspaceApiError,
+  medicalMonitoringWorkspaceDomainRegistry,
 } from "./medicalMonitoringWorkspaceApi.mjs";
 import {
   MEDICAL_MONITORING_WORKSPACE_VIEWS,
@@ -50,16 +51,11 @@ const VIEW_LABELS = Object.freeze({
 const SUBJECT_VIEW_KEYS = Object.freeze(["journey", "profile", "timeline"]);
 const SUBJECT_VIEW_LABELS = Object.freeze({ journey: "旅程总览", profile: "指标趋势", timeline: "事件明细" });
 
-const DOMAIN_LABELS = Object.freeze({
-  ae: "AE",
-  mh: "MH",
-  cm: "合并用药",
-  ip: "试验用药",
-  lab_exam: "检验检查",
-  hospital_procedure: "诊疗操作",
-  symptom_efficacy: "疗效/症状",
-  protocol_compliance: "方案执行",
-});
+const DOMAIN_LABELS = Object.freeze(Object.fromEntries(
+  Object.entries(medicalMonitoringWorkspaceDomainRegistry).map(
+    ([domain, encoding]) => [domain, encoding.label],
+  ),
+));
 
 /** Soft-break lane chips so wraps stay 2+2 (or slash-balanced), never 3+1 orphans. */
 function laneChipLabel(label) {

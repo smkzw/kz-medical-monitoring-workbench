@@ -67,11 +67,11 @@ const DOMAINS = Object.freeze({
   ae: { label: "AE", shape: "rounded_rect", line: "solid" },
   mh: { label: "MH", shape: "bookmark", line: "dot_dash" },
   cm: { label: "合并用药", shape: "capsule", line: "solid" },
-  ip: { label: "试验药", shape: "hexagon", line: "step" },
+  ip: { label: "试验用药", shape: "hexagon", line: "step" },
   lab_exam: { label: "检验/检查", shape: "square", line: "trend" },
   hospital_procedure: { label: "住院/操作", shape: "doorframe", line: "solid" },
   symptom_efficacy: { label: "症状/疗效", shape: "circle", line: "trend" },
-  protocol_compliance: { label: "方案符合", shape: "single_flag", line: "bracket" },
+  protocol_compliance: { label: "方案符合性", shape: "single_flag", line: "bracket" },
 });
 
 const SEVERITIES = Object.freeze({
