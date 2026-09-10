@@ -181,3 +181,17 @@
 - 只读复核：交接前HEAD 18ddfe3，产品逻辑1ce29f9，未提交产品源码变更为零；get_goal仍paused、Trellis仍in_progress；正式MG paused=1、571 jobs/321候选封装，87重复未执行代仍退休，8911未监听。v7隔离2字段一致且未产facts；未完成独立审阅仍需收束。
 - 新来源发现：用户`9. DM`与当前冻结`评分SDV`同名MG listing hash不同；不同的5个sheet中cell坐标/类型/值公式子节点/style比较无差异，但隐藏行、筛选、命名范围/视图等元数据有差异。详细hash及方法/限制见附件。不能直接替换旧来源或宣称全局等价；正式恢复前核对来源选择及覆盖/复用合同，必要时生成新SourceRevision。
 - 未运行模型/服务/产品回归，未修改源码、运行库、原始项目资料、医学写作或goal；未清理既有回执/ignored运行证据。新Agent获继续实施授权后，按handoff第14节完成v7独立审阅、来源/正式接线、MG有界恢复与真实纵向闭环，再承接P4–P6。此前暂停保持有效。
+
+
+### 2026-09-11 ZCode 接管：完整工程review + 计划更新 + 连续实施（进行中）
+
+用户授权本会话（ZCode/GLM-5.3）完整接管并进入连续实施。机制：off_peak；主线程审阅+2只读探查子代理+1独立审阅worker（zcode/GLM-5.3-Flash:max 新鲜会话，重派v7审阅）。
+
+接管review结论（全文见`.trellis/workspace/宋旻恺/MM_TAKEOVER_REVIEW_20260911.md`）：
+- 现场与交接完全一致；710项聚焦回归通过（7文件集，18.7s）。
+- P0问题：正式组合根未启用tools-v7四标志（main.py:3629）；真实facts→AE/MH→看板→Query链未接通；**Query/报告工作区前端实际不存在**（交接§6.4描述与实际不符，需从零新建）。
+- P1问题：输入payload无内容寻址层（809M字符，三重放大）；monitoring_ai_service.py 8881行维护债（本批不动，新增功能放新模块）；ProductLoop"服务端范围/推荐/确认"术语泄漏+snapshotToken兜底显示；MG同名来源差异。
+- P2清理清单：前端死代码链约5000+行（BatchPanel/DailyRun/RuleRelease/FieldMapping/ProtocolPreparation/DailyAi*/Assurance链，产品树零引用）；八轨标签不一致；空g6/目录。
+- MG来源决策（本会话作出）：**保持冻结评分SDV版本为正式来源**，9.DM记为已核实等价备选（cell级无差异证据 mg-source-comparison.json）；仅用户明确要求以DM为业务权威时才建新SourceRevision。
+
+执行顺序（落实handoff §14，无变更）：v7审阅收束→组合根接线+独立runtime验证→有界恢复MG（备份/清点/repository接口，优先AE/MH/CM/IP/PD域）→facts物化→P3纵切+Query工作区→ego验收→P4-P6。阶段性清理按P2清单、清单制、保护证据。
