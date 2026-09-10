@@ -442,6 +442,7 @@ from .monitoring_ai_worker import MonitoringAiWorker
 from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX,
     MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX,
+    MONITORING_C3_VERIFIER_PROMPT_VERSION,
 )
 from .monitoring_deterministic_metadata_mapping import (
     DETERMINISTIC_METADATA_MODEL,
@@ -1538,6 +1539,11 @@ def _recover_monitoring_ai_jobs():
             if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING:
                 current_prompt_versions = (
                     current_prompt_versions
+                    # The first-round verifier prompt is a live contract the
+                    # reconciliation gate still validates against; leaving it
+                    # out of the current set retires completed verifier
+                    # cohorts and breaks _completed_candidates.
+                    | {MONITORING_C3_VERIFIER_PROMPT_VERSION}
                     | MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS
                 )
             monitoring_ai_repository.supersede_prompt_versions_except(
