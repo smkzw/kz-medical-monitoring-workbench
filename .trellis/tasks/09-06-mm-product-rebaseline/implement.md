@@ -195,3 +195,10 @@
 - MG来源决策（本会话作出）：**保持冻结评分SDV版本为正式来源**，9.DM记为已核实等价备选（cell级无差异证据 mg-source-comparison.json）；仅用户明确要求以DM为业务权威时才建新SourceRevision。
 
 执行顺序（落实handoff §14，无变更）：v7审阅收束→组合根接线+独立runtime验证→有界恢复MG（备份/清点/repository接口，优先AE/MH/CM/IP/PD域）→facts物化→P3纵切+Query工作区→ego验收→P4-P6。阶段性清理按P2清单、清单制、保护证据。
+
+#### 2026-09-11 接管执行记录（ZCode，连续实施中）
+
+- 审阅收束：v7独立工程审阅以新鲜会话完成（原9-08会话用户中止无恢复句柄），报告current-options-20260908/runs/conference/mm-current-options-20260908/general_single_object.md。结论：1ce29f9实现正确无阻断；3项低风险观察（OBS-1已被接线提交解决；OBS-2浅拷贝、OBS-3非dual fail-closed无需行动）。
+- 代码批：e703784组合根四标志；4111ad8 v7为当前裁决部署；c800313前端术语/标签/一键确认恢复；e0198b7+d5b44b1死链清理约11700行；79204d5+19f359b修复启动supersession漏verifier-v1的预存缺陷（误退休的151任务+151候选从备份恢复，reconcile复验一致）。
+- 切换执行：备份（recovery/20260911-before-zcode-recovery.sqlite3, sha256 bfbe64da…）→retire（v5/v3未执行238个退休，终态保留）→submit（695分歧→v7双cohort各87任务）→resume（02:40 CST）。只读彩排确认reconcile_with_verifier=800一致/695分歧。监控后台运行（cutover_v7_and_recover.py monitor，进程37522）。
+- 待办：裁决完成→剩余真医学问题评估→确认/激活→facts物化与抽查→P3纵切。Query工作区前端确认为从零新建（r7 API无对应端点，D10投影为域资产）。
