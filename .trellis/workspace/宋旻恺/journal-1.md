@@ -1398,3 +1398,17 @@ tools-v7两字段隔离双路一致，561项回归通过；独立ZCode审阅被�
 正式切换实施：e703784组合根四标志启用（导入级验证v12/v10-tools-v7+策略v2，隔离RUNTIME_DIR，无worker线程副作用）；4111ad8将tools-v7声明为当前裁决部署——启动supersession将退休正式库152 queued+3租约过期running旧v5/v3任务、保留11完成+8失败为终态审计证据；附带修复_current_monitoring_ai_revision的prompt_version防御性访问（预存测试腐化）与bridge测试新语义。719项通过。正式AI库切换前一致性备份：recovery/20260911-before-zcode-recovery.sqlite3（sha256 bfbe64da…f4689）。
 
 队列清点（只读）：首轮v19/v1各151全部completed保留；裁决旧合同g01仅完成11；87个g02保持退休。恢复路径：v7独立审阅worker（zcode/GLM-5.3-Flash:max新鲜会话，原9-08会话中止无恢复句柄）运行中；审阅收束后启动应用执行cutover→按pipeline提交未解决分片v7新工作单元→resume。尚未启动应用/模型；未生成facts。
+
+### 2026-09-11 接管续：切换准备就绪（等待v7审阅收束）
+
+前端批c800313：ProductLoop禁用词清零+snapshotToken兜底改文案；八轨标签统一为用户规范用词并以API注册表为单一来源；恢复无建议问题卡的"系统判断正确"一键确认（f76bf59收窄属回归，渲染测试钉住的UX合同为证）。死链清理e0198b7+d5b44b1：14组件+8配套mjs+6CSS+17测试共约11700行，删除前grep验证产品树零引用，medicalMonitoringFieldMappingState.mjs因活树消费保留；71项node套件+Vite build通过。
+
+步骤3准备：只读彩排reconcile_with_verifier在正式库成功——draft monmapdraft_da52157f v1(DRAFT)，1495字段=800一致+695分歧（AE域在列），auto_pass/dual_model_pass均false，正式路径至裁决提交无意外；reconcile_with_verifier内部用legacy比较（mapping_confirmation.py:1150未传新policy，已知既定状态），旧首轮候选无dependency_fields不阻断。切换脚本cutover_v7_and_recover.py已写入正式run目录（retire/submit/resume/monitor四相位，签名已核对），执行前置条件：v7独立审阅收束无阻断缺陷。worker仍在审阅（rollout持续写入）。
+
+### 2026-09-11 v7审阅收束+正式切换执行+误退休恢复
+
+独立审阅收束：zcode/GLM-5.3-Flash:max新鲜会话完成117行实质报告（冻结副本与1ce29f9逐字diff全SAME；五个审查重点全过：硬约束不丢/旧候选零改写/option_id同源交换不变/v4-v6复验兼容/版本名单完整；冻结副本内598测试通过）。3项观察：OBS-1生产未启v7（已被e703784+4111ad8解决，同实例前提已核）；OBS-2投影浅拷贝（无实害，扩展时再deepcopy）；OBS-3非dual场景fail-closed（既有行为）。审阅通过，不构成cutover验收。
+
+切换执行中发现并修复预存缺陷：启动supersession的current集漏了首轮verifier合同（monitoring-listing-field-mapping-verifier-v1）——retire相位把151个已完成verifier首轮任务+151候选误标stale_input/superseded，_completed_candidates将fail-closed。根因修复79204d5（main.py钩子补入verifier-v1+测试同步19f359b）；受损行从切换前一致性备份逐字节恢复（INSERT OR REPLACE单事务），reconcile复验800一致/695分歧无变化。该缺陷在原常量下同样存在，任何正式app重启都会触发，本次为首次暴露。
+
+正式切换完成：retire（v5/v3未执行任务238个stale_input，87个g02重标记，终态11+8保留）→submit（695分歧字段→v7双cohort各87任务queued，v12/v10-tools-v7）→resume（paused=0，primary 4并行+verifier 2并行执行中）。监控cutover_v7_and_recover.py monitor相位后台运行（30s轮询，≤120min，进程37522为worker宿主）。719项回归全绿。
