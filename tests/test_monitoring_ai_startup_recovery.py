@@ -10,6 +10,9 @@ from packages.medical_monitoring.admission import (
     MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS,
     MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS,
 )
+from packages.medical_monitoring.admission.mapping_gate import (
+    MONITORING_C3_VERIFIER_PROMPT_VERSION,
+)
 from packages.medical_monitoring.admission.document_authority import (
     CURRENT_PROMPT_VERSIONS_BY_TASK
     as DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK,
@@ -88,6 +91,7 @@ def test_startup_retires_old_prompt_contracts_before_waking_worker(
                 )
                 | (
                     MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS
+                    | {MONITORING_C3_VERIFIER_PROMPT_VERSION}
                     if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
                     else frozenset()
                 )
