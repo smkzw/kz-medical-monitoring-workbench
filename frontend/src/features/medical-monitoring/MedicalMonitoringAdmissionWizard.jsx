@@ -205,7 +205,13 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
                       onClick={() => onAnswerCard?.(card, card.suggestedAnswer ? null : card.reusablePriorAnswer)}
                     >
                       {card.suggestedAnswer ? `确认：${card.suggestedAnswer}` : `仍是：${card.reusablePriorAnswer}`}
-                    </button> : null}
+                    </button> : <button
+                      type="button"
+                      className="monitoring-admission-secondary"
+                      onClick={() => onAnswerCard?.(card, null)}
+                    >
+                      系统判断正确
+                    </button>}
                     {noteKey === card.key ? (
                       <span className="monitoring-admission-question-note">
                         <textarea

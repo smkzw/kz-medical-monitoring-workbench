@@ -431,7 +431,7 @@ export function MonitoringHistoryDrawer({ history, selectedPublicRunToken = "", 
     <div className="monitoring-product-overlay" role="presentation">
       <aside className="monitoring-history-drawer" role="dialog" aria-modal="true" aria-label="监查历史" data-monitoring-history-drawer>
         <header className="monitoring-drawer-head">
-          <div><span className="monitoring-eyebrow">监查记录</span><h2>历史</h2><p>按服务端顺序显示最近记录。</p></div>
+          <div><span className="monitoring-eyebrow">监查记录</span><h2>历史</h2><p>按开始时间显示最近记录。</p></div>
           <button type="button" className="monitoring-icon-button" aria-label="关闭历史" onClick={onClose}>关闭</button>
         </header>
         <div className="monitoring-history-list">
@@ -493,7 +493,7 @@ export function MonitoringWizardView({
                     <span className="monitoring-mode-card-marker" aria-hidden="true" />
                     <strong>{mode.label || "监查方式"}</strong>
                     <p>{mode.description}</p>
-                    {mode.recommended ? <small>服务端推荐：{mode.recommendationReason}</small> : null}
+                    {mode.recommended ? <small>系统推荐：{mode.recommendationReason}</small> : null}
                     {mode.available !== true ? <small className="is-disabled">{mode.disabledReason || "当前不可用"}</small> : null}
                   </button>
                 ))}
@@ -503,14 +503,14 @@ export function MonitoringWizardView({
           {step === 2 ? (
             <section className="monitoring-wizard-section" aria-labelledby="monitoring-wizard-scope-heading">
               <div className="monitoring-wizard-section-head"><div><span className="monitoring-eyebrow">第 2 步</span><h3 id="monitoring-wizard-scope-heading">确认数据范围</h3></div><p>{selectedMode?.description || ""}</p></div>
-              {dataBatches.length > 1 ? <label className="monitoring-data-picker"><span>数据版本</span><select value={wizard.currentSnapshotToken} onChange={(event) => setField("currentSnapshotToken", event.target.value)}>{dataBatches.map((batch) => <option value={batch.snapshotToken} key={batch.snapshotToken}>{batch.dataCutoff || batch.snapshotToken} · {batch.scopeDescription || "数据范围"}</option>)}</select></label> : null}
+              {dataBatches.length > 1 ? <label className="monitoring-data-picker"><span>数据版本</span><select value={wizard.currentSnapshotToken} onChange={(event) => setField("currentSnapshotToken", event.target.value)}>{dataBatches.map((batch) => <option value={batch.snapshotToken} key={batch.snapshotToken}>{batch.dataCutoff || "数据版本待确认"} · {batch.scopeDescription || "数据范围"}</option>)}</select></label> : null}
               <dl className="monitoring-wizard-facts">
                 <div><dt>当前数据</dt><dd>{selectedData.scopeDescription || "当前完整数据"}</dd></div>
                 <div><dt>数据截止</dt><dd>{selectedData.dataCutoff || "待确认"}</dd></div>
                 <div><dt>记录数量</dt><dd>{selectedData.rowCount ?? "待确认"}</dd></div>
               </dl>
               <fieldset className="monitoring-option-fieldset"><legend>执行基础</legend><div className="monitoring-choice-grid">{(wizard?.basisOptions || []).map((option) => <label key={option.value} className={`monitoring-choice-card${option.value === wizard.executionBasis ? " is-selected" : ""}`}><input type="radio" name="monitoring-execution-basis" value={option.value} checked={option.value === wizard.executionBasis} disabled={option.available !== true} onChange={() => setField("executionBasis", option.value)} /><span><strong>{option.label || "当前选项"}</strong>{option.disabledReason ? <small>{option.disabledReason}</small> : null}</span></label>)}</div></fieldset>
-              {wizard.executionBasis === "incremental" ? <fieldset className="monitoring-option-fieldset"><legend>比较基线</legend><div className="monitoring-baseline-list">{(wizard?.baselineOptions || []).map((option) => <label key={option.baselineToken} className={`monitoring-baseline-row${option.baselineToken === wizard.baselineToken ? " is-selected" : ""}`}><input type="radio" name="monitoring-baseline" value={option.baselineToken} checked={option.baselineToken === wizard.baselineToken} disabled={option.selectable !== true} onChange={() => setField("baselineToken", option.baselineToken)} /><span><strong>{option.scopeDescription || option.modeText || "已发布基线"}</strong><small>{option.dataCutoff || "截止时间待确认"}{option.recommended ? " · 服务端推荐" : ""}</small></span>{option.selectable !== true ? <em>{"当前不可用"}</em> : null}</label>)}</div></fieldset> : null}
+              {wizard.executionBasis === "incremental" ? <fieldset className="monitoring-option-fieldset"><legend>比较基线</legend><div className="monitoring-baseline-list">{(wizard?.baselineOptions || []).map((option) => <label key={option.baselineToken} className={`monitoring-baseline-row${option.baselineToken === wizard.baselineToken ? " is-selected" : ""}`}><input type="radio" name="monitoring-baseline" value={option.baselineToken} checked={option.baselineToken === wizard.baselineToken} disabled={option.selectable !== true} onChange={() => setField("baselineToken", option.baselineToken)} /><span><strong>{option.scopeDescription || option.modeText || "已发布基线"}</strong><small>{option.dataCutoff || "截止时间待确认"}{option.recommended ? " · 系统推荐" : ""}</small></span>{option.selectable !== true ? <em>{"当前不可用"}</em> : null}</label>)}</div></fieldset> : null}
             </section>
           ) : null}
           {step === 3 ? (
@@ -524,7 +524,7 @@ export function MonitoringWizardView({
           {step === 4 ? (
             <section className="monitoring-wizard-section" aria-labelledby="monitoring-wizard-confirm-heading">
               <div className="monitoring-wizard-section-head"><div><span className="monitoring-eyebrow">第 4 步</span><h3 id="monitoring-wizard-confirm-heading">确认并开始</h3></div><p>开始后将进入本次监查进度；离开页面不会停止本次监查。</p></div>
-              <dl className="monitoring-confirm-summary"><div><dt>监查方式</dt><dd>{wizard?.summary?.modeText || "待确认"}</dd></div><div><dt>数据范围</dt><dd>{wizard?.summary?.scopeDescription || currentData.scopeDescription || "待确认"}</dd></div><div><dt>数据截止</dt><dd>{wizard?.summary?.dataCutoffText || currentData.dataCutoff || "待确认"}</dd></div><div><dt>比较基线</dt><dd>{wizard?.summary?.comparisonRangeText || "不使用上次结果"}</dd></div><div><dt>中心数量</dt><dd>{wizard?.serverSummary?.centerCount ?? "开始后由服务端确认"}</dd></div><div><dt>受试者数量</dt><dd>{wizard?.serverSummary?.subjectCount ?? "开始后由服务端确认"}</dd></div><div><dt>特殊关注</dt><dd>{wizard?.summary?.selectedRuleCount ?? wizard?.riskRuleTokens?.length ?? 0} 项</dd></div><div><dt>工作项总数</dt><dd>{wizard?.serverSummary?.workItemCount ?? "开始后由服务端确认"}</dd></div></dl>
+              <dl className="monitoring-confirm-summary"><div><dt>监查方式</dt><dd>{wizard?.summary?.modeText || "待确认"}</dd></div><div><dt>数据范围</dt><dd>{wizard?.summary?.scopeDescription || currentData.scopeDescription || "待确认"}</dd></div><div><dt>数据截止</dt><dd>{wizard?.summary?.dataCutoffText || currentData.dataCutoff || "待确认"}</dd></div><div><dt>比较基线</dt><dd>{wizard?.summary?.comparisonRangeText || "不使用上次结果"}</dd></div><div><dt>中心数量</dt><dd>{wizard?.serverSummary?.centerCount ?? "开始后由系统确认"}</dd></div><div><dt>受试者数量</dt><dd>{wizard?.serverSummary?.subjectCount ?? "开始后由系统确认"}</dd></div><div><dt>特殊关注</dt><dd>{wizard?.summary?.selectedRuleCount ?? wizard?.riskRuleTokens?.length ?? 0} 项</dd></div><div><dt>工作项总数</dt><dd>{wizard?.serverSummary?.workItemCount ?? "开始后由系统确认"}</dd></div></dl>
             </section>
           ) : null}
           {wizard?.errorText ? <p className="monitoring-wizard-error" role="alert">{wizard.errorText}</p> : null}
@@ -1262,7 +1262,7 @@ export function MedicalMonitoringProductLoop({
       ? "使用“查看本次结果”打开本次已发布结果；如有正在进行的监查，可从工作条返回进度。"
       : productState.kind === "active_run"
         ? "工作条中的“查看本次进度”进入真实进度页面。"
-        : "工作条中的操作会读取服务端范围与历史，不使用本地示例结果。";
+        : "工作条中的操作会读取已导入的研究数据与历史，不使用本地示例结果。";
   return (
     <main className="monitoring-page monitoring-product-page" data-monitoring-view={routeView} data-monitoring-product-state={productStatus} data-monitoring-product-view={routeView}>
       <header className="monitoring-page-header monitoring-product-header">

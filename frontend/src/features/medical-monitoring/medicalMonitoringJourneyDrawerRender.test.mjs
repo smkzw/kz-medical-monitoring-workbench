@@ -69,7 +69,7 @@ for (const domain of ["ae", "mh", "cm", "ip", "lab_exam", "hospital_procedure", 
 check(axis.includes('id="monitoring-journey-axis-title"'), "shared axis title carries the stable focus-restore id");
 check(axis.includes('tabindex="-1"'), "axis title is focusable as the drawer restore target");
 check(axis.includes("筛选访视") && axis.includes("第 2 次访视"), "visit axis nodes render on the same axis");
-for (const label of ["合并用药", "试验用药", "检验检查", "诊疗操作", "疗效/症状", "方案执行"]) {
+for (const label of ["合并用药", "试验用药", "检验/检查", "住院/操作", "症状/疗效", "方案符合性"]) {
   check(axis.includes(label), `axis uses the frozen Chinese-native domain label ${label}`);
 }
 passed += 11;

@@ -199,7 +199,7 @@ check(!renders.confirm.includes("subject_id"), "technical role stays out of the 
 // Drafting: answer controls appear and confirmation waits for every answer.
 check(renders.confirmDrafting.includes("已完成 0/1"), "answer progress rendered");
 check(renders.confirmDrafting.includes(">系统判断正确</button>"), "one-tap confirmation offered");
-check(renders.confirmDrafting.includes(">不是，说明实际含义</button>"), "free-text alternative offered");
+check(renders.confirmDrafting.includes(">说明实际含义</button>"), "free-text alternative offered");
 check(
   renders.confirmDrafting.includes('aria-label="补充实际医学含义"') === false,
   "note field appears only after choosing 另有情况",
@@ -231,7 +231,7 @@ check(!renders.done.includes("adm-20260902-0001"), "attempt record identity rema
 check(renders.done.includes("无需逐项确认"), "post-confirm facts generate automatically");
 check(renders.done.includes("正在生成监查数据"), "done primary reports automatic progress");
 check(renders.doneReady.includes("监查数据已准备完成"), "ready outcome names the user result");
-check(renders.doneReady.includes("系统已自动核对640 个原始数据位置"), "ready outcome explains automatic source alignment");
+check(renders.doneReady.includes("已核对 640 个原始数据位置"), "ready outcome explains automatic source alignment");
 check(renders.doneReady.includes("已整理 3 张数据表、128 条记录、640 个数据项"), "ready outcome summarizes generated data");
 check(renders.doneReady.includes("无需逐项检查"), "ready outcome removes manual verification burden");
 check(renders.doneReady.includes("进入医学监查"), "ready outcome offers one clear next action");

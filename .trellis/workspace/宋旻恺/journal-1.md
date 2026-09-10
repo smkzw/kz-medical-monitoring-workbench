@@ -1390,3 +1390,11 @@ tools-v7两字段隔离双路一致，561项回归通过；独立ZCode审阅被�
 ### 2026-09-11 完整Agent交接（运行仍暂停）
 
 按用户要求形成`HANDOFF_MEDICAL_MONITORING_20260911.md`及`handoff-evidence-20260911/`附件。机制direct，仅文档与只读核验，不派新模型、不恢复产品。交接文档载明当前goal原文、需求演变、A/B重构、P0–P6进度、组件/证据地图、停滞原因及可执行恢复步骤。现场确认HEAD18ddfe3/逻辑1ce29f9、正式MG paused=1、571任务/321候选、8911停止；独立v7审阅未完成。新增DM/评分SDV同名listing差异证据：单元格对比未见差异，隐藏/筛选/命名范围等元数据不同，下一正式恢复须核对来源及复用合同。产品源码、原始资料、运行库、历史回执和goal均未改，详细结果合并implement.md最新记录。
+
+### 2026-09-11 ZCode接管：review、计划更新与v7正式切换（进行中）
+
+用户授权ZCode(GLM-5.3)完整接管并连续实施。重新锚定：HEAD db5543e、正式MG paused=1、571/321/87、8911停止，与交接一致；710项聚焦回归通过。接管review见MM_TAKEOVER_REVIEW_20260911.md（P0：组合根未启v7、真实链未通、Query工作区实际不存在；P1：payload无内容寻址层、ProductLoop术语泄漏；P2清理清单：约5000行死代码链等）。MG来源决策：保持SDV冻结版，9.DM记等价备选。机制修正：goal-prompt.md废止"不用外部执行/会商"旧条款。文档提交fd6de5a。
+
+正式切换实施：e703784组合根四标志启用（导入级验证v12/v10-tools-v7+策略v2，隔离RUNTIME_DIR，无worker线程副作用）；4111ad8将tools-v7声明为当前裁决部署——启动supersession将退休正式库152 queued+3租约过期running旧v5/v3任务、保留11完成+8失败为终态审计证据；附带修复_current_monitoring_ai_revision的prompt_version防御性访问（预存测试腐化）与bridge测试新语义。719项通过。正式AI库切换前一致性备份：recovery/20260911-before-zcode-recovery.sqlite3（sha256 bfbe64da…f4689）。
+
+队列清点（只读）：首轮v19/v1各151全部completed保留；裁决旧合同g01仅完成11；87个g02保持退休。恢复路径：v7独立审阅worker（zcode/GLM-5.3-Flash:max新鲜会话，原9-08会话中止无恢复句柄）运行中；审阅收束后启动应用执行cutover→按pipeline提交未解决分片v7新工作单元→resume。尚未启动应用/模型；未生成facts。
