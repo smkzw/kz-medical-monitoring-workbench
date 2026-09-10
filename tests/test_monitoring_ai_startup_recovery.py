@@ -325,7 +325,7 @@ def test_main_listing_revision_path_delegates_to_lightweight_helper(
     monkeypatch.setattr(
         app_main,
         "current_monitoring_ai_revision",
-        lambda repository, batch_repository, current_job: (
+        lambda repository, batch_repository, current_job, **_kwargs: (
             calls.append((repository, batch_repository, current_job))
             or "c" * 64
         ),
