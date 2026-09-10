@@ -3635,6 +3635,14 @@ _r7_admission_mapping_pipeline = AdmissionMappingPipeline(
     verifier_ai_service=monitoring_ai_verifier_service,
     require_document_evidence=True,
     document_evidence_resolver=monitoring_document_evidence_resolver.resolve,
+    # tools-v7 adjudication contract (v12/v10 prompts): evidence-tool reads,
+    # explicit dependency_fields, visual reads, and prior-proof-free option
+    # projection with role-equivalence certificates. Validated in isolation
+    # through runs/mm_p2_tool_trial_20260906 (v6 9-field + v7 residue runs).
+    adjudication_tool_reads=True,
+    explicit_mapping_dependencies=True,
+    visual_tool_reads=True,
+    role_equivalence=True,
 )
 _r7_admission_mapping_confirmation = AdmissionMappingConfirmationService(
     mapping_pipeline=_r7_admission_mapping_pipeline,
