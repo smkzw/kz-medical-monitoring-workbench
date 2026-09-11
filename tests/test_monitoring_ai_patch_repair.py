@@ -246,20 +246,27 @@ def test_v7_prompt_keeps_frozen_full_repair(tmp_path: Path) -> None:
 def test_custom_domain_field_error_localizes_for_patch() -> None:
     from services.api.app.monitoring_ai_contracts import MonitoringAiTaskType
 
-    targets = MonitoringAiService._patch_repair_targets(
-        SimpleNamespace(
-            task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
-            prompt_version=V71_PRIMARY,
-        ),
-        {"candidates": [{"structured_payload": {"field_mappings": [
-            {"domain": "AE", "source_field": "AECO"}
-        ]}}]},
+    output = {"candidates": [{"structured_payload": {"field_mappings": [
+        {"domain": "AE", "source_field": "AECO"}
+    ]}}]}
+    # Both the bare custom error and the controlled-formatter prefixed form
+    # (observed in the real v7.1 isolated trial) must localize.
+    for text in (
         "AE/AECO: role_equivalence_axis_invalid:object",
-    )
-    assert targets == [
-        {
-            "domain": "AE",
-            "source_field": "AECO",
-            "errors": ["role_equivalence_axis_invalid:object"],
-        }
-    ]
+        "MonitoringAiOutputValidationError: AE/AECO: role_equivalence_axis_invalid:object",
+    ):
+        targets = MonitoringAiService._patch_repair_targets(
+            SimpleNamespace(
+                task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+                prompt_version=V71_PRIMARY,
+            ),
+            output,
+            text,
+        )
+        assert targets == [
+            {
+                "domain": "AE",
+                "source_field": "AECO",
+                "errors": ["role_equivalence_axis_invalid:object"],
+            }
+        ]
