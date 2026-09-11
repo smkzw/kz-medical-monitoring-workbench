@@ -1446,3 +1446,7 @@ v7.1部分进度快照：primary 3完成/5失败/75排队/4租约running；verif
 本会话（ZCode接管连续实施）总提交链：fd6de5a接管review/plan→e703784组合根v7接线→4111ad8 v7当前部署→c800313前端术语/标签/一键确认→e0198b7+d5b44b1死链清理11700行→79204d5+19f359b verifier-v1启动集修复+误退休恢复→e177a93 v7.1补丁式修复合同→33211d9前缀剥离修复→（evidence_ids纪律句已提交）→文档提交若干。v7独立工程审阅已收束通过（current-options-20260908 general_single_object.md，117行实质报告）。
 
 恢复顺序（下一位Agent）：读本journal尾部+implement.md 2026-09-11段→核对git log与队列状态→resume相位（cutover_v7_and_recover.py resume：expire leases+unpause+wake，或直接重启watcher worker_host_until_drained.py，其已修正v7.1匹配）→排空后LOOP-5（adjudicate_draft轮询推进receipts/采纳）→LOOP-6 facts→LOOP-7 P3纵切+Query工作区。隔离试验证据v71_patch_trial_r3双cohort completed；恢复MG不需要重跑隔离验证。
+
+### 2026-09-11 20:36 用户恢复连续实施（LOOP-4续）
+
+锚定核验与暂停记录一致（paused=1、P 3/5/75/4、V 3/2/80/2、零进程、HEAD 965ae93）。租约已自然过期。执行恢复：unpause + watcher重启（pid 97071，10h预算），90秒内8任务运行（含过期租约回收）。后续按暂停记录顺序推进。
