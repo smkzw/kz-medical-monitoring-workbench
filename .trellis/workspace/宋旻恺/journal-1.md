@@ -1428,3 +1428,7 @@ tools-v7两字段隔离双路一致，561项回归通过；独立ZCode审阅被�
 v7.1实施（e177a93，726项回归含7项新测试）：v13/verifier-v11-tools-v7.1注册入STRICT并集链+新PATCH_REPAIR_MAPPING_PROMPT_VERSIONS集合；pipeline role_equivalence=True切换v7.1对（current常量同步，v7降legacy terminal）；系统提示新增输出键名纪律块（显式禁用键清单+轴对象形状+user_action非空）；修复信封补丁模式——初始输出已解析且违规可定位到字段条目时，修复轮只重发违规字段完整条目，服务按(domain,source_field)整条位置替换后走未改动的全量校验；未知/重复/空补丁目标fail-closed；不可定位错误保留冻结的全量重建合同；v7提示保持冻结行为。隔离验证脚本v71_patch_trial.py就绪（同域失败分片双路重放）。
 
 LOOP-4机制确认：等价采用签名含prompt_version，v7完成结果按设计不可复用于v7.1——正式恢复走v7.1全量重提（695字段统一代），94个v7完成结果留审计历史。
+
+### 2026-09-11 LOOP轮次3：隔离真实双路验证通过
+
+v71_patch_trial三轮迭代：(r1)暴露前缀剥离bug——受控错误格式"ClassName: DOMAIN/FIELD: msg"使补丁定位正则失配，修复33211d9；(r2)补丁机制完整工作——verifier初始违规(role_equivalence_option_set_mismatch)正确定位LB_CHEM/实验室指标名称，修复轮只重发该字段(2348字符vs初始7062)，拼接+全量复验执行；但暴露第二真实缺陷——补丁条目五维齐全形状正确却省略字段级evidence_ids，轴引用画像证据不在bind允许集(service:7112 allowed=mapping.evidence_ids)，补一句精确纪律(同提交)；(r3)双cohort均completed——旧失败verifier分片首过，primary连续两轮通过。结论：v7.1键名纪律块为主效、补丁修复为安全网；机制与提示均经真实双模型证据。准备LOOP-4正式重提。
