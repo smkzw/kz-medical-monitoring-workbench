@@ -202,3 +202,13 @@
 - 代码批：e703784组合根四标志；4111ad8 v7为当前裁决部署；c800313前端术语/标签/一键确认恢复；e0198b7+d5b44b1死链清理约11700行；79204d5+19f359b修复启动supersession漏verifier-v1的预存缺陷（误退休的151任务+151候选从备份恢复，reconcile复验一致）。
 - 切换执行：备份（recovery/20260911-before-zcode-recovery.sqlite3, sha256 bfbe64da…）→retire（v5/v3未执行238个退休，终态保留）→submit（695分歧→v7双cohort各87任务）→resume（02:40 CST）。只读彩排确认reconcile_with_verifier=800一致/695分歧。监控后台运行（cutover_v7_and_recover.py monitor，进程37522）。
 - 待办：裁决完成→剩余真医学问题评估→确认/激活→facts物化与抽查→P3纵切。Query工作区前端确认为从零新建（r7 API无对应端点，D10投影为域资产）。
+
+#### 2026-09-11 构建LOOP与v7.1（ZCode连续实施；以用户无损暂停收尾）
+
+用户指令按plan/goal执行构建-测试-优化-再构建LOOP。轮次记录：
+- LOOP-1 排空分析：v7首轮裁决174任务=94完成/80失败；失败=修复轮长JSON重发解析失败26+键名错位/证书轴形状/空user_action等（详见journal 2026-09-11段）。
+- LOOP-2 v7.1合同（e177a93+33211d9+纪律句提交）：v13/verifier-v11-tools-v7.1；输出键名纪律块；补丁式受控修复（违规可定位时只重发违规字段整条，服务按(domain,source_field)整条替换后全量复验；不可定位保留冻结全量重建；v7冻结不动）；726项回归含7项新测试。
+- LOOP-3 隔离真实双路验证：三轮迭代修复两个真实缺陷（错误前缀剥离、axis证据须镜像到字段evidence_ids），r3双cohort均completed（旧失败verifier分片首过）。证据runs/mm_p2_tool_trial_20260906/v71_patch_trial_r3_20260911.log。
+- LOOP-4 正式v7.1全量重提：695分歧字段统一代双cohort各87分片提交并运行；等价采用签名含prompt_version，v7结果按设计不复用。用户无损暂停时部分进度：P 3完成/5失败/75排队/4租约；V 3/2/80/2。watcher已停、队列paused=1、在途已落盘。
+
+恢复步骤：(1)核对journal 2026-09-11尾部与git log；(2)重启watcher（worker_host_until_drained.py，已修正v7.1匹配）或cutover resume相位，租约过期由repository合法回收；(3)排空后adjudicate_draft轮询推进LOOP-5 receipts采纳；(4)LOOP-6确认/激活→facts物化与原单元格抽查；(5)LOOP-7 P3纵切+Query工作区（从零新建）。隔离验证无需重跑。
