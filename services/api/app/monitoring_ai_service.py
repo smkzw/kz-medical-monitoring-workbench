@@ -3964,8 +3964,18 @@ class MonitoringAiService:
                     break
                 violations.setdefault(int(index_text), []).append(message)
         else:
-            # Custom fail-closed errors localize as "DOMAIN/FIELD: message".
-            match = re.match(r"^([^/:\s]{1,80})/([^/:\s]{1,240}): (.+)$", validation_errors, re.DOTALL)
+            # Custom fail-closed errors localize as "DOMAIN/FIELD: message",
+            # optionally behind a "ClassName: " prefix added by the controlled
+            # error formatter.
+            error_body = validation_errors
+            prefix_match = re.match(r"^[A-Za-z_.]+Error: ", error_body)
+            if prefix_match is not None:
+                error_body = error_body[prefix_match.end():]
+            match = re.match(
+                r"^([^/:\s]{1,80})/([^/:\s]{1,240}): (.+)$",
+                error_body,
+                re.DOTALL,
+            )
             if match is None:
                 return []
             domain, source_field, message = match.groups()
