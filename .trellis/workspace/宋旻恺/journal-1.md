@@ -1420,3 +1420,11 @@ tools-v7两字段隔离双路一致，561项回归通过；独立ZCode审阅被�
 ### 2026-09-11 运行继续+配对机制确认+v7.1方向
 
 失败构成修正：20个primary失败=12双轮内容失败+8修复轮解析失败（非单一根因）。修复信封已含must_be_unmapped等确定性约束与指引，模型仍不满足。resolved=0机制确认：分片按域切分，双cohort按created_at顺序不同处理不同域，配对在运行后期自然形成，非缺陷；receipts将在配对后落盘。自愈worker宿主watcher（worker_host_until_drained.py，pid 90858）接管monitor窗口结束后的worker托管，队列排空或8h截止时退出并通知。v7.1设计方向（待运行结束后的残差处理）：修复轮补丁式输出（只重发违规字段，降低长输出JSON失误）+确定性可判分歧的系统预裁决（如全空列unmapped无需模型重推）——均为合同变更，需新prompt版本+隔离验证+独立复核后才能正式使用。
+
+### 2026-09-11 LOOP轮次1-2：排空分析→v7.1补丁式修复合同
+
+排空终态：174任务=94完成/80失败（primary 32/55，verifier 62/25）。失败构成（含修复轮）：primary 55=26修复轮长JSON解析失败（包装记录为schema_version缺失/extra_forbidden）+11空user_action+2治疗锚点+1空响应+若干键名错位；verifier 25=15证书轴形状无效+5键名错位+2锚点+3其他。根因归纳：修复轮要求重发11-21k字符完整JSON在长输出上格式失误；模型对证书键名/位置猜测（role_equivalence_evidence放字段级、counterevidence_summary散出、dimensions轴给字符串）；user_action空串。
+
+v7.1实施（e177a93，726项回归含7项新测试）：v13/verifier-v11-tools-v7.1注册入STRICT并集链+新PATCH_REPAIR_MAPPING_PROMPT_VERSIONS集合；pipeline role_equivalence=True切换v7.1对（current常量同步，v7降legacy terminal）；系统提示新增输出键名纪律块（显式禁用键清单+轴对象形状+user_action非空）；修复信封补丁模式——初始输出已解析且违规可定位到字段条目时，修复轮只重发违规字段完整条目，服务按(domain,source_field)整条位置替换后走未改动的全量校验；未知/重复/空补丁目标fail-closed；不可定位错误保留冻结的全量重建合同；v7提示保持冻结行为。隔离验证脚本v71_patch_trial.py就绪（同域失败分片双路重放）。
+
+LOOP-4机制确认：等价采用签名含prompt_version，v7完成结果按设计不可复用于v7.1——正式恢复走v7.1全量重提（695字段统一代），94个v7完成结果留审计历史。
