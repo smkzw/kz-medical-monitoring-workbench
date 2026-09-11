@@ -1432,3 +1432,7 @@ LOOP-4机制确认：等价采用签名含prompt_version，v7完成结果按设�
 ### 2026-09-11 LOOP轮次3：隔离真实双路验证通过
 
 v71_patch_trial三轮迭代：(r1)暴露前缀剥离bug——受控错误格式"ClassName: DOMAIN/FIELD: msg"使补丁定位正则失配，修复33211d9；(r2)补丁机制完整工作——verifier初始违规(role_equivalence_option_set_mismatch)正确定位LB_CHEM/实验室指标名称，修复轮只重发该字段(2348字符vs初始7062)，拼接+全量复验执行；但暴露第二真实缺陷——补丁条目五维齐全形状正确却省略字段级evidence_ids，轴引用画像证据不在bind允许集(service:7112 allowed=mapping.evidence_ids)，补一句精确纪律(同提交)；(r3)双cohort均completed——旧失败verifier分片首过，primary连续两轮通过。结论：v7.1键名纪律块为主效、补丁修复为安全网；机制与提示均经真实双模型证据。准备LOOP-4正式重提。
+
+### 2026-09-11 LOOP轮次4：正式v7.1全量重提（运行中）
+
+隔离验证通过后执行正式重提：cutover submit相位在正式队列创建v7.1双cohort各87分片（v13/verifier-v11-tools-v7.1，695分歧字段统一代；v7的94完成+80失败保留为旧命名空间审计历史，等价采用签名含prompt_version按设计不复用）。watcher修正排空查询(%tools-v7→%tools-v7.1前缀匹配，首次误判退出已重启pid 61153，10h预算)。运行吞吐与v7相当(4+2并行)，预计4-6小时排空。后续：排空后adjudicate_draft轮询推进receipts落地(LOOP-5)→剩余真医学问题评估→确认激活→facts物化(LOOP-6)。恢复锚点：worker_host_v71_20260911.log；DB查询用LIKE '%v7.1'。
