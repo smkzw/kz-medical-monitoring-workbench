@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import threading
 from copy import deepcopy
@@ -63,7 +64,7 @@ from .monitoring_ai_contracts import (
     validate_candidates_for_job,
 )
 from .monitoring_evidence_tool_loop import EvidenceToolLoopError
-from packages.medical_monitoring.admission.evidence_tool_contract import DEPENDENCY_MAPPING_PROMPT_VERSIONS, VISUAL_MAPPING_PROMPT_VERSIONS, ROLE_EQUIVALENCE_PROMPT_VERSIONS, ROLE_EQUIVALENCE_EVIDENCE_PROMPT_VERSIONS, STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS
+from packages.medical_monitoring.admission.evidence_tool_contract import DEPENDENCY_MAPPING_PROMPT_VERSIONS, VISUAL_MAPPING_PROMPT_VERSIONS, ROLE_EQUIVALENCE_PROMPT_VERSIONS, ROLE_EQUIVALENCE_EVIDENCE_PROMPT_VERSIONS, STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS, PATCH_REPAIR_MAPPING_PROMPT_VERSIONS
 from .monitoring_ai_repository import (
     MonitoringAiRepository,
     MonitoringAiStateConflictError,
@@ -2512,6 +2513,15 @@ class MonitoringAiService:
                 if stale_result is not None:
                     return stale_result
                 try:
+                    if (
+                        "patch_contract" in repair_envelope.payload
+                        and isinstance(initial_output, Mapping)
+                        and isinstance(repaired_output, Mapping)
+                    ):
+                        repaired_output = self._apply_field_patch(
+                            initial_output,
+                            repaired_output,
+                        )
                     candidates = self._parse_provider_output(
                         job,
                         repaired_output,
@@ -3627,6 +3637,19 @@ class MonitoringAiService:
                 "role_equivalence只是该数组中某一字段的可选属性，不能单独返回。"
                 "需要更多证据则先输出工具请求；完成时逐项核查字段数量及最外层括号完整。"
             )
+        if job.prompt_version in PATCH_REPAIR_MAPPING_PROMPT_VERSIONS:
+            system_prompt += (
+                " 输出键名纪律：field_mappings每个条目只能包含output_schema列出的键。"
+                "等价证书只能挂在条目的role_equivalence键下；不得输出"
+                "role_equivalence_evidence、role_equivalence_evidence_ids、"
+                "counterevidence_summary（字段级）、source_label、dependency_fields_note、"
+                "text_for_uncertain、repair_note、answer等任何未列键名——它们是输入侧说明或"
+                "声明内部属性，不是输出键。counterevidence_summary只在role_equivalence对象内部；"
+                "dimensions每个维度都是{relation,evidence_ids,rationale}对象而不是字符串。"
+                "user_action必须是非空中文说明；无用户事项时写明依据（如“无需确认：证据一致”），"
+                "不得输出空字符串。修复轮按patch_contract只重发违规字段的完整条目，"
+                "保持严格JSON、输出尽量短。"
+            )
         return AiPromptEnvelope(
             task_id=job.job_id,
             task_type=AI_TASK_TYPE_BY_MONITORING_TASK[job.task_type],
@@ -3881,6 +3904,155 @@ class MonitoringAiService:
             )
         )
 
+    @staticmethod
+    def _patch_repair_targets(
+        job: MonitoringAiJob,
+        invalid_output: Any,
+        validation_errors: str,
+    ) -> List[Dict[str, Any]]:
+        """Localize repairable violations to whole field-mapping entries.
+
+        Patch mode applies only when every violation is attributable to
+        specific field entries of an already-JSON-parsed initial output;
+        any envelope-level or unlocalizable error keeps the frozen
+        full-rebuild contract. Targets are (domain, source_field) pairs
+        resolved from the initial output's own field order — never from
+        column-name inference.
+        """
+
+        if (
+            job.task_type != MonitoringAiTaskType.LISTING_FIELD_MAPPING
+            or job.prompt_version not in PATCH_REPAIR_MAPPING_PROMPT_VERSIONS
+            or not isinstance(invalid_output, Mapping)
+        ):
+            return []
+        try:
+            base_fields = invalid_output["candidates"][0][
+                "structured_payload"
+            ]["field_mappings"]
+            if not isinstance(base_fields, list) or not base_fields:
+                return []
+        except (KeyError, IndexError, TypeError):
+            return []
+        violations: Dict[int, List[str]] = {}
+        unlocalizable = False
+        errors: Any = None
+        error_text = validation_errors
+        # Wrapped pydantic errors carry a "ClassName: " prefix before the
+        # JSON list; strip it so the list itself can be parsed.
+        list_start = error_text.find("[")
+        if list_start > 0:
+            error_text = error_text[list_start:]
+        try:
+            errors = json.loads(error_text)
+        except (ValueError, TypeError):
+            errors = None
+        if isinstance(errors, list) and errors and all(
+            isinstance(item, dict) for item in errors
+        ):
+            for item in errors:
+                path = str(item.get("path") or "")
+                message = str(item.get("message") or item.get("type") or "")
+                if not path.startswith("field_mappings."):
+                    unlocalizable = True
+                    break
+                message = f"{path}: {message}" if path else message
+                tail = path[len("field_mappings."):]
+                index_text = tail.split(".", 1)[0].split("[", 1)[0]
+                if not index_text.isdigit():
+                    unlocalizable = True
+                    break
+                violations.setdefault(int(index_text), []).append(message)
+        else:
+            # Custom fail-closed errors localize as "DOMAIN/FIELD: message".
+            match = re.match(r"^([^/:\s]{1,80})/([^/:\s]{1,240}): (.+)$", validation_errors, re.DOTALL)
+            if match is None:
+                return []
+            domain, source_field, message = match.groups()
+            for index, field in enumerate(base_fields):
+                if (
+                    str(field.get("domain") or "") == domain
+                    and str(field.get("source_field") or "") == source_field
+                ):
+                    violations.setdefault(index, []).append(message)
+                    break
+            else:
+                return []
+        if unlocalizable or not violations:
+            return []
+        targets: List[Dict[str, Any]] = []
+        for index in sorted(violations):
+            field = base_fields[index]
+            targets.append(
+                {
+                    "domain": str(field.get("domain") or ""),
+                    "source_field": str(field.get("source_field") or ""),
+                    "errors": violations[index][:10],
+                }
+            )
+        return targets
+
+    @staticmethod
+    def _apply_field_patch(
+        initial_output: Mapping[str, Any],
+        patch_output: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        """Splice whole patched field entries back into the initial output.
+
+        Replacement is positional by exact (domain, source_field) identity;
+        no partial merge, no key-level edit, no semantic transformation.
+        The merged document then goes through the full unmodified
+        validation pipeline, so a bad patch fails exactly like a bad
+        full rebuild would.
+        """
+
+        try:
+            patch_fields = patch_output["candidates"][0]["structured_payload"][
+                "field_mappings"
+            ]
+            if not isinstance(patch_fields, list) or not patch_fields:
+                raise KeyError("empty field patch")
+        except (KeyError, IndexError, TypeError) as exc:
+            raise MonitoringAiOutputValidationError(
+                f"field patch payload invalid: {exc}"
+            ) from exc
+        merged = deepcopy(dict(initial_output))
+        try:
+            base_fields = merged["candidates"][0]["structured_payload"][
+                "field_mappings"
+            ]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise MonitoringAiOutputValidationError(
+                f"initial output not patchable: {exc}"
+            ) from exc
+        index = {
+            (str(field.get("domain") or ""), str(field.get("source_field") or "")): position
+            for position, field in enumerate(base_fields)
+        }
+        replaced: set = set()
+        for patched in patch_fields:
+            if not isinstance(patched, Mapping):
+                raise MonitoringAiOutputValidationError(
+                    "field patch entry is not an object"
+                )
+            key = (
+                str(patched.get("domain") or ""),
+                str(patched.get("source_field") or ""),
+            )
+            if key not in index:
+                raise MonitoringAiOutputValidationError(
+                    "field patch target not present in original output"
+                )
+            if key in replaced:
+                raise MonitoringAiOutputValidationError(
+                    "field patch target emitted twice"
+                )
+            base_fields[index[key]] = dict(patched)
+            replaced.add(key)
+        if not replaced:
+            raise MonitoringAiOutputValidationError("field patch empty")
+        return merged
+
     def _build_repair_envelope(
         self,
         job: MonitoringAiJob,
@@ -3890,6 +4062,14 @@ class MonitoringAiService:
         validation_diagnostics: Sequence[Dict[str, Any]] = (),
     ) -> AiPromptEnvelope:
         base = self._build_prompt_envelope(job, input_payload)
+        # v7.1 residue contract: when the initial output parsed as a JSON
+        # object and the violations localize to specific field entries, the
+        # repair round re-emits only those entries (patch mode). The service
+        # splices whole replaced entries back positionally; no partial merge
+        # or semantic edit ever happens on either side.
+        patch_targets = self._patch_repair_targets(
+            job, invalid_output, validation_errors
+        )
         deterministic_field_constraints: Optional[Dict[str, Any]] = None
         if job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING:
             fields = base.payload["input_payload"]["field_profile"]["fields"]
@@ -4010,6 +4190,53 @@ class MonitoringAiService:
                     ),
                 }
             )
+        if patch_targets:
+            patch_field_template = deepcopy(
+                base.payload["output_schema"]["candidates"][0]
+                ["structured_payload"]["field_mappings"][0]
+            )
+            repair_payload["output_schema"] = {
+                "schema_version": MONITORING_AI_SCHEMA_VERSION,
+                "task_id": job.job_id,
+                "task_type": job.task_type.value,
+                "input_revision_sha256": job.input_revision_sha256,
+                "candidates": [
+                    {
+                        "candidate_type": (
+                            base.payload["output_schema"]["candidates"][0]
+                            ["candidate_type"]
+                        ),
+                        "title": "字段修复补丁",
+                        "text": "仅包含被修复字段的完整field_mappings条目",
+                        "structured_payload": {
+                            "field_mappings": [patch_field_template]
+                        },
+                    }
+                ],
+            }
+            repair_payload["patch_contract"] = {
+                "attempt": 1,
+                "maximum_repairs": 1,
+                "scope": "violating_fields_only",
+                "violating_fields": patch_targets,
+                "instruction": (
+                    "只重新输出violating_fields中列出的字段的完整"
+                    "field_mappings条目（每条整条重发，不是部分合并）。"
+                    "candidates恰好一个，其structured_payload."
+                    "field_mappings只包含这些字段、每条恰好一次，"
+                    "不得包含其他字段。最外层schema_version、task_id、"
+                    "task_type、input_revision_sha256逐字复制。每条完整包含"
+                    "output_schema列出的全部必填键，且不得包含任何未列出的键。"
+                    "系统会把补丁条目按domain/source_field整条替换回原输出后"
+                    "重新全量校验。"
+                ),
+            }
+            repair_payload["repair_contract"] = {
+                "attempt": 1,
+                "maximum_repairs": 1,
+                "scope": "violating_fields_only",
+                "instruction": repair_payload["patch_contract"]["instruction"],
+            }
         if job.task_type in {
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
