@@ -1436,3 +1436,13 @@ v71_patch_trial三轮迭代：(r1)暴露前缀剥离bug——受控错误格式"
 ### 2026-09-11 LOOP轮次4：正式v7.1全量重提（运行中）
 
 隔离验证通过后执行正式重提：cutover submit相位在正式队列创建v7.1双cohort各87分片（v13/verifier-v11-tools-v7.1，695分歧字段统一代；v7的94完成+80失败保留为旧命名空间审计历史，等价采用签名含prompt_version按设计不复用）。watcher修正排空查询(%tools-v7→%tools-v7.1前缀匹配，首次误判退出已重启pid 61153，10h预算)。运行吞吐与v7相当(4+2并行)，预计4-6小时排空。后续：排空后adjudicate_draft轮询推进receipts落地(LOOP-5)→剩余真医学问题评估→确认激活→facts物化(LOOP-6)。恢复锚点：worker_host_v71_20260911.log；DB查询用LIKE '%v7.1'。
+
+### 2026-09-11 用户无损暂停（LOOP-4运行中断暂停，当前停止点）
+
+用户指令"无损暂停"已执行：正式队列paused=1持久写入（2026-09-11晚），在途模型结果等待落盘后watcher(pid 61153)已停止；本会话监控sleep任务已取消。6个running行为watcher持有的租约（300s过期后由resume路径的expire_exhausted_leases合法回收，不改SQL）。
+
+v7.1部分进度快照：primary 3完成/5失败/75排队/4租约running；verifier 3完成/2失败/80排队/2租约running（双cohort各87分片，695字段统一代）。失败5+2为少量provider_runtime_error与合同拒绝，比例暂优于v7同期，样本小不下结论。
+
+本会话（ZCode接管连续实施）总提交链：fd6de5a接管review/plan→e703784组合根v7接线→4111ad8 v7当前部署→c800313前端术语/标签/一键确认→e0198b7+d5b44b1死链清理11700行→79204d5+19f359b verifier-v1启动集修复+误退休恢复→e177a93 v7.1补丁式修复合同→33211d9前缀剥离修复→（evidence_ids纪律句已提交）→文档提交若干。v7独立工程审阅已收束通过（current-options-20260908 general_single_object.md，117行实质报告）。
+
+恢复顺序（下一位Agent）：读本journal尾部+implement.md 2026-09-11段→核对git log与队列状态→resume相位（cutover_v7_and_recover.py resume：expire leases+unpause+wake，或直接重启watcher worker_host_until_drained.py，其已修正v7.1匹配）→排空后LOOP-5（adjudicate_draft轮询推进receipts/采纳）→LOOP-6 facts→LOOP-7 P3纵切+Query工作区。隔离试验证据v71_patch_trial_r3双cohort completed；恢复MG不需要重跑隔离验证。
