@@ -48,21 +48,22 @@ MAPPING_ADJUDICATION_PROMPT_VERSION = (
 MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION = (
     "monitoring-listing-field-mapping-adjudication-verifier-v3"
 )
-# Current adjudication deployment is tools-v7 (evidence-tool reads, explicit
-# dependency_fields, visual reads, prior-proof-free option projection with
-# role-equivalence certificates). v5/v3 remain the flags-off constructor's
-# prompt names but are no longer a current queue deployment: startup
-# supersession retires their queued/running work and keeps only terminal
-# audit evidence, so the pre-v7 contract can never wake again.
+# Current adjudication deployment is tools-v7.1 (v7 contract plus patch-mode
+# controlled repair for violating fields). v5/v3 remain the flags-off
+# constructor's prompt names but are no longer a current queue deployment:
+# startup supersession retires their queued/running work and keeps only
+# terminal audit evidence, so the pre-v7 contract can never wake again.
 MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS = frozenset({
-    "monitoring-listing-field-mapping-adjudication-v12-tools-v7",
-    "monitoring-listing-field-mapping-adjudication-verifier-v10-tools-v7",
+    "monitoring-listing-field-mapping-adjudication-v13-tools-v7.1",
+    "monitoring-listing-field-mapping-adjudication-verifier-v11-tools-v7.1",
 })
 MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS = frozenset({
     "monitoring-listing-field-mapping-adjudication-v3",
     "monitoring-listing-field-mapping-adjudication-v4",
     "monitoring-listing-field-mapping-adjudication-verifier-v1",
     "monitoring-listing-field-mapping-adjudication-verifier-v2",
+    "monitoring-listing-field-mapping-adjudication-v12-tools-v7",
+    "monitoring-listing-field-mapping-adjudication-verifier-v10-tools-v7",
     MAPPING_ADJUDICATION_PROMPT_VERSION,
     MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION,
 })
@@ -329,8 +330,8 @@ class AdmissionMappingPipeline:
     def _adjudication_prompt_version(self, cohort):
         verifier = cohort == MONITORING_MAPPING_COHORT_VERIFIER
         if self._role_equivalence:
-            return ("monitoring-listing-field-mapping-adjudication-verifier-v10-tools-v7" if verifier
-                    else "monitoring-listing-field-mapping-adjudication-v12-tools-v7")
+            return ("monitoring-listing-field-mapping-adjudication-verifier-v11-tools-v7.1" if verifier
+                    else "monitoring-listing-field-mapping-adjudication-v13-tools-v7.1")
         if self._visual_tool_reads:
             return ("monitoring-listing-field-mapping-adjudication-verifier-v6-tools-v3" if verifier
                     else "monitoring-listing-field-mapping-adjudication-v8-tools-v3")

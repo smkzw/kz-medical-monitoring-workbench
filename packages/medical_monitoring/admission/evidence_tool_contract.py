@@ -9,6 +9,18 @@ STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS = frozenset({
     "monitoring-listing-field-mapping-adjudication-verifier-v10-tools-v7",
     "monitoring-listing-field-mapping-adjudication-v11-tools-v6",
     "monitoring-listing-field-mapping-adjudication-verifier-v9-tools-v6",
+    "monitoring-listing-field-mapping-adjudication-v13-tools-v7.1",
+    "monitoring-listing-field-mapping-adjudication-verifier-v11-tools-v7.1",
+})
+
+# v7.1 residue contract: the controlled repair round re-emits only the
+# violating field-mapping entries (patch mode) instead of the whole JSON
+# document. Long single-document re-emission was the dominant v7 residue
+# failure (strict parse breaks on 11-21k-char rebuilds). Older prompt
+# versions keep the frozen full-rebuild repair contract.
+PATCH_REPAIR_MAPPING_PROMPT_VERSIONS = frozenset({
+    "monitoring-listing-field-mapping-adjudication-v13-tools-v7.1",
+    "monitoring-listing-field-mapping-adjudication-verifier-v11-tools-v7.1",
 })
 
 ROLE_EQUIVALENCE_EVIDENCE_PROMPT_VERSIONS = frozenset({
