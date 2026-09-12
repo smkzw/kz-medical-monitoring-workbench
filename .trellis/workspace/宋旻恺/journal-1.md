@@ -1502,3 +1502,7 @@ deepseek v14首轮86/86全败根因实证：finish=length、content 0字符、re
 用户质询"为什么还在持续派出mtplx"——根因：watcher与验证器绑定仍停在上一条指令的配置，新指令未落运行时。纠偏（d7e3051+运行时JSON）：主=zhipu-coding-plan/GLM-5.3-Flash(high)（鉴权同OMP），次=deepseek/deepseek-flash(high)盲核对；mtplx降历史身份（与GLM核对时代同列）。同时完成harness去专用化：预算/纪律块改为profile能力标签（output_token_budget/output_discipline经绑定env驱动），代码零模型名特判；修复回执收集器多路由标签下的身份错配bug；767项回归。
 
 重大进展：切换前deepseek主路第二轮恢复大获成功（52/87完成），与mtplx核对73完成分片被合法配对——裁决remaining从696塌缩至3（receipts按字段生效且绑定prompt版本集，身份切换不使其失效）。cms64排队/mtplx94排队/deepseek主路19排队为身份隔离惰性僵尸（无worker可领，不阻塞）。status_loop继续每20分钟推进；最后3字段将由GLM主+deepseek次新代收尾→LOOP-5。
+
+### 2026-09-13 02:00 角色判据修复+最终主副代开跑
+
+前述"remaining 696→3"为断链假象：GLM升主路后glm-5.3-flash同时命中主/核身份集合，正式authority回执的(cms+glm)分析对按身份分类塌缩为单角色→文档解析全missing→302首轮任务全stale→reconcile在verifier_incomplete早退（其remaining只数草稿问题字段=3）。修复：角色判据改为prompt版本自带标记（-primary-/-verifier-，首轮verifier版本含-verifier），身份集合降为成员校验；正式dated解析复验四角色全current。修复后真实状态显现：695分歧待裁决，最终主副代（GLM主high+deepseek次high）已于01:49全量提交并执行中（GLM 61排队/8运行；deepseek验证器串行）。status_loop+watcher自驱；验证器为长杆（~87分片串行）。历史deepseek主路52完成与mtplx核对73完成因digest身份隔离不会被新代配对，保留为该指令期间的合法审计证据。
