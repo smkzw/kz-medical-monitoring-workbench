@@ -1716,13 +1716,30 @@ def _validate_run_pair(
         ),
     )
     for run, identity in zip((left, right), expected):
-        actual = (run.role, run.provider, run.model, run.prompt_version)
         bound_hash = (
             run.input_sha256
             if stage == "analysis"
             else run.conflict_packet_sha256
         )
-        if actual != identity or bound_hash != input_hash:
+        if identity[0] == "verifier":
+            # 2026-09-12 redesignation: the verifier identity may be the
+            # current local MTPLX pair or the historical cloud GLM pair;
+            # persisted runs under either identity stay revalidatable.
+            from .mapping_gate import is_monitoring_verifier_runtime
+
+            identity_ok = (
+                run.role == "verifier"
+                and is_monitoring_verifier_runtime(run.provider, run.model)
+                and run.prompt_version == identity[3]
+            )
+        else:
+            identity_ok = (
+                run.role,
+                run.provider,
+                run.model,
+                run.prompt_version,
+            ) == identity
+        if not identity_ok or bound_hash != input_hash:
             raise DocumentAuthorityError("document_authority_run_identity_invalid")
 
 
