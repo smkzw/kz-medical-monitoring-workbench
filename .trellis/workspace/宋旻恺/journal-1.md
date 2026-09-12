@@ -1464,3 +1464,7 @@ v7.1部分进度快照：primary 3完成/5失败/75排队/4租约running；verif
 ### 2026-09-12 12:55 正式切换v14执行（goal恢复）
 
 锚定：v13/v11全终态（38+22完成/47+65失败/2租约残留）。执行：退休2个非终态→cutover submit创建v14/verifier-v12双cohort各87分片（载荷avg 212k/最大322k字符≈55-85k token，本地预算内）→unpause→watcher(pid 81851, 10h预算)。本地mtplx串行是长杆（87分片×xhigh思考）。v13/v11/v7终态保留为审计历史。排空后按advance_to_facts.py推进LOOP-5/6。
+
+### 2026-09-12 13:15 关键阻塞：cms路由器账户额度耗尽（需用户充值）
+
+v14运行10分钟primary 7失败中6个HTTP 403，响应体解码=「用户额度不足, 剩余额度: ¥-0.004494」。小探针/中等载荷通过为阈值巧合；账户已负余额，主路cloud cms-model无法执行直到充值。处置：不暂停（本地mtplx验证器免费推进；403被拒不计费）；primary分片快速终态。**充值后衔接路径**：运行advance_to_facts.py status（adjudicate轮询自动原位重试失败分片）→排空→LOOP-5 receipts→LOOP-6 facts。双核对合同不允许主路降级本地（primary_fallback永不dual_pass且同箱双跑结构性拒绝），故等待充值是唯一合规路径。watcher(pid 81851)持续托管。
