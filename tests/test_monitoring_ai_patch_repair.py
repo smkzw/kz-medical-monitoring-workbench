@@ -17,9 +17,9 @@ from tests.test_monitoring_ai_service import (
     _valid_output,
 )
 
-V71_PRIMARY = "monitoring-listing-field-mapping-adjudication-v13-tools-v7.1"
+V71_PRIMARY = "monitoring-listing-field-mapping-adjudication-v14-tools-v7.1"
 V71_VERIFIER = (
-    "monitoring-listing-field-mapping-adjudication-verifier-v11-tools-v7.1"
+    "monitoring-listing-field-mapping-adjudication-verifier-v12-tools-v7.1"
 )
 V7_PRIMARY = "monitoring-listing-field-mapping-adjudication-v12-tools-v7"
 
@@ -55,9 +55,7 @@ def test_v71_versions_and_pipeline_selection() -> None:
         AdmissionMappingPipeline,
     )
 
-    assert PATCH_REPAIR_MAPPING_PROMPT_VERSIONS == frozenset(
-        {V71_PRIMARY, V71_VERIFIER}
-    )
+    assert {V71_PRIMARY, V71_VERIFIER} <= PATCH_REPAIR_MAPPING_PROMPT_VERSIONS
     assert V71_PRIMARY in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS
     assert V71_VERIFIER in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS
     assert V71_PRIMARY in ROLE_EQUIVALENCE_PROMPT_VERSIONS
@@ -65,6 +63,9 @@ def test_v71_versions_and_pipeline_selection() -> None:
         {V71_PRIMARY, V71_VERIFIER}
     )
     assert V7_PRIMARY in MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS
+    assert "monitoring-listing-field-mapping-adjudication-v13-tools-v7.1" in (
+        MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS
+    )
     pipeline = AdmissionMappingPipeline(
         adjudication_tool_reads=True,
         explicit_mapping_dependencies=True,

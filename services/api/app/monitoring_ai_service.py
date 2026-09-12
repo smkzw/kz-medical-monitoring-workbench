@@ -1552,6 +1552,30 @@ class MonitoringAiEvidenceChangedError(RuntimeError):
     pass
 
 
+def _chunk_local_contract(
+    contract: Any,
+    chunk_pairs: set,
+) -> Any:
+    """Filter an adjudication contract's dual options to the chunk's fields."""
+    if not isinstance(contract, dict):
+        return contract
+    review = contract.get("candidate_options_review")
+    if not isinstance(review, list):
+        return contract
+    trimmed = dict(contract)
+    trimmed["candidate_options_review"] = [
+        row
+        for row in review
+        if isinstance(row, dict)
+        and (
+            str(row.get("domain") or "").strip(),
+            str(row.get("source_field") or "").strip(),
+        )
+        in chunk_pairs
+    ]
+    return trimmed
+
+
 class MonitoringAiService:
     """Product-AI service for medical monitoring candidate generation.
 
@@ -2034,6 +2058,45 @@ class MonitoringAiService:
                             ).strip()
                             == domain
                         ],
+                        # 2026-09-12 chunk-local context contract (v14/v12):
+                        # every chunk previously embedded ALL diverged-field
+                        # dual options and ALL adjudication context profiles
+                        # (~2.5M chars/chunk), which exhausted the local
+                        # verifier's ~200k effective context. Keep only this
+                        # chunk's candidate options and same-domain context.
+                        # First-round blind submissions never carry these keys,
+                        # and the conditional keeps it that way.
+                        **(
+                            {
+                                "adjudication_contract": _chunk_local_contract(
+                                    chunk_profile["adjudication_contract"],
+                                    {
+                                        (
+                                            str(item.get("domain")).strip(),
+                                            str(item.get("field")).strip(),
+                                        )
+                                        for item in chunk_fields
+                                    },
+                                )
+                            }
+                            if "adjudication_contract" in chunk_profile
+                            else {}
+                        ),
+                        **(
+                            {
+                                "read_only_adjudication_context_profiles": [
+                                    deepcopy(row)
+                                    for row in chunk_profile[
+                                        "read_only_adjudication_context_profiles"
+                                    ]
+                                    if isinstance(row, dict)
+                                    and str(row.get("domain", "")).strip() == domain
+                                ]
+                            }
+                            if "read_only_adjudication_context_profiles"
+                            in chunk_profile
+                            else {}
+                        ),
                         "treatment_identity_binding_source_pairs": [
                             {
                                 "domain": str(
