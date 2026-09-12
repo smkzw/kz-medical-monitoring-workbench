@@ -489,7 +489,10 @@ class AiRoleRuntimeSettingsStore:
                 model=MONITORING_C3_MAPPING_MODEL,
                 enabled=True,
                 thinking=THINKING_ENABLED,
-                reasoning_effort="max",
+                # max thinking is unbounded on adjudication chunks (123k
+                # reasoning chars, content 0, finish=length at 32k budget);
+                # high is the bounded operating point.
+                reasoning_effort="high",
             ),
             MEDICAL_MONITORING_VERIFIER_AI_ROLE: AiRoleBinding(
                 role_id=MEDICAL_MONITORING_VERIFIER_AI_ROLE,
