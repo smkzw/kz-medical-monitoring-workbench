@@ -178,21 +178,16 @@ def monitoring_mapping_execution_route(provider: str, model: str) -> str:
 
     cleaned_provider = str(provider or "").strip()
     cleaned_model = normalize_monitoring_mapping_model(str(model or ""))
-    identity = (cleaned_provider, cleaned_model.casefold())
-    if identity in {
-        (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL.casefold()),
-        (MONITORING_C3_ALTERNATE_PROVIDER, MONITORING_C3_ALTERNATE_MODEL.casefold()),
-    }:
+    identity = (cleaned_provider, cleaned_model)
+    if is_monitoring_primary_runtime(*identity):
         return MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY
-    if identity == (
-        MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
-        MONITORING_C3_LOCAL_FALLBACK_MODEL.casefold(),
+    if (
+        cleaned_provider == MONITORING_C3_LOCAL_FALLBACK_PROVIDER
+        and cleaned_model.casefold()
+        == MONITORING_C3_LOCAL_FALLBACK_MODEL.casefold()
     ):
         return MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY_FALLBACK
-    if identity == (
-        MONITORING_C3_VERIFIER_PROVIDER,
-        MONITORING_C3_VERIFIER_MODEL.casefold(),
-    ):
+    if is_monitoring_verifier_runtime(*identity):
         return MONITORING_C3_MAPPING_EXECUTION_ROUTE_VERIFIER
     return MONITORING_C3_MAPPING_EXECUTION_ROUTE_UNRECOGNIZED
 
