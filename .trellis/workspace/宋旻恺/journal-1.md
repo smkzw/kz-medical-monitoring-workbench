@@ -1460,3 +1460,7 @@ v7.1部分进度快照：primary 3完成/5失败/75排队/4租约running；verif
 ### 2026-09-12 双角色重指定完成（用户指令：主cms-model(high)+副mtplx(xhigh)本地VLM）
 
 用户指令将验证器重指定为本机MTPLX Qwen3.8-Flash-Next（mlx-serve 127.0.0.1:8002，xhigh思考，~200k有效上下文，16k输出预算，原生VLM）；主分析cms-model(high)实证为cms-smk/MiniMax-M3（路由别名返回身份一致，无需切换）。实施四层：(1)代码层2ed9af6+963a102+作用域修复——mapping_gate验证器常量mtplx+历史GLM对保留、验证器运行时集合、role settings本地profile(900s)+xhigh绑定、verifier并行1、租约900s、本地模型输出纪律提示块；(2)设计层v2§6重写（主副提示/调度差异、本地特性、回退语义反转：本地不可用=核对失败闭合）；(3)运行时JSON改造（profile/绑定/密钥，原文件备份于recovery/）；(4)隔离实证暴露并修复三个真实缺陷：document_authority._validate_run_pair硬编码验证器身份破坏全部历史GLM证据重验（963a102）；resolver本地回退分支误伤本地验证器任务（prompt_version判别修复）；**每分片内嵌全量695双选项+799画像=~94万token超出本地窗口（v14/verifier-v12 chunk-local裁剪至~25k token，本地mtplx真实完成裁决分片，云端成本降25倍）**。429风暴期间zhipu已非验证器，正式切换（旧zhipu任务退休+mtplx代重提）已staged待用户恢复goal后执行。766项回归通过。
+
+### 2026-09-12 12:55 正式切换v14执行（goal恢复）
+
+锚定：v13/v11全终态（38+22完成/47+65失败/2租约残留）。执行：退休2个非终态→cutover submit创建v14/verifier-v12双cohort各87分片（载荷avg 212k/最大322k字符≈55-85k token，本地预算内）→unpause→watcher(pid 81851, 10h预算)。本地mtplx串行是长杆（87分片×xhigh思考）。v13/v11/v7终态保留为审计历史。排空后按advance_to_facts.py推进LOOP-5/6。
