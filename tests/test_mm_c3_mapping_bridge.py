@@ -14,6 +14,9 @@ from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_ALTERNATE_PROVIDER,
     MONITORING_C3_LOCAL_FALLBACK_MODEL,
     MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
+    MONITORING_C3_GLM_VERIFIER_MODEL,
+    MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
+    MONITORING_C3_GLM_VERIFIER_PROVIDER,
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROFILE_ID,
     MONITORING_C3_MAPPING_PROVIDER,
@@ -735,11 +738,14 @@ def test_pipeline_local_fallback_requires_repository_terminal_receipts(
     verifier_service = MonitoringAiService(
         repository,
         runtime_resolver=lambda: unavailable(
-            MONITORING_C3_VERIFIER_PROVIDER,
-            MONITORING_C3_VERIFIER_MODEL,
-            "independent_ai__zhipu_coding_plan_glm_flash",
+            MONITORING_C3_GLM_VERIFIER_PROVIDER,
+            MONITORING_C3_GLM_VERIFIER_MODEL,
+            MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
         ),
     )
+    # Historical shape: this legacy fallback scenario predates the local
+    # verifier redesignation, so the remote verifier route here is pinned to
+    # the historical GLM identity via constructor overrides.
     remote_pipeline = AdmissionMappingPipeline(
         ai_service=primary_service,
         verifier_ai_service=verifier_service,
@@ -747,6 +753,8 @@ def test_pipeline_local_fallback_requires_repository_terminal_receipts(
         input_revision_factory=MonitoringAiInputRevision.model_validate,
         task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
         relationship_profiler=_stub_profiler,
+        verifier_required_provider=MONITORING_C3_GLM_VERIFIER_PROVIDER,
+        verifier_required_model=MONITORING_C3_GLM_VERIFIER_MODEL,
     )
     remote_pipeline.generate_candidates(
         project_id=PROJECT_ID,
@@ -771,9 +779,9 @@ def test_pipeline_local_fallback_requires_repository_terminal_receipts(
         (
             verifier_service,
             (
-                "independent_ai__zhipu_coding_plan_glm_flash",
-                MONITORING_C3_VERIFIER_PROVIDER,
-                MONITORING_C3_VERIFIER_MODEL,
+                MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
+                MONITORING_C3_GLM_VERIFIER_PROVIDER,
+                MONITORING_C3_GLM_VERIFIER_MODEL,
             ),
         ),
     ):

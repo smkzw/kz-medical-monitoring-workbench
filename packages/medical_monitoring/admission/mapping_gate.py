@@ -23,9 +23,22 @@ MONITORING_C3_MAPPING_MODEL = "MiniMax-M3"
 MONITORING_C3_MAPPING_PROFILE_ID = "medical_monitoring_ai__cms_smk_minimax_m3"
 MONITORING_C3_ALTERNATE_PROVIDER = "cms-router"
 MONITORING_C3_ALTERNATE_MODEL = "minimax-m3"
-MONITORING_C3_VERIFIER_PROVIDER = "zhipu-coding-plan"
-MONITORING_C3_VERIFIER_MODEL = "glm-5.3-flash"
-MONITORING_C3_VERIFIER_PROFILE_ID = "independent_ai__zhipu_coding_plan_glm_flash"
+# 2026-09-12 user redesignation: the verifier cohort is the LOCAL MTPLX VLM
+# (Youssofal--Qwen3.8-Flash-Next-MTPLX-Optimized-Speed served as
+# ``mtplx-flash-next-optimized-speed``, thinking xhigh, ~200k effective
+# context, native VLM). The previous cloud GLM pair remains a supported
+# verifier transport for historical receipts and as the remote substitute;
+# new submissions bind to mtplx.
+MONITORING_C3_VERIFIER_PROVIDER = "mtplx"
+MONITORING_C3_VERIFIER_MODEL = "mtplx-flash-next-optimized-speed"
+MONITORING_C3_VERIFIER_PROFILE_ID = (
+    "medical_monitoring_verifier__mtplx_qwen38_flash_next"
+)
+MONITORING_C3_GLM_VERIFIER_PROVIDER = "zhipu-coding-plan"
+MONITORING_C3_GLM_VERIFIER_MODEL = "glm-5.3-flash"
+MONITORING_C3_GLM_VERIFIER_PROFILE_ID = (
+    "independent_ai__zhipu_coding_plan_glm_flash"
+)
 MONITORING_MAPPING_COHORT_PRIMARY = "primary"
 MONITORING_MAPPING_COHORT_VERIFIER = "verifier"
 MONITORING_MAPPING_COHORTS = frozenset({
@@ -64,6 +77,19 @@ MONITORING_C3_SUPPORTED_RUNTIMES = frozenset({
         MONITORING_C3_LOCAL_FALLBACK_MODEL,
     ),
 })
+# Every verifier identity that persisted jobs may legally carry: the current
+# local MTPLX verifier plus the historical cloud GLM verifier whose completed
+# jobs/receipts must keep revalidating after the redesignation.
+MONITORING_C3_VERIFIER_RUNTIME_PAIRS = frozenset({
+    (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
+    (MONITORING_C3_GLM_VERIFIER_PROVIDER, MONITORING_C3_GLM_VERIFIER_MODEL),
+})
+
+
+def is_monitoring_verifier_runtime(provider: str, model: str) -> bool:
+    return (str(provider or ""), str(model or "")) in (
+        MONITORING_C3_VERIFIER_RUNTIME_PAIRS
+    )
 ZHIPU_CODING_PLAN_PRESET_ID = "zhipu_coding_plan"
 ZHIPU_CODING_PLAN_BASE_URL = "https://open.bigmodel.cn/api/coding/paas/v4"
 ZHIPU_CODING_PLAN_API_KEY_ENV = "ZAI_CODING_CN_API_KEY"

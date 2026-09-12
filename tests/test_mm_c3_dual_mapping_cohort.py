@@ -30,6 +30,9 @@ from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_ALTERNATE_PROVIDER,
     MONITORING_C3_LOCAL_FALLBACK_MODEL,
     MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
+    MONITORING_C3_GLM_VERIFIER_MODEL,
+    MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
+    MONITORING_C3_GLM_VERIFIER_PROVIDER,
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROFILE_ID,
     MONITORING_C3_MAPPING_PROVIDER,
@@ -274,7 +277,10 @@ def test_verifier_cohort_gate_is_strict_without_fallback_routes() -> None:
         )
         is False
     )
-    # The admitted local MTPLX fallback must never pass as the verifier.
+    # 2026-09-12 redesignation: the local MTPLX VLM IS the verifier, and a
+    # remote-routes kill-switch must not affect a local verifier binding.
+    # The historical cloud GLM verifier and the primary cloud pair stay
+    # inadmissible for new verifier submissions.
     assert (
         verifier.runtime_matches(
             MonitoringAiRuntimeBinding(
@@ -282,6 +288,30 @@ def test_verifier_cohort_gate_is_strict_without_fallback_routes() -> None:
                 provider=MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
                 model=MONITORING_C3_LOCAL_FALLBACK_MODEL,
                 env={"MONITORING_C3_REMOTE_ROUTES_UNAVAILABLE": "true"},
+                available=True,
+            )
+        )
+        is True
+    )
+    assert (
+        verifier.runtime_matches(
+            MonitoringAiRuntimeBinding(
+                profile_id=MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
+                provider=MONITORING_C3_GLM_VERIFIER_PROVIDER,
+                model=MONITORING_C3_GLM_VERIFIER_MODEL,
+                env={},
+                available=True,
+            )
+        )
+        is False
+    )
+    assert (
+        verifier.runtime_matches(
+            MonitoringAiRuntimeBinding(
+                profile_id=MONITORING_C3_MAPPING_PROFILE_ID,
+                provider=MONITORING_C3_MAPPING_PROVIDER,
+                model=MONITORING_C3_MAPPING_MODEL,
+                env={},
                 available=True,
             )
         )
@@ -423,18 +453,16 @@ def test_verifier_generation_without_verifier_runtime_sends_nothing(
         business_key_prefix=f"{MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX}:{attempt_id}:",
     ) == ()
 
-    # An admitted local fallback must not count as the verifier either.
+    # 2026-09-12 redesignation: a runtime bound to the historical cloud GLM
+    # verifier (or anything non-mtplx) must not count as the verifier.
     fallback_runtime = MonitoringAiRuntimeBinding(
-        profile_id=MONITORING_C3_VERIFIER_PROFILE_ID,
-        provider=MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
-        model=MONITORING_C3_LOCAL_FALLBACK_MODEL,
-        env={
-            **_runtime_env(
-                MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
-                MONITORING_C3_LOCAL_FALLBACK_MODEL,
-            ),
-            "MONITORING_C3_REMOTE_ROUTES_UNAVAILABLE": "true",
-        },
+        profile_id=MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
+        provider=MONITORING_C3_GLM_VERIFIER_PROVIDER,
+        model=MONITORING_C3_GLM_VERIFIER_MODEL,
+        env=_runtime_env(
+            MONITORING_C3_GLM_VERIFIER_PROVIDER,
+            MONITORING_C3_GLM_VERIFIER_MODEL,
+        ),
         available=True,
     )
     pipeline, repository = _dual_pipeline(
