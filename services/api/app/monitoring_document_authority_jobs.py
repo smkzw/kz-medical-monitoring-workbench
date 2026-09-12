@@ -44,6 +44,7 @@ from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_MAPPING_PROVIDER,
     MONITORING_C3_VERIFIER_MODEL,
     MONITORING_C3_VERIFIER_PROVIDER,
+    is_monitoring_verifier_runtime,
 )
 
 from .monitoring_ai_contracts import (
@@ -109,7 +110,13 @@ def load_document_authority_analysis_run(
     if (
         job.status != MonitoringAiJobStatus.COMPLETED
         or job.task_type != MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS
-        or (job.provider, job.requested_model) != expected_provider_model
+        or not (
+            (job.provider, job.requested_model) == expected_provider_model
+            if role == "primary"
+            else is_monitoring_verifier_runtime(
+                job.provider, job.requested_model
+            )
+        )
         or job.prompt_version not in allowed_prompt_versions
         or job.response_model != job.requested_model
     ):
@@ -434,7 +441,13 @@ def load_document_authority_review_run(
         job.status != MonitoringAiJobStatus.COMPLETED
         or job.task_type != MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW
         or job.prompt_version not in allowed_prompt_versions
-        or (job.provider, job.requested_model) != expected_provider_model
+        or not (
+            (job.provider, job.requested_model) == expected_provider_model
+            if role == "primary"
+            else is_monitoring_verifier_runtime(
+                job.provider, job.requested_model
+            )
+        )
         or job.response_model != job.requested_model
     ):
         raise DocumentAuthorityError("document_authority_review_job_identity_invalid")
@@ -960,8 +973,9 @@ def verify_document_authority_promotion_receipt(
                 if job.provider == MONITORING_C3_MAPPING_PROVIDER
                 and job.requested_model == MONITORING_C3_MAPPING_MODEL
                 else "verifier"
-                if job.provider == MONITORING_C3_VERIFIER_PROVIDER
-                and job.requested_model == MONITORING_C3_VERIFIER_MODEL
+                if is_monitoring_verifier_runtime(
+                    job.provider, job.requested_model
+                )
                 else ""
             ): job
             for job in analysis_jobs
@@ -985,8 +999,9 @@ def verify_document_authority_promotion_receipt(
                 if job.provider == MONITORING_C3_MAPPING_PROVIDER
                 and job.requested_model == MONITORING_C3_MAPPING_MODEL
                 else "verifier"
-                if job.provider == MONITORING_C3_VERIFIER_PROVIDER
-                and job.requested_model == MONITORING_C3_VERIFIER_MODEL
+                if is_monitoring_verifier_runtime(
+                    job.provider, job.requested_model
+                )
                 else ""
             ): job
             for job in review_jobs
@@ -1003,8 +1018,9 @@ def verify_document_authority_promotion_receipt(
                 if job.provider == MONITORING_C3_MAPPING_PROVIDER
                 and job.requested_model == MONITORING_C3_MAPPING_MODEL
                 else "verifier"
-                if job.provider == MONITORING_C3_VERIFIER_PROVIDER
-                and job.requested_model == MONITORING_C3_VERIFIER_MODEL
+                if is_monitoring_verifier_runtime(
+                    job.provider, job.requested_model
+                )
                 else ""
             ): job
             for job in adjudication_jobs
@@ -1024,8 +1040,9 @@ def verify_document_authority_promotion_receipt(
                 if job.provider == MONITORING_C3_MAPPING_PROVIDER
                 and job.requested_model == MONITORING_C3_MAPPING_MODEL
                 else "verifier"
-                if job.provider == MONITORING_C3_VERIFIER_PROVIDER
-                and job.requested_model == MONITORING_C3_VERIFIER_MODEL
+                if is_monitoring_verifier_runtime(
+                    job.provider, job.requested_model
+                )
                 else ""
             ): job
             for job in critique_jobs

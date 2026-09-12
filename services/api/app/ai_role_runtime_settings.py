@@ -16,6 +16,7 @@ from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_VERIFIER_MODEL,
     ZHIPU_CODING_PLAN_API_KEY_ENV,
     ZHIPU_CODING_PLAN_BASE_URL,
+    MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
     MONITORING_C3_VERIFIER_PROFILE_ID,
 )
 
@@ -161,8 +162,9 @@ ROLE_DEFINITIONS: tuple[AiRoleDefinition, ...] = (
         label="医学监查独立核对AI",
         description="对主分析 cohort 的字段对应建议执行独立、盲态的全量核对。",
         recommendation=(
-            "独立核对必须使用与主分析不同的模型路线："
-            "默认智谱 GLM-5.3 Flash；不得回退到本地模型或与主分析同源。"
+            "独立核对使用本机 MTPLX Qwen3.8 Flash Next（xhigh思考，约200k"
+            "有效上下文，原生VLM），与云端主分析保持模型、部署与上下文"
+            "隔离；本地服务不可用时核对失败闭合，不静默替换。"
         ),
         default_model=MONITORING_C3_VERIFIER_MODEL,
     ),
@@ -305,8 +307,23 @@ def _builtin_profiles() -> tuple[AiProviderProfile, ...]:
         ),
         AiProviderProfile(
             profile_id=MONITORING_C3_VERIFIER_PROFILE_ID,
+            provider="mtplx",
+            label="MTPLX Qwen3.8 Flash Next 医学监查独立核对（本地VLM）",
+            base_url=os.environ.get(
+                "MTPLX_BASE_URL", "http://127.0.0.1:8002/v1"
+            ),
+            model="mtplx-flash-next-optimized-speed",
+            expected_response_model="mtplx-flash-next-optimized-speed",
+            api_key_env="MTPLX_API_KEY",
+            deployment_scope="local",
+            discovery_mode="manual_plus_probe",
+            timeout_seconds=900.0,
+            enabled=True,
+        ),
+        AiProviderProfile(
+            profile_id=MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
             provider="zhipu-coding-plan",
-            label="GLM-5.3 Flash 医学监查独立核对",
+            label="GLM-5.3 Flash 医学监查独立核对（历史/备用）",
             base_url=ZHIPU_CODING_PLAN_BASE_URL,
             model="glm-5.3-flash",
             expected_response_model="glm-5.3-flash",
@@ -322,13 +339,16 @@ _BUILTIN_ROLE_PROFILE_IDS = {
     INDEPENDENT_AI_ROLE: {
         INDEPENDENT_AI_DEEPSEEK_FLASH_PROFILE_ID,
         MONITORING_C3_VERIFIER_PROFILE_ID,
+        MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
     },
     MEDICAL_MONITORING_AI_ROLE: {
         MONITORING_C3_MAPPING_PROFILE_ID,
         MONITORING_C3_VERIFIER_PROFILE_ID,
+        MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
     },
     MEDICAL_MONITORING_VERIFIER_AI_ROLE: {
         MONITORING_C3_VERIFIER_PROFILE_ID,
+        MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
     },
     OCR_ROLE: {OCR_OMLX_PROFILE_ID, OCR_PADDLE_PROFILE_ID},
     TRANSLATION_BODY_ROLE: {TRANSLATION_BODY_OMLX_PROFILE_ID},
@@ -458,8 +478,8 @@ class AiRoleRuntimeSettingsStore:
                 profile_id=MONITORING_C3_VERIFIER_PROFILE_ID,
                 model=MONITORING_C3_VERIFIER_MODEL,
                 enabled=True,
-                thinking=THINKING_DISABLED,
-                reasoning_effort="high",
+                thinking=THINKING_ENABLED,
+                reasoning_effort="xhigh",
             ),
             OCR_ROLE: AiRoleBinding(
                 role_id=OCR_ROLE,

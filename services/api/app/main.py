@@ -1020,7 +1020,12 @@ monitoring_metric_configuration_service = MonitoringMetricConfigurationService(
     batch_repository=monitoring_batch_repository,
 )
 monitoring_ai_repository = MonitoringAiRepository(
-    RUNTIME_DIR / "medical_monitoring_ai.sqlite3"
+    RUNTIME_DIR / "medical_monitoring_ai.sqlite3",
+    # The local MTPLX verifier runs xhigh thinking turns that can exceed the
+    # 300s default lease; a longer lease only delays dead-worker reclaim.
+    lease_seconds=int(
+        os.environ.get("WORKBENCH_MONITORING_AI_LEASE_SECONDS", "900")
+    ),
 )
 source_registry.monitoring_authority_receipt_verifier = (
     lambda project_id, receipt: verify_document_authority_promotion_receipt(
@@ -1278,8 +1283,10 @@ monitoring_ai_verifier_service = MonitoringAiService(
 )
 monitoring_ai_verifier_worker = MonitoringAiWorker(
     monitoring_ai_verifier_service,
+    # Local mlx-serve is compute-bound and effectively serial; one flight at
+    # a time keeps single-chunk latency bounded.
     parallelism=int(
-        os.environ.get("WORKBENCH_MONITORING_AI_VERIFIER_PARALLELISM", "2")
+        os.environ.get("WORKBENCH_MONITORING_AI_VERIFIER_PARALLELISM", "1")
     ),
     identity_bound=True,
 )

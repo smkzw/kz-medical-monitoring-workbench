@@ -24,6 +24,8 @@ from .mapping_gate import (
     MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROVIDER,
+    MONITORING_C3_GLM_VERIFIER_MODEL,
+    MONITORING_C3_GLM_VERIFIER_PROVIDER,
     MONITORING_C3_VERIFIER_MODEL,
     MONITORING_C3_VERIFIER_PROVIDER,
     MONITORING_MAPPING_COHORT_PRIMARY,
@@ -698,43 +700,71 @@ class AdmissionMappingPipeline:
                 MONITORING_C3_MAPPING_MODEL,
                 f"listing-field-mapping:{attempt_id}:",
             ),
+            # Historical fallback receipts may carry either verifier
+            # identity (cloud GLM before the local redesignation, local
+            # MTPLX after); terminal evidence from either counts.
             (
                 "verifier",
                 MONITORING_C3_VERIFIER_PROVIDER,
                 MONITORING_C3_VERIFIER_MODEL,
                 f"listing-field-mapping-verifier:{attempt_id}:",
             ),
+            (
+                "verifier_legacy_glm",
+                MONITORING_C3_GLM_VERIFIER_PROVIDER,
+                MONITORING_C3_GLM_VERIFIER_MODEL,
+                f"listing-field-mapping-verifier:{attempt_id}:",
+            ),
         )
         evidence = []
+        # Group allowed routes per cohort label: the verifier label accepts
+        # both the current local identity and the historical cloud identity.
+        routes_by_label: dict = {}
         for cohort, provider, model, prefix in routes:
+            label = "verifier" if cohort.startswith("verifier") else cohort
+            routes_by_label.setdefault(label, []).append(
+                (provider, model, prefix)
+            )
+        for label, label_routes in routes_by_label.items():
             candidates = []
-            for job in self._repository.list_jobs(
-                project_id,
-                task_type=str(_value(self._task_type)),
-                business_key_prefix=prefix,
-            ):
-                if (
-                    str(job.provider) != provider
-                    or str(job.requested_model).casefold() != model.casefold()
-                    or str(_value(job.status)) != "failed"
-                    or job.contract_retirement_code
-                    or job.failure_code not in _REMOTE_UNAVAILABLE_FAILURES
+            for provider, model, prefix in label_routes:
+                for job in self._repository.list_jobs(
+                    project_id,
+                    task_type=str(_value(self._task_type)),
+                    business_key_prefix=prefix,
                 ):
-                    continue
-                payload = self._repository.input_payload(project_id, job.job_id)
-                profile = payload.get("field_profile") or {}
-                if profile.get("full_profile_sha256") != profile_sha256:
-                    continue
-                attempts = self._repository.attempts(project_id, job.job_id)
-                if not attempts or attempts[-1]["failure_code"] != job.failure_code:
-                    continue
-                if job.failure_code == "provider_runtime_error" and (
-                    job.attempt_count < job.max_attempts or not job.retryable
-                ):
-                    continue
-                if job.failure_code != "provider_runtime_error" and job.retryable:
-                    continue
-                candidates.append((job, attempts))
+                    if (
+                        str(job.provider) != provider
+                        or str(job.requested_model).casefold() != model.casefold()
+                        or str(_value(job.status)) != "failed"
+                        or job.contract_retirement_code
+                        or job.failure_code not in _REMOTE_UNAVAILABLE_FAILURES
+                    ):
+                        continue
+                    payload = self._repository.input_payload(
+                        project_id, job.job_id
+                    )
+                    profile = payload.get("field_profile") or {}
+                    if profile.get("full_profile_sha256") != profile_sha256:
+                        continue
+                    attempts = self._repository.attempts(
+                        project_id, job.job_id
+                    )
+                    if (
+                        not attempts
+                        or attempts[-1]["failure_code"] != job.failure_code
+                    ):
+                        continue
+                    if job.failure_code == "provider_runtime_error" and (
+                        job.attempt_count < job.max_attempts or not job.retryable
+                    ):
+                        continue
+                    if (
+                        job.failure_code != "provider_runtime_error"
+                        and job.retryable
+                    ):
+                        continue
+                    candidates.append((job, attempts))
             if not candidates:
                 raise AdmissionMappingPipelineError(
                     "mapping_fallback_terminal_evidence_missing"
@@ -743,7 +773,7 @@ class AdmissionMappingPipeline:
                 candidates, key=lambda item: (item[0].updated_at, item[0].job_id)
             )
             evidence.append({
-                "cohort": cohort,
+                "cohort": label,
                 "provider": provider,
                 "model": model,
                 "job_id": job.job_id,

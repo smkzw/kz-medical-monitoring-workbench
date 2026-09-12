@@ -116,6 +116,9 @@ from packages.medical_monitoring.admission.document_authority import (
     validate_document_authority_conflict_review,
 )
 from packages.medical_monitoring.admission.mapping_gate import (
+    MONITORING_C3_GLM_VERIFIER_MODEL,
+    MONITORING_C3_GLM_VERIFIER_PROVIDER,
+    MONITORING_C3_LOCAL_FALLBACK_MODEL,
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROVIDER,
     MONITORING_C3_VERIFIER_MODEL,
@@ -3651,6 +3654,14 @@ class MonitoringAiService:
                 "user_action必须是非空中文说明；无用户事项时写明依据（如“无需确认：证据一致”），"
                 "不得输出空字符串。修复轮按patch_contract只重发违规字段的完整条目，"
                 "保持严格JSON、输出尽量短。"
+            )
+        if str(job.requested_model or "") == MONITORING_C3_LOCAL_FALLBACK_MODEL:
+            system_prompt += (
+                " 本地模型输出纪律：全部推理放在思考通道完成，最终回复正文有且只有一个"
+                "完整JSON对象——正文前后不得有任何解释、前言、markdown围栏或多余文本。"
+                "输出预算约16000 tokens：不确定说明与引用保持精炼，长引文一律用证据编号"
+                "引用而不抄写原文。身份字段（schema_version、task_id、task_type、"
+                "input_revision_sha256）逐字复制output_schema。"
             )
         return AiPromptEnvelope(
             task_id=job.job_id,
@@ -8631,6 +8642,9 @@ class MonitoringAiService:
                 or identities != {
                     (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
                     (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
+                } and identities != {
+                    (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
+                    (MONITORING_C3_GLM_VERIFIER_PROVIDER, MONITORING_C3_GLM_VERIFIER_MODEL),
                 }
                 or receipt_sha256 != content_sha256(unsigned)
             ):
