@@ -42,6 +42,67 @@ _LEGACY_CONTRACT_RETIREMENT_FAILURE_CODES = frozenset(
 )
 
 
+_BLOB_SECTION_MARKER = "$section_blob"
+_BLOB_SECTION_MIN_CHARS = 16_000
+
+
+def _blob_section_markers(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and set(value) == {_BLOB_SECTION_MARKER}
+        and isinstance(value[_BLOB_SECTION_MARKER], str)
+    )
+
+
+def _dedup_payload_for_store(connection: sqlite3.Connection, payload: Mapping[str, Any], clock) -> str:
+    """Serialize a payload, spilling large top-level sections into blobs.
+
+    Chunk payloads repeat multi-hundred-KB read-only context sections across
+    sibling chunks; each oversized section is stored once per content hash
+    and referenced by marker. Readers materialize transparently, and the
+    job's input_payload_sha256 still validates against the materialized
+    document, so semantic identity is unchanged.
+    """
+    stored: dict[str, Any] = {}
+    now = clock()
+    for key, value in payload.items():
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        if len(text) >= _BLOB_SECTION_MIN_CHARS:
+            digest = content_sha256(value)
+            connection.execute(
+                "INSERT OR IGNORE INTO monitoring_ai_payload_blobs "
+                "(blob_sha256, payload_json, size_bytes, created_at) VALUES (?, ?, ?, ?)",
+                (digest, text, len(text), _iso(now)),
+            )
+            stored[key] = {_BLOB_SECTION_MARKER: digest}
+        else:
+            stored[key] = value
+    return json.dumps(stored, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _materialize_payload(connection: sqlite3.Connection, stored_text: str) -> dict[str, Any]:
+    payload = json.loads(stored_text)
+    if not isinstance(payload, dict):
+        return payload
+    if not any(_blob_section_markers(value) for value in payload.values()):
+        return payload
+    resolved: dict[str, Any] = {}
+    for key, value in payload.items():
+        if not _blob_section_markers(value):
+            resolved[key] = value
+            continue
+        row = connection.execute(
+            "SELECT payload_json FROM monitoring_ai_payload_blobs WHERE blob_sha256 = ?",
+            (value[_BLOB_SECTION_MARKER],),
+        ).fetchone()
+        if row is None:
+            raise MonitoringAiRepositoryError(
+                "monitoring AI payload section blob is missing"
+            )
+        resolved[key] = json.loads(row[0])
+    return resolved
+
+
 class MonitoringAiRepositoryError(ValueError):
     pass
 
@@ -266,6 +327,12 @@ class MonitoringAiRepository:
                         REFERENCES monitoring_ai_candidates(candidate_id),
                     UNIQUE(project_id, idempotency_key)
                 );
+                CREATE TABLE IF NOT EXISTS monitoring_ai_payload_blobs (
+                    blob_sha256 TEXT PRIMARY KEY,
+                    payload_json TEXT NOT NULL,
+                    size_bytes INTEGER NOT NULL,
+                    created_at TEXT NOT NULL
+                );
 
                 CREATE INDEX IF NOT EXISTS idx_monitoring_ai_jobs_queue
                 ON monitoring_ai_jobs(status, lease_expires_at, created_at);
@@ -405,7 +472,7 @@ class MonitoringAiRepository:
                         request.business_key,
                         canonical_json(request.input_revision),
                         request.input_revision_sha256,
-                        canonical_json(request.input_payload),
+                        _dedup_payload_for_store(connection, request.input_payload, self.clock),
                         request.input_payload_sha256,
                         request.prompt_version,
                         request.profile_id,
@@ -421,7 +488,7 @@ class MonitoringAiRepository:
                     (job_id,),
                 ).fetchone()
             connection.commit()
-        return self._job(existing)
+        return self._job(existing, repository=self)
 
     def get(self, project_id: str, job_id: str) -> MonitoringAiJob:
         with self._connect() as connection:
@@ -434,7 +501,7 @@ class MonitoringAiRepository:
             ).fetchone()
         if row is None:
             raise MonitoringAiRepositoryError("monitoring AI job not found")
-        return self._job(row)
+        return self._job(row, repository=self)
 
     def input_payload(self, project_id: str, job_id: str) -> dict[str, Any]:
         with self._connect() as connection:
@@ -445,9 +512,9 @@ class MonitoringAiRepository:
                 """,
                 (project_id, job_id),
             ).fetchone()
-        if row is None:
-            raise MonitoringAiRepositoryError("monitoring AI job not found")
-        _, payload = self._validated_job_inputs(row)
+            if row is None:
+                raise MonitoringAiRepositoryError("monitoring AI job not found")
+            _, payload = self._validated_job_inputs(row, connection=connection)
         return payload
 
     def list_jobs(
@@ -480,7 +547,7 @@ class MonitoringAiRepository:
         # Status/list views must retain the persisted revision token so callers
         # can exclude deliberately stale jobs; execution reads use the strict
         # identity path in ``get``/``input_payload``.
-        return tuple(self._job(row, strict_input_identity=False, validate_payload=not lightweight) for row in rows)
+        return tuple(self._job(row, strict_input_identity=False, validate_payload=not lightweight, repository=self) for row in rows)
 
     def set_queue_paused(self, project_id: str, *, paused: bool) -> None:
         """Persist the project stop boundary without cancelling in-flight work."""
@@ -650,7 +717,7 @@ class MonitoringAiRepository:
                 (row["job_id"],),
             ).fetchone()
             connection.commit()
-        return self._job(current)
+        return self._job(current, repository=self)
 
     def expire_exhausted_leases(self, *, project_id: str = "", retire_legacy_workflows: bool = True) -> int:
         """Move expired final-attempt leases to a retryable terminal state.
@@ -1086,7 +1153,7 @@ class MonitoringAiRepository:
                     )
                 connection.commit()
                 return (
-                    self._job(repaired_job),
+                    self._job(repaired_job, repository=self),
                     self._deterministic_repair(
                         existing,
                         expected_project_id=job.project_id,
@@ -1233,7 +1300,7 @@ class MonitoringAiRepository:
             ).fetchone()
             connection.commit()
         return (
-            self._job(repaired_job),
+            self._job(repaired_job, repository=self),
             self._deterministic_repair(
                 repair_row,
                 expected_project_id=job.project_id,
@@ -1385,7 +1452,7 @@ class MonitoringAiRepository:
                 raise MonitoringAiRepositoryError("monitoring AI job not found")
             duplicate, retained = rows
             for row in rows:
-                self._validated_job_inputs(row)
+                self._validated_job_inputs(row, connection=connection)
             reason = f"Equivalent unstarted generation; retained job {retained_job_id}"
             if (duplicate["contract_retirement_code"] == "duplicate_unstarted_generation"
                     and duplicate["contract_retirement_reason"] == reason):
@@ -2426,12 +2493,24 @@ class MonitoringAiRepository:
         row: sqlite3.Row,
         *,
         strict_input_identity: bool = True,
+        connection: Optional[sqlite3.Connection] = None,
     ) -> tuple[MonitoringAiInputRevision, dict[str, Any]]:
         try:
             input_revision = MonitoringAiInputRevision.model_validate_json(
                 row["input_revision_json"]
             )
             payload = json.loads(row["input_payload_json"])
+            if any(
+                _blob_section_markers(value)
+                for value in (
+                    payload.values() if isinstance(payload, dict) else ()
+                )
+            ):
+                if connection is None:
+                    raise MonitoringAiRepositoryError(
+                        "monitoring AI payload section blob requires a connection"
+                    )
+                payload = _materialize_payload(connection, row["input_payload_json"])
         except (TypeError, ValueError) as exc:
             raise MonitoringAiRepositoryError(
                 "persisted monitoring AI job input is invalid"
@@ -2477,6 +2556,7 @@ class MonitoringAiRepository:
         *,
         strict_input_identity: bool = True,
         validate_payload: bool = True,
+        repository=None,
     ) -> MonitoringAiJob:
         try:
             job_id = _required_text(row["job_id"], "job_id")
@@ -2499,9 +2579,26 @@ class MonitoringAiRepository:
             )
             output_sha256 = _optional_sha256(row["output_sha256"], "output_sha256")
             if validate_payload:
-                input_revision, _ = MonitoringAiRepository._validated_job_inputs(
-                    row, strict_input_identity=strict_input_identity,
-                )
+                if repository is not None and any(
+                    _blob_section_markers(value)
+                    for value in (
+                        json.loads(row["input_payload_json"]).values()
+                        if isinstance(json.loads(row["input_payload_json"]), dict)
+                        else ()
+                    )
+                ):
+                    with repository._connect() as blob_connection:
+                        input_revision, _ = (
+                            MonitoringAiRepository._validated_job_inputs(
+                                row,
+                                strict_input_identity=strict_input_identity,
+                                connection=blob_connection,
+                            )
+                        )
+                else:
+                    input_revision, _ = MonitoringAiRepository._validated_job_inputs(
+                        row, strict_input_identity=strict_input_identity,
+                    )
             else:
                 # Status projection only. Execution and candidate acceptance
                 # continue through get()/candidates() with full validation.

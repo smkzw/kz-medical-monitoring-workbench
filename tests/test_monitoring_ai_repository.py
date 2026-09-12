@@ -2742,3 +2742,59 @@ def test_pre_marker_schema_backfills_legacy_contract_retirement(
             job.job_id,
             current_input_revision_sha256=job.input_revision_sha256,
         )
+
+
+def test_payload_section_blobs_dedup_and_roundtrip(tmp_path):
+    """Large sections spill to content-addressed blobs; reads materialize."""
+    repo = MonitoringAiRepository(tmp_path / "blob.sqlite3")
+    big_context = {"profiles": [{"field": f"F{i}", "payload": "x" * 400} for i in range(60)]}
+    small_meta = {"note": "small"}
+    payload_one = {"field_profile": big_context, "meta": small_meta, "n": 1}
+    payload_two = {"field_profile": big_context, "meta": small_meta, "n": 2}
+    revision_one = MonitoringAiInputRevision(project_id="p-blob", batch_revision="r1")
+    revision_two = MonitoringAiInputRevision(project_id="p-blob", batch_revision="r2")
+    job_one = repo.create_or_get(
+        MonitoringAiJobCreate(
+            project_id="p-blob",
+            task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+            business_key="bk-one",
+            prompt_version="pv-blob",
+            profile_id="profile-blob",
+            provider="deepseek",
+            requested_model="deepseek-flash",
+            input_revision=revision_one,
+            input_payload=payload_one,
+        )
+    )
+    job_two = repo.create_or_get(
+        MonitoringAiJobCreate(
+            project_id="p-blob",
+            task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+            business_key="bk-two",
+            prompt_version="pv-blob",
+            profile_id="profile-blob",
+            provider="deepseek",
+            requested_model="deepseek-flash",
+            input_revision=revision_two,
+            input_payload=payload_two,
+        )
+    )
+
+    with repo._connect() as connection:
+        blobs = connection.execute(
+            "SELECT COUNT(*) FROM monitoring_ai_payload_blobs"
+        ).fetchone()[0]
+        stored_one = json.loads(
+            connection.execute(
+                "SELECT input_payload_json FROM monitoring_ai_jobs WHERE job_id = ?",
+                (job_one.job_id,),
+            ).fetchone()[0],
+        )
+    assert blobs == 1  # shared section stored once across both jobs
+    assert "$section_blob" in stored_one["field_profile"]
+    assert stored_one["meta"] == small_meta
+
+    for job, payload in ((job_one, payload_one), (job_two, payload_two)):
+        assert repo.input_payload("p-blob", job.job_id) == payload
+        fetched = repo.get("p-blob", job.job_id)
+        assert fetched.input_payload_sha256 == job.input_payload_sha256
