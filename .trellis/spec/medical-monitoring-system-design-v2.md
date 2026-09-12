@@ -66,7 +66,7 @@ services中的8601行monitoring_ai_service不得继续长大。按“任务仓�
 
 ## 6. cms-model(high)主分析＋本地MTPLX全量盲核对（2026-09-12用户重指定）
 
-主分析：cms-model(high)——经cms-smk直连端点的路由别名，实际身份MiniMax-M3（路由器返回身份已实证；产品按具体模型名钉扎expected_response_model，1M上下文，原生VLM），思考high。核对：本机MTPLX Qwen3.8-Flash-Next（mlx-serve，mtplx-flash-next-optimized-speed，思考xhigh，约200k有效上下文，约16k输出预算，原生VLM），与云端主分析保持模型、部署与上下文三重隔离；历史GLM身份保留为已存证据的合法核对身份与新运行的远程备用。首轮输入同一冻结证据revision，两路上下文隔离；核对模型不看主结果。Codex和OMP不在产品运行时参与解释或裁决。
+主分析：deepseek/deepseek-flash(max思考)——api.deepseek.com官方端点，规范名deepseek-flash（请求=响应身份已实证；1M上下文），思考max。cms-router路线（cms-model别名，实际MiniMax-M3，high）降为历史身份，已存证据按主路历史集合继续重验；其账户余额耗尽是切换的直接动因。核对：本机MTPLX Qwen3.8-Flash-Next（mlx-serve，mtplx-flash-next-optimized-speed，思考xhigh，约200k有效上下文，约16k输出预算，原生VLM），与云端主分析保持模型、部署与上下文三重隔离；历史GLM身份保留为已存证据的合法核对身份与新运行的远程备用。首轮输入同一冻结证据revision，两路上下文隔离；核对模型不看主结果。Codex和OMP不在产品运行时参与解释或裁决。
 
 主副差异（提示层）：两路共用任务合同与证据工具协议；副路追加本地模型输出纪律——推理只在思考通道，正文有且只有一个完整JSON对象，输出预算内保持精炼、长引文用证据编号；主路无此块。调度差异：主路云端可并行（默认4），副路本地串行（并行1）；副路租约900s容纳xhigh长思考；副路分片输入必须落在约200k有效上下文内（分片尺寸以副路预算为准，双路输入仍逐字相同）。本地特性约束：mlx-serve计算受限单实例、无速率限制但时延与思考深度正相关、AC电源与内存门由宿主保障；本地服务不可用=核对失败闭合，不静默替换、不称双核对通过。
 
