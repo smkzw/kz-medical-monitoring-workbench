@@ -1456,3 +1456,7 @@ v7.1部分进度快照：primary 3完成/5失败/75排队/4租约running；verif
 用户新goal指定主分析cms-model(high)+核对GLM-5.3-flash(high)、降级名改为mlx-serve。实证处理：直接探测cms-router（new-api.mediportal.com.cn/v1）model=cms-model返回response model=MiniMax-M3——cms-model是路由器别名，当前cms-smk/MiniMax-M3绑定即该路线；两角色binding均已是reasoning_effort=high。结论：无需任何切换，产品端按具体模型名钉扎expected_response_model比别名更严格（actual model identity精确返回的合同保持）。mlx-serve为用户对本地MTPLX的新称谓，功能不变。
 
 429风暴：zhipu核对账户23:00起被硬限流（12分钟36个429，冷却12分钟无效），已暂停队列止损。现场：P约32完/36败/13排队，V 22完/46败/17排队。已失败分片由排空时adjudicate_candidates原位重试路径（auto-recovery 1次）恢复；随后按LOOP-5推进。恢复策略：长冷却后重启watcher。
+
+### 2026-09-12 双角色重指定完成（用户指令：主cms-model(high)+副mtplx(xhigh)本地VLM）
+
+用户指令将验证器重指定为本机MTPLX Qwen3.8-Flash-Next（mlx-serve 127.0.0.1:8002，xhigh思考，~200k有效上下文，16k输出预算，原生VLM）；主分析cms-model(high)实证为cms-smk/MiniMax-M3（路由别名返回身份一致，无需切换）。实施四层：(1)代码层2ed9af6+963a102+作用域修复——mapping_gate验证器常量mtplx+历史GLM对保留、验证器运行时集合、role settings本地profile(900s)+xhigh绑定、verifier并行1、租约900s、本地模型输出纪律提示块；(2)设计层v2§6重写（主副提示/调度差异、本地特性、回退语义反转：本地不可用=核对失败闭合）；(3)运行时JSON改造（profile/绑定/密钥，原文件备份于recovery/）；(4)隔离实证暴露并修复三个真实缺陷：document_authority._validate_run_pair硬编码验证器身份破坏全部历史GLM证据重验（963a102）；resolver本地回退分支误伤本地验证器任务（prompt_version判别修复）；**每分片内嵌全量695双选项+799画像=~94万token超出本地窗口（v14/verifier-v12 chunk-local裁剪至~25k token，本地mtplx真实完成裁决分片，云端成本降25倍）**。429风暴期间zhipu已非验证器，正式切换（旧zhipu任务退休+mtplx代重提）已staged待用户恢复goal后执行。766项回归通过。
