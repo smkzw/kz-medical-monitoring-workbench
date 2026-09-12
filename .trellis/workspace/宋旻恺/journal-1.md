@@ -1492,3 +1492,7 @@ deepseek v14首轮86/86全败根因实证：finish=length、content 0字符、re
 ### 2026-09-13 00:15 阶段清理+载荷分节blob去重（P1-1第一步）
 
 窗口期工作：阶段性清理（pytest缓存×3含冻结副本内可再生的、/tmp接线验证目录、测试bundle；运行证据全部保留）。P1-1实施5bf0851：新建monitoring_ai_payload_blobs内容寻址表，≥16k字符的载荷顶层分节按内容哈希唯一存储（分片间共享的10-300KB只读上下文只存一份），读取经_validated_job_inputs透明物化，input_payload_sha256仍按物化文档校验（语义身份不变）；旧行零迁移惰性兼容；round-trip+去重计数测试；697项回归。正式库待队列空闲时自然启用（新写入走blob）。运行侧：deepseek接近排空（31完/37败重试中/7排队），mtplx 68排队本地串行推进中。
+
+### 2026-09-13 00:45 第二轮恢复授予（重试预算耗尽后）
+
+45主路+验证器失败分片的auto-recovery(count=1)全部耗尽。其中26个主路失败是max思考坏配置时代产物（其唯一重试也在坏配置下烧掉）。经repository.retry_terminal(automatic_recovery_limit=2)对当前revision未变的失败分片授予第二轮（主路45全部恢复；验证器同步处理）——repository公共API操作，非SQL改写。健康配置(high思考+32k预算+1800s租约)下执行。
