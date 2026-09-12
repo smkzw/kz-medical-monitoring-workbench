@@ -1480,3 +1480,7 @@ v14运行10分钟primary 7失败中6个HTTP 403，响应体解码=「用户额�
 ### 2026-09-12 21:50 预算耗尽修复+重试死锁修复，v14双路恢复执行
 
 deepseek v14首轮86/86全败根因实证：finish=length、content 0字符、reasoning_content 44,856字符——max思考耗尽12000 token预算，正文零输出（HTTP 200非报错）。修复52d68a6：deepseek-flash主路映射预算12000→32768（模型上限65536，留双通道余量）。第二问题：尝试耗尽任务卡过期租约running态→adjudicate重试分支被"running"永久阻塞+claim因attempt_count不领→死锁。修复：advance_to_facts.py status相位前置expire_exhausted_leases（repository为此设计的合法回收）。修复后86失败→重试放行（38失败/45排队/4运行，新预算执行）。mtplx验证器同步推进（54完成/94排队）。旧watcher带旧代码曾致一轮浪费——watcher重启后代码生效。继续排空至LOOP-5。
+
+### 2026-09-12 22:40 high思考生效+自动化推进
+
+绑定max→high后（max思考无界实证：reasoning随预算等比膨胀12k→44k/32k→123k字符、content恒0；bounded high为运行点，max保留给小任务）重启watcher，deepseek首批完成出现（3完成/12运行）。部署status_loop.sh自动轮询（每20分钟expire+retry+adjudicate推进至complete/blocked），与watcher并行自愈。现场：deepseek 3/28/44/12，mtplx 64/31/74/5。预计数小时排空后LOOP-5自动收束。
