@@ -1472,3 +1472,7 @@ v14运行10分钟primary 7失败中6个HTTP 403，响应体解码=「用户额�
 ### 2026-09-12 13:10 充值自愈守护上线
 
 主路仍403（余额¥-0.0045未变）。部署auto_recharge_recovery.py守护（12h预算）：每5分钟探测路由器计费；检测到充值即自动执行adjudicate status轮询（原位重试403失败分片）并每90秒推进至complete/blocked终态。本地mtplx验证器继续免费串行推进（86排队）。watcher(81851)+守护双进程托管，充值后无需人工介入即恢复全链路。
+
+### 2026-09-12 14:10 主路切换deepseek-flash(max)+正式v14重提（用户指令）
+
+用户指令：主模型→deepseek/deepseek-flash（思考max）；本地明确用MTPLX（非MLX serve命名）。实证：api.deepseek.com规范名deepseek-flash（请求=响应身份；v4-flash别名返回deepseek-flash），max思考+reasoning_content正常；密钥在工作台ai-runtime.env。实施（f9b1a38+分类器集合修复）：gate主路常量→deepseek+cms历史集合（复用mtplx切换的爆炸半径方案：authority两文件/run-pair/回执收集/验证器全集合化；执行路由分类器集合化——cms首轮任务曾误判UNRECOGNIZED阻断reconcile）；裁决digest纳入运行时身份（换路线=新命名空间，避免与旧路线行碰撞）；网关白名单+deepseek-flash；role binding max思考+600s超时；正式运行时JSON/密钥重绑。766项回归。队列：deepseek v14主路新digest命名空间83排队/4运行；verifier(mtplx)170排队并行2-3；旧cms v14行惰性历史（身份隔离永不被领取）；充值守护已停（阻塞随切换消失）。auto_recharge与LOOP-5衔接改由排空后advance_to_facts推进。
