@@ -1697,10 +1697,16 @@ def current_admission_mapping_revision(
             record=record,
             workspace_dir=workspace_dir,
         )
+        # The local fallback receipt branch applies to PRIMARY-cohort jobs
+        # only: every verifier prompt version contains "verifier" while no
+        # primary version ever does, so since the 2026-09-12 redesignation
+        # (local MTPLX IS the designated verifier) verifier jobs carrying the
+        # local identity must never be treated as primary fallback runs.
         if (
             str(job.provider) == MONITORING_C3_LOCAL_FALLBACK_PROVIDER
             and str(job.requested_model).casefold()
             == MONITORING_C3_LOCAL_FALLBACK_MODEL.casefold()
+            and "verifier" not in str(getattr(job, "prompt_version", ""))
         ):
             stored_receipt = field_profile.get("fallback_admission")
             if not isinstance(stored_receipt, Mapping):
