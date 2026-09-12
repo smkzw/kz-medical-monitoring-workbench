@@ -123,6 +123,23 @@ MONITORING_C3_PRIMARY_RUNTIME_PAIRS = frozenset({
 })
 
 
+def monitoring_prompt_version_role(prompt_version: str) -> str:
+    """Classify a monitoring prompt version's cohort role from its own text.
+
+    Authority and mapping prompt versions carry an explicit role marker
+    ("-primary-" / "-verifier-"); with route pools the same provider/model
+    may serve either role, so identity sets alone cannot disambiguate.
+    """
+    cleaned = str(prompt_version or "")
+    if "-verifier-" in cleaned:
+        return "verifier"
+    if "-primary-" in cleaned:
+        return "primary"
+    # First-round prompts: verifier versions carry the marker; the primary
+    # first-round version does not.
+    return "verifier" if "-verifier" in cleaned else "primary"
+
+
 def is_monitoring_primary_runtime(provider: str, model: str) -> bool:
     return (str(provider or ""), str(model or "")) in (
         MONITORING_C3_PRIMARY_RUNTIME_PAIRS
@@ -360,6 +377,7 @@ __all__ = [
     "MONITORING_C3_CMS_PRIMARY_PROFILE_ID",
     "MONITORING_C3_CMS_PRIMARY_PROVIDER",
     "MONITORING_C3_LOCAL_FALLBACK_MODEL",
+    "monitoring_prompt_version_role",
     "MONITORING_C3_MTPLX_VERIFIER_MODEL",
     "MONITORING_C3_MTPLX_VERIFIER_PROFILE_ID",
     "MONITORING_C3_MTPLX_VERIFIER_PROVIDER",
