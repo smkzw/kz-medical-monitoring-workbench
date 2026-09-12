@@ -118,6 +118,8 @@ from packages.medical_monitoring.admission.document_authority import (
 from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_GLM_VERIFIER_MODEL,
     MONITORING_C3_GLM_VERIFIER_PROVIDER,
+    is_monitoring_primary_runtime,
+    is_monitoring_verifier_runtime,
     MONITORING_C3_LOCAL_FALLBACK_MODEL,
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROVIDER,
@@ -8702,13 +8704,17 @@ class MonitoringAiService:
                 != "mm-c3-remote-unavailability-receipt-v1"
                 or not isinstance(routes, list)
                 or len(routes) != 2
-                or identities != {
-                    (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
-                    (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
-                } and identities != {
-                    (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
-                    (MONITORING_C3_GLM_VERIFIER_PROVIDER, MONITORING_C3_GLM_VERIFIER_MODEL),
-                }
+                or not (
+                    len(identities) == 2
+                    and sum(
+                        is_monitoring_primary_runtime(*identity)
+                        for identity in identities
+                    ) == 1
+                    and sum(
+                        is_monitoring_verifier_runtime(*identity)
+                        for identity in identities
+                    ) == 1
+                )
                 or receipt_sha256 != content_sha256(unsigned)
             ):
                 raise ValueError("mapping fallback admission receipt is invalid")

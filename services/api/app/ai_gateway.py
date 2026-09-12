@@ -68,8 +68,17 @@ SUPPORTED_SCHEMA_VERSIONS = {"ai_task_output_v0_1"}
 DIRECT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 DIRECT_DEEPSEEK_MODEL = "deepseek-v4-pro"
 DIRECT_DEEPSEEK_TRANSLATION_SUPPORT_MODEL = "deepseek-v4-flash"
+# 2026-09-12: api.deepseek.com serves the flash route under the canonical
+# name ``deepseek-flash`` (request==response identity, verified live); the
+# alias ``deepseek-v4-flash`` resolves to the same route but reports
+# ``deepseek-flash`` back, so the monitoring primary pins the canonical id.
+DIRECT_DEEPSEEK_FLASH_MODEL = "deepseek-flash"
 DIRECT_DEEPSEEK_MODELS = frozenset(
-    {DIRECT_DEEPSEEK_MODEL, DIRECT_DEEPSEEK_TRANSLATION_SUPPORT_MODEL}
+    {
+        DIRECT_DEEPSEEK_MODEL,
+        DIRECT_DEEPSEEK_TRANSLATION_SUPPORT_MODEL,
+        DIRECT_DEEPSEEK_FLASH_MODEL,
+    }
 )
 ALIBABA_TOKEN_PLAN_PROVIDER = "alibaba_token_plan"
 ALIBABA_TOKEN_PLAN_BASE_URL = (

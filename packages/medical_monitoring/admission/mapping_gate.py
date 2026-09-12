@@ -18,9 +18,17 @@ MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION = "mm-c3-dual-mapping-cohort-v1"
 # The primary route is the direct CMS endpoint.  ``cms-router`` remains a
 # supported transport identity for installations that expose the same route
 # through the local CMS router, but it is not an OMP invocation.
-MONITORING_C3_MAPPING_PROVIDER = "cms-smk"
-MONITORING_C3_MAPPING_MODEL = "MiniMax-M3"
-MONITORING_C3_MAPPING_PROFILE_ID = "medical_monitoring_ai__cms_smk_minimax_m3"
+# 2026-09-12 user redesignation: the primary analysis route is DeepSeek
+# flash at max thinking (api.deepseek.com, request==response identity
+# ``deepseek-flash``). The previous cms-router MiniMax route remains a
+# supported historical identity: persisted primary jobs and receipts under
+# cms-smk/MiniMax-M3 (and the cms-router alternate) must keep revalidating.
+MONITORING_C3_MAPPING_PROVIDER = "deepseek"
+MONITORING_C3_MAPPING_MODEL = "deepseek-flash"
+MONITORING_C3_MAPPING_PROFILE_ID = "medical_monitoring_ai__deepseek_flash"
+MONITORING_C3_CMS_PRIMARY_PROVIDER = "cms-smk"
+MONITORING_C3_CMS_PRIMARY_MODEL = "MiniMax-M3"
+MONITORING_C3_CMS_PRIMARY_PROFILE_ID = "medical_monitoring_ai__cms_smk_minimax_m3"
 MONITORING_C3_ALTERNATE_PROVIDER = "cms-router"
 MONITORING_C3_ALTERNATE_MODEL = "minimax-m3"
 # 2026-09-12 user redesignation: the verifier cohort is the LOCAL MTPLX VLM
@@ -84,6 +92,17 @@ MONITORING_C3_VERIFIER_RUNTIME_PAIRS = frozenset({
     (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
     (MONITORING_C3_GLM_VERIFIER_PROVIDER, MONITORING_C3_GLM_VERIFIER_MODEL),
 })
+MONITORING_C3_PRIMARY_RUNTIME_PAIRS = frozenset({
+    (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
+    (MONITORING_C3_CMS_PRIMARY_PROVIDER, MONITORING_C3_CMS_PRIMARY_MODEL),
+    (MONITORING_C3_ALTERNATE_PROVIDER, MONITORING_C3_ALTERNATE_MODEL),
+})
+
+
+def is_monitoring_primary_runtime(provider: str, model: str) -> bool:
+    return (str(provider or ""), str(model or "")) in (
+        MONITORING_C3_PRIMARY_RUNTIME_PAIRS
+    )
 
 
 def is_monitoring_verifier_runtime(provider: str, model: str) -> bool:
@@ -143,11 +162,9 @@ def monitoring_mapping_runtime_matches(
             # Local admission needs repository-backed terminal evidence from
             # both remote routes; a runtime/env declaration is never proof.
             return False
-        primary_routes = {
-            (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL.casefold()),
-            (MONITORING_C3_ALTERNATE_PROVIDER, MONITORING_C3_ALTERNATE_MODEL.casefold()),
-        }
-        return available and actual in primary_routes
+        return available and is_monitoring_primary_runtime(
+            provider, model
+        )
     return available and actual == requested
 
 
@@ -317,6 +334,9 @@ __all__ = [
     "MONITORING_C3_VERIFIER_PROMPT_VERSION",
     "MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX",
     "MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX",
+    "MONITORING_C3_CMS_PRIMARY_MODEL",
+    "MONITORING_C3_CMS_PRIMARY_PROFILE_ID",
+    "MONITORING_C3_CMS_PRIMARY_PROVIDER",
     "MONITORING_C3_LOCAL_FALLBACK_MODEL",
     "MONITORING_C3_LOCAL_FALLBACK_PROVIDER",
     "MONITORING_C3_SUPPORTED_RUNTIMES",

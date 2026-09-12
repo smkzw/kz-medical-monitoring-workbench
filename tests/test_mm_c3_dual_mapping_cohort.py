@@ -100,7 +100,7 @@ def _runtime_env(provider: str, model: str) -> dict[str, str]:
     return {
         "WORKBENCH_AI_PROVIDER": provider,
         "WORKBENCH_AI_TRANSPORT": "openai_compatible",
-        "WORKBENCH_AI_BASE_URL": "https://example.invalid/v1",
+        "WORKBENCH_AI_BASE_URL": ("https://api.deepseek.com/v1" if provider == "deepseek" else "https://example.invalid/v1"),
         "WORKBENCH_AI_API_KEY": "test-key",
         "WORKBENCH_AI_MODEL": model,
         "WORKBENCH_AI_EXPECTED_RESPONSE_MODEL": model,
