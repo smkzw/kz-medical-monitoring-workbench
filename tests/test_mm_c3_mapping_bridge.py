@@ -14,6 +14,16 @@ from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_ALTERNATE_PROVIDER,
     MONITORING_C3_LOCAL_FALLBACK_MODEL,
     MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
+    MONITORING_C3_DEEPSEEK_PRIMARY_MODEL,
+    MONITORING_C3_DEEPSEEK_PRIMARY_PROFILE_ID,
+    MONITORING_C3_DEEPSEEK_PRIMARY_PROVIDER,
+    MONITORING_C3_CMS_PRIMARY_MODEL,
+    MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX,
+    MONITORING_C3_CMS_PRIMARY_PROFILE_ID,
+    MONITORING_C3_CMS_PRIMARY_PROVIDER,
+    MONITORING_C3_MTPLX_VERIFIER_MODEL,
+    MONITORING_C3_MTPLX_VERIFIER_PROFILE_ID,
+    MONITORING_C3_MTPLX_VERIFIER_PROVIDER,
     MONITORING_C3_GLM_VERIFIER_MODEL,
     MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
     MONITORING_C3_GLM_VERIFIER_PROVIDER,
@@ -727,20 +737,23 @@ def test_pipeline_local_fallback_requires_repository_terminal_receipts(
             failure_code="ai_not_configured",
         )
 
+    # Era-accurate legacy scenario: before the pool redesignation the
+    # primary was cms-smk/MiniMax and the verifier cloud GLM; pin both
+    # identities explicitly so pool-era constant changes never collide.
     primary_service = MonitoringAiService(
         repository,
         runtime_resolver=lambda: unavailable(
-            MONITORING_C3_MAPPING_PROVIDER,
-            MONITORING_C3_MAPPING_MODEL,
-            MONITORING_C3_MAPPING_PROFILE_ID,
+            MONITORING_C3_CMS_PRIMARY_PROVIDER,
+            MONITORING_C3_CMS_PRIMARY_MODEL,
+            MONITORING_C3_CMS_PRIMARY_PROFILE_ID,
         ),
     )
     verifier_service = MonitoringAiService(
         repository,
         runtime_resolver=lambda: unavailable(
-            MONITORING_C3_GLM_VERIFIER_PROVIDER,
-            MONITORING_C3_GLM_VERIFIER_MODEL,
-            MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
+            MONITORING_C3_MTPLX_VERIFIER_PROVIDER,
+            MONITORING_C3_MTPLX_VERIFIER_MODEL,
+            MONITORING_C3_MTPLX_VERIFIER_PROFILE_ID,
         ),
     )
     # Historical shape: this legacy fallback scenario predates the local
@@ -753,8 +766,10 @@ def test_pipeline_local_fallback_requires_repository_terminal_receipts(
         input_revision_factory=MonitoringAiInputRevision.model_validate,
         task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
         relationship_profiler=_stub_profiler,
-        verifier_required_provider=MONITORING_C3_GLM_VERIFIER_PROVIDER,
-        verifier_required_model=MONITORING_C3_GLM_VERIFIER_MODEL,
+        required_provider=MONITORING_C3_CMS_PRIMARY_PROVIDER,
+        required_model=MONITORING_C3_CMS_PRIMARY_MODEL,
+        verifier_required_provider=MONITORING_C3_MTPLX_VERIFIER_PROVIDER,
+        verifier_required_model=MONITORING_C3_MTPLX_VERIFIER_MODEL,
     )
     remote_pipeline.generate_candidates(
         project_id=PROJECT_ID,
@@ -771,17 +786,17 @@ def test_pipeline_local_fallback_requires_repository_terminal_receipts(
         (
             primary_service,
             (
-                MONITORING_C3_MAPPING_PROFILE_ID,
-                MONITORING_C3_MAPPING_PROVIDER,
-                MONITORING_C3_MAPPING_MODEL,
+                MONITORING_C3_CMS_PRIMARY_PROFILE_ID,
+                MONITORING_C3_CMS_PRIMARY_PROVIDER,
+                MONITORING_C3_CMS_PRIMARY_MODEL,
             ),
         ),
         (
             verifier_service,
             (
-                MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
-                MONITORING_C3_GLM_VERIFIER_PROVIDER,
-                MONITORING_C3_GLM_VERIFIER_MODEL,
+                MONITORING_C3_MTPLX_VERIFIER_PROFILE_ID,
+                MONITORING_C3_MTPLX_VERIFIER_PROVIDER,
+                MONITORING_C3_MTPLX_VERIFIER_MODEL,
             ),
         ),
     ):
@@ -814,9 +829,14 @@ def test_pipeline_local_fallback_requires_repository_terminal_receipts(
     assert local["execution"]["providers"] == [
         MONITORING_C3_LOCAL_FALLBACK_PROVIDER
     ]
+    # mtplx is BOTH the legacy local-fallback pair and the historical
+    # verifier identity; exclude the verifier namespace explicitly.
     local_jobs = [
         job for job in repository.list_jobs(PROJECT_ID)
         if job.provider == MONITORING_C3_LOCAL_FALLBACK_PROVIDER
+        and str(job.business_key).startswith(
+            f"{MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX}:{attempt_id}:"
+        )
     ]
     assert local_jobs
     profile = repository.input_payload(

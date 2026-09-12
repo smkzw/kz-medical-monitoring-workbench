@@ -18,14 +18,24 @@ MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION = "mm-c3-dual-mapping-cohort-v1"
 # The primary route is the direct CMS endpoint.  ``cms-router`` remains a
 # supported transport identity for installations that expose the same route
 # through the local CMS router, but it is not an OMP invocation.
-# 2026-09-12 user redesignation: the primary analysis route is DeepSeek
-# flash at max thinking (api.deepseek.com, request==response identity
-# ``deepseek-flash``). The previous cms-router MiniMax route remains a
-# supported historical identity: persisted primary jobs and receipts under
-# cms-smk/MiniMax-M3 (and the cms-router alternate) must keep revalidating.
-MONITORING_C3_MAPPING_PROVIDER = "deepseek"
-MONITORING_C3_MAPPING_MODEL = "deepseek-flash"
-MONITORING_C3_MAPPING_PROFILE_ID = "medical_monitoring_ai__deepseek_flash"
+# 2026-09-13 user redesignation: the primary analysis is a ROUTE POOL of
+# cloud models — zhipu-coding-plan GLM-5.3-Flash (high) first, DeepSeek
+# deepseek-flash (high) second — with the local MTPLX VLM as the blind
+# verifier. The harness treats routes as data (capability-tagged profiles);
+# these constants name the pool's ACTIVE route for new submissions, and the
+# PRIMARY_RUNTIME_PAIRS set below admits every current and historical
+# primary identity so persisted jobs/receipts keep revalidating across
+# route changes.
+MONITORING_C3_MAPPING_PROVIDER = "zhipu-coding-plan"
+MONITORING_C3_MAPPING_MODEL = "glm-5.3-flash"
+MONITORING_C3_MAPPING_PROFILE_ID = (
+    "medical_monitoring_ai__zhipu_glm_flash_high"
+)
+MONITORING_C3_DEEPSEEK_PRIMARY_PROVIDER = "deepseek"
+MONITORING_C3_DEEPSEEK_PRIMARY_MODEL = "deepseek-flash"
+MONITORING_C3_DEEPSEEK_PRIMARY_PROFILE_ID = (
+    "medical_monitoring_ai__deepseek_flash"
+)
 MONITORING_C3_CMS_PRIMARY_PROVIDER = "cms-smk"
 MONITORING_C3_CMS_PRIMARY_MODEL = "MiniMax-M3"
 MONITORING_C3_CMS_PRIMARY_PROFILE_ID = "medical_monitoring_ai__cms_smk_minimax_m3"
@@ -37,9 +47,18 @@ MONITORING_C3_ALTERNATE_MODEL = "minimax-m3"
 # context, native VLM). The previous cloud GLM pair remains a supported
 # verifier transport for historical receipts and as the remote substitute;
 # new submissions bind to mtplx.
-MONITORING_C3_VERIFIER_PROVIDER = "mtplx"
-MONITORING_C3_VERIFIER_MODEL = "mtplx-flash-next-optimized-speed"
+# 2026-09-13 user correction: the dual-model contract is GLM-5.3-Flash
+# (high) as primary + deepseek-flash (high) as the blind verifier. The
+# local MTPLX verifier from the interim directive exits the active
+# configuration and remains a historical identity only.
+MONITORING_C3_VERIFIER_PROVIDER = "deepseek"
+MONITORING_C3_VERIFIER_MODEL = "deepseek-flash"
 MONITORING_C3_VERIFIER_PROFILE_ID = (
+    "medical_monitoring_verifier__deepseek_flash"
+)
+MONITORING_C3_MTPLX_VERIFIER_PROVIDER = "mtplx"
+MONITORING_C3_MTPLX_VERIFIER_MODEL = "mtplx-flash-next-optimized-speed"
+MONITORING_C3_MTPLX_VERIFIER_PROFILE_ID = (
     "medical_monitoring_verifier__mtplx_qwen38_flash_next"
 )
 MONITORING_C3_GLM_VERIFIER_PROVIDER = "zhipu-coding-plan"
@@ -91,9 +110,14 @@ MONITORING_C3_SUPPORTED_RUNTIMES = frozenset({
 MONITORING_C3_VERIFIER_RUNTIME_PAIRS = frozenset({
     (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
     (MONITORING_C3_GLM_VERIFIER_PROVIDER, MONITORING_C3_GLM_VERIFIER_MODEL),
+    (
+        MONITORING_C3_MTPLX_VERIFIER_PROVIDER,
+        MONITORING_C3_MTPLX_VERIFIER_MODEL,
+    ),
 })
 MONITORING_C3_PRIMARY_RUNTIME_PAIRS = frozenset({
     (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
+    (MONITORING_C3_DEEPSEEK_PRIMARY_PROVIDER, MONITORING_C3_DEEPSEEK_PRIMARY_MODEL),
     (MONITORING_C3_CMS_PRIMARY_PROVIDER, MONITORING_C3_CMS_PRIMARY_MODEL),
     (MONITORING_C3_ALTERNATE_PROVIDER, MONITORING_C3_ALTERNATE_MODEL),
 })
@@ -330,9 +354,15 @@ __all__ = [
     "MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX",
     "MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX",
     "MONITORING_C3_CMS_PRIMARY_MODEL",
+    "MONITORING_C3_DEEPSEEK_PRIMARY_MODEL",
+    "MONITORING_C3_DEEPSEEK_PRIMARY_PROFILE_ID",
+    "MONITORING_C3_DEEPSEEK_PRIMARY_PROVIDER",
     "MONITORING_C3_CMS_PRIMARY_PROFILE_ID",
     "MONITORING_C3_CMS_PRIMARY_PROVIDER",
     "MONITORING_C3_LOCAL_FALLBACK_MODEL",
+    "MONITORING_C3_MTPLX_VERIFIER_MODEL",
+    "MONITORING_C3_MTPLX_VERIFIER_PROFILE_ID",
+    "MONITORING_C3_MTPLX_VERIFIER_PROVIDER",
     "MONITORING_C3_LOCAL_FALLBACK_PROVIDER",
     "MONITORING_C3_SUPPORTED_RUNTIMES",
     "MONITORING_MAPPING_COHORTS",

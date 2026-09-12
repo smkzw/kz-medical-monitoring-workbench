@@ -3720,7 +3720,16 @@ class MonitoringAiService:
                 "不得输出空字符串。修复轮按patch_contract只重发违规字段的完整条目，"
                 "保持严格JSON、输出尽量短。"
             )
-        if str(job.requested_model or "") == MONITORING_C3_LOCAL_FALLBACK_MODEL:
+        runtime_env = {}
+        try:
+            # Each cohort service carries its own runtime resolver; capability
+            # flags come from the serving route's profile, model-name-free.
+            runtime_env = self._monitoring_provider_env(
+                self.runtime_resolver().env
+            )
+        except Exception:
+            runtime_env = {}
+        if runtime_env.get("WORKBENCH_AI_OUTPUT_DISCIPLINE", "") == "strict_single_json":
             system_prompt += (
                 " 本地模型输出纪律：全部推理放在思考通道完成，最终回复正文有且只有一个"
                 "完整JSON对象——正文前后不得有任何解释、前言、markdown围栏或多余文本。"
@@ -3856,17 +3865,13 @@ class MonitoringAiService:
             },
             reasoning_effort="high",
             max_output_tokens=(
-                # deepseek-flash at max thinking burns the whole budget on
-                # reasoning_content (real run: 44.8k reasoning chars, content
-                # 0, finish=length); the mapping envelope needs headroom for
-                # reasoning + the JSON document.
-                32_768
-                if (
-                    job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
-                    and str(job.requested_model or "")
-                    == MONITORING_C3_MAPPING_MODEL
+                int(
+                    self._monitoring_provider_env(
+                        resolve_monitoring_ai_runtime().env
+                    ).get("WORKBENCH_AI_OUTPUT_TOKEN_BUDGET", "0")
+                    or 0
                 )
-                else 12_000
+                or 12_000
                 if job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
                 else (
                     _DOCUMENT_AUTHORITY_MAX_OUTPUT_TOKENS

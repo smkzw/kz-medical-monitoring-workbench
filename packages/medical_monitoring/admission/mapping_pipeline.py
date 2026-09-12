@@ -21,6 +21,8 @@ from .mapping_bridge import (
 from .document_evidence import DOCUMENT_ROLES, MAPPING_REQUIRED_DOCUMENT_ROLES
 from .mapping_gate import (
     MONITORING_C3_LOCAL_FALLBACK_MODEL,
+    MONITORING_C3_MTPLX_VERIFIER_PROVIDER,
+    MONITORING_C3_MTPLX_VERIFIER_MODEL,
     MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROVIDER,
@@ -717,6 +719,12 @@ class AdmissionMappingPipeline:
                 MONITORING_C3_GLM_VERIFIER_MODEL,
                 f"listing-field-mapping-verifier:{attempt_id}:",
             ),
+            (
+                "verifier_legacy_mtplx",
+                MONITORING_C3_MTPLX_VERIFIER_PROVIDER,
+                MONITORING_C3_MTPLX_VERIFIER_MODEL,
+                f"listing-field-mapping-verifier:{attempt_id}:",
+            ),
         )
         evidence = []
         # Group allowed routes per cohort label: the verifier label accepts
@@ -766,18 +774,19 @@ class AdmissionMappingPipeline:
                         and job.retryable
                     ):
                         continue
-                    candidates.append((job, attempts))
+                    candidates.append((job, attempts, provider, model))
             if not candidates:
                 raise AdmissionMappingPipelineError(
                     "mapping_fallback_terminal_evidence_missing"
                 )
-            job, attempts = max(
-                candidates, key=lambda item: (item[0].updated_at, item[0].job_id)
+            job, attempts, route_provider, route_model = max(
+                candidates,
+                key=lambda item: (item[0].updated_at, item[0].job_id),
             )
             evidence.append({
                 "cohort": label,
-                "provider": provider,
-                "model": model,
+                "provider": route_provider,
+                "model": route_model,
                 "job_id": job.job_id,
                 "input_revision_sha256": job.input_revision_sha256,
                 "prompt_version": job.prompt_version,
@@ -873,6 +882,8 @@ class AdmissionMappingPipeline:
                 or not attempts
                 or attempts[-1]["failure_code"] != route["failure_code"]
             ):
+                import sys as _s
+                print('REPLAY-MISMATCH route=', route['provider'], route['model'], 'pv=', route['prompt_version'], 'job=', job.provider, job.requested_model, job.prompt_version, 'natt=', len(attempts), 'lastfc=', attempts[-1]['failure_code'] if attempts else None, 'routefc=', route['failure_code'], 'same_att=', projected_attempts == route['attempt_receipts'], file=_s.stderr)
                 raise AdmissionMappingPipelineError(
                     "mapping_fallback_terminal_evidence_invalid"
                 )
