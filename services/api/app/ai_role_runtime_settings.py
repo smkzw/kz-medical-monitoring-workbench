@@ -20,6 +20,7 @@ from packages.medical_monitoring.admission.mapping_gate import (
     ZHIPU_CODING_PLAN_API_KEY_ENV,
     ZHIPU_CODING_PLAN_BASE_URL,
     MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
+    MONITORING_C3_MTPLX_VERIFIER_PROFILE_ID,
     MONITORING_C3_VERIFIER_PROFILE_ID,
 )
 
@@ -297,9 +298,23 @@ def _builtin_profiles() -> tuple[AiProviderProfile, ...]:
             enabled=True,
         ),
         AiProviderProfile(
+            profile_id=MONITORING_C3_MAPPING_PROFILE_ID,
+            provider=MONITORING_C3_MAPPING_PROVIDER,
+            label="GLM-5.3 Flash 医学监查主分析（主力，high思考）",
+            base_url=ZHIPU_CODING_PLAN_BASE_URL,
+            model=MONITORING_C3_MAPPING_MODEL,
+            expected_response_model=MONITORING_C3_MAPPING_MODEL,
+            api_key_env=ZHIPU_CODING_PLAN_API_KEY_ENV,
+            deployment_scope="cloud",
+            discovery_mode="manual_plus_probe",
+            timeout_seconds=600.0,
+            output_token_budget=32_768,
+            enabled=True,
+        ),
+        AiProviderProfile(
             profile_id="medical_monitoring_ai__deepseek_flash",
             provider="deepseek",
-            label="DeepSeek Flash 医学监查主分析（max思考）",
+            label="DeepSeek Flash 医学监查主分析（池次选，high思考）",
             base_url="https://api.deepseek.com/v1",
             model="deepseek-flash",
             expected_response_model="deepseek-flash",
@@ -307,6 +322,7 @@ def _builtin_profiles() -> tuple[AiProviderProfile, ...]:
             deployment_scope="cloud",
             discovery_mode="manual_plus_probe",
             timeout_seconds=600.0,
+            output_token_budget=32_768,
             enabled=True,
         ),
         AiProviderProfile(
@@ -323,8 +339,22 @@ def _builtin_profiles() -> tuple[AiProviderProfile, ...]:
         ),
         AiProviderProfile(
             profile_id=MONITORING_C3_VERIFIER_PROFILE_ID,
+            provider="deepseek",
+            label="DeepSeek Flash 医学监查独立盲核对（high思考）",
+            base_url="https://api.deepseek.com/v1",
+            model="deepseek-flash",
+            expected_response_model="deepseek-flash",
+            api_key_env="DEEPSEEK_API_KEY",
+            deployment_scope="cloud",
+            discovery_mode="manual_plus_probe",
+            timeout_seconds=600.0,
+            output_token_budget=32_768,
+            enabled=True,
+        ),
+        AiProviderProfile(
+            profile_id=MONITORING_C3_MTPLX_VERIFIER_PROFILE_ID,
             provider="mtplx",
-            label="MTPLX Qwen3.8 Flash Next 医学监查独立核对（本地VLM）",
+            label="MTPLX Qwen3.8 Flash Next 独立核对（历史，本地VLM）",
             base_url=os.environ.get(
                 "MTPLX_BASE_URL", "http://127.0.0.1:8002/v1"
             ),
@@ -334,6 +364,8 @@ def _builtin_profiles() -> tuple[AiProviderProfile, ...]:
             deployment_scope="local",
             discovery_mode="manual_plus_probe",
             timeout_seconds=900.0,
+            output_token_budget=16_000,
+            output_discipline="strict_single_json",
             enabled=True,
         ),
         AiProviderProfile(
@@ -358,6 +390,7 @@ _BUILTIN_ROLE_PROFILE_IDS = {
         MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
     },
     MEDICAL_MONITORING_AI_ROLE: {
+        MONITORING_C3_MAPPING_PROFILE_ID,
         "medical_monitoring_ai__deepseek_flash",
         MONITORING_C3_MAPPING_PROFILE_ID,
         MONITORING_C3_CMS_PRIMARY_PROFILE_ID,
@@ -367,6 +400,7 @@ _BUILTIN_ROLE_PROFILE_IDS = {
     MEDICAL_MONITORING_VERIFIER_AI_ROLE: {
         MONITORING_C3_VERIFIER_PROFILE_ID,
         MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
+        MONITORING_C3_MTPLX_VERIFIER_PROFILE_ID,
     },
     OCR_ROLE: {OCR_OMLX_PROFILE_ID, OCR_PADDLE_PROFILE_ID},
     TRANSLATION_BODY_ROLE: {TRANSLATION_BODY_OMLX_PROFILE_ID},
@@ -500,7 +534,7 @@ class AiRoleRuntimeSettingsStore:
                 model=MONITORING_C3_VERIFIER_MODEL,
                 enabled=True,
                 thinking=THINKING_ENABLED,
-                reasoning_effort="xhigh",
+                reasoning_effort="high",
             ),
             OCR_ROLE: AiRoleBinding(
                 role_id=OCR_ROLE,

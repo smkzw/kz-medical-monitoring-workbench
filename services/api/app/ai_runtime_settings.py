@@ -62,6 +62,10 @@ class AiProviderProfile:
     discovery_mode: str = "models_endpoint"
     enabled: bool = True
     revision: int = 1
+    # Capability tags — the harness stays model-agnostic; per-route needs
+    # are DATA on the profile, never if-model-name branches in code.
+    output_token_budget: int = 0          # 0 = task default
+    output_discipline: str = ""           # e.g. "strict_single_json"
 
 
 class AiProviderProfileUpsertRequest(BaseModel):
@@ -602,6 +606,14 @@ class AiRuntimeSettingsStore:
                 "WORKBENCH_AI_MODEL": profile.model,
                 "WORKBENCH_AI_DEPLOYMENT_PROFILE": profile.deployment_profile,
                 "WORKBENCH_AI_TIMEOUT_SECONDS": str(profile.timeout_seconds),
+                **(
+                    {"WORKBENCH_AI_OUTPUT_TOKEN_BUDGET": str(profile.output_token_budget)}
+                    if profile.output_token_budget else {}
+                ),
+                **(
+                    {"WORKBENCH_AI_OUTPUT_DISCIPLINE": profile.output_discipline}
+                    if profile.output_discipline else {}
+                ),
                 "WORKBENCH_AI_EXPECTED_RESPONSE_MODEL": (
                     profile.expected_response_model or profile.model
                 ),
