@@ -3856,7 +3856,17 @@ class MonitoringAiService:
             },
             reasoning_effort="high",
             max_output_tokens=(
-                12_000
+                # deepseek-flash at max thinking burns the whole budget on
+                # reasoning_content (real run: 44.8k reasoning chars, content
+                # 0, finish=length); the mapping envelope needs headroom for
+                # reasoning + the JSON document.
+                32_768
+                if (
+                    job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
+                    and str(job.requested_model or "")
+                    == MONITORING_C3_MAPPING_MODEL
+                )
+                else 12_000
                 if job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
                 else (
                     _DOCUMENT_AUTHORITY_MAX_OUTPUT_TOKENS
