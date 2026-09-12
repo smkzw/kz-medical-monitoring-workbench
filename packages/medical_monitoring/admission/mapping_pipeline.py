@@ -24,6 +24,7 @@ from .mapping_gate import (
     MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
     MONITORING_C3_MAPPING_MODEL,
     MONITORING_C3_MAPPING_PROVIDER,
+    MONITORING_C3_PRIMARY_RUNTIME_PAIRS,
     MONITORING_C3_GLM_VERIFIER_MODEL,
     MONITORING_C3_GLM_VERIFIER_PROVIDER,
     MONITORING_C3_VERIFIER_MODEL,
@@ -695,13 +696,12 @@ class AdmissionMappingPipeline:
     ) -> dict[str, Any]:
         """Derive a bounded receipt from immutable job-attempt evidence."""
 
+        primary_routes = tuple(
+            ("primary", provider, model, f"listing-field-mapping:{attempt_id}:")
+            for provider, model in sorted(MONITORING_C3_PRIMARY_RUNTIME_PAIRS)
+        )
         routes = (
-            (
-                "primary",
-                MONITORING_C3_MAPPING_PROVIDER,
-                MONITORING_C3_MAPPING_MODEL,
-                f"listing-field-mapping:{attempt_id}:",
-            ),
+            *primary_routes,
             # Historical fallback receipts may carry either verifier
             # identity (cloud GLM before the local redesignation, local
             # MTPLX after); terminal evidence from either counts.
@@ -1228,6 +1228,15 @@ class AdmissionMappingPipeline:
                     **({"evidence_profile_sha256": _evidence_revision_key}
                        if _evidence_revision_key else {}),
                     "prompt_version": self._adjudication_prompt_version(contract.cohort),
+                    # Provider identity is part of the work-unit identity:
+                    # switching the model route must open a fresh adjudication
+                    # namespace instead of colliding with prior-route rows.
+                    "runtime": (
+                        self._required_provider if contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
+                        else self._verifier_required_provider,
+                        self._required_model.casefold() if contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
+                        else self._verifier_required_model.casefold(),
+                    ),
                 },
                 ensure_ascii=False,
                 sort_keys=True,

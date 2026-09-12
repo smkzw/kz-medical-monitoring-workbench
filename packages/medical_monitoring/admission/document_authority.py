@@ -1733,12 +1733,13 @@ def _validate_run_pair(
                 and run.prompt_version == identity[3]
             )
         else:
+            from .mapping_gate import is_monitoring_primary_runtime
+
             identity_ok = (
-                run.role,
-                run.provider,
-                run.model,
-                run.prompt_version,
-            ) == identity
+                run.role == "primary"
+                and is_monitoring_primary_runtime(run.provider, run.model)
+                and run.prompt_version == identity[3]
+            )
         if not identity_ok or bound_hash != input_hash:
             raise DocumentAuthorityError("document_authority_run_identity_invalid")
 
