@@ -1024,7 +1024,7 @@ monitoring_ai_repository = MonitoringAiRepository(
     # The local MTPLX verifier runs xhigh thinking turns that can exceed the
     # 300s default lease; a longer lease only delays dead-worker reclaim.
     lease_seconds=int(
-        os.environ.get("WORKBENCH_MONITORING_AI_LEASE_SECONDS", "900")
+        os.environ.get("WORKBENCH_MONITORING_AI_LEASE_SECONDS", "1800")
     ),
 )
 source_registry.monitoring_authority_receipt_verifier = (
