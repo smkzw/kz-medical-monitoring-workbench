@@ -1476,3 +1476,7 @@ v14运行10分钟primary 7失败中6个HTTP 403，响应体解码=「用户额�
 ### 2026-09-12 14:10 主路切换deepseek-flash(max)+正式v14重提（用户指令）
 
 用户指令：主模型→deepseek/deepseek-flash（思考max）；本地明确用MTPLX（非MLX serve命名）。实证：api.deepseek.com规范名deepseek-flash（请求=响应身份；v4-flash别名返回deepseek-flash），max思考+reasoning_content正常；密钥在工作台ai-runtime.env。实施（f9b1a38+分类器集合修复）：gate主路常量→deepseek+cms历史集合（复用mtplx切换的爆炸半径方案：authority两文件/run-pair/回执收集/验证器全集合化；执行路由分类器集合化——cms首轮任务曾误判UNRECOGNIZED阻断reconcile）；裁决digest纳入运行时身份（换路线=新命名空间，避免与旧路线行碰撞）；网关白名单+deepseek-flash；role binding max思考+600s超时；正式运行时JSON/密钥重绑。766项回归。队列：deepseek v14主路新digest命名空间83排队/4运行；verifier(mtplx)170排队并行2-3；旧cms v14行惰性历史（身份隔离永不被领取）；充值守护已停（阻塞随切换消失）。auto_recharge与LOOP-5衔接改由排空后advance_to_facts推进。
+
+### 2026-09-12 21:50 预算耗尽修复+重试死锁修复，v14双路恢复执行
+
+deepseek v14首轮86/86全败根因实证：finish=length、content 0字符、reasoning_content 44,856字符——max思考耗尽12000 token预算，正文零输出（HTTP 200非报错）。修复52d68a6：deepseek-flash主路映射预算12000→32768（模型上限65536，留双通道余量）。第二问题：尝试耗尽任务卡过期租约running态→adjudicate重试分支被"running"永久阻塞+claim因attempt_count不领→死锁。修复：advance_to_facts.py status相位前置expire_exhausted_leases（repository为此设计的合法回收）。修复后86失败→重试放行（38失败/45排队/4运行，新预算执行）。mtplx验证器同步推进（54完成/94排队）。旧watcher带旧代码曾致一轮浪费——watcher重启后代码生效。继续排空至LOOP-5。
