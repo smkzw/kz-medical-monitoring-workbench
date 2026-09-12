@@ -1506,3 +1506,7 @@ deepseek v14首轮86/86全败根因实证：finish=length、content 0字符、re
 ### 2026-09-13 02:00 角色判据修复+最终主副代开跑
 
 前述"remaining 696→3"为断链假象：GLM升主路后glm-5.3-flash同时命中主/核身份集合，正式authority回执的(cms+glm)分析对按身份分类塌缩为单角色→文档解析全missing→302首轮任务全stale→reconcile在verifier_incomplete早退（其remaining只数草稿问题字段=3）。修复：角色判据改为prompt版本自带标记（-primary-/-verifier-，首轮verifier版本含-verifier），身份集合降为成员校验；正式dated解析复验四角色全current。修复后真实状态显现：695分歧待裁决，最终主副代（GLM主high+deepseek次high）已于01:49全量提交并执行中（GLM 61排队/8运行；deepseek验证器串行）。status_loop+watcher自驱；验证器为长杆（~87分片串行）。历史deepseek主路52完成与mtplx核对73完成因digest身份隔离不会被新代配对，保留为该指令期间的合法审计证据。
+
+### 2026-09-13 02:40 中毒代次处置与v15清洁代执行
+
+v14最终主副代在文档断链窗口提交，载荷缺文档绑定→角色修复后全部168分片stale_input且不可恢复（载荷哈希不可变、重试被输入修订不符拒绝、重提交被代内stale阻塞）。处置：升v15/verifier-v13（同合同，仅命名空间）重开digest；v14/v12入legacy terminal，中毒行保留审计。v15代已提交执行：GLM主79排队/8运行，deepseek核84排队/3运行（并行2）。watcher 98028托管。status_loop持续。此事件记录了第三种死锁形态（stale阻塞重提交）——若再现需评估给adjudicate_candidates补stale分片的合法重开路径。
