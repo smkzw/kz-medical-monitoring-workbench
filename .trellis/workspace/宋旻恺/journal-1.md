@@ -1468,3 +1468,7 @@ v7.1部分进度快照：primary 3完成/5失败/75排队/4租约running；verif
 ### 2026-09-12 13:15 关键阻塞：cms路由器账户额度耗尽（需用户充值）
 
 v14运行10分钟primary 7失败中6个HTTP 403，响应体解码=「用户额度不足, 剩余额度: ¥-0.004494」。小探针/中等载荷通过为阈值巧合；账户已负余额，主路cloud cms-model无法执行直到充值。处置：不暂停（本地mtplx验证器免费推进；403被拒不计费）；primary分片快速终态。**充值后衔接路径**：运行advance_to_facts.py status（adjudicate轮询自动原位重试失败分片）→排空→LOOP-5 receipts→LOOP-6 facts。双核对合同不允许主路降级本地（primary_fallback永不dual_pass且同箱双跑结构性拒绝），故等待充值是唯一合规路径。watcher(pid 81851)持续托管。
+
+### 2026-09-12 13:10 充值自愈守护上线
+
+主路仍403（余额¥-0.0045未变）。部署auto_recharge_recovery.py守护（12h预算）：每5分钟探测路由器计费；检测到充值即自动执行adjudicate status轮询（原位重试403失败分片）并每90秒推进至complete/blocked终态。本地mtplx验证器继续免费串行推进（86排队）。watcher(81851)+守护双进程托管，充值后无需人工介入即恢复全链路。
