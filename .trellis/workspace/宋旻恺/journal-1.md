@@ -1484,3 +1484,7 @@ deepseek v14首轮86/86全败根因实证：finish=length、content 0字符、re
 ### 2026-09-12 22:40 high思考生效+自动化推进
 
 绑定max→high后（max思考无界实证：reasoning随预算等比膨胀12k→44k/32k→123k字符、content恒0；bounded high为运行点，max保留给小任务）重启watcher，deepseek首批完成出现（3完成/12运行）。部署status_loop.sh自动轮询（每20分钟expire+retry+adjudicate推进至complete/blocked），与watcher并行自愈。现场：deepseek 3/28/44/12，mtplx 64/31/74/5。预计数小时排空后LOOP-5自动收束。
+
+### 2026-09-12 23:55 用户失败监测的精确回应
+
+用户统计的277失败=217历史遗留（cms配额耗尽125+GLM 429时代92，已死路线审计行）+当前代60。当前代构成：deepseek修复前26个length思考耗尽（max→high已解决，修复后仅9失败且完成持续增长）；mtplx 34失败=21证书判定（分散各类每类1个，非系统性，重试可恢复）+5修复轮无效+4租约过期（xhigh长思考超900s无心跳——租约已提1800s并重启watcher）+5零星传输。结论：配置问题已全部修复；剩余为语义残差由每20分钟自动重试消化；无需等待外的干预。
