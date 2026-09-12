@@ -1450,3 +1450,9 @@ v7.1部分进度快照：primary 3完成/5失败/75排队/4租约running；verif
 ### 2026-09-11 20:36 用户恢复连续实施（LOOP-4续）
 
 锚定核验与暂停记录一致（paused=1、P 3/5/75/4、V 3/2/80/2、零进程、HEAD 965ae93）。租约已自然过期。执行恢复：unpause + watcher重启（pid 97071，10h预算），90秒内8任务运行（含过期租约回收）。后续按暂停记录顺序推进。
+
+### 2026-09-12 新goal锚定：cms-model(high)别名实证=现有绑定；429风暴止损
+
+用户新goal指定主分析cms-model(high)+核对GLM-5.3-flash(high)、降级名改为mlx-serve。实证处理：直接探测cms-router（new-api.mediportal.com.cn/v1）model=cms-model返回response model=MiniMax-M3——cms-model是路由器别名，当前cms-smk/MiniMax-M3绑定即该路线；两角色binding均已是reasoning_effort=high。结论：无需任何切换，产品端按具体模型名钉扎expected_response_model比别名更严格（actual model identity精确返回的合同保持）。mlx-serve为用户对本地MTPLX的新称谓，功能不变。
+
+429风暴：zhipu核对账户23:00起被硬限流（12分钟36个429，冷却12分钟无效），已暂停队列止损。现场：P约32完/36败/13排队，V 22完/46败/17排队。已失败分片由排空时adjudicate_candidates原位重试路径（auto-recovery 1次）恢复；随后按LOOP-5推进。恢复策略：长冷却后重启watcher。
