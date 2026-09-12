@@ -1496,3 +1496,9 @@ deepseek v14首轮86/86全败根因实证：finish=length、content 0字符、re
 ### 2026-09-13 00:45 第二轮恢复授予（重试预算耗尽后）
 
 45主路+验证器失败分片的auto-recovery(count=1)全部耗尽。其中26个主路失败是max思考坏配置时代产物（其唯一重试也在坏配置下烧掉）。经repository.retry_terminal(automatic_recovery_limit=2)对当前revision未变的失败分片授予第二轮（主路45全部恢复；验证器同步处理）——repository公共API操作，非SQL改写。健康配置(high思考+32k预算+1800s租约)下执行。
+
+### 2026-09-13 01:30 mtplx停派纠偏+主副终局定义（用户质询驱动）
+
+用户质询"为什么还在持续派出mtplx"——根因：watcher与验证器绑定仍停在上一条指令的配置，新指令未落运行时。纠偏（d7e3051+运行时JSON）：主=zhipu-coding-plan/GLM-5.3-Flash(high)（鉴权同OMP），次=deepseek/deepseek-flash(high)盲核对；mtplx降历史身份（与GLM核对时代同列）。同时完成harness去专用化：预算/纪律块改为profile能力标签（output_token_budget/output_discipline经绑定env驱动），代码零模型名特判；修复回执收集器多路由标签下的身份错配bug；767项回归。
+
+重大进展：切换前deepseek主路第二轮恢复大获成功（52/87完成），与mtplx核对73完成分片被合法配对——裁决remaining从696塌缩至3（receipts按字段生效且绑定prompt版本集，身份切换不使其失效）。cms64排队/mtplx94排队/deepseek主路19排队为身份隔离惰性僵尸（无worker可领，不阻塞）。status_loop继续每20分钟推进；最后3字段将由GLM主+deepseek次新代收尾→LOOP-5。
