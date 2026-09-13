@@ -113,7 +113,6 @@ def _completed_payload_equivalent_cohort(
             (
                 str(row.input_payload_sha256),
                 str(row.input_revision_sha256),
-                str(row.prompt_version),
                 str(row.profile_id),
                 str(row.provider),
                 str(row.requested_model),
