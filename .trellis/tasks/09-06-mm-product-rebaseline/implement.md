@@ -212,3 +212,10 @@
 - LOOP-4 正式v7.1全量重提：695分歧字段统一代双cohort各87分片提交并运行；等价采用签名含prompt_version，v7结果按设计不复用。用户无损暂停时部分进度：P 3完成/5失败/75排队/4租约；V 3/2/80/2。watcher已停、队列paused=1、在途已落盘。
 
 恢复步骤：(1)核对journal 2026-09-11尾部与git log；(2)重启watcher（worker_host_until_drained.py，已修正v7.1匹配）或cutover resume相位，租约过期由repository合法回收；(3)排空后adjudicate_draft轮询推进LOOP-5 receipts采纳；(4)LOOP-6确认/激活→facts物化与原单元格抽查；(5)LOOP-7 P3纵切+Query工作区（从零新建）。隔离验证无需重跑。
+
+
+#### 2026-09-14 无损暂停（v16收敛至8残差；恢复入口）
+
+v16最终代：GLM主168完/6败、deepseek核172完/2败（97.7%完成率）。本轮（09-13晚至09-14晨）实施：v16轴形状示例提示、五~六轮repository恢复（每轮约80%转化）、**等价复用两项修复**（signature去prompt_version+分组跨digest——frozen输入字节一致即复用）、digest不含prompt/路由身份（路由切换不分裂工作单元）、角色判据prompt标记化（5aa29de）。全部767项回归绿。
+
+恢复顺序：核对journal尾部→resume（watcher，verifier并行2）→status轮询至complete/blocked→呈现3个真实医学问题（AE/SAECAT严重性标准空值、EG/EGABCSO未启用确认、SH/SHCO备注性质）→用户确认→confirm→facts物化与原单元格抽查→P3纵切+Query工作区→LOOP-7僵尸队列卫生清理。若8残差卡住：v17治疗锚点补读示例或证书insufficient兜底呈现。
