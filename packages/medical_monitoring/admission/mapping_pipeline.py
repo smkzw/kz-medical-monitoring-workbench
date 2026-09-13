@@ -59,8 +59,8 @@ MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION = (
 # startup supersession retires their queued/running work and keeps only
 # terminal audit evidence, so the pre-v7 contract can never wake again.
 MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS = frozenset({
-    "monitoring-listing-field-mapping-adjudication-v15-tools-v7.1",
-    "monitoring-listing-field-mapping-adjudication-verifier-v13-tools-v7.1",
+    "monitoring-listing-field-mapping-adjudication-v16-tools-v7.1",
+    "monitoring-listing-field-mapping-adjudication-verifier-v14-tools-v7.1",
 })
 MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS = frozenset({
     "monitoring-listing-field-mapping-adjudication-v3",
@@ -73,6 +73,8 @@ MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS = frozenset({
     "monitoring-listing-field-mapping-adjudication-verifier-v11-tools-v7.1",
     "monitoring-listing-field-mapping-adjudication-v14-tools-v7.1",
     "monitoring-listing-field-mapping-adjudication-verifier-v12-tools-v7.1",
+    "monitoring-listing-field-mapping-adjudication-v15-tools-v7.1",
+    "monitoring-listing-field-mapping-adjudication-verifier-v13-tools-v7.1",
     MAPPING_ADJUDICATION_PROMPT_VERSION,
     MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION,
 })
@@ -339,8 +341,8 @@ class AdmissionMappingPipeline:
     def _adjudication_prompt_version(self, cohort):
         verifier = cohort == MONITORING_MAPPING_COHORT_VERIFIER
         if self._role_equivalence:
-            return ("monitoring-listing-field-mapping-adjudication-verifier-v13-tools-v7.1" if verifier
-                    else "monitoring-listing-field-mapping-adjudication-v15-tools-v7.1")
+            return ("monitoring-listing-field-mapping-adjudication-verifier-v14-tools-v7.1" if verifier
+                    else "monitoring-listing-field-mapping-adjudication-v16-tools-v7.1")
         if self._visual_tool_reads:
             return ("monitoring-listing-field-mapping-adjudication-verifier-v6-tools-v3" if verifier
                     else "monitoring-listing-field-mapping-adjudication-v8-tools-v3")
