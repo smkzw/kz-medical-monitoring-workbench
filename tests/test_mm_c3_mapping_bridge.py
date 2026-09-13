@@ -224,8 +224,11 @@ def _runtime(
 
 def test_completed_equivalent_adjudication_cohort_survives_digest_drift() -> None:
     def job(group: str, index: int, status: str, updated_at: str):
+        # Real keys carry an attempt segment between cohort and digest; the
+        # work-identity grouping must strip cohort+attempt+digest and keep
+        # the chunk, so "prefix:old:g01:chunk-i" matches "prefix:new:g01:...".
         return SimpleNamespace(
-            business_key=f"prefix:{group}:g01:chunk-{index}",
+            business_key=f"prefix:{group}:attempt-1:g01:chunk-{index}",
             input_payload_sha256=f"payload-{index}",
             input_revision_sha256="revision",
             prompt_version="prompt",

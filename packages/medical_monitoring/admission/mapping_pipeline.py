@@ -123,15 +123,24 @@ def _completed_payload_equivalent_cohort(
     if not current:
         return ()
     target = signature(current)
+    # Group by the work identity inside the key (attempt + chunk), not by
+    # the digest segment: the digest encodes the frozen review scope, which
+    # the payload/revision signature already covers byte-exactly. Grouping
+    # across digests lets completed cohorts from earlier route/prompt
+    # namespaces satisfy an identical work unit.
+    import re as _re
+
     groups: dict[tuple[str, int], list[Any]] = {}
     for job in available:
         match = _ADJUDICATION_GENERATION_RE.search(str(job.business_key))
         if match is None:
             continue
-        groups.setdefault(
-            (str(job.business_key)[:match.start()], int(match.group(1))),
-            [],
-        ).append(job)
+        # Strip the digest segment: everything between the attempt id and
+        # the :gNN: marker is the digest/review-scope hash, which the
+        # payload/revision signature already covers byte-exactly.
+        head = str(job.business_key)[: match.start()]
+        work_key = head.rsplit(":", 1)[0] + ":"
+        groups.setdefault((work_key, int(match.group(1))), []).append(job)
     matches = [
         tuple(rows)
         for rows in groups.values()
