@@ -17,9 +17,9 @@ from tests.test_monitoring_ai_service import (
     _valid_output,
 )
 
-V71_PRIMARY = "monitoring-listing-field-mapping-adjudication-v15-tools-v7.1"
+V71_PRIMARY = "monitoring-listing-field-mapping-adjudication-v16-tools-v7.1"
 V71_VERIFIER = (
-    "monitoring-listing-field-mapping-adjudication-verifier-v13-tools-v7.1"
+    "monitoring-listing-field-mapping-adjudication-verifier-v14-tools-v7.1"
 )
 V7_PRIMARY = "monitoring-listing-field-mapping-adjudication-v12-tools-v7"
 
@@ -63,7 +63,7 @@ def test_v71_versions_and_pipeline_selection() -> None:
         {V71_PRIMARY, V71_VERIFIER}
     )
     assert V7_PRIMARY in MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS
-    assert "monitoring-listing-field-mapping-adjudication-v14-tools-v7.1" in (
+    assert "monitoring-listing-field-mapping-adjudication-v15-tools-v7.1" in (
         MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS
     )
     pipeline = AdmissionMappingPipeline(
