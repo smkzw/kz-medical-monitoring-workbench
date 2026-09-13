@@ -1514,3 +1514,13 @@ v14最终主副代在文档断链窗口提交，载荷缺文档绑定→角色�
 ### 2026-09-13 09:40 v15收官与v16残差攻坚
 
 v15代四轮恢复后168/174完成：GLM 84完/3败、deepseek 84完/3败。6个顽固残差全部为certificate轴形状类（同类168分片通过证明合同可满足，属字段级模型输出形状顽固错误）+锚点/空响应。处置：v16/verifier-v14（轴对象合法/非法具体示例进等价提示；版本化纪律全额重开命名空间，v15完成保留审计）。第三/四轮恢复机制（repository retry_terminal限额递增）已验证为标准残差处置手段。
+
+### 2026-09-14 06:30 用户无损暂停（v16代收敛至8残差）
+
+用户指令"无损暂停"已执行：队列paused=1持久写入；watcher(64120)/status_loop/后台检查进程全部终止（残留的一个sleep中的advance_to_facts status进程对已终止）；8911未监听；项目守护归零。
+
+暂停时刻状态：v16最终代收敛至**GLM主168完/6败、deepseek核172完/2败**（合计340完成/8失败，完成率97.7%）。残差类别：GLM 6个（治疗锚点2+证书4）、deepseek 2个（证书1+空响应1）——全部为语义残差，第六轮重队已提交9个但暂停时仅部分落账（本轮实际可能已再转化）。
+
+本轮恢复会话（09-13 20:40至今）实施：v16/verifier-v14轴形状示例（轴对象合法/非法mini-example）；第五轮deepseek侧87/87全清；**等价复用两项关键修复**——signature()去prompt_version（frozen输入身份即复用契约）、equivalent-cohort分组跨digest（修复CM/EX两个顽固分片）；digest不含prompt/路由身份（路由切换不再分裂同工作单元）。收敛机制验证：每轮恢复约80%失败转化，失败持续下降26→8。
+
+恢复入口（下位Agent）：journal本段+implement.md→核对队列paused与v16计数→resume（cutover或watcher，verifier并行2）→status轮询至complete/blocked→**3个真实医学问题呈现用户**（AE/SAECAT、EG/EGABCSO、SH/SHCO——空值语义确认）→确认后confirm_draft→facts物化与原单元格抽查（LOOP-6）→P3纵切+Query工作区（LOOP-7）。若8残差仍卡，评估v17（治疗锚点类的补读示例）或对证书类的insufficient兜底呈现。
