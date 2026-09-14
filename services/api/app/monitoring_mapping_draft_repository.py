@@ -2139,7 +2139,7 @@ class MonitoringMappingDraftRepository:
                 if item["job_id"] == row["job_id"]
                 and item["candidate_id"] == row["candidate_id"]
             )
-            sources[pair] = MonitoringMappingFieldSource(
+            receipt_source = MonitoringMappingFieldSource(
                 domain=pair[0],
                 source_field=pair[1],
                 job_id=row["job_id"],
@@ -2149,6 +2149,10 @@ class MonitoringMappingDraftRepository:
                 prompt_version=selected["prompt_version"],
                 evidence_ids=tuple(json.loads(row["evidence_ids_json"])),
             )
+            object.__setattr__(
+                receipt_source, "from_adjudication_receipt", True
+            )
+            sources[pair] = receipt_source
         return tuple(sources[pair] for pair in sorted(sources))
 
     def semantic_quality(
@@ -2805,9 +2809,19 @@ class MonitoringMappingDraftRepository:
             raise MonitoringMappingStateConflictError(
                 "persisted mapping draft source lineage does not match fields"
             )
+        # Second-round adjudication receipts legitimately reference the
+        # adjudication jobs' input revision, which differs from the draft's
+        # first-round lineage revision; only the base (first-round) sources
+        # must match. Receipt overrides are replay-safe via their
+        # reconciliation hash instead.
+        base_sources = [
+            item
+            for item in draft.field_sources
+            if not getattr(item, "from_adjudication_receipt", False)
+        ]
         if any(
             item.input_revision_sha256 != draft.input_revision_sha256
-            for item in draft.field_sources
+            for item in base_sources
         ):
             raise MonitoringMappingStateConflictError(
                 "persisted mapping draft source lineage revision mismatch"
