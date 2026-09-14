@@ -1963,7 +1963,7 @@ class MonitoringMappingDraftRepository:
                 raise MonitoringMappingStateConflictError(
                     "selected adjudication source is not one of the reviewers"
                 )
-            if len({
+            if verified_reviews and len({
                 item["input_revision_sha256"] for item in verified_reviews
             }) != 1:
                 connection.rollback()
