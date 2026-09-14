@@ -1498,6 +1498,10 @@ class AdmissionMappingConfirmationService:
                         or field.get("decision_reconciliation_sha256") != reconciliation_sha256):
                     return False
                 continue
+            if receipt.resolution == "unverifiable_gap":
+                # Visible bounded residue: no durable verdict exists after the
+                # retry budget; coverage insufficiency is the outcome itself.
+                continue
             if (
                 _model_flag(field)
                 or receipt.resolution != "adjudicated_mapping"
