@@ -174,6 +174,9 @@ PROMPT_VERSION_BY_TASK: Dict[MonitoringAiTaskType, str] = {
     ),
 }
 _C3_VERIFIER_PROMPT_VERSION = "monitoring-listing-field-mapping-verifier-v1"
+CROSS_TABLE_VERIFIER_PROMPT_VERSION = (
+    "monitoring-cross-table-clue-synthesis-verifier-v1"
+)
 
 AI_TASK_TYPE_BY_MONITORING_TASK: Dict[MonitoringAiTaskType, AiTaskType] = {
     MonitoringAiTaskType.LISTING_FIELD_MAPPING: (AiTaskType.LISTING_SEMANTIC_MAPPING),
@@ -3449,6 +3452,18 @@ class MonitoringAiService:
                         " 你是与另一复核harness隔离运行的第二裁决者。不得推测或复述"
                         "另一裁决者的答案；必须独立寻找反证、遗漏和更保守解释。"
                     )
+        if (
+            job.task_type == MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS
+            and job.prompt_version == CROSS_TABLE_VERIFIER_PROMPT_VERSION
+        ):
+            system_prompt += (
+                " 你现在是跨表线索的全量盲核harness，不是主分析的复述者。"
+                "输入中不会提供主分析答案；必须独立核对每条证据的原始字段值、"
+                "日期逻辑、AE/MH/CM/试验用药的跨表一致性与替代解释，主动寻找"
+                "反证。AE强度、严重性、预期性、因果性与监查优先级必须分离表述，"
+                "不得合并或自动升级。证据不足时保守输出data_gap候选，不得猜测"
+                "主分析可能如何判断，也不得把推断写成已确认的临床结论。"
+            )
         elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS:
             system_prompt += (
                 " 这是文件权威识别，不是医学结论分析。必须独立检查冻结批次中"
