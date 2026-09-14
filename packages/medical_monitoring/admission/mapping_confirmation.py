@@ -116,7 +116,9 @@ def _effective_adjudication_receipts(
         pair = (receipt.domain, receipt.source_field)
         if (
             receipt.reconciliation_sha256 == reconciliation_sha256
-            and receipt.resolution in {"escalated", "adjudicated_mapping"}
+            and receipt.resolution in {
+                "escalated", "adjudicated_mapping", "unverifiable_gap",
+            }
         ):
             selected[pair] = receipt
     return selected
