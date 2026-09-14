@@ -2179,6 +2179,70 @@ class MonitoringMappingDraftRepository:
             )
         return tuple(sources[pair] for pair in sorted(sources))
 
+    def backfill_receipt_source_origins(
+        self,
+        project_id: str,
+        *,
+        draft_id: str,
+        revision_id: str,
+    ) -> int:
+        """Migration repair: mark receipt-derived revision sources.
+
+        Revisions confirmed before ``source_origin`` existed persist receipt
+        overrides without the marker, so lineage guards treat them as
+        first-round sources. This operation re-derives the marker from the
+        durable adjudication receipts (same rule as effective sources) and
+        rewrites the revision row's serialized sources. Nothing else about
+        the revision changes; the repair is idempotent.
+        """
+        project_id = _require_safe_identifier(project_id, "project_id")
+        draft_id = _require_safe_identifier(draft_id, "draft_id")
+        revision_id = _require_safe_identifier(revision_id, "revision_id")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT field_sources_json FROM monitoring_mapping_revisions
+                WHERE project_id = ? AND mapping_revision = ?
+                """,
+                (project_id, revision_id),
+            ).fetchone()
+            if row is None:
+                connection.rollback()
+                raise MonitoringMappingNotFoundError("mapping revision not found")
+            receipt_pairs = {
+                (item["domain"], item["source_field"])
+                for item in connection.execute(
+                    """
+                    SELECT domain, source_field
+                    FROM monitoring_mapping_adjudication_receipts
+                    WHERE project_id = ? AND draft_id = ?
+                      AND resolution IN ('adjudicated_mapping', 'escalated')
+                    """,
+                    (project_id, draft_id),
+                ).fetchall()
+            }
+            sources = json.loads(row["field_sources_json"])
+            updated = 0
+            for item in sources:
+                if not isinstance(item, Mapping):
+                    continue
+                pair = (item.get("domain"), item.get("source_field"))
+                if pair in receipt_pairs and item.get("source_origin") != "adjudication_receipt":
+                    item["source_origin"] = "adjudication_receipt"
+                    updated += 1
+            if updated:
+                connection.execute(
+                    """
+                    UPDATE monitoring_mapping_revisions
+                    SET field_sources_json = ?
+                    WHERE project_id = ? AND mapping_revision = ?
+                    """,
+                    (_model_sequence_json(sources), project_id, revision_id),
+                )
+            connection.commit()
+        return updated
+
     def semantic_quality(
         self,
         project_id: str,
