@@ -1047,6 +1047,9 @@ class MonitoringMappingDraftRepository:
 
                 CREATE TRIGGER IF NOT EXISTS trg_mapping_revision_no_update
                 BEFORE UPDATE ON monitoring_mapping_revisions
+                WHEN NEW.field_sources_json IS NOT OLD.field_sources_json
+                    OR NEW.fields_json IS NOT OLD.fields_json
+                    OR NEW.input_revision_sha256 IS NOT OLD.input_revision_sha256
                 BEGIN
                     SELECT RAISE(ABORT, 'mapping revision is immutable');
                 END;
