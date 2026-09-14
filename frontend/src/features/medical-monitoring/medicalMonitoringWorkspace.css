@@ -2381,3 +2381,92 @@ g[data-flow-link]:focus-visible .monitoring-flow-ribbon {
     min-width: 680px;
   }
 }
+
+/* —— Query 工作区：依据—发现—请核实事项 三段卡片 —— */
+.monitoring-query-workspace .monitoring-query-intro {
+  margin: 0 0 14px;
+  color: #595959;
+}
+.monitoring-query-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.monitoring-query-card {
+  background: #FFFFFF;
+  border: 1px solid #D6D2CD;
+  border-left: 4px solid #FF9900;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.monitoring-query-card-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.monitoring-query-card-head > strong {
+  font-size: 16px;
+}
+.monitoring-query-card-target {
+  color: #595959;
+}
+.monitoring-query-card-body {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.monitoring-query-card-body section {
+  background: #FDFBF7;
+  border: 1px solid #EEECE1;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.monitoring-query-card-body h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #A85F34;
+}
+.monitoring-query-card-body p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.monitoring-query-card-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+.monitoring-query-card-actions button {
+  border: 1px solid #FF9900;
+  background: #FFFFFF;
+  color: #B26A00;
+  border-radius: 999px;
+  padding: 6px 16px;
+  cursor: pointer;
+}
+.monitoring-query-card-actions button:first-child {
+  background: #FF9900;
+  color: #FFFFFF;
+}
+.monitoring-query-card-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.monitoring-query-footer {
+  margin-top: 14px;
+}
+.monitoring-query-entry {
+  margin-left: auto;
+}
+@media print {
+  .monitoring-query-card-list {
+    gap: 8px;
+  }
+  .monitoring-query-card-body {
+    grid-template-columns: 1fr;
+  }
+}
