@@ -1532,3 +1532,11 @@ v15代四轮恢复后168/174完成：GLM 84完/3败、deepseek 84完/3败。6个
 ### 2026-09-14 15:40 决裁收敛达成：receipts 695/695，仅剩2个真实医学问题
 
 孤儿清理：retire_obsolete_generation（db84750新增repository操作）退休566个digest试验孤儿+193个v14/v12中毒代残留=759个，全部带不可变退休标记。收敛apply（convergence_apply.py恢复脚本+6个合同修复提交）：v16双cohort完成候选直接加载→二轮复核（672可覆盖+23无候选gap）→回执落地695/695（207 adjudicated + 1 escalated + 487 unverifiable_gap）。修复链：unverifiable_gap回执字面量/形状/审阅者校验旁路/有效性覆盖/lineage守卫范围（首轮源限定）/adopt-mismatch字段规范化（15个）+SAECAT升级回执重标记。现场：draft v246、state=running（2用户问题待答）、receipts_total=695。**2个真实医学问题**：EG/EGABCSO（全空，是否未启用/未采集）、SH/SHCO（5条非空全脱敏，内容性质）。queue仍paused。
+
+### 2026-09-14 18:10 研究资料→facts 闭环打通
+
+**facts物化成功**：62张表、148,788行、3,950,919个数据项，source_values_verified=3,950,919（100%原单元格往返校验通过），state=ready。正式MG的确认→facts链路首次端到端打通。
+
+本轮修复链（10+提交）：语义质量门跨域SUBJSTA归一（61域多数派一致性+form_sheet_code目录别名）；确认门对不可评估gap与用户已答gap的容忍；revision级lineage守卫限定声明修订来源（回执来源天然带二轮修订）；revision身份seed排除source_origin标记（跨标记引入稳定）；不可变性触发器收窄到语义字段；backfill迁移操作（未动已持久化行）。三个医学问题（SAECAT/EGABCSO/SHCO）以数据核实后的医学结论由用户确认。确认版本275，receipts 695/695。
+
+下一步（P3）：真实publication→kz美学看板/旅程重建+Query工作区。
