@@ -1936,6 +1936,7 @@ class MonitoringMappingDraftRepository:
                 raise MonitoringMappingStateConflictError(
                     "confirmed mapping draft cannot receive adjudication"
                 )
+            verified_reviews = ()
             if resolution == "unverifiable_gap":
                 selected = None
             else:
