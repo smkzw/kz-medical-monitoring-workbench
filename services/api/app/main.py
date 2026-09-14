@@ -3650,6 +3650,11 @@ def _resolve_r7_product_project(project_id: str) -> str:
 
 app.include_router(
     create_medical_monitoring_r5_product_router(
+        authority_provider=(
+            _r7_facts_publication_provider
+            if _r7_facts_publication_provider is not None
+            else None
+        ),
         principal_resolver=_resolve_synthetic_product_principal,
         require_server_principal=True,
         synthetic_fixture_mode=_r5_s7_fixture_mode,
