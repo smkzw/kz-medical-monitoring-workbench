@@ -231,6 +231,7 @@ ROLE_CATALOG_V2: tuple[RoleConcept, ...] = (
         "form_oid",
         "source_form_identifier",
         "technical_form_id",
+        "form_sheet_code",
     ),
     _concept(
         "metadata.record_id",
