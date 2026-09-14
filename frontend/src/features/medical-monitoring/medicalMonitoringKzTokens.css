@@ -1,0 +1,236 @@
+/* kangzhe-design-3d design tokens for the medical monitoring workspace.
+ * Source of truth: kangzhe-design-3d core.md §0.8/§5/§6 + track_interactive.
+ * Light mode ONLY (v5.0); no dark theme tokens. */
+
+:root {
+  color-scheme: only light;
+
+  /* Brand emphasis — fixed HEX, never substitute (I-04) */
+  --kz-orange: #ff9900;
+  --kz-orange-mid: #f5a000;
+  --kz-yellow: #ffcc00;
+  --kz-number: #ffa900;
+  --kz-risk: #c00000;
+
+  /* Department palette — fixed mapping, never swap (§0.8.2) */
+  --kz-med: #ff9900;
+  --kz-med-soft: #fbe3d6;
+  --kz-co: #407aaa;
+  --kz-co-soft: #dce6f2;
+  --kz-dmst: #587b3b;
+  --kz-dmst-soft: #dce9c8;
+  --kz-pv: #a85f34;
+  --kz-pv-soft: #fcf5e6;
+
+  /* Neutrals — recommended band, harmonious adjustment allowed */
+  --kz-deep-text: #0f1115;
+  --kz-body: #404040;
+  --kz-title-gray: #595959;
+  --kz-meta: #808080;
+  --kz-border: #aaa6a1;
+  --kz-border-weak: #d6d2cd;
+
+  /* Surfaces */
+  --kz-white: #ffffff;
+  --kz-bg: #f8f9fa;
+  --kz-table-head: #f79646;
+  --kz-table-soft: #fbe3d6;
+  --kz-table-line: #fac090;
+  --kz-surface-warm: #fcf5e6;
+  --kz-check-green: #2e7d32;
+
+  /* Typography (§6.1) */
+  --kz-font: "Microsoft YaHei", "微软雅黑", "PingFang SC", "Noto Sans SC",
+    "Helvetica Neue", Arial, sans-serif;
+
+  /* Card geometry (I-72: radius ≤8 standard, ≤6 compact) */
+  --kz-radius: 8px;
+  --kz-radius-compact: 6px;
+
+  /* Layered elevation — layered sophistication, not flat (§3.1) */
+  --kz-shadow-1: 0 1px 3px rgba(15, 17, 21, 0.06), 0 1px 2px rgba(15, 17, 21, 0.04);
+  --kz-shadow-2: 0 2px 8px rgba(15, 17, 21, 0.08), 0 1px 3px rgba(15, 17, 21, 0.05);
+  --kz-shadow-3: 0 8px 24px rgba(15, 17, 21, 0.1), 0 2px 6px rgba(15, 17, 21, 0.06);
+
+  /* Chart palette order (html_charts.md §3) */
+  --kz-chart-seq: #ff9900, #407aaa, #587b3b, #a85f34, #ffcc00, #aaa6a1, #c00000;
+}
+
+/* Scope the tokens + font to the monitoring workspace only. */
+.mm-kz {
+  font-family: var(--kz-font);
+  color: var(--kz-body);
+  background: var(--kz-bg);
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+/* Light sticky header (§0.8.3A) */
+.mm-kz-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--kz-border-weak);
+  box-shadow: var(--kz-shadow-1);
+}
+.mm-kz-header .mm-kz-active-bar {
+  border-bottom: 2px solid var(--kz-orange);
+}
+
+/* Card baseline (I-72: shadow or top identity bar; mid anchor from content) */
+.mm-kz-card {
+  background: var(--kz-white);
+  border-radius: var(--kz-radius);
+  box-shadow: var(--kz-shadow-2);
+  border-top: 3px solid var(--kz-orange);
+  overflow: visible;
+}
+.mm-kz-card[data-dept="med"] { border-top-color: var(--kz-med); }
+.mm-kz-card[data-dept="co"] { border-top-color: var(--kz-co); }
+.mm-kz-card[data-dept="dmst"] { border-top-color: var(--kz-dmst); }
+.mm-kz-card[data-dept="pv"] { border-top-color: var(--kz-pv); }
+.mm-kz-card[data-dept="neutral"] { border-top-color: var(--kz-border); }
+
+.mm-kz-card h3 {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--kz-deep-text);
+  margin: 0;
+}
+.mm-kz-card.compact h3 {
+  font-size: 20px;
+}
+.mm-kz-card :is(p, li) {
+  font-size: 19px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.mm-kz-card.compact :is(p, li) {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* Emphasis spectrum (I-69) */
+.mm-kz .kz-em-red { color: var(--kz-risk); font-weight: 700; }
+.mm-kz .kz-em-underline { text-decoration: underline; text-underline-offset: 3px; }
+
+/* Brand data table (core §11.1) */
+.mm-kz-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.mm-kz-table th,
+.mm-kz-table td {
+  box-sizing: border-box;
+  vertical-align: middle;
+  border: 1px solid var(--kz-table-line);
+  padding: 14px 16px;
+  font-size: 19px;
+  line-height: 1.4;
+  font-weight: 400;
+  text-align: left;
+}
+.mm-kz-table th {
+  background: var(--kz-table-head);
+  color: var(--kz-deep-text);
+  font-weight: 700;
+}
+.mm-kz-table td:first-child { font-weight: 700; }
+.mm-kz-table tbody tr:nth-child(odd) td { background: var(--kz-table-soft); }
+.mm-kz-table tbody tr:nth-child(even) td { background: var(--kz-white); }
+.mm-kz-table.dense th,
+.mm-kz-table.dense td {
+  padding: 8px 12px;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+/* Solid-orange controls carry dark ink, centered (§0.8.3C) */
+.mm-kz-btn-primary {
+  background: var(--kz-orange);
+  color: var(--kz-deep-text);
+  border: none;
+  border-radius: var(--kz-radius-compact);
+  font-family: var(--kz-font);
+  font-weight: 700;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+.mm-kz-btn-outline {
+  background: var(--kz-white);
+  color: #9a5b00;
+  border: 1px solid var(--kz-orange);
+  border-radius: var(--kz-radius-compact);
+  font-family: var(--kz-font);
+  font-weight: 600;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* Risk chip — red reserved for risk semantics only (I-10) */
+.mm-kz-risk-chip {
+  background: var(--kz-risk);
+  color: #ffffff;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Status lamp cluster (mid-anchor for cards) */
+.mm-kz-lamp {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 3px rgba(255, 153, 0, 0.15);
+}
+.mm-kz-lamp[data-level="high"] { background: var(--kz-risk); box-shadow: 0 0 0 3px rgba(192, 0, 0, 0.15); }
+.mm-kz-lamp[data-level="medium"] { background: var(--kz-orange); }
+.mm-kz-lamp[data-level="low"] { background: var(--kz-dmst); }
+.mm-kz-lamp[data-level="unknown"] { background: var(--kz-border); box-shadow: none; }
+
+/* Stat strip — big number + unit + caption (compact card) */
+.mm-kz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mm-kz-stat .mm-kz-stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--kz-deep-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.mm-kz-stat .mm-kz-stat-value small { font-size: 16px; font-weight: 600; color: var(--kz-meta); }
+.mm-kz-stat .mm-kz-stat-caption {
+  font-size: 14px;
+  color: var(--kz-meta);
+}
+
+/* Skeleton + empty states (interactive track 14.13.2) */
+.mm-kz-skeleton {
+  background: #eeece1;
+  border-radius: var(--kz-radius-compact);
+  animation: mm-kz-pulse 1.4s ease-in-out infinite;
+}
+@keyframes mm-kz-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mm-kz-skeleton { animation: none; }
+}
