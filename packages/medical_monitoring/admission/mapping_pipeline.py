@@ -1365,11 +1365,16 @@ class AdmissionMappingPipeline:
             and not getattr(job, "contract_retirement_code", "")
         ]
         if failed_jobs:
+            completed_jobs = [
+                job for job in jobs if str(_value(job.status)) == "completed"
+            ]
             return {
                 "state": "failed",
                 "generation": generation,
                 "job_count": len(jobs),
-                "mappings": [],
+                # Completed siblings' candidates remain usable for the
+                # bounded-gap apply path; only failed chunks become gaps.
+                **self._adjudication_payload(completed_jobs),
                 "failed_jobs": failed_jobs,
             }
         if generation:
