@@ -739,6 +739,15 @@ def register_public_result_routes(router: APIRouter, context: PublicationRouteCo
                 cutoff_ref=publication.data_cutoff,
                 site_ref=query.get("site_ref"),
             )
+            # Facts lane: surface the dual-cohort AE/MH findings artifact on
+            # the public overview projection (digest recomputed downstream).
+            findings_provider = getattr(r6_provider, "public_findings", None)
+            if callable(findings_provider):
+                injected = findings_provider()
+                if injected:
+                    projection = result.get("projection")
+                    if isinstance(projection, dict):
+                        projection["query_findings"] = injected
             return _public_result_envelope(
                 result,
                 launch=launch,

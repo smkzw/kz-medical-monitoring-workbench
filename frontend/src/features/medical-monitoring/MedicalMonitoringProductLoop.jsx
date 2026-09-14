@@ -321,6 +321,9 @@ function normalizePublicProductPayload(resultContext) {
   const temporal = isRecord(raw.temporal_spine) ? raw.temporal_spine : isRecord(raw.spine) ? raw.spine : {};
   const events = (Array.isArray(raw.events) ? raw.events : Array.isArray(temporal.events) ? temporal.events : [])
     .map((value) => normalizeEvent(value, domainMap));
+  const aiQueryFindings = Array.isArray(raw.query_findings)
+    ? raw.query_findings.filter((value) => isRecord(value) && clean(value.title))
+    : [];
   const visits = Array.isArray(raw.visits) ? raw.visits : Array.isArray(temporal.visits) ? temporal.visits : [];
   const pendingDates = raw.pending_dates ?? raw.date_pending_refs ?? temporal.pending_dates ?? [];
   const sourceEvidence = raw.source_evidence || raw.evidence || null;
@@ -358,6 +361,7 @@ function normalizePublicProductPayload(resultContext) {
       subjects: Array.isArray(raw.subjects) ? raw.subjects : Array.isArray(raw.subject_options) ? raw.subject_options : [],
       subjectFlow: raw.subject_flow || null,
       aggregation: isRecord(raw.aggregation) ? raw.aggregation : null,
+      aiQueryFindings,
       temporalSpine: {
         ...temporal,
         spineRef: clean(temporal.spine_ref || identity.spine_ref),

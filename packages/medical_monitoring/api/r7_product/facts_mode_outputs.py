@@ -8,8 +8,12 @@ their source locators for the affected-query draft. No invented findings.
 
 from __future__ import annotations
 
+import glob
+import json
+import os
 from collections import Counter
-from typing import Any, Mapping
+from pathlib import Path
+from typing import Any, Mapping, Optional
 
 from ...reports import mode_output as mo
 
@@ -29,6 +33,9 @@ _MAX_FINDINGS = 200
 
 class FactsModeOutputProvider:
     """Build the four mode outputs from the real facts authority packet."""
+
+    def __init__(self, artifacts_dir: Optional[Path] = None) -> None:
+        self._artifacts_dir = artifacts_dir
 
     @staticmethod
     def _binding(run_binding: Mapping[str, Any]) -> dict[str, Any]:
@@ -132,6 +139,9 @@ class FactsModeOutputProvider:
     def _daily_findings(
         self, binding: Mapping[str, Any], r5_packet: Any
     ) -> list[dict[str, Any]]:
+        ai_findings = self._load_ai_findings()
+        if ai_findings:
+            return self._findings_from_artifact(ai_findings, r5_packet)
         events_by_ref = {event.event_ref: event for event in r5_packet.events}
         subjects_by_ref = {
             subject.subject_ref: subject for subject in r5_packet.subjects
@@ -175,6 +185,113 @@ class FactsModeOutputProvider:
                     "locator": {
                         "path": f"facts.{event.domain}",
                         "record_id": event.event_ref,
+                    },
+                }
+            )
+        return findings
+
+    def public_findings(self) -> list[dict[str, Any]]:
+        """Audience-facing projection of the dual-cohort AE/MH findings."""
+
+        ai_findings = self._load_ai_findings()
+        if not ai_findings:
+            return []
+        rows: list[dict[str, Any]] = []
+        for index, item in enumerate(ai_findings):
+            cohort = (item.get("primary") or item.get("verifier")) or {}
+            rows.append(
+                {
+                    "finding_id": f"aemh-{index:04d}",
+                    "subject_label": str(item.get("subject_label", "")),
+                    "state": str(item.get("state", "escalated")),
+                    "state_reason_zh": str(item.get("reason_zh", "")),
+                    "title": str(cohort.get("title", ""))[:200],
+                    "text": str(cohort.get("text", ""))[:2000],
+                }
+            )
+        return rows
+
+    def _load_ai_findings(self) -> list[dict[str, Any]] | None:
+        """Load the newest dual-cohort AE/MH findings artifact, if any."""
+
+        if self._artifacts_dir is None:
+            return None
+        candidates = sorted(
+            glob.glob(
+                os.path.join(
+                    str(self._artifacts_dir),
+                    "aemh-findings-facts-snapshot-001*.json",
+                )
+            )
+        )
+        if not candidates:
+            return None
+        try:
+            with open(candidates[-1], encoding="utf-8") as handle:
+                artifact = json.load(handle)
+        except (OSError, ValueError):
+            return None
+        findings = artifact.get("findings")
+        if isinstance(findings, list) and findings:
+            return findings
+        return None
+
+    def _findings_from_artifact(
+        self, ai_findings: list[dict[str, Any]], r5_packet: Any
+    ) -> list[dict[str, Any]]:
+        """Project dual-cohort findings into query-draft findings.
+
+        Accepted pairs carry both cohorts' wording; escalated items stay
+        visible with the disagreement marker; gaps stay visible as
+        unverifiable. Risk binding uses the subject's first AE risk anchor so
+        evidence drill-down keeps working.
+        """
+
+        subjects_by_label = {
+            subject.subject_label: subject for subject in r5_packet.subjects
+        }
+        risk_by_subject: dict[str, Any] = {}
+        for risk in r5_packet.risks:
+            if risk.domain == "ae" and risk.subject_ref not in risk_by_subject:
+                risk_by_subject[risk.subject_ref] = risk
+        findings: list[dict[str, Any]] = []
+        for index, item in enumerate(ai_findings):
+            if len(findings) >= _MAX_FINDINGS:
+                break
+            subject_label = str(item.get("subject_label", "")).strip()
+            subject = subjects_by_label.get(subject_label)
+            if subject is None:
+                continue
+            risk = risk_by_subject.get(subject.subject_ref)
+            cohort = (item.get("primary") or item.get("verifier")) or {}
+            title = str(cohort.get("title", "")).strip() or "跨表线索待复核"
+            state = str(item.get("state", "escalated"))
+            state_note = {
+                "accepted": "主分析与独立盲核（双模型）均引用相同原始记录，线索成立，待医学复核。",
+                "escalated": str(item.get("reason_zh", "双cohort存在分歧，不得强行接受，请医学监察员裁决。")),
+                "unverifiable_gap": "本轮双cohort未能完成核实，覆盖不足可见，待下轮补核。",
+            }.get(state, "待医学复核。")
+            basis = (
+                f"双cohort分析（{state_note}）受试者{subject_label}的"
+                "AE/MH/合并用药/试验用药原始记录。"
+            )
+            finding_text = f"「{title}」"
+            action = "请下钻受试者旅程与来源记录核对临床语境后确认处置。"
+            findings.append(
+                {
+                    "finding_id": f"aemh-finding-{index:04d}",
+                    "risk_id": risk.risk_ref if risk else f"aemh-subject-{subject.subject_ref}",
+                    "issue_id": f"aemh-issue-{state}",
+                    "subject_id": subject.subject_ref,
+                    "site_id": subject.site_ref,
+                    "scope_kind": "subject",
+                    "basis": basis,
+                    "finding": finding_text,
+                    "action": action,
+                    "evidence_refs": list(risk.source_locator_refs) if risk else [],
+                    "locator": {
+                        "path": "facts.aemh_cross_analysis",
+                        "record_id": f"aemh-{subject_label}",
                     },
                 }
             )

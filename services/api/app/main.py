@@ -1142,6 +1142,60 @@ monitoring_ai_risk_packet_resolver = MonitoringAiRiskPacketResolver(
 )
 
 
+_FACTS_DOMAINS_CACHE: dict[str, Any] = {"signature": None, "domains": None}
+
+
+def _current_facts_analysis_revision(job):
+    """Freshness for facts-lane analysis jobs.
+
+    The frozen fact artifacts are the source of truth: a claimed job stays
+    fresh while every declared ``facts:<table>`` source still hashes to the
+    same row count/content in the artifact directory. The domains load is
+    cached per process keyed by the directory's mtime signature.
+    """
+    from packages.medical_monitoring.intelligence.primitives import (  # noqa: PLC0415
+        content_hash as _facts_content_hash,
+    )
+
+    workspace = (
+        RUNTIME_DIR / "medical_monitoring_r7" / str(job.project_id)
+    )
+    artifacts = workspace / "runtime" / "artifacts"
+    if not artifacts.is_dir():
+        return ""
+    try:
+        signature = max(
+            (path.stat().st_mtime_ns, path.name)
+            for path in artifacts.glob("*.json")
+        )
+    except (OSError, ValueError):
+        return ""
+    if _FACTS_DOMAINS_CACHE["signature"] != signature:
+        try:
+            _FACTS_DOMAINS_CACHE["domains"] = (
+                _r7_facts_publication_provider._load_domains()
+                if _r7_facts_publication_provider is not None
+                else None
+            )
+            _FACTS_DOMAINS_CACHE["signature"] = signature
+        except Exception:
+            return ""
+    domains = _FACTS_DOMAINS_CACHE["domains"]
+    if not isinstance(domains, dict):
+        return ""
+    for binding in job.input_revision.sources:
+        entry = str(getattr(binding, "source_entry_id", "")).strip()
+        if not entry.startswith("facts:"):
+            return ""
+        table = entry[len("facts:") :]
+        rows = domains.get(table, [])
+        expected = str(getattr(binding, "source_content_sha256", "")).strip()
+        actual = _facts_content_hash({"table": table, "rows": len(rows)})
+        if expected != actual:
+            return ""
+    return job.input_revision_sha256
+
+
 def _current_monitoring_ai_revision(job):
     if job.task_type == MonitoringAiTaskType.RULE_TEMPLATE_RECOMMENDATION:
         try:
@@ -1222,6 +1276,18 @@ def _current_monitoring_ai_revision(job):
                     ):
                         return ""
                     return job.input_revision_sha256
+                # Facts lane: subject-level analysis over materialized facts.
+                # Freshness = every declared facts table still hashes to the
+                # same content in the frozen artifact directory.
+                batch_id = str(subject_context.get("batch_id") or "").strip()
+                if (
+                    batch_id
+                    and str(
+                        subject_context.get("mapping_revision") or ""
+                    ).strip() == "facts-materialized"
+                    and job.business_key.startswith("aemh:")
+                ):
+                    return _current_facts_analysis_revision(job)
             return ""
         except (KeyError, ValueError):
             return ""
@@ -1553,6 +1619,16 @@ def _recover_monitoring_ai_jobs():
                     | {MONITORING_C3_VERIFIER_PROMPT_VERSION}
                     | MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS
                 )
+            if task_type == MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS:
+                # The dual-cohort AE/MH lane runs an independent blind
+                # verifier prompt beside the primary clue-synthesis contract.
+                from services.api.app.monitoring_ai_service import (  # noqa: PLC0415
+                    CROSS_TABLE_VERIFIER_PROMPT_VERSION,
+                )
+
+                current_prompt_versions = current_prompt_versions | {
+                    CROSS_TABLE_VERIFIER_PROMPT_VERSION
+                }
             monitoring_ai_repository.supersede_prompt_versions_except(
                 task_type=task_type,
                 current_prompt_version=prompt_version,
@@ -3722,7 +3798,9 @@ if _r7_facts_publication_provider is not None:
         FactsPublicationAdapter as _FactsPublicationAdapter,
     )
 
-    _r7_facts_mode_output_provider = _FactsModeOutputProvider()
+    _r7_facts_mode_output_provider = _FactsModeOutputProvider(
+        _FACTS_WORKSPACE_DIR / "runtime" / "artifacts"
+    )
     _r7_facts_publication_adapter = _FactsPublicationAdapter(
         _r7_facts_publication_provider
     )

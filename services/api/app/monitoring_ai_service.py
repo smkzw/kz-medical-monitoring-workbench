@@ -3248,8 +3248,9 @@ class MonitoringAiService:
             )
         elif job.task_type == MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS:
             candidate_count = (
-                "必须恰好输出2至3个彼此不重复的候选；每个候选必须引用"
-                "至少两个真实原始数据域的证据。"
+                "输出1至3个彼此不重复的候选；每个候选必须引用至少两个"
+                "真实原始数据域的证据。宁少勿滥：只能构造出合格的单一候选时，"
+                "只输出这一个，不得为凑数输出单数据域候选。"
             )
         elif job.task_type in (
             MonitoringAiTaskType.RISK_EVIDENCE_SUMMARY,
@@ -3463,6 +3464,10 @@ class MonitoringAiService:
                 "反证。AE强度、严重性、预期性、因果性与监查优先级必须分离表述，"
                 "不得合并或自动升级。证据不足时保守输出data_gap候选，不得猜测"
                 "主分析可能如何判断，也不得把推断写成已确认的临床结论。"
+                " 输出前逐个候选自检：合计其claims.evidence_ids覆盖的domain数，"
+                "不足两个domain的候选必须补引其他domain的对照证据行"
+                "（如用药记录对照病史、访视日期对照给药窗口），无法补引就"
+                "删除该候选——系统会直接拒绝任何单domain候选。"
             )
         elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS:
             system_prompt += (

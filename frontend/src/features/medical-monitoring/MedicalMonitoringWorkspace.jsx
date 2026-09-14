@@ -1832,8 +1832,41 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
     .filter((risk) => !risk.aggregate && ["critical", "high", "medium"].includes(risk.severity))
     .sort((left, right) => ["critical", "high", "medium"].indexOf(left.severity) - ["critical", "high", "medium"].indexOf(right.severity));
   const totalCount = projection.aggregation?.risk_count ?? risks.length;
+  const aiFindings = Array.isArray(projection.aiQueryFindings) ? projection.aiQueryFindings : [];
+  const aiAccepted = aiFindings.filter((item) => item.state === "accepted").length;
+  const aiEscalated = aiFindings.filter((item) => item.state === "escalated").length;
+  const aiGaps = aiFindings.filter((item) => item.state === "unverifiable_gap").length;
   return (
     <div className="monitoring-view-stack monitoring-query-workspace" data-monitoring-query-count={risks.length}>
+      {aiFindings.length ? (
+        <section className="monitoring-panel monitoring-panel-wide">
+          <div className="monitoring-section-heading"><span className="monitoring-eyebrow">双模型分析</span><h2>AI 跨表线索（{aiFindings.length} 条 · 双cohort一致 {aiAccepted} · 分歧 {aiEscalated} · 待补核 {aiGaps}）</h2></div>
+          <p className="monitoring-query-intro">以下线索由主分析与独立盲核（双模型全量盲核对）产出：一致的线索成立但仍需您复核；分歧线索不作强判，由您裁决；覆盖不足如实标出。</p>
+          <ul className="monitoring-query-card-list">
+            {aiFindings.map((item) => {
+              const subject = subjectsByRef.get(`subject-${item.subject_label}`) || (projection.subjects || []).find((row) => row.subject_label === item.subject_label || row.label === item.subject_label);
+              const stateBadge = item.state === "accepted" ? "双cohort一致" : item.state === "escalated" ? "分歧待裁决" : "待补核";
+              return (
+                <li key={item.finding_id} className="monitoring-query-card" data-query-finding={item.finding_id} data-finding-state={item.state}>
+                  <header className="monitoring-query-card-head">
+                    <span className={`monitoring-query-state-chip monitoring-query-state-${item.state}`}>{stateBadge}</span>
+                    <strong>{item.title}</strong>
+                    <span className="monitoring-query-card-target">受试者 {item.subject_label || "待确认"}</span>
+                  </header>
+                  <div className="monitoring-query-card-body">
+                    <section aria-label="依据"><h3>依据</h3><p>{item.state_reason_zh || "双cohort独立分析同一冻结证据包。"}</p></section>
+                    <section aria-label="发现"><h3>发现</h3><p>{item.text || item.title}</p></section>
+                    <section aria-label="请核实事项"><h3>请核实事项</h3><p>请下钻受试者旅程与来源记录核对临床语境后确认处置。</p></section>
+                  </div>
+                  <footer className="monitoring-query-card-actions">
+                    <button type="button" disabled={!subject} onClick={() => subject && onSubjectSelect?.(subject)}>进入受试者医学旅程</button>
+                  </footer>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
       <section className="monitoring-panel monitoring-panel-wide">
         <div className="monitoring-section-heading"><span className="monitoring-eyebrow">查询工作区</span><h2>请核实事项（{risks.length} 项待核对 · 全量锚点 {numberText(totalCount)}）</h2></div>
         <p className="monitoring-query-intro">以下每张卡片按「依据 — 发现 — 请核实事项」三段呈现：先看数据依据，再看医学发现，最后由您核对原始记录后决定是否发出数据核查问题。AI 只定位证据和风险，医学判断由您终审。</p>
