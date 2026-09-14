@@ -155,6 +155,22 @@ class FactsPublicationAuthorityProvider:
         self._cache[cache_key] = packet
         return packet
 
+    def get_packet(
+        self,
+        project_ref: str,
+        run_ref: str | None = None,
+        snapshot_ref: str | None = None,
+        cutoff_ref: str | None = None,
+    ) -> R5AuthorityPacket:
+        """Positional adapter consumed by R5ProductAdapter._packet."""
+        key = (str(project_ref), str(snapshot_ref or "facts-snapshot-001"))
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        packet = self._build(key)
+        self._cache[key] = packet
+        return packet
+
     def _build(self, cache_key: tuple[str, str]) -> R5AuthorityPacket:
         domains = self._load_domains()
         snapshot_ref = cache_key[1] or "facts-snapshot-001"
