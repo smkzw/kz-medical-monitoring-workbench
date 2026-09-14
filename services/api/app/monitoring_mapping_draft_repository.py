@@ -3071,14 +3071,20 @@ class MonitoringMappingDraftRepository:
                     raise MonitoringMappingStateConflictError(
                         "persisted mapping semantic quality report hash mismatch"
                     )
+                def _seed_source(item: Any) -> dict[str, Any]:
+                    payload = item.model_dump(mode="json")
+                    # source_origin is a provenance marker added after some
+                    # revisions were persisted; identity must stay stable
+                    # across its introduction.
+                    payload.pop("source_origin", None)
+                    return payload
+
                 revision_seed = {
                     "project_id": project_id,
                     "draft_id": draft_id,
                     "draft_version": draft_version,
                     "fields": [item.model_dump(mode="json") for item in fields],
-                    "field_sources": [
-                        item.model_dump(mode="json") for item in field_sources
-                    ],
+                    "field_sources": [_seed_source(item) for item in field_sources],
                     "input_revision_sha256": input_revision_sha256,
                     "source_set_sha256": source_set_sha256,
                     "semantic_quality_report_sha256": (
