@@ -2470,3 +2470,13 @@ g[data-flow-link]:focus-visible .monitoring-flow-ribbon {
     grid-template-columns: 1fr;
   }
 }
+
+.monitoring-query-state-chip {
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.monitoring-query-state-accepted { background: #E8F1E4; color: #3F5E33; border: 1px solid #587B3B; }
+.monitoring-query-state-escalated { background: #FFF3E0; color: #A85F34; border: 1px solid #A85F34; }
+.monitoring-query-state-unverifiable_gap { background: #F2F0EB; color: #595959; border: 1px solid #AAA6A1; }

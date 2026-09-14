@@ -102,7 +102,7 @@ def build_subject_evidence(
                     "locator": locator,
                     "quote": quote,
                     "raw_fields": {
-                        "evidence_kind": "original_listing_row",
+                        "evidence_kind": "original_data",
                         "subject_id": subject_label,
                         "domain": domain,
                         "domain_role": _DOMAIN_ROLE[domain],
@@ -180,6 +180,14 @@ def submit_cohorts(
                     "仅生成待当前医学用户复核的跨表线索；不得自动判定"
                     "AE/MH漏报、方案违背或生成Query。"
                 ),
+                "analysis_contract": (
+                    "每个线索候选的claims.evidence_ids必须合计引用至少两个"
+                    "不同domain（如AE+MH、CM+EX、AE+CM）的evidence_id；"
+                    "只引用单一domain证据的候选会被系统直接拒绝。"
+                    "evidence_packet每条证据的raw_fields.domain标明了所属域。"
+                    "AE强度、严重性、预期性、因果性与监查优先级必须分开表述，"
+                    "不得合并；证据不足时输出data_gap主张，不得补造。"
+                ),
             },
             "evidence_packet": evidence,
         }
@@ -214,10 +222,157 @@ def submit_cohorts(
     )
 
 
+def _clue_fingerprint(candidate: Any) -> frozenset[str]:
+    """Structural fingerprint: the original-evidence ids one clue cites."""
+    return frozenset(
+        item.evidence_id for item in getattr(candidate, "evidence", ())
+    )
+
+
+def _finding_text(candidate: Any) -> dict[str, Any]:
+    payload = getattr(candidate, "structured_payload", {}) or {}
+    return {
+        "title": str(getattr(candidate, "title", "") or "")[:200],
+        "text": str(getattr(candidate, "text", "") or "")[:2000],
+        "domains": list(payload.get("domains", []) or []),
+        "payload": payload,
+    }
+
+
+def adjudicate(
+    *,
+    ai_repository: Any,
+    project_id: str,
+    subject_labels: Sequence[str],
+    facts_snapshot_ref: str,
+    primary_job_by_subject: Mapping[str, str],
+    verifier_job_by_subject: Mapping[str, str],
+    artifacts_dir: Path,
+) -> dict[str, Any]:
+    """Pair the two cohorts per subject into visible findings.
+
+    Conservative structural matching only: a primary clue and a verifier clue
+    agree when they cite at least one shared original evidence row. Unpaired
+    clues from either cohort stay ``escalated`` (never force-accepted); a
+    subject whose cohort job did not complete stays ``unverifiable_gap``.
+    """
+
+    findings: list[dict[str, Any]] = []
+    cohort_status: dict[str, dict[str, str]] = {}
+    for subject_label in subject_labels:
+        primary_id = primary_job_by_subject.get(subject_label, "")
+        verifier_id = verifier_job_by_subject.get(subject_label, "")
+        primary_candidates = (
+            ai_repository.candidates(project_id, primary_id)
+            if primary_id
+            else ()
+        )
+        verifier_candidates = (
+            ai_repository.candidates(project_id, verifier_id)
+            if verifier_id
+            else ()
+        )
+        primary_job = (
+            ai_repository.get(project_id, primary_id) if primary_id else None
+        )
+        verifier_job = (
+            ai_repository.get(project_id, verifier_id) if verifier_id else None
+        )
+        cohort_status[subject_label] = {
+            "primary_job": primary_id,
+            "primary_state": str(getattr(primary_job, "status", "missing")),
+            "verifier_job": verifier_id,
+            "verifier_state": str(getattr(verifier_job, "status", "missing")),
+        }
+        if not primary_candidates and not verifier_candidates:
+            findings.append(
+                {
+                    "subject_label": subject_label,
+                    "state": "unverifiable_gap",
+                    "reason_zh": "双cohort均无可用候选（未完成或输出无效），本轮不可核实。",
+                    "primary": None,
+                    "verifier": None,
+                }
+            )
+            continue
+        used_verifier: set[str] = set()
+        for primary_clue in primary_candidates:
+            primary_text = _finding_text(primary_clue)
+            primary_evidence = _clue_fingerprint(primary_clue)
+            matched_verifier = None
+            for verifier_clue in verifier_candidates:
+                if verifier_clue.candidate_id in used_verifier:
+                    continue
+                if primary_evidence & _clue_fingerprint(verifier_clue):
+                    matched_verifier = verifier_clue
+                    break
+            if matched_verifier is not None:
+                used_verifier.add(matched_verifier.candidate_id)
+                findings.append(
+                    {
+                        "subject_label": subject_label,
+                        "state": "accepted",
+                        "reason_zh": "主分析与独立盲核均引用相同原始记录，线索成立，待医学复核。",
+                        "primary": primary_text,
+                        "verifier": _finding_text(matched_verifier),
+                    }
+                )
+            else:
+                findings.append(
+                    {
+                        "subject_label": subject_label,
+                        "state": "escalated",
+                        "reason_zh": "仅主分析提出该线索，独立盲核未引用相同原始记录；不得强行接受，请医学监察员裁决。",
+                        "primary": primary_text,
+                        "verifier": None,
+                    }
+                )
+        for verifier_clue in verifier_candidates:
+            if verifier_clue.candidate_id in used_verifier:
+                continue
+            findings.append(
+                {
+                    "subject_label": subject_label,
+                    "state": "escalated",
+                    "reason_zh": "仅独立盲核提出该线索（主分析遗漏）；不得强行接受，请医学监察员裁决。",
+                    "primary": None,
+                    "verifier": _finding_text(verifier_clue),
+                }
+            )
+    accepted = sum(1 for item in findings if item["state"] == "accepted")
+    escalated = sum(1 for item in findings if item["state"] == "escalated")
+    gaps = sum(1 for item in findings if item["state"] == "unverifiable_gap")
+    artifact = {
+        "kind": "aemh_cross_findings",
+        "snapshot_ref": facts_snapshot_ref,
+        "project_id": project_id,
+        "prompt_versions": {
+            "primary": PRIMARY_PROMPT_VERSION,
+            "verifier": VERIFIER_PROMPT_VERSION,
+        },
+        "counts": {
+            "accepted": accepted,
+            "escalated": escalated,
+            "unverifiable_gap": gaps,
+        },
+        "cohort_status": cohort_status,
+        "findings": findings,
+    }
+    digest = content_hash(artifact)
+    artifact["content_sha256"] = digest
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    (artifacts_dir / f"aemh-findings-{facts_snapshot_ref}.json").write_text(
+        json.dumps(artifact, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+    return artifact
+
+
 __all__ = [
     "AeMhSubmission",
     "PRIMARY_PROMPT_VERSION",
     "VERIFIER_PROMPT_VERSION",
+    "adjudicate",
     "build_subject_evidence",
     "submit_cohorts",
 ]
