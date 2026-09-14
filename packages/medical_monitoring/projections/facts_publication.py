@@ -12,7 +12,7 @@ import re
 from dataclasses import fields
 from datetime import date
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 from ..intelligence.primitives import content_hash
 from .product_types import (
@@ -65,15 +65,109 @@ _DOMAIN_BY_TABLE: dict[str, tuple[str, str]] = {
     "HW": ("lab_exam", "exam"),
     "EG": ("lab_exam", "exam"),
     "VS": ("lab_exam", "exam"),
+    "SV": ("protocol_compliance", "protocol_deviation"),
     "SH": ("hospital_procedure", "procedure"),
     "SU": ("hospital_procedure", "procedure"),
+    "PR": ("hospital_procedure", "procedure"),
     "PT": ("symptom_efficacy", "symptom"),
     "NE": ("symptom_efficacy", "efficacy"),
+    "NS": ("symptom_efficacy", "efficacy"),
+    "RQL": ("symptom_efficacy", "scale"),
     "PC": ("symptom_efficacy", "outcome"),
     "PD": ("protocol_compliance", "protocol_deviation"),
-    "RQL": ("protocol_compliance", "protocol_deviation"),
+    "IE": ("protocol_compliance", "protocol_deviation"),
+    "ICF": ("protocol_compliance", "protocol_deviation"),
+    "RAN": ("protocol_compliance", "protocol_deviation"),
+    "DS": ("protocol_compliance", "protocol_deviation"),
+    "FW": ("protocol_compliance", "protocol_deviation"),
     "RES": ("symptom_efficacy", "efficacy"),
+    "PE": ("lab_exam", "exam"),
+    "MO": ("lab_exam", "exam"),
+    "RT": ("lab_exam", "exam"),
+    "UNS": ("lab_exam", "exam"),
+    "USV": ("lab_exam", "exam"),
+    "PK": ("lab_exam", "exam"),
+    "SK": ("mh", "mh"),
+    "PARH": ("mh", "mh"),
+    "SARH": ("mh", "mh"),
+    "AH": ("mh", "mh"),
 }
+
+# 非临床事件表：人口学与表单目录不进入八轨事件流
+_EXCLUDED_TABLES = {"DM", "TOC"}
+
+# subtype 英文标识 → 中文兜底标签（行内无术语列时使用）
+_SUBTYPE_LABEL_ZH = {
+    "ae": "不良事件",
+    "mh": "既往病史",
+    "concomitant_medication": "合并用药",
+    "ip_dose": "给药记录",
+    "lab": "实验室检验",
+    "exam": "检查",
+    "procedure": "住院/操作",
+    "hospitalization": "住院",
+    "symptom": "症状评估",
+    "efficacy": "疗效评估",
+    "scale": "量表评估",
+    "outcome": "结局",
+    "trend": "趋势",
+    "protocol_deviation": "方案偏离",
+}
+
+# 表级中文兜底标签：同 subtype 下区分不同来源表（如 ICF/随机/访视记录）
+_TABLE_LABEL_ZH = {
+    "SV": "访视记录",
+    "IE": "入排评估",
+    "ICF": "知情同意",
+    "RAN": "随机",
+    "DS": "研究处置",
+    "FW": "随访",
+    "PD": "方案偏离",
+    "RQL": "生活质量量表",
+    "PK": "药代采样",
+    "RT": "RPR检测",
+    "USV": "尿酸检测",
+    "UNS": "其他检查",
+    "MO": "胸片影像",
+    "PE": "体格检查",
+    "VS": "生命体征",
+    "EG": "心电图",
+    "HW": "身高体重",
+    "SK": "吸烟史",
+    "PARH": "宠物接触史",
+    "SARH": "特殊病史",
+    "AH": "过敏史",
+    "PR": "既往操作",
+    "NS": "鼻腔评估",
+    "NE": "鼻镜检查",
+    "PT": "肺功能",
+    "SH": "手术史",
+}
+
+# 事件中文标签列解析优先级：术语列 → 检查项目列 → 异常结论列 → 中文指标名/处置 → 备注列
+_TERM_SUFFIX_PRIORITY = ("TERM", "TRT", "TEST", "ABCO")
+_TERM_EXACT = ("实验室指标名称", "DSDECOD")
+_COMMENT_SUFFIX = "CO"
+_TABLE_TERM_OVERRIDES: dict[str, tuple[str, ...]] = {
+    "IE": ("IECO", "IECAT"),
+}
+
+
+def _term_keys_for(table: str, columns: list[str]) -> list[str]:
+    if table in _TABLE_TERM_OVERRIDES:
+        keys = [c for c in _TABLE_TERM_OVERRIDES[table] if c in columns]
+        if keys:
+            return keys
+    ordered: list[str] = []
+    for suffix in _TERM_SUFFIX_PRIORITY:
+        ordered.extend(c for c in columns if c.endswith(suffix) and c not in ordered)
+    ordered.extend(c for c in _TERM_EXACT if c in columns and c not in ordered)
+    ordered.extend(
+        c
+        for c in columns
+        if c.endswith(_COMMENT_SUFFIX) and c not in ordered
+    )
+    return ordered
 
 
 def _domain_for(table: str) -> tuple[str, str]:
@@ -255,7 +349,7 @@ class FactsPublicationAuthorityProvider:
                 visit_ref=None,
                 risk_anchor_refs=(),
                 source_locator_refs=(_locator(table, index).locator_ref,),
-                label_zh=label[:60] or subtype,
+                label_zh=label[:60] or _SUBTYPE_LABEL_ZH.get(subtype, subtype),
             )
             events.append(record)
             # 初步风险：严重度可由表内字段推导（如 AESEV），此处保守 medium 起步
@@ -286,13 +380,14 @@ class FactsPublicationAuthorityProvider:
             )
             return record
 
-        # 访视（VS 或任一含 VISIT+日期的表取每个受试者×访视一条）
+        # 访视（SV 为权威访视记录表；VS/HW/EG 补充覆盖）
         seen_visits: set[tuple[str, str]] = set()
-        for table in ("VS", "HW", "EG"):
+        _VISIT_DATE_COL = {"SV": "VISDAT", "VS": "VSDAT"}
+        for table in ("SV", "VS", "HW", "EG"):
             for index, row in enumerate(domains.get(table, [])):
                 subj = _clean(row.get("SUBJID"))
                 visit_name = _clean(row.get("VISIT"))
-                date_raw = row.get(f"{table}DAT") if table != "VS" else row.get("VSDAT")
+                date_raw = row.get(_VISIT_DATE_COL.get(table, f"{table}DAT"))
                 if not subj or not visit_name or subj in _UK_TOKENS:
                     continue
                 key = (subj, visit_name)
@@ -302,7 +397,7 @@ class FactsPublicationAuthorityProvider:
                 seen_visits.add(key)
                 visits.append(
                     R5VisitRecord(
-                        visit_ref=f"visit-{subj}-{abs(hash(visit_name)) % 10_000:04d}",
+                        visit_ref=f"visit-{subj}-{int(content_hash(visit_name)[:6], 16) % 10_000:04d}",
                         subject_ref=f"subject-{subj}",
                         site_ref=subject_site.get(subj, "site-unknown"),
                         spine_ref=f"spine-{subj}",
@@ -317,15 +412,25 @@ class FactsPublicationAuthorityProvider:
 
         # 八轨事件
         for table, rows in domains.items():
+            if table in _EXCLUDED_TABLES:
+                continue
             domain, subtype = _domain_for(table)
             date_keys = [k for k in rows[0].keys() if k.endswith("DAT") or k in ("SHDAT",)] if rows else []
-            term_keys = [k for k in rows[0].keys() if k in ("AETERM", "SHTERM", "CMTRT", "EGABCO", "PTTERM", "LBNAM")] if rows else []
+            term_keys = _term_keys_for(table, list(rows[0].keys())) if rows else []
             for index, row in enumerate(rows):
                 subj = _clean(row.get("SUBJID"))
                 if not subj or subj in _UK_TOKENS:
                     continue
                 start_raw = next((row[k] for k in date_keys if _clean(row.get(k))), None)
-                label = _clean(next((row[k] for k in term_keys if _clean(row.get(k))), subtype))
+                term_value = next((row[k] for k in term_keys if _clean(row.get(k))), None)
+                if _clean(term_value):
+                    label = _clean(term_value)
+                else:
+                    fallback = _TABLE_LABEL_ZH.get(table) or _SUBTYPE_LABEL_ZH.get(subtype, subtype)
+                    visit_name = _clean(row.get("VISIT"))
+                    if "共同页" in visit_name or "共同" == visit_name:
+                        visit_name = ""
+                    label = f"{fallback}·{visit_name}" if visit_name else fallback
                 _add_event(
                     table=table, index=index, subj=subj, subtype=subtype,
                     domain=domain, start_raw=start_raw, label=label,
@@ -333,7 +438,7 @@ class FactsPublicationAuthorityProvider:
 
         # 受试者流向（SV/筛选表：ICF→筛选→治疗→研究状态）
         flow_catalog = self._flow_catalog(domains)
-        flow_paths = self._flow_paths(domains, subject_site, snapshot_ref, sources)
+        flow_paths = self._flow_paths(domains, subject_site, _locator)
 
         packet = R5AuthorityPacket(
             project_ref=cache_key[0] or "proj_mgk10_sar_real",
@@ -393,18 +498,96 @@ class FactsPublicationAuthorityProvider:
         self,
         domains: Mapping[str, list[dict[str, Any]]],
         subject_site: Mapping[str, str],
-        snapshot_ref: str,
-        sources: list[R5SourceRecord],
+        locator: Callable[[str, int], R5SourceRecord],
     ) -> tuple[R5SubjectFlowPathRecord, ...]:
         paths = []
-        # 状态列（SUBJSTA）作为研究状态依据；EX 给药记录作为进入治疗依据
-        treatment_subjects = {
-            _clean(row.get("SUBJID"))
-            for table, rows in domains.items()
-            if _domain_for(table)[0] == "ip"
-            for row in rows
-            if _clean(row.get("SUBJID"))
-        }
+
+        def _earliest(
+            rows: list[dict[str, Any]], date_cols: Sequence[str]
+        ) -> tuple[date | None, int] | None:
+            best: tuple[date, int] | None = None
+            for index, row in enumerate(rows):
+                for col in date_cols:
+                    raw = _clean(row.get(col))
+                    if raw and _date_state(raw) == "exact":
+                        parsed = _parse_date(raw)
+                        if parsed and (best is None or parsed < best[0]):
+                            best = (parsed, index)
+                        break
+            return best
+
+        # 知情同意：ICF 表 ICFDAT
+        icf_by_subject: dict[str, tuple[date | None, str, int]] = {}
+        for index, row in enumerate(domains.get("ICF", [])):
+            subj = _clean(row.get("SUBJID"))
+            if not subj or subj in _UK_TOKENS:
+                continue
+            raw = _clean(row.get("ICFDAT"))
+            state = _date_state(raw)
+            parsed = _parse_date(raw) if state == "exact" else None
+            current = icf_by_subject.get(subj)
+            if current is None or (parsed and (current[0] is None or parsed < current[0])):
+                icf_by_subject[subj] = (parsed, state, index)
+
+        # 筛选：SV 中首个含「筛选」的访视日期；兜底为最早访视
+        screening_by_subject: dict[str, tuple[date, int]] = {}
+        first_visit_by_subject: dict[str, tuple[date, int]] = {}
+        sv_rows = domains.get("SV", [])
+        for index, row in enumerate(sv_rows):
+            subj = _clean(row.get("SUBJID"))
+            raw = _clean(row.get("VISDAT"))
+            parsed = _parse_date(raw) if _date_state(raw) == "exact" else None
+            if not subj or subj in _UK_TOKENS or not parsed:
+                continue
+            visit_name = _clean(row.get("VISIT"))
+            if "筛选" in visit_name and subj not in screening_by_subject:
+                screening_by_subject[subj] = (parsed, index)
+            current = first_visit_by_subject.get(subj)
+            if current is None or parsed < current[0]:
+                first_visit_by_subject[subj] = (parsed, index)
+
+        # 治疗：EX* 任一日期列的最早精确日期；兜底随机日期
+        treatment_by_subject: dict[str, tuple[date, str, int]] = {}
+        for table, rows in domains.items():
+            if _domain_for(table)[0] != "ip":
+                continue
+            date_cols = [c for c in (rows[0].keys() if rows else []) if c.endswith("DAT")]
+            for index, row in enumerate(rows):
+                subj = _clean(row.get("SUBJID"))
+                if not subj or subj in _UK_TOKENS:
+                    continue
+                for col in date_cols:
+                    raw = _clean(row.get(col))
+                    if raw and _date_state(raw) == "exact":
+                        parsed = _parse_date(raw)
+                        if parsed:
+                            current = treatment_by_subject.get(subj)
+                            if current is None or parsed < current[0]:
+                                treatment_by_subject[subj] = (parsed, table, index)
+                        break
+        random_by_subject: dict[str, tuple[date | None, str, int]] = {}
+        for index, row in enumerate(domains.get("RAN", [])):
+            subj = _clean(row.get("SUBJID"))
+            if not subj or subj in _UK_TOKENS:
+                continue
+            raw = _clean(row.get("RANDAT"))
+            state = _date_state(raw)
+            parsed = _parse_date(raw) if state == "exact" else None
+            random_by_subject[subj] = (parsed, state, index)
+
+        # 研究处置：DS 表 DSDECOD + DSDAT；兜底 SUBJSTA 状态文本
+        disposition_by_subject: dict[str, tuple[date | None, str, str, int]] = {}
+        for index, row in enumerate(domains.get("DS", [])):
+            subj = _clean(row.get("SUBJID"))
+            if not subj or subj in _UK_TOKENS:
+                continue
+            raw = _clean(row.get("DSDAT"))
+            state = _date_state(raw)
+            parsed = _parse_date(raw) if state == "exact" else None
+            decod = _clean(row.get("DSDECOD")) or "研究处置"
+            current = disposition_by_subject.get(subj)
+            if current is None or (parsed and (current[0] is None or parsed < current[0])):
+                disposition_by_subject[subj] = (parsed, state, decod, index)
         status_by_subject: dict[str, str] = {}
         for table, rows in domains.items():
             for row in rows:
@@ -412,16 +595,61 @@ class FactsPublicationAuthorityProvider:
                 status = _clean(row.get("SUBJSTA"))
                 if subj and status and status not in _UK_TOKENS:
                     status_by_subject.setdefault(subj, status)
+
         for subj in sorted({s for s in subject_site}):
-            steps = [
-                R5SubjectFlowStep(stage_ref="stage-icf", entered_date=None, basis_date=None, date_state="missing", transition_reason_zh="名册记录", source_locator_refs=()),
-                R5SubjectFlowStep(stage_ref="stage-screening", entered_date=None, basis_date=None, date_state="missing", transition_reason_zh="名册记录", source_locator_refs=()),
-            ]
-            if subj in treatment_subjects:
-                steps.append(R5SubjectFlowStep(stage_ref="stage-treatment", entered_date=None, basis_date=None, date_state="missing", transition_reason_zh="给药记录", source_locator_refs=()))
-            status = status_by_subject.get(subj, "")
-            if status:
-                steps.append(R5SubjectFlowStep(stage_ref="stage-study-status", entered_date=None, basis_date=None, date_state="missing", transition_reason_zh=f"状态：{status}", source_locator_refs=()))
+            steps = [R5SubjectFlowStep(
+                stage_ref="stage-icf",
+                entered_date=icf_by_subject[subj][0],
+                basis_date=icf_by_subject[subj][0],
+                date_state=icf_by_subject[subj][1],
+                transition_reason_zh="知情同意书签署",
+                source_locator_refs=(locator("ICF", icf_by_subject[subj][2]).locator_ref,),
+            ) if subj in icf_by_subject else R5SubjectFlowStep(
+                stage_ref="stage-icf", entered_date=None, basis_date=None,
+                date_state="missing", transition_reason_zh="名册记录", source_locator_refs=(),
+            )]
+            screen = screening_by_subject.get(subj) or first_visit_by_subject.get(subj)
+            if screen:
+                steps.append(R5SubjectFlowStep(
+                    stage_ref="stage-screening",
+                    entered_date=screen[0], basis_date=screen[0], date_state="exact",
+                    transition_reason_zh="筛选访视" if subj in screening_by_subject else "首次访视",
+                    source_locator_refs=(locator("SV", screen[1]).locator_ref,),
+                ))
+            else:
+                steps.append(R5SubjectFlowStep(
+                    stage_ref="stage-screening", entered_date=None, basis_date=None,
+                    date_state="missing", transition_reason_zh="名册记录", source_locator_refs=(),
+                ))
+            if subj in treatment_by_subject:
+                treat = treatment_by_subject[subj]
+                steps.append(R5SubjectFlowStep(
+                    stage_ref="stage-treatment",
+                    entered_date=treat[0], basis_date=treat[0], date_state="exact",
+                    transition_reason_zh="首次给药",
+                    source_locator_refs=(locator(treat[1], treat[2]).locator_ref,),
+                ))
+            elif subj in random_by_subject and random_by_subject[subj][1] == "exact":
+                rand = random_by_subject[subj]
+                steps.append(R5SubjectFlowStep(
+                    stage_ref="stage-treatment",
+                    entered_date=rand[0], basis_date=rand[0], date_state=rand[1],
+                    transition_reason_zh="随机",
+                    source_locator_refs=(locator("RAN", rand[2]).locator_ref,),
+                ))
+            if subj in disposition_by_subject:
+                disp = disposition_by_subject[subj]
+                steps.append(R5SubjectFlowStep(
+                    stage_ref="stage-study-status",
+                    entered_date=disp[0], basis_date=disp[0], date_state=disp[1],
+                    transition_reason_zh=f"研究处置：{disp[2]}",
+                    source_locator_refs=(locator("DS", disp[3]).locator_ref,),
+                ))
+            elif (status := status_by_subject.get(subj)):
+                steps.append(R5SubjectFlowStep(
+                    stage_ref="stage-study-status", entered_date=None, basis_date=None,
+                    date_state="missing", transition_reason_zh=f"状态：{status}", source_locator_refs=(),
+                ))
             paths.append(
                 R5SubjectFlowPathRecord(
                     subject_ref=f"subject-{subj}",
