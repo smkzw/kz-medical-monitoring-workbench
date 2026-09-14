@@ -3004,14 +3004,32 @@ class MonitoringMappingDraftRepository:
                 raise MonitoringMappingStateConflictError(
                     "persisted mapping revision source lineage does not match fields"
                 )
-            # Same rule as the draft-level lineage: adjudication-receipt
-            # sources legitimately reference the second-round jobs' revision;
-            # only base (first-round) sources must match the declared one.
+            # Same rule as the draft-level lineage: second-round receipt
+            # sources legitimately reference the adjudication jobs' revision.
+            # They are identifiable in-row by their prompt version (the
+            # declared lineage is the first-round cohort's); pre-marker rows
+            # and marker rows both resolve correctly.
+            base_prompt_versions = {
+                item.prompt_version
+                for item in field_sources
+                if item.input_revision_sha256 == input_revision_sha256
+            }
             base_revision_sources = [
                 item
                 for item in field_sources
-                if getattr(item, "source_origin", "") != "adjudication_receipt"
-                and not getattr(item, "from_adjudication_receipt", False)
+                if item.input_revision_sha256 == input_revision_sha256
+                or item.prompt_version in base_prompt_versions
+                and item.prompt_version != ""
+                and any(
+                    other.prompt_version == item.prompt_version
+                    and other.input_revision_sha256 == input_revision_sha256
+                    for other in field_sources
+                ) is False
+            ]
+            base_revision_sources = [
+                item
+                for item in field_sources
+                if item.input_revision_sha256 == input_revision_sha256
             ]
             if any(
                 item.input_revision_sha256 != input_revision_sha256
