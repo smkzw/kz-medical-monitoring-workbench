@@ -1250,12 +1250,16 @@ class AdmissionMappingPipeline:
                     "dual_review": dual_rows,
                     **({"evidence_profile_sha256": _evidence_revision_key}
                        if _evidence_revision_key else {}),
-                    # Prompt version and route identity deliberately stay OUT
-                    # of the digest: the work unit is the frozen review scope.
-                    # Prompt/runtime identity lives on each job row (unique
-                    # constraint + equivalent-cohort signature), so route
-                    # changes never collide AND completed cohorts remain
-                    # reusable across route changes.
+                    "prompt_version": self._adjudication_prompt_version(contract.cohort),
+                    # Provider identity is part of the work-unit identity:
+                    # switching the model route must open a fresh adjudication
+                    # namespace instead of colliding with prior-route rows.
+                    "runtime": (
+                        self._required_provider if contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
+                        else self._verifier_required_provider,
+                        self._required_model.casefold() if contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
+                        else self._verifier_required_model.casefold(),
+                    ),
                 },
                 ensure_ascii=False,
                 sort_keys=True,
