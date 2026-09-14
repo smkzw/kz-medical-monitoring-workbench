@@ -293,6 +293,9 @@ class MonitoringMappingFieldSource(BaseModel):
     input_revision_sha256: str
     prompt_version: str
     evidence_ids: tuple[str, ...]
+    # "adjudication_receipt" marks second-round receipt-derived sources whose
+    # input revision legitimately differs from the first-round lineage.
+    source_origin: str = ""
 
     @field_validator("candidate_content_sha256", "input_revision_sha256")
     @classmethod
@@ -2171,10 +2174,9 @@ class MonitoringMappingDraftRepository:
                 prompt_version=selected["prompt_version"],
                 evidence_ids=tuple(json.loads(row["evidence_ids_json"])),
             )
-            object.__setattr__(
-                receipt_source, "from_adjudication_receipt", True
+            sources[pair] = receipt_source.model_copy(
+                update={"source_origin": "adjudication_receipt"}
             )
-            sources[pair] = receipt_source
         return tuple(sources[pair] for pair in sorted(sources))
 
     def semantic_quality(
