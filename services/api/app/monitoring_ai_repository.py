@@ -1714,6 +1714,71 @@ class MonitoringAiRepository:
             connection.commit()
         return len(job_ids)
 
+    def retire_obsolete_generation(
+        self,
+        project_id: str,
+        *,
+        job_ids: list[str],
+        reason: str,
+    ) -> int:
+        """Retire never-completed jobs of an obsolete adjudication namespace.
+
+        A digest/route experiment can re-partition pending work under a new
+        namespace; when the experiment is reverted those never-executed rows
+        are dead weight the claim loop would happily run. This operation
+        durably contract-retires queued/running rows whose work unit is
+        superseded by the reverted experiment, without touching terminal
+        rows (their audit evidence survives) and without any SQL hand-edit.
+        """
+        cleaned = [str(item).strip() for item in job_ids if str(item).strip()]
+        if not cleaned:
+            return 0
+        reason_text = (reason.strip() or "已废弃命名空间的未执行工作")[:2_000]
+        now = self.clock()
+        retired = 0
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            for job_id in cleaned:
+                row = connection.execute(
+                    """
+                    SELECT status, contract_retirement_code
+                    FROM monitoring_ai_jobs
+                    WHERE project_id = ? AND job_id = ?
+                    """,
+                    (project_id, job_id),
+                ).fetchone()
+                if row is None or row["status"] not in (
+                    "queued", "running", "blocked",
+                ) or row["contract_retirement_code"]:
+                    continue
+                connection.execute(
+                    """
+                    UPDATE monitoring_ai_jobs
+                    SET status = 'stale_input',
+                        failure_code = 'superseded_job_contract',
+                        failure_message = ?,
+                        retryable = 0,
+                        lease_owner = '',
+                        lease_expires_at = '',
+                        contract_retirement_code = 'obsolete_generation',
+                        contract_retirement_reason = ?,
+                        contract_retired_at = ?,
+                        updated_at = ?
+                    WHERE project_id = ? AND job_id = ?
+                    """,
+                    (
+                        reason_text[:4_000],
+                        reason_text,
+                        _iso(now),
+                        _iso(now),
+                        project_id,
+                        job_id,
+                    ),
+                )
+                retired += 1
+            connection.commit()
+        return retired
+
     def supersede_business_key_except(
         self,
         project_id: str,
