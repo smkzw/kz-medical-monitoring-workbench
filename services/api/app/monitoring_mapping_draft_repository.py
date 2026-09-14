@@ -1853,7 +1853,10 @@ class MonitoringMappingDraftRepository:
         domain: str,
         source_field: str,
         reconciliation_sha256: str,
-        resolution: Literal["primary_retained", "adjudicated_mapping", "escalated"],
+        resolution: Literal[
+            "primary_retained", "adjudicated_mapping", "escalated",
+            "unverifiable_gap",
+        ],
         job_id: str,
         candidate_id: str,
         evidence_ids: tuple[str, ...],
