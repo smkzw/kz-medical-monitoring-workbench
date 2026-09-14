@@ -2841,7 +2841,8 @@ class MonitoringMappingDraftRepository:
         base_sources = [
             item
             for item in draft.field_sources
-            if not getattr(item, "from_adjudication_receipt", False)
+            if getattr(item, "source_origin", "") != "adjudication_receipt"
+            and not getattr(item, "from_adjudication_receipt", False)
         ]
         if any(
             item.input_revision_sha256 != draft.input_revision_sha256
@@ -2942,7 +2943,8 @@ class MonitoringMappingDraftRepository:
             base_revision_sources = [
                 item
                 for item in field_sources
-                if not getattr(item, "from_adjudication_receipt", False)
+                if getattr(item, "source_origin", "") != "adjudication_receipt"
+                and not getattr(item, "from_adjudication_receipt", False)
             ]
             if any(
                 item.input_revision_sha256 != input_revision_sha256
