@@ -61,9 +61,10 @@ def _risk_payload(
     subject_label: Optional[str] = None,
 ) -> dict[str, Any]:
     subject_name = subject_label or risk.subject_ref
+    domain_label = DOMAIN_ENCODING.get(risk.domain, {}).get("short_label_zh", risk.domain)
     evidence_summary = {
         "why_reminded": f"{risk.risk_type_zh}可能影响受试者安全性评价或方案符合性判断，需要沿原始记录核实。",
-        "basis": f"依据当前项目监查规则及已绑定的{risk.domain}域记录。",
+        "basis": f"依据当前项目监查规则及已绑定的{domain_label}域记录。",
         "finding": f"发现{subject_name}存在“{risk.risk_type_zh}”相关记录。",
         "action_item": "请核对原始记录、研究方案与数据录入情况，并确认是否需要发出数据核查问题。",
         "supporting_evidence": "已定位到支持该风险提示的原始记录。",

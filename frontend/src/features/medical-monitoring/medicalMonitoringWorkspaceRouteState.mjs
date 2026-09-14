@@ -1,6 +1,7 @@
 export const MEDICAL_MONITORING_WORKSPACE_VIEWS = Object.freeze([
   "overview",
   "site_overview",
+  "queries",
   "journey",
   "profile",
   "timeline",

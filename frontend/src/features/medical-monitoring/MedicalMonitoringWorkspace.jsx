@@ -11,6 +11,7 @@ import {
 } from "./medicalMonitoringWorkspaceRouteState.mjs";
 import { layoutJourneyTimeline, parseTimelineDate, visitAxisDate } from "./medicalMonitoringJourneyTimeline.mjs";
 import { DomainIcon } from "./DomainIcon.jsx";
+import { KzSubjectFlowSankey, KzRiskTypeBars, KzCenterDomainHeatmap } from "./medicalMonitoringKzChart.jsx";
 import { MedicalMonitoringProgressPanel } from "./MedicalMonitoringProgressPanel.jsx";
 import { MedicalMonitoringProductLoop } from "./MedicalMonitoringProductLoop.jsx";
 import {
@@ -1205,93 +1206,32 @@ export function SubjectFlowSection({
             {subjectFlowHasSelection(selection) && <button type="button" className="monitoring-flow-clear" onClick={() => onClear?.()}>清除筛选</button>}
             {summaryLine && <span className="monitoring-flow-filter-hint">{summaryLine}</span>}
           </div>
-          <svg
-            className="monitoring-flow-svg"
-            viewBox={`0 0 ${graph.width} ${graph.height}`}
-            role="group"
-            aria-label="受试者阶段流向图"
-          >
-            {graph.ribbons.map((ribbon, index) => (
-              <g
-                key={ribbon.ref}
-                role="button"
-                tabIndex={0}
-                data-flow-link={ribbon.ref}
-                className={`${selection.linkRef === ribbon.ref ? "is-selected" : ""}${nodeSelectionActive && selection.linkRef !== ribbon.ref ? " is-dim" : ""}`}
-                aria-label={`从${ribbon.fromLabel}到${ribbon.toLabel}，${ribbon.count} 人，该流向受试者中当前伴随中高风险 ${ribbon.risk} 人`}
-                ref={registerFlowFocus(flow.stages.length + index)}
-                onClick={() => onLinkSelect?.(ribbon.ref)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onLinkSelect?.(ribbon.ref);
-                  }
-                }}
-              >
-                <title>{`从${ribbon.fromLabel}到${ribbon.toLabel}：${ribbon.count} 人，该流向受试者中当前伴随中高风险 ${ribbon.risk} 人`}</title>
-                <path d={ribbon.ribbonPath} className="monitoring-flow-ribbon" />
-                <path d={ribbon.hitPath} className="monitoring-flow-link-hit" />
-                <text x={ribbon.labelX} y={ribbon.labelY} className="monitoring-flow-link-count">{ribbon.count}</text>
-                {/* Mid/high risk stays on nodes only. Ribbon “中高 N” sits on the stroke and
-                    fails first-screen scan (conference R3 P2). Title/aria still carry the count. */}
-              </g>
-            ))}
-            {graph.nodes.map((node, index) => {
-              const [line1, line2] = flowLabelLines(node.label);
-              const centerX = node.x + FLOW_LAYOUT.nodeWidth / 2;
-              const nodeSelected = selection.stageRef === node.ref;
-              return (
-                <g
-                  key={node.ref}
-                  role="button"
-                  tabIndex={0}
+          <KzSubjectFlowSankey
+            flow={flow}
+            selection={selection}
+            onStageSelect={onStageSelect}
+            onLinkSelect={onLinkSelect}
+          />
+          <ul className="monitoring-flow-a11y-list">
+            {graph.nodes.map((node) => (
+              <li key={node.ref}>
+                <button
+                  type="button"
                   data-flow-node={node.ref}
-                  data-stage-kind={node.kind}
-                  data-flow-empty={node.emptyAtCutoff ? "true" : "false"}
-                  className={`${nodeSelected ? "is-selected" : ""}${nodeSelectionActive && !nodeSelected ? " is-dim" : ""}`}
-                  aria-label={`${node.label}，到达 ${node.reached} 人，当前 ${node.current} 人，其中中高风险 ${node.risk} 人`}
-                  ref={registerFlowFocus(index)}
                   onClick={() => onStageSelect?.(node.ref, "current")}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onStageSelect?.(node.ref, "current");
-                    }
-                  }}
-                >
-                  <title>{node.label}</title>
-                  <rect x={node.x} y={node.y} width={FLOW_LAYOUT.nodeWidth} height={FLOW_LAYOUT.nodeHeight} rx={10} className="monitoring-flow-node-box" />
-                  <text x={centerX} y={node.y + 18} className="monitoring-flow-node-label">{line1}</text>
-                  {line2 ? <text x={centerX} y={node.y + 34} className="monitoring-flow-node-label">{line2}</text> : null}
-                  <text x={centerX} y={node.y + 54} className="monitoring-flow-node-counts">{`到达 ${node.reached} · 当前 ${node.current}`}</text>
-                  {node.risk > 0 && !node.emptyAtCutoff ? (
-                    <text x={centerX} y={node.y + FLOW_LAYOUT.nodeHeight + 18} className="monitoring-flow-node-risk">{`中高风险 ${node.risk}`}</text>
-                  ) : null}
-                  {node.emptyAtCutoff && <text x={centerX} y={node.y + 72} className="monitoring-flow-node-empty">本截止点无人到达</text>}
-                  <g
-                    role="button"
-                    tabIndex={0}
-                    data-flow-reached-target={node.ref}
-                    aria-label={`查看${node.label}累计到达 ${node.reached} 人`}
-                    ref={registerFlowFocus(flow.stages.length + graph.ribbons.length + index)}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onStageSelect?.(node.ref, "reached");
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onStageSelect?.(node.ref, "reached");
-                      }
-                    }}
-                  >
-                    <rect x={centerX - 72} y={node.y + 36} width={64} height={24} fill="rgba(0,0,0,0)" />
-                  </g>
-                </g>
-              );
-            })}
-          </svg>
+                >{`${node.label}：到达 ${node.reached} 人，当前 ${node.current} 人，中高风险 ${node.risk} 人`}</button>
+              </li>
+            ))}
+            {graph.ribbons.map((ribbon) => (
+              <li key={ribbon.ref}>
+                <button
+                  type="button"
+                  data-flow-link={ribbon.ref}
+                  onClick={() => onLinkSelect?.(ribbon.ref)}
+                >{`从${ribbon.fromLabel}到${ribbon.toLabel}：${ribbon.count} 人，中高风险 ${ribbon.risk} 人`}</button>
+              </li>
+            ))}
+          </ul>
           {!hideIncremental ? (
             <p className="monitoring-flow-risk-summary" data-monitoring-flow-risk-summary="true">
               <strong>中高风险变化摘要</strong>
@@ -1388,6 +1328,7 @@ export function OverviewView({
   onFlowRiskToggle,
   onFlowClear,
   onFlowSubjectJump,
+  onOpenQueries,
   suppressVersionClaim = false,
   flowTableOpen = true,
   continuityCounts = null,
@@ -1398,6 +1339,7 @@ export function OverviewView({
   const flow = normalizeSubjectFlowView(projection);
   const flowSelection = subjectFlowSelectionFromRoute(route);
   const risks = [...projection.currentRisks].sort(riskSort);
+  const queryRiskCount = risks.filter((risk) => !risk.aggregate && ["critical", "high", "medium"].includes(risk.severity)).length;
   const selectedRisk = risks.find((risk) => risk.riskInstanceRef === selectedRiskInstanceRef) || null;
   const currentCounts = payload.counts?.currentRisk || {};
   const changes = projection.changeBands || [];
@@ -1468,8 +1410,8 @@ export function OverviewView({
       <div className="monitoring-overview-columns">
         <section className="monitoring-panel monitoring-panel-wide">
           <div className="monitoring-section-heading"><span className="monitoring-eyebrow">当前风险</span><h2>高、中风险定位</h2></div>
-          <RiskList
-            risks={risks.filter((risk) => ["critical", "high", "medium"].includes(risk.severity))}
+              <RiskList
+                risks={risks.filter((risk) => !risk.aggregate && ["critical", "high", "medium"].includes(risk.severity))}
             onSelect={onRiskSelect}
             selectedRiskInstanceRef={selectedRiskInstanceRef}
             omitChangeClaims={suppressVersionClaim}
@@ -1542,8 +1484,26 @@ export function OverviewView({
         </section>
       )}
 
+      {projection.aggregation?.mode === "aggregate" && projection.currentRisks.some((risk) => risk.aggregate) ? (
+        <section className="monitoring-panel monitoring-panel-wide">
+          <div className="monitoring-section-heading">
+            <span className="monitoring-eyebrow">全量风险分布</span>
+            <h2>风险类型 × 严重度（全量 {numberText(projection.aggregation.risk_count)} 条锚点）</h2>
+            {onOpenQueries ? <button type="button" className="monitoring-product-button is-primary monitoring-query-entry" onClick={onOpenQueries}>查询工作区：{queryRiskCount} 项待核实</button> : null}
+          </div>
+          <KzRiskTypeBars rows={projection.currentRisks} height={340} />
+        </section>
+      ) : null}
+
       <section className="monitoring-panel monitoring-center-overview-panel">
         <div className="monitoring-section-heading"><span className="monitoring-eyebrow">中心概览</span><h2>中心风险与数据覆盖</h2></div>
+        {projection.centers.some((center) => center.riskCount !== undefined) ? (
+          <KzCenterDomainHeatmap
+            cells={projection.centers.filter((center) => center.domain)}
+            domains={projection.domains}
+            height={560}
+          />
+        ) : null}
         <CenterTable centers={projection.centers} onSelect={onCenterSelect} />
       </section>
       <DomainLegend domains={projection.domains} />
@@ -1865,6 +1825,55 @@ function EvidenceView({ payload, route, onBack }) {
   );
 }
 
+export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, onBack }) {
+  const projection = payload.projection;
+  const subjectsByRef = new Map((projection.subjects || []).map((subject) => [subject.subject_ref || subject.subject_id, subject]));
+  const risks = (projection.currentRisks || [])
+    .filter((risk) => !risk.aggregate && ["critical", "high", "medium"].includes(risk.severity))
+    .sort((left, right) => ["critical", "high", "medium"].indexOf(left.severity) - ["critical", "high", "medium"].indexOf(right.severity));
+  const totalCount = projection.aggregation?.risk_count ?? risks.length;
+  return (
+    <div className="monitoring-view-stack monitoring-query-workspace" data-monitoring-query-count={risks.length}>
+      <section className="monitoring-panel monitoring-panel-wide">
+        <div className="monitoring-section-heading"><span className="monitoring-eyebrow">查询工作区</span><h2>请核实事项（{risks.length} 项待核对 · 全量锚点 {numberText(totalCount)}）</h2></div>
+        <p className="monitoring-query-intro">以下每张卡片按「依据 — 发现 — 请核实事项」三段呈现：先看数据依据，再看医学发现，最后由您核对原始记录后决定是否发出数据核查问题。AI 只定位证据和风险，医学判断由您终审。</p>
+        {risks.length === 0 ? (
+          <div className="monitoring-empty-inline">当前范围内没有待核实的查询事项。</div>
+        ) : (
+          <ul className="monitoring-query-card-list">
+            {risks.map((risk) => {
+              const subject = subjectsByRef.get(risk.subjectRef);
+              const evidence = risk.evidenceSummary || {};
+              return (
+                <li key={risk.riskInstanceRef || risk.riskRef} className="monitoring-query-card" data-query-risk={risk.riskInstanceRef || risk.riskRef}>
+                  <header className="monitoring-query-card-head">
+                    <RiskBadge risk={risk} />
+                    <strong>{risk.riskType}</strong>
+                    <span className="monitoring-query-card-target">
+                      受试者 {text(risk.subjectLabel, risk.subjectRef)} · 中心 {risk.siteLabel}
+                    </span>
+                    <span className={`monitoring-date-chip monitoring-date-${risk.dateState}`}>{risk.dateLabel}</span>
+                  </header>
+                  <div className="monitoring-query-card-body">
+                    <section aria-label="依据"><h3>依据</h3><p>{text(evidence.basis, "依据当前项目监查规则及已绑定记录。")}</p></section>
+                    <section aria-label="发现"><h3>发现</h3><p>{text(evidence.finding, `发现${risk.subjectLabel || risk.subjectRef}存在“${risk.riskType}”相关记录。`)}</p></section>
+                    <section aria-label="请核实事项"><h3>请核实事项</h3><p>{text(evidence.query_draft || evidence.action_item, "请核对原始记录、研究方案与数据录入情况，并确认是否需要发出数据核查问题。")}</p></section>
+                  </div>
+                  <footer className="monitoring-query-card-actions">
+                    <button type="button" disabled={!subject} onClick={() => subject && onSubjectSelect?.(subject)}>进入受试者医学旅程</button>
+                    <button type="button" className="monitoring-back-button" disabled={!risk.sourceLocatorRef} onClick={() => onSource?.(risk)}>查看原始来源</button>
+                  </footer>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {onBack ? <div className="monitoring-query-footer"><button type="button" className="monitoring-back-button" onClick={onBack}>返回项目风险概览</button></div> : null}
+      </section>
+    </div>
+  );
+}
+
 export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn }) {
   const adapter = useMemo(() => createMedicalMonitoringWorkspaceApi(), []);
   const route = routeCanonical(routeState);
@@ -2064,11 +2073,22 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
   }, [onRouteChange]);
   const availableViews = MEDICAL_MONITORING_WORKSPACE_VIEWS.filter((view) => {
     if (view === "overview") return true;
+    if (view === "queries") return true;
     if (view === "site_overview") return Boolean(route.site_ref);
     if (SUBJECT_VIEW_KEYS.includes(view)) return Boolean(route.subject_ref);
     if (view === "evidence") return Boolean(route.risk_instance_ref && route.source_locator_ref);
     return false;
   });
+  const openQueries = useCallback(() => {
+    const currentRoute = currentRouteRef.current;
+    onRouteChange?.(routeStateForMedicalMonitoringWorkspaceView(currentRoute, "queries", {
+      site_ref: "",
+      subject_ref: "",
+      spine_ref: "",
+      window_start: "",
+      window_end: "",
+    }));
+  }, [onRouteChange]);
 
   if (isMonitoringProductRoute) {
     return (
@@ -2080,6 +2100,8 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
         OverviewView={OverviewView}
         SubjectWorkspaceView={SubjectWorkspaceView}
         EvidenceView={EvidenceView}
+        QueryWorkspaceView={QueryWorkspaceView}
+        onOpenQueries={openQueries}
       />
     );
   }

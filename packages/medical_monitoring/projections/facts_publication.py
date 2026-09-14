@@ -415,7 +415,9 @@ class FactsPublicationAuthorityProvider:
             if table in _EXCLUDED_TABLES:
                 continue
             domain, subtype = _domain_for(table)
-            date_keys = [k for k in rows[0].keys() if k.endswith("DAT") or k in ("SHDAT",)] if rows else []
+            raw_date_keys = [k for k in rows[0].keys() if k.endswith("DAT") or k in ("SHDAT",)] if rows else []
+            # 起始日期列优先（*STDAT/{表}DAT），结束列（*ENDAT）不充当起始
+            date_keys = sorted(raw_date_keys, key=lambda k: (1 if "END" in k.upper() else 0, raw_date_keys.index(k)))
             term_keys = _term_keys_for(table, list(rows[0].keys())) if rows else []
             for index, row in enumerate(rows):
                 subj = _clean(row.get("SUBJID"))

@@ -41,7 +41,7 @@ import { routeStateForMedicalMonitoringWorkspaceView } from "./medicalMonitoring
 import "./medicalMonitoringProductLoop.css";
 
 const PRODUCT_RESULT_SUBJECT_VIEWS = new Set(["journey", "profile", "timeline"]);
-const PRODUCT_RESULT_VIEWS = new Set(["overview", "site_overview", "journey", "profile", "timeline", "evidence"]);
+const PRODUCT_RESULT_VIEWS = new Set(["overview", "site_overview", "queries", "journey", "profile", "timeline", "evidence"]);
 const PUBLIC_RESULT_LOCATORS = Object.freeze([
   "site_ref",
   "subject_ref",
@@ -136,7 +136,7 @@ function publicRunTokenFrom(value) {
 }
 
 function projectionView(routeView) {
-  if (routeView === "site_overview") return "overview";
+  if (routeView === "site_overview" || routeView === "queries") return "overview";
   if (PRODUCT_RESULT_SUBJECT_VIEWS.has(routeView)) return "journey";
   if (routeView === "evidence") return "evidence";
   return "overview";
@@ -286,6 +286,11 @@ function normalizePublicProductPayload(resultContext) {
       measures: [],
       risks: [],
     };
+    // 大队列聚合形态：中心×域单元携带计数而非逐条引用
+    if (source.individual_risk_count !== undefined) existing.riskCount = source.individual_risk_count;
+    if (isRecord(source.severity_counts)) existing.severityCounts = { ...source.severity_counts };
+    existing.domain = clean(source.domain, existing.domain || "");
+    existing.severity = clean(source.severity, existing.severity || "");
     const cellMeasures = Array.isArray(source.measures)
       ? source.measures.map(normalizeMeasure)
       : Array.isArray(source.measure_refs)
@@ -352,6 +357,7 @@ function normalizePublicProductPayload(resultContext) {
       domains,
       subjects: Array.isArray(raw.subjects) ? raw.subjects : Array.isArray(raw.subject_options) ? raw.subject_options : [],
       subjectFlow: raw.subject_flow || null,
+      aggregation: isRecord(raw.aggregation) ? raw.aggregation : null,
       temporalSpine: {
         ...temporal,
         spineRef: clean(temporal.spine_ref || identity.spine_ref),
@@ -609,6 +615,8 @@ export function MedicalMonitoringProductLoop({
   OverviewView,
   SubjectWorkspaceView,
   EvidenceView,
+  QueryWorkspaceView,
+  onOpenQueries,
   api: providedApi,
 }) {
   const api = useMemo(() => providedApi || createMedicalMonitoringProductApi(), [providedApi]);
@@ -1211,7 +1219,9 @@ export function MedicalMonitoringProductLoop({
     : null;
   const currentResultView = resultPayload && resultContext ? (
     routeView === "overview" || routeView === "site_overview"
-      ? OverviewView ? <OverviewView payload={resultPayload} route={route} selectedRiskInstanceRef={route.risk_instance_ref} onRiskSelect={selectResultRisk} onCenterSelect={selectResultCenter} onSubjectSelect={selectResultSubject} onSource={openResultSource} onFlowStageSelect={selectResultFlowStage} onFlowLinkSelect={selectResultFlowLink} onFlowMetricSelect={selectResultFlowMetric} onFlowRiskToggle={toggleResultFlowRisk} onFlowClear={clearResultFlow} onFlowSubjectJump={jumpResultFlowSubject} suppressVersionClaim={suppressVersionClaim} flowTableOpen continuityCounts={continuityCounts} continuityComparisonText={continuityResult?.ok ? continuityResult.value?.comparison?.comparison_text : ""} continuityLoading={continuityLoading} /> : null
+      ? OverviewView ? <OverviewView payload={resultPayload} route={route} selectedRiskInstanceRef={route.risk_instance_ref} onRiskSelect={selectResultRisk} onCenterSelect={selectResultCenter} onSubjectSelect={selectResultSubject} onSource={openResultSource} onFlowStageSelect={selectResultFlowStage} onFlowLinkSelect={selectResultFlowLink} onFlowMetricSelect={selectResultFlowMetric} onFlowRiskToggle={toggleResultFlowRisk} onFlowClear={clearResultFlow} onFlowSubjectJump={jumpResultFlowSubject} onOpenQueries={onOpenQueries} suppressVersionClaim={suppressVersionClaim} flowTableOpen continuityCounts={continuityCounts} continuityComparisonText={continuityResult?.ok ? continuityResult.value?.comparison?.comparison_text : ""} continuityLoading={continuityLoading} /> : null
+      : routeView === "queries"
+        ? QueryWorkspaceView ? <QueryWorkspaceView payload={resultPayload} route={route} onSubjectSelect={selectResultSubject} onSource={openResultSource} onBack={() => navigate("overview")} /> : null
       : PRODUCT_RESULT_SUBJECT_VIEWS.has(routeView)
         ? SubjectWorkspaceView ? <SubjectWorkspaceView payload={resultPayload} route={route} view={routeView} zoomLevel={0} onRiskSelect={selectResultRisk} onEventSelect={selectResultEvent} onSource={openResultSource} onDrawerClose={() => onRouteChange?.(monitoringJourneyDrawerClosePatch(route))} onJourneyRowSelect={selectResultContinuityRow} continuityResult={continuityResult} continuityUnavailable={continuityUnavailableText} continuityLoading={continuityLoading} /> : null
         : routeView === "evidence"
@@ -1220,7 +1230,7 @@ export function MedicalMonitoringProductLoop({
   ) : null;
   const loadingBody = setupHistoryLoading || resultLoading || entryLoading;
   const unavailableText = resultError?.text || setupHistoryError?.text || "本次结果暂不可查看，请返回进度页";
-  const effectiveHeading = routeView === "site_overview" ? "中心风险图谱" : PRODUCT_RESULT_SUBJECT_VIEWS.has(routeView) ? "受试者医学旅程" : routeView === "evidence" ? "风险证据" : "项目风险概览";
+  const effectiveHeading = routeView === "site_overview" ? "中心风险图谱" : routeView === "queries" ? "查询工作区（请核实事项）" : PRODUCT_RESULT_SUBJECT_VIEWS.has(routeView) ? "受试者医学旅程" : routeView === "evidence" ? "风险证据" : "项目风险概览";
   const resultLoaded = Boolean(resultPayload && resultContext);
   const resultSiteScopeText = publicResultSiteScopeText(resultPayload, route);
   const workbar = { ...(productState?.workbar || {}) };
