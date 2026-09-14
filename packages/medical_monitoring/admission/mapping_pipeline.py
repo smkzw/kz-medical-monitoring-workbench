@@ -1412,11 +1412,22 @@ class AdmissionMappingPipeline:
                     "state": "running", "generation": generation,
                     "job_count": len(jobs), "mappings": [],
                 }
+            failed_jobs = [
+                (job.project_id, job.job_id)
+                for job in resumed
+                if str(_value(job.status)) in {"failed", "blocked"}
+                and not getattr(job, "contract_retirement_code", "")
+            ]
+            completed_jobs = [
+                job for job in resumed if str(_value(job.status)) == "completed"
+            ]
             return {
                 "state": "failed",
                 "generation": generation,
                 "job_count": len(jobs),
                 "mappings": [],
+                "failed_jobs": failed_jobs,
+                **(self._adjudication_payload(completed_jobs) if completed_jobs else {}),
             }
 
         record = self._ready_record(
