@@ -420,6 +420,7 @@ def create_medical_monitoring_r7_product_router(
     monitoring_document_authority_starter: Any = None,
     monitoring_document_authority_promoter: Any = None,
     admission_fact_materializer: Any = None,
+    real_setup_inputs: Optional[Callable[[str], Any]] = None,
     audit_ledger_factory: Optional[Callable[..., Any]] = None,
 ) -> APIRouter:
     """Create the project-scoped R7 product router; no workspace I/O here."""
@@ -493,7 +494,11 @@ def create_medical_monitoring_r7_product_router(
             synthetic_setup_inputs=(
                 (lambda project_id: _synthetic_setup_inputs(project_id))
                 if synthetic_fixture_mode
-                else (lambda _project_id: (_raise_run_data_not_ready()))
+                else (
+                    real_setup_inputs
+                    if real_setup_inputs is not None
+                    else (lambda _project_id: (_raise_run_data_not_ready()))
+                )
             ),
             risk_rule_db_name=R7_RISK_RULE_DB_NAME,
         ),

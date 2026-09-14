@@ -3633,6 +3633,101 @@ if _r5_s7_fixture_mode:
     )
 
 
+def _r7_real_setup_inputs(canonical_project_id: str):
+    """Facts-backed R7 setup inputs for a project with materialized facts.
+
+    The single current snapshot mirrors the verified fact materialization of
+    the newest admitted attempt; published baselines stay empty until runs
+    of the same mode have been published.
+    """
+    from packages.medical_monitoring.admission import fact_materialization as _fm
+    from packages.medical_monitoring.runtime import run_setup as _rs
+
+    if (
+        _r7_facts_publication_provider is None
+        or canonical_project_id != "proj_mgk10_sar_real"
+        or not _fm.latest_fact_materialization_ready(
+            canonical_project_id, _FACTS_WORKSPACE_DIR
+        )
+    ):
+        raise _rs.RunSetupError("run_data_not_ready")
+    packet = _r7_facts_publication_provider.get_packet(
+        canonical_project_id, None, None, None
+    )
+    cutoff = max(
+        (
+            e.start_date
+            for e in packet.events
+            if e.start_date is not None
+        ),
+        default=None,
+    )
+    imported_at = ""
+    fact_summary: dict = {}
+    try:
+        _admission_dir = _FACTS_WORKSPACE_DIR / "admissions"
+        attempts = [
+            _fm.load_attempt(_admission_dir, _attempt_id, verify_files=False)
+            for _attempt_id in _fm.list_attempt_ids(_admission_dir)
+        ]
+        if attempts:
+            _latest_attempt = max(
+                attempts, key=lambda item: (item.created_at, item.attempt_id)
+            )
+            imported_at = str(_latest_attempt.created_at or "")
+            _store = _fm._store(_FACTS_WORKSPACE_DIR)
+            try:
+                _persisted = _store.get_domain_object(
+                    _fm.FACT_MATERIALIZATION_KIND, _latest_attempt.attempt_id
+                )
+            finally:
+                _store.close()
+            if _persisted and isinstance(_persisted[1], Mapping):
+                fact_summary = dict(_persisted[1].get("summary") or {})
+    except Exception:
+        imported_at = ""
+    counts_text = "已核验事实快照"
+    if fact_summary:
+        counts_text = (
+            f"已核验事实快照：{fact_summary.get('tables', '?')}表/"
+            f"{fact_summary.get('rows', '?')}行/"
+            f"{fact_summary.get('values', '?')}值100%往返校验"
+        )
+    snapshot = _rs.DataSnapshot(
+        snapshot_ref=packet.snapshot_ref,
+        project_id=canonical_project_id,
+        data_cutoff=(cutoff.isoformat() if cutoff else imported_at or "未注明"),
+        rows=tuple(
+            {
+                "canonical_key": subject.subject_ref,
+                "site_ref": subject.site_ref,
+                "subject_ref": subject.subject_ref,
+            }
+            for subject in packet.subjects
+        ),
+        key_fields=("canonical_key",),
+        imported_at=imported_at,
+        scope_description=counts_text,
+    )
+    return (snapshot,), ()
+
+
+_r7_facts_mode_output_provider = None
+_r7_facts_publication_adapter = None
+if _r7_facts_publication_provider is not None:
+    from packages.medical_monitoring.api.r7_product.facts_mode_outputs import (  # noqa: E402
+        FactsModeOutputProvider as _FactsModeOutputProvider,
+    )
+    from packages.medical_monitoring.api.r7_product.facts_publication_adapter import (  # noqa: E402
+        FactsPublicationAdapter as _FactsPublicationAdapter,
+    )
+
+    _r7_facts_mode_output_provider = _FactsModeOutputProvider()
+    _r7_facts_publication_adapter = _FactsPublicationAdapter(
+        _r7_facts_publication_provider
+    )
+
+
 def _resolve_synthetic_product_principal(request: Request) -> MonitoringAuthenticatedPrincipal | None:
     if _r5_s7_fixture_principal is not None:
         return _r5_s7_fixture_principal
@@ -3651,8 +3746,8 @@ def _resolve_r7_product_project(project_id: str) -> str:
 app.include_router(
     create_medical_monitoring_r5_product_router(
         authority_provider=(
-            _r7_facts_publication_provider
-            if _r7_facts_publication_provider is not None
+            _r7_facts_publication_adapter
+            if _r7_facts_publication_adapter is not None
             else None
         ),
         principal_resolver=_resolve_synthetic_product_principal,
@@ -3766,11 +3861,15 @@ app.include_router(
         principal_resolver=_resolve_synthetic_product_principal,
         require_server_principal=True,
         publication_authority_provider=(
-            _r7_facts_publication_provider
-            if _r7_facts_publication_provider is not None
+            _r7_facts_publication_adapter
+            if _r7_facts_publication_adapter is not None
             else _r7_synthetic_publication_provider
         ),
-        r6_output_provider=_r7_synthetic_mode_output_provider,
+        r6_output_provider=(
+            _r7_facts_mode_output_provider
+            if _r7_facts_publication_provider is not None
+            else _r7_synthetic_mode_output_provider
+        ),
         admission_pipeline=DataAdmissionPipeline(
             parse_listing_file,
             expected_project_identifiers=lambda project_id: (
@@ -3793,6 +3892,7 @@ app.include_router(
             _promote_r7_monitoring_document_authority
         ),
         admission_fact_materializer=_r7_admission_fact_materializer,
+        real_setup_inputs=_r7_real_setup_inputs,
         synthetic_fixture_mode=_r5_s7_fixture_mode,
     )
 )

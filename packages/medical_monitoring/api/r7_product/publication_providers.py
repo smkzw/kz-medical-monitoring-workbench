@@ -357,8 +357,16 @@ def _validate_r5_publication_packet(
         or (
             not packet.s4_packets
             and not (
-                getattr(packet.product_packet, "synthetic", False) is True
-                and identity.project_ref.startswith("s7-synthetic-")
+                (
+                    getattr(packet.product_packet, "synthetic", False) is True
+                    and identity.project_ref.startswith("s7-synthetic-")
+                )
+                # Deterministic facts lane: authority derives entirely from
+                # verified materialized facts (no AI adjudication outputs yet),
+                # declared by the explicit facts authority contract marker.
+                or getattr(
+                    packet.product_packet, "authority_contract_id", ""
+                ) == "facts-authority-v1"
             )
         )
     ):
