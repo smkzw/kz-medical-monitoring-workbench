@@ -1,0 +1,92 @@
+/* kz-interact.css — 康哲交互层样式 v5.1(下钻卡/chip/可编辑表/甘特手柄/折叠表/工具条)
+ * 合同:design_specs/html_interact.md。原样注入,NEVER 在页面内重写。
+ * 全程浅色;打印/qc/export 态自动降级。
+ */
+
+/* ---- 下钻/编辑弹层卡 ---- */
+.kz-pop{position:fixed;z-index:9999;width:320px;max-width:calc(100vw - 32px);max-height:min(420px,70vh);overflow:auto;
+  background:rgba(255,255,255,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:1px solid rgba(0,0,0,.07);border-radius:14px;box-shadow:0 12px 40px -8px rgba(31,41,55,.22),0 2px 8px rgba(31,41,55,.08);
+  padding:14px 16px;font-size:13.5px;line-height:1.65;color:#2A2A2A}
+.kz-pop__head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.kz-pop__title{font-size:14.5px;font-weight:700;color:#1F2937;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kz-pop__close{flex:none;width:22px;height:22px;border:none;border-radius:50%;background:#F3F4F6;color:#6B7280;cursor:pointer;font-size:13px;line-height:22px;padding:0}
+.kz-pop__close:hover{background:#E5E7EB;color:#1F2937}
+.kz-pop__crumb{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:12px;color:#9CA3AF;margin-bottom:8px}
+.kz-pop__crumb button{border:none;background:none;color:#B98218;cursor:pointer;font-size:12px;padding:0}
+.kz-pop__crumb button:hover{text-decoration:underline}
+.kz-pop__body p{margin:4px 0}
+.kz-pop__kids{margin-top:10px;border-top:1px dashed #E5E7EB;padding-top:8px;display:flex;flex-direction:column;gap:4px}
+.kz-pop__kids button{text-align:left;border:1px solid #EFEAE2;background:#FDFBF7;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:13px;color:#6B5518}
+.kz-pop__kids button:hover{background:#FDF3E3;border-color:#E8C87A}
+.kz-pop label{display:block;font-size:12px;color:#6B7280;margin:8px 0 2px}
+.kz-pop input[type=date]{width:100%;box-sizing:border-box;border:1px solid #E5E7EB;border-radius:8px;padding:6px 8px;font-size:13px}
+.kz-pop__row{display:flex;gap:8px;margin-top:12px;justify-content:flex-end}
+.kz-pop__row button{border:none;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer}
+.kz-pop__ok{background:#E8A33D;color:#fff}.kz-pop__ok:hover{background:#D8932D}
+.kz-pop__cancel{background:#F3F4F6;color:#4B5563}.kz-pop__cancel:hover{background:#E5E7EB}
+
+/* ---- 系列显隐 chip(替代 ECharts 内置 legend) ---- */
+.kz-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px}
+.kz-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid #E5E7EB;background:#fff;border-radius:999px;
+  padding:4px 12px;font-size:12.5px;color:#374151;cursor:pointer;user-select:none;transition:opacity .18s,border-color .18s}
+.kz-chip i{width:9px;height:9px;border-radius:50%;flex:none}
+.kz-chip--range i{border-radius:3px}
+.kz-chip[aria-pressed=false]{opacity:.42;border-style:dashed}
+.kz-chip:hover{border-color:#E8C87A}
+
+/* ---- 可编辑表格 ---- */
+td[data-kz-cell]{cursor:pointer}
+td[data-kz-cell]:hover{outline:1px dashed #E8A33D;outline-offset:-1px}
+td.kz-dirty{position:relative;background:rgba(232,163,61,.08)}
+td.kz-dirty::after{content:"";position:absolute;top:0;right:0;border-top:5px solid #E8A33D;border-left:5px solid transparent}
+td input.kz-cell-edit{width:100%;box-sizing:border-box;border:1px solid #E8A33D;border-radius:6px;padding:2px 6px;font:inherit;background:#FFFDF8}
+@keyframes kzShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+td.kz-shake{animation:kzShake .25s}
+tr.kz-flash td{animation:kzFlash 1.2s}
+@keyframes kzFlash{0%{background:rgba(232,163,61,.35)}100%{background:transparent}}
+
+/* ---- 折叠表(流式/站点默认收起) ---- */
+details.kz-fold{margin-top:10px;border:1px solid #EDEAE4;border-radius:12px;background:#fff;overflow:hidden}
+details.kz-fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:10px 14px;
+  font-size:13.5px;font-weight:600;color:#4B5563;background:#FBFAF7;user-select:none}
+details.kz-fold>summary::-webkit-details-marker{display:none}
+details.kz-fold>summary::before{content:"▸";color:#B98218;transition:transform .18s;flex:none}
+details.kz-fold[open]>summary::before{transform:rotate(90deg)}
+details.kz-fold>summary .kz-fold-badge{margin-left:auto;font-weight:400;font-size:12px;color:#9CA3AF}
+details.kz-fold>summary .kz-fold-badge b{color:#B98218;font-weight:600}
+details.kz-fold>.kz-fold-body{padding:6px 14px 14px;overflow-x:auto}
+
+/* ---- 编辑工具条 ---- */
+.kz-toolbar{position:fixed;right:16px;bottom:16px;z-index:9998;display:flex;align-items:center;gap:8px;
+  background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border:1px solid rgba(0,0,0,.08);border-radius:12px;
+  box-shadow:0 8px 28px -6px rgba(31,41,55,.20);padding:8px 12px;font-size:12.5px;color:#4B5563}
+.kz-toolbar b{color:#B98218}
+.kz-toolbar button{border:1px solid #E5E7EB;background:#fff;border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer;color:#374151}
+.kz-toolbar button:hover{border-color:#E8C87A;color:#8C6D1F}
+.kz-toolbar button.kz-primary{background:#E8A33D;border-color:#E8A33D;color:#fff}
+.kz-toolbar button.kz-primary:hover{background:#D8932D}
+
+/* ---- 草稿恢复提示 ---- */
+.kz-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;display:flex;align-items:center;gap:10px;
+  background:#1F2937;color:#F9FAFB;border-radius:12px;padding:10px 16px;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.kz-toast button{border:none;border-radius:8px;padding:4px 12px;font-size:12.5px;cursor:pointer}
+.kz-toast .kz-t-ok{background:#E8A33D;color:#fff}
+.kz-toast .kz-t-no{background:rgba(255,255,255,.14);color:#E5E7EB}
+
+/* ---- 甘特拖拽提示 ---- */
+.kz-gantt-hint{font-size:12px;color:#9CA3AF;margin:2px 0 6px}
+.kz-gantt-hint b{color:#8C6D1F;font-weight:600}
+
+/* ---- 降级:qc/export/打印 ---- */
+[data-qc] .kz-toolbar,[data-export] .kz-toolbar,[data-qc] .kz-toast,[data-export] .kz-toast{display:none!important}
+@media print{
+  .kz-pop,.kz-toolbar,.kz-toast,.kz-gantt-hint{display:none!important}
+  details.kz-fold{display:block!important}
+  details.kz-fold:not([open])>*:not(summary){display:block!important}
+  details.kz-fold>summary{cursor:default}
+  details.kz-fold>.kz-fold-body{overflow:visible!important}
+}
+@media (prefers-reduced-motion:reduce){
+  .kz-chip,tr.kz-flash td,td.kz-shake,details.kz-fold>summary::before{animation:none!important;transition:none!important}
+}
