@@ -3587,6 +3587,22 @@ _r5_s7_fixture_mode = synthetic_profile_requested()
 _r5_s7_fixture_principal: MonitoringAuthenticatedPrincipal | None = None
 _r7_synthetic_publication_provider = None
 _r7_synthetic_mode_output_provider = None
+# Real facts publication: whenever the materialized facts for the formal
+# project exist, they are the publication authority — synthetic fixtures
+# remain only for fixture-mode runs without facts.
+from packages.medical_monitoring.projections.facts_publication import (  # noqa: E402
+    FactsPublicationAuthorityProvider as _FactsPublicationProvider,
+)
+
+_FACTS_WORKSPACE_DIR = (
+    RUNTIME_DIR / "medical_monitoring_r7" / "proj_mgk10_sar_real"
+)
+if (_FACTS_WORKSPACE_DIR / "runtime" / "artifacts").is_dir():
+    _r7_facts_publication_provider = _FactsPublicationProvider(
+        _FACTS_WORKSPACE_DIR, project_label="MG-K10-SAR"
+    )
+else:
+    _r7_facts_publication_provider = None
 if _r5_s7_fixture_mode:
     from packages.medical_monitoring.api.r7_product.synthetic_publication import (
         SyntheticModeOutputProvider,
@@ -3744,7 +3760,11 @@ app.include_router(
         project_resolver=_resolve_r7_product_project,
         principal_resolver=_resolve_synthetic_product_principal,
         require_server_principal=True,
-        publication_authority_provider=_r7_synthetic_publication_provider,
+        publication_authority_provider=(
+            _r7_facts_publication_provider
+            if _r7_facts_publication_provider is not None
+            else _r7_synthetic_publication_provider
+        ),
         r6_output_provider=_r7_synthetic_mode_output_provider,
         admission_pipeline=DataAdmissionPipeline(
             parse_listing_file,
