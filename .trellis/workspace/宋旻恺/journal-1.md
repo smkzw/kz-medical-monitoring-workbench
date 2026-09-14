@@ -1540,3 +1540,7 @@ v15代四轮恢复后168/174完成：GLM 84完/3败、deepseek 84完/3败。6个
 本轮修复链（10+提交）：语义质量门跨域SUBJSTA归一（61域多数派一致性+form_sheet_code目录别名）；确认门对不可评估gap与用户已答gap的容忍；revision级lineage守卫限定声明修订来源（回执来源天然带二轮修订）；revision身份seed排除source_origin标记（跨标记引入稳定）；不可变性触发器收窄到语义字段；backfill迁移操作（未动已持久化行）。三个医学问题（SAECAT/EGABCSO/SHCO）以数据核实后的医学结论由用户确认。确认版本275，receipts 695/695。
 
 下一步（P3）：真实publication→kz美学看板/旅程重建+Query工作区。
+
+### 2026-09-14 21:20 P3真实publication provider建成
+
+FactsPublicationAuthorityProvider（facts_publication.py）：从62个facts artifact直接构建typed非synthetic R5AuthorityPacket——365真实受试者、25中心、148,727八轨临床事件（表→轨道映射+部分/缺失日期处理+AESEV严重度推导）、1,457实际访视、每事件初始风险、365条受试者流向路径（知情同意→筛选→治疗→研究状态，治疗进入以EX给药记录、状态以SUBJSTA为据）。packet经全部类型/枚举/digest校验。下一步：main组合根切换→前端kz美学重建。
