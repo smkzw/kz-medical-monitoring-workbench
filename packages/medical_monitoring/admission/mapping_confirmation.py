@@ -764,16 +764,46 @@ class AdmissionMappingConfirmationService:
             for result in cohort_results.values()
         }
         if states != {"ready"}:
+            all_terminal = not states.intersection({"queued", "running"})
+            gap_fields: list[dict[str, str]] = []
+            if (
+                all_terminal
+                and states.intersection({"failed", "blocked"})
+                and self._cohort_recoveries_exhausted(cohort_results)
+            ):
+                # Bounded residue (design v2 §6): after the retry budget is
+                # exhausted, the failing chunks' fields become visible
+                # unverifiable gaps instead of blocking the whole batch.
+                gap_fields = self._gap_fields_for_failed_chunks(
+                    project_id=project_id,
+                    cohort_results=cohort_results,
+                    known_pairs={
+                        (
+                            str(field.get("domain") or ""),
+                            str(field.get("source_field") or ""),
+                        )
+                        for field in payload.get("fields") or []
+                    },
+                )
             projected = self._draft_payload(draft)
             projected["adjudication"] = {
                 "state": (
-                    "blocked"
+                    "complete_with_gaps"
+                    if gap_fields
+                    else "blocked"
                     if states.intersection({"failed", "blocked"})
                     else "running"
                 ),
                 "resolved_count": 0,
                 "remaining_question_count": len(unresolved),
+                "gap_field_count": len(gap_fields),
             }
+            if gap_fields:
+                projected["adjudication"]["gap_fields"] = gap_fields
+                projected["adjudication"]["gap_note"] = (
+                    "以下字段在多轮双模型裁决后仍无法闭合，已列为不可评估能力；"
+                    "其余字段继续走确认流程。"
+                )
             return projected
 
         current_revisions: dict[str, str] = {}
@@ -1030,6 +1060,53 @@ class AdmissionMappingConfirmationService:
             ],
         }
         return projected
+
+    def _cohort_recoveries_exhausted(self, cohort_results) -> bool:
+        """True when every failed adjudication job burned its retries."""
+        for result in cohort_results.values():
+            for item in result.get("mappings") or []:
+                continue
+        # mappings only carries completed work; query the repository directly
+        # via the jobs the pipeline reported (job_ids live in mappings rows).
+        for result in cohort_results.values():
+            for job_ref in result.get("failed_jobs") or []:
+                job = self.ai_repository.get(job_ref[0], job_ref[1])
+                if int(getattr(job, "attempt_count", 0) or 0) < int(
+                    getattr(job, "max_attempts", 0) or 0
+                ):
+                    return False
+        return True
+
+    def _gap_fields_for_failed_chunks(
+        self,
+        *,
+        project_id: str,
+        cohort_results,
+        known_pairs: set,
+    ) -> list:
+        """Fields covered by failed chunks become visible unverifiable gaps."""
+        gaps: list[dict[str, str]] = []
+        seen: set = set()
+        for result in cohort_results.values():
+            for job_ref in result.get("failed_jobs") or []:
+                try:
+                    payload = self.ai_repository.input_payload(
+                        job_ref[0], job_ref[1]
+                    )
+                except Exception:
+                    continue
+                profile = payload.get("field_profile") or {}
+                for field in profile.get("fields") or []:
+                    pair = (
+                        str(field.get("domain") or ""),
+                        str(field.get("field") or field.get("source_field") or ""),
+                    )
+                    if pair in known_pairs and pair not in seen:
+                        seen.add(pair)
+                        gaps.append(
+                            {"domain": pair[0], "source_field": pair[1]}
+                        )
+        return gaps
 
     def reconcile_with_verifier(
         self,
