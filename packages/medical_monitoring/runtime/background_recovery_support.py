@@ -721,8 +721,10 @@ def _validate_r1_store(store: Store, run_id: str, expected_project_id: str = "")
         run = store.get_run(run_id)
         if expected_project_id and run.project_id != expected_project_id:
             raise _error("run_binding_not_found")
-        if not store.get_project(run.project_id).is_synthetic:
-            raise _error("runtime_integrity_failed")
+        # Project existence is validated by get_project raising; the synthetic
+        # flag is a fixture-lane marker, not an integrity property, and real
+        # projects admitted by the data pipeline are legitimate identities.
+        store.get_project(run.project_id)
         if int(run.manifest_revision) <= 0:
             raise _error("execution_not_prepared")
         manifest = store.get_manifest(run_id, run.manifest_revision)

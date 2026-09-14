@@ -64,6 +64,12 @@ from .product_types import (
     canonical_sha256,
 )
 
+# Overview scale boundary: cohorts larger than this project aggregate risk
+# rows (plus medium-or-higher exemplars) instead of one row per risk.
+_OVERVIEW_AGGREGATION_THRESHOLD = 500
+_OVERVIEW_EXEMPLAR_LIMIT = 50
+
+
 class R5ProductAdapter:
     """Project typed authority into the three closed R5 read surfaces."""
 
@@ -144,31 +150,87 @@ class R5ProductAdapter:
         high = tuple(item for item in selected_risks if item.severity in {"critical", "high"})
         medium = tuple(item for item in selected_risks if item.severity == "medium")
         low = tuple(item for item in selected_risks if item.severity == "low")
-        current_risks = [
-            _risk_payload(item, receipt_ref, subject_label=subject_labels.get(item.subject_ref))
-            for item in selected_risks
-        ]
-        current_risk_set = _with_content_hash({
-            "high_risk_refs": [item.risk_ref for item in high],
-            "medium_risk_refs": [item.risk_ref for item in medium],
-            "low_risk_cluster_refs": [item.risk_ref for item in low],
-            "resolved_history_refs": [],
-            "authority_receipt_ref": receipt_ref,
-        })
+        # Scale-aware overview: real cohorts carry five-to-six-digit risk
+        # anchors; a project cockpit projects aggregates (plus medium-or-higher
+        # exemplars for drill-in), never one row per risk. Small packets (the
+        # fixture lane, single-site scopes) keep the per-risk shape.
+        aggregated_overview = len(selected_risks) > _OVERVIEW_AGGREGATION_THRESHOLD
+        if aggregated_overview:
+            type_severity_counts: dict[tuple[str, str], int] = {}
+            site_severity_counts: dict[tuple[str, str], int] = {}
+            exemplar_pool = sorted(
+                (*high, *medium),
+                key=lambda item: SEVERITIES.index(item.severity),
+            )
+            for item in selected_risks:
+                type_key = (item.risk_type_zh, item.severity)
+                type_severity_counts[type_key] = type_severity_counts.get(type_key, 0) + 1
+                site_key = (item.site_ref, item.severity)
+                site_severity_counts[site_key] = site_severity_counts.get(site_key, 0) + 1
+            current_risks = [
+                {
+                    "aggregate": True,
+                    "risk_type": risk_type,
+                    "severity": severity,
+                    "count": count,
+                }
+                for (risk_type, severity), count in sorted(type_severity_counts.items())
+            ]
+            current_risks.extend(
+                _risk_payload(item, receipt_ref, subject_label=subject_labels.get(item.subject_ref))
+                for item in exemplar_pool[:_OVERVIEW_EXEMPLAR_LIMIT]
+            )
+            current_risk_set = _with_content_hash({
+                "aggregated": True,
+                "risk_count": len(selected_risks),
+                "high_risk_count": len(high),
+                "medium_risk_count": len(medium),
+                "low_risk_count": len(low),
+                "resolved_history_refs": [],
+                "authority_receipt_ref": receipt_ref,
+            })
+        else:
+            current_risks = [
+                _risk_payload(item, receipt_ref, subject_label=subject_labels.get(item.subject_ref))
+                for item in selected_risks
+            ]
+            current_risk_set = _with_content_hash({
+                "high_risk_refs": [item.risk_ref for item in high],
+                "medium_risk_refs": [item.risk_ref for item in medium],
+                "low_risk_cluster_refs": [item.risk_ref for item in low],
+                "resolved_history_refs": [],
+                "authority_receipt_ref": receipt_ref,
+            })
         center_cells = []
         for site in selected_sites:
             for domain in DOMAINS:
                 site_risks = tuple(item for item in selected_risks if item.site_ref == site.site_ref and item.domain == domain)
                 if not site_risks and domain != site.domain:
                     continue
-                center_cells.append({
-                    "site_ref": site.site_ref,
-                    "domain": domain,
-                    "severity": max((item.severity for item in site_risks), default=site.severity, key=SEVERITIES.index),
-                    "pattern_refs": list(site.pattern_refs),
-                    "individual_risk_refs": [item.risk_ref for item in site_risks],
-                    "measure_refs": list(site.measure_refs),
-                })
+                if aggregated_overview:
+                    cell_severity_counts = {
+                        severity: sum(1 for item in site_risks if item.severity == severity)
+                        for severity in SEVERITIES
+                        if any(item.severity == severity for item in site_risks)
+                    }
+                    center_cells.append({
+                        "site_ref": site.site_ref,
+                        "domain": domain,
+                        "severity": max((item.severity for item in site_risks), default=site.severity, key=SEVERITIES.index),
+                        "pattern_refs": list(site.pattern_refs),
+                        "individual_risk_count": len(site_risks),
+                        "severity_counts": cell_severity_counts,
+                        "measure_refs": list(site.measure_refs),
+                    })
+                else:
+                    center_cells.append({
+                        "site_ref": site.site_ref,
+                        "domain": domain,
+                        "severity": max((item.severity for item in site_risks), default=site.severity, key=SEVERITIES.index),
+                        "pattern_refs": list(site.pattern_refs),
+                        "individual_risk_refs": [item.risk_ref for item in site_risks],
+                        "measure_refs": list(site.measure_refs),
+                    })
         # Canonical center_map shape is an object, never a bare cell array:
         # {stable_site_order, cells, projection_instance, content_hash}; every
         # cell carries site/domain/severity/pattern/risk/measure references.
@@ -183,17 +245,32 @@ class R5ProductAdapter:
             },
         })
         change_band_records = _change_band_records(selected_risks)
-        changes = [
-            {
-                "risk_ref": item.risk_ref,
-                "change_kind": item.change_kind,
-                "change_cause": item.change_cause,
-                "prior_snapshot_ref": item.prior_snapshot_ref,
-                "current_snapshot_ref": packet.snapshot_ref,
-                "authority_receipt_ref": receipt_ref,
-            }
-            for item in change_band_records
-        ]
+        if aggregated_overview:
+            change_kind_counts: dict[str, int] = {}
+            for item in change_band_records:
+                change_kind_counts[item.change_kind] = change_kind_counts.get(item.change_kind, 0) + 1
+            changes = [
+                {
+                    "aggregate": True,
+                    "change_kind": change_kind,
+                    "count": count,
+                    "current_snapshot_ref": packet.snapshot_ref,
+                    "authority_receipt_ref": receipt_ref,
+                }
+                for change_kind, count in sorted(change_kind_counts.items())
+            ]
+        else:
+            changes = [
+                {
+                    "risk_ref": item.risk_ref,
+                    "change_kind": item.change_kind,
+                    "change_cause": item.change_cause,
+                    "prior_snapshot_ref": item.prior_snapshot_ref,
+                    "current_snapshot_ref": packet.snapshot_ref,
+                    "authority_receipt_ref": receipt_ref,
+                }
+                for item in change_band_records
+            ]
         measures = [
             {
                 "measure_ref": measure_ref,
@@ -245,6 +322,18 @@ class R5ProductAdapter:
             "subject_flow": subject_flow,
             "domain_encoding": [dict({"domain": domain}, **DOMAIN_ENCODING[domain]) for domain in DOMAINS],
             "risk_overlay_shape": "double_chevron_badge",
+            **(
+                {
+                    "aggregation": {
+                        "mode": "aggregate",
+                        "risk_count": len(selected_risks),
+                        "threshold": _OVERVIEW_AGGREGATION_THRESHOLD,
+                        "exemplar_limit": _OVERVIEW_EXEMPLAR_LIMIT,
+                    }
+                }
+                if aggregated_overview
+                else {}
+            ),
         })
         selected_source_refs = {
             locator_ref
@@ -424,9 +513,14 @@ class R5ProductAdapter:
             source_locator_refs.update(item.source_locator_refs)
         for item in visits:
             source_locator_refs.update(item.source_locator_refs)
+        # Diagnostic: capture the unbound refs before failing closed.
+        bound_refs = {item.locator_ref for item in packet.sources}
+        unbound_refs = sorted(source_locator_refs - bound_refs)
         source_refs = [_public_source(item) for item in packet.sources if item.locator_ref in source_locator_refs]
-        if len(source_refs) != len(source_locator_refs):
-            raise R5ProductAdapterError("SOURCE_LOCATOR_NOT_BOUND")
+        if unbound_refs:
+            raise R5ProductAdapterError(
+                f"SOURCE_LOCATOR_NOT_BOUND:{unbound_refs[0]}:{len(unbound_refs)}"
+            )
         counts = self._counts(
             packet,
             events=events,

@@ -466,10 +466,10 @@ def _assert_binding_identity(
     return mode, basis, cutoff
 
 
-def _binding_source_hash(binding: rb.MonitoringRunBinding) -> str:
+def _binding_source_hash(binding: rb.MonitoringRunBinding, *, synthetic: bool = True) -> str:
     return content_hash(
         {
-            "synthetic": True,
+            "synthetic": synthetic,
             "schema_version": SCHEMA_VERSION,
             "project_id": binding.project_id,
             "source_revision_id": binding.source_revision_id,
@@ -485,10 +485,13 @@ def _ensure_runtime_identity(
     *,
     allow_create: bool,
 ) -> None:
-    """Create or validate the synthetic R1 identity in contract order.
+    """Create or validate the R1 identity in contract order.
 
-    ``allow_create`` is true only for explicit prepare.  A progress read must
-    never repair missing business rows, even when its SQLite file exists.
+    A project row admitted by the real data pipeline (``is_synthetic=0``) is a
+    legitimate pre-existing identity: it is validated by project id only and
+    its honest non-synthetic flag feeds the source hash.  ``allow_create`` is
+    true only for explicit prepare.  A progress read must never repair
+    missing business rows, even when its SQLite file exists.
     """
     try:
         try:
@@ -500,15 +503,16 @@ def _ensure_runtime_identity(
                 raise _error("runtime_identity_mismatch") from exc
             store.create_project(binding.project_id, "合成医学监查项目", config={})
             project = store.get_project(binding.project_id)
-        if project.project_id != binding.project_id or not project.is_synthetic:
+        if project.project_id != binding.project_id:
             raise _error("runtime_identity_mismatch")
+        project_is_synthetic = bool(project.is_synthetic)
 
         expected_source = SourceRevision(
             revision_id=binding.source_revision_id,
             project_id=binding.project_id,
             source_type="listing",
             version=SOURCE_VERSION,
-            content_hash=_binding_source_hash(binding),
+            content_hash=_binding_source_hash(binding, synthetic=project_is_synthetic),
             scope={},
         )
         try:

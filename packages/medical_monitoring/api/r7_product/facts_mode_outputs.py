@@ -1,0 +1,184 @@
+"""Real facts-backed R6 mode outputs for the materialized-facts product lane.
+
+Mirrors the synthetic mode-output provider protocol but derives every row
+from the typed facts authority packet: severity/type aggregation for the
+full-risk output and adverse-event (medium-or-higher) query findings with
+their source locators for the affected-query draft. No invented findings.
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+from typing import Any, Mapping
+
+from ...reports import mode_output as mo
+
+_SEVERITY_ZH = {"critical": "重度", "medium": "中度", "low": "轻度"}
+_DOMAIN_ZH = {
+    "ae": "不良事件",
+    "mh": "既往病史",
+    "cm": "合并用药",
+    "ip": "试验药使用",
+    "lab_exam": "检验检查",
+    "hospital_procedure": "住院/操作",
+    "symptom_efficacy": "症状/疗效",
+    "protocol_compliance": "方案符合性",
+}
+_MAX_FINDINGS = 200
+
+
+class FactsModeOutputProvider:
+    """Build the four mode outputs from the real facts authority packet."""
+
+    @staticmethod
+    def _binding(run_binding: Mapping[str, Any]) -> dict[str, Any]:
+        binding = dict(run_binding)
+        binding.setdefault("carry_forward_run_ids", [])
+        binding.setdefault("mode_transition", "explicit_new_run")
+        binding.setdefault("actor", "system_facts")
+        if not binding.get("created_at"):
+            binding["created_at"] = "2026-08-28T00:00:00Z"
+        if not binding.get("knowledge_pack_version"):
+            binding["knowledge_pack_version"] = "facts-kp-v1"
+        if not binding.get("rule_activation_version"):
+            binding["rule_activation_version"] = "facts-rules-v1"
+        if not binding.get("mapping_version"):
+            binding["mapping_version"] = "facts-mapping-v1"
+        if not binding.get("identity_algorithm_version"):
+            binding["identity_algorithm_version"] = "facts-identity-v1"
+        if not binding.get("identity_algorithm_digest"):
+            binding["identity_algorithm_digest"] = "facts-identity-digest-v1"
+        return binding
+
+    def get_mode_outputs(
+        self,
+        run_binding: Mapping[str, Any],
+        r5_packet: Any,
+        **_: Any,
+    ) -> tuple[dict[str, Any], ...]:
+        binding = self._binding(run_binding)
+        mode = str(binding["mode"])
+        if mode == "post_lock_pre_cfdi":
+            binding.setdefault("fixed_total", True)
+            binding.setdefault("locked_snapshot_hash", r5_packet.packet_digest)
+            binding.setdefault("output_cutoff_ref", binding.get("data_cutoff"))
+            binding.setdefault("output_revision_ref", binding.get("source_revision_id"))
+            binding.setdefault("local_os_user", "local-os-user")
+            binding.setdefault("acceptance_evidence_hash", "facts-acceptance-v1")
+        contract = mo.build_mode_contract(mode)
+        context = mo.default_entry_context_for_mode(mode, run_binding=binding)
+        digest = r5_packet.packet_digest
+        refs = {
+            "project_id": binding["project_id"],
+            "run_id": binding["run_id"],
+            "data_cutoff": binding["data_cutoff"],
+            "source_revision_id": binding["source_revision_id"],
+            "authority_digest": digest,
+            "coverage_digest": digest,
+            "qc_digest": digest,
+            "digest": digest,
+        }
+        severity_counts = Counter(risk.severity for risk in r5_packet.risks)
+        # The R6 risk payload carries the actionable set (medium-or-higher)
+        # with real risk ids bound to the authority closure; the full-anchor
+        # picture is served by the aggregated overview projection.
+        risk_rows = [
+            {
+                "risk_id": risk.risk_ref,
+                "severity": risk.severity,
+                "risk_type": risk.risk_type_zh,
+                "domain": risk.domain,
+            }
+            for risk in r5_packet.risks
+            if risk.severity in ("medium", "critical")
+        ]
+        if mode == "daily":
+            findings = self._daily_findings(binding, r5_packet)
+            return mo.build_daily_mode_outputs(
+                binding,
+                contract,
+                authority_refs=refs,
+                coverage_refs=refs,
+                qc_refs=refs,
+                findings=findings,
+                risks=risk_rows,
+                entry_context=context,
+            )
+        if mode == "pre_lock":
+            return mo.build_pre_lock_mode_outputs(
+                binding,
+                contract,
+                authority_refs=refs,
+                coverage_refs=refs,
+                qc_refs=refs,
+                risks=risk_rows,
+                population_scope={
+                    "scope_kind": "project",
+                    "population_id": binding["project_id"],
+                    "label": "全部已核验事实受试者",
+                    "site_count": len(r5_packet.sites),
+                    "subject_count": len(r5_packet.subjects),
+                    "risk_count": sum(severity_counts.values()),
+                },
+                from_source_revision_id=str(binding.get("source_revision_id") or ""),
+                revision_reason="锁库前全量风险核对（首次事实快照）",
+                entry_context=context,
+            )
+        raise mo.ModeOutputError(
+            mo.OUTPUT_NOT_ELIGIBLE,
+            "facts mode outputs are not yet defined for this mode",
+        )
+
+    def _daily_findings(
+        self, binding: Mapping[str, Any], r5_packet: Any
+    ) -> list[dict[str, Any]]:
+        events_by_ref = {event.event_ref: event for event in r5_packet.events}
+        subjects_by_ref = {
+            subject.subject_ref: subject for subject in r5_packet.subjects
+        }
+        findings: list[dict[str, Any]] = []
+        for risk in r5_packet.risks:
+            if len(findings) >= _MAX_FINDINGS:
+                break
+            if risk.severity not in ("medium", "critical"):
+                continue
+            event = events_by_ref.get(risk.risk_anchor_ref or "")
+            if event is None:
+                continue
+            subject = subjects_by_ref.get(event.subject_ref)
+            subject_label = subject.subject_label if subject else event.subject_ref
+            domain_zh = _DOMAIN_ZH.get(event.domain, event.domain)
+            severity_zh = _SEVERITY_ZH.get(risk.severity, risk.severity)
+            date_text = str(event.start_date or "日期缺失")
+            basis = (
+                f"已核验事实：受试者{subject_label}于{date_text}记录一条"
+                f"{domain_zh}（{event.label_zh}），严重程度{severity_zh}。"
+            )
+            finding_text = (
+                f"「{event.label_zh}」为{severity_zh}{domain_zh}信号，"
+                "需要医学监察员人工核对。"
+            )
+            action = "请下钻受试者旅程与来源记录核对临床语境后确认处置。"
+            findings.append(
+                {
+                    "finding_id": f"facts-finding-{event.event_ref}",
+                    "risk_id": risk.risk_ref,
+                    "issue_id": f"facts-issue-{event.domain}",
+                    "subject_id": event.subject_ref,
+                    "site_id": event.site_ref,
+                    "scope_kind": "subject",
+                    "basis": basis,
+                    "finding": finding_text,
+                    "action": action,
+                    "evidence_refs": list(risk.source_locator_refs)
+                    or list(event.source_locator_refs),
+                    "locator": {
+                        "path": f"facts.{event.domain}",
+                        "record_id": event.event_ref,
+                    },
+                }
+            )
+        return findings
+
+
+__all__ = ["FactsModeOutputProvider"]

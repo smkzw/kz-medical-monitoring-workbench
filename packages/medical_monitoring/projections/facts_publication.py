@@ -490,6 +490,7 @@ class FactsPublicationAuthorityProvider:
         return (
             R5FlowStageRecord(stage_ref="stage-icf", stage_label_zh="知情同意", column_order=0, row_order=0, stage_kind="main", is_entry=True, is_terminal=False, source_locator_refs=()),
             R5FlowStageRecord(stage_ref="stage-screening", stage_label_zh="筛选", column_order=1, row_order=0, stage_kind="main", is_entry=False, is_terminal=False, source_locator_refs=()),
+            R5FlowStageRecord(stage_ref="stage-screen-failed", stage_label_zh="筛选失败", column_order=1, row_order=1, stage_kind="branch_terminal", is_entry=False, is_terminal=True, source_locator_refs=()),
             R5FlowStageRecord(stage_ref="stage-treatment", stage_label_zh="治疗", column_order=2, row_order=0, stage_kind="main", is_entry=False, is_terminal=False, source_locator_refs=()),
             R5FlowStageRecord(stage_ref="stage-study-status", stage_label_zh="研究状态", column_order=3, row_order=0, stage_kind="main", is_entry=False, is_terminal=True, source_locator_refs=()),
         )
@@ -640,14 +641,27 @@ class FactsPublicationAuthorityProvider:
             if subj in disposition_by_subject:
                 disp = disposition_by_subject[subj]
                 steps.append(R5SubjectFlowStep(
-                    stage_ref="stage-study-status",
+                    stage_ref=(
+                        "stage-study-status"
+                        if subj in treatment_by_subject
+                        else "stage-screen-failed"
+                    ),
                     entered_date=disp[0], basis_date=disp[0], date_state=disp[1],
                     transition_reason_zh=f"研究处置：{disp[2]}",
                     source_locator_refs=(locator("DS", disp[3]).locator_ref,),
                 ))
             elif (status := status_by_subject.get(subj)):
+                # Screen failures terminate on the dedicated branch stage;
+                # main-column continuity (screening→treatment→status) stays
+                # intact for treated subjects.
+                stage_ref = (
+                    "stage-screen-failed"
+                    if subj not in treatment_by_subject
+                    and "筛选失败" in status
+                    else "stage-study-status"
+                )
                 steps.append(R5SubjectFlowStep(
-                    stage_ref="stage-study-status", entered_date=None, basis_date=None,
+                    stage_ref=stage_ref, entered_date=None, basis_date=None,
                     date_state="missing", transition_reason_zh=f"状态：{status}", source_locator_refs=(),
                 ))
             paths.append(

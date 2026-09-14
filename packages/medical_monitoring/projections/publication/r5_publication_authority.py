@@ -237,8 +237,16 @@ class R5AuthorityPacket:
             and getattr(self.product_packet, "synthetic", False) is True
             and self.project_ref.startswith("s7-synthetic-")
         )
+        # Deterministic facts lane: authority derives entirely from verified
+        # materialized facts; the S4 AI-adjudication layer joins this packet
+        # only once dual-model analysis runs enter publication.
+        facts_product = (
+            self.product_packet is not None
+            and getattr(self.product_packet, "authority_contract_id", "")
+            == "facts-authority-v1"
+        )
         if (
-            (not packets and not synthetic_product)
+            (not packets and not synthetic_product and not facts_product)
             or any(type(item) is not s4.R5S4AuthorityPacket for item in packets)
         ):
             raise R5PublicationAuthorityError(
