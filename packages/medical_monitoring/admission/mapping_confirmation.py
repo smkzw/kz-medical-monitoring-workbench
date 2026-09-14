@@ -1493,6 +1493,15 @@ class AdmissionMappingConfirmationService:
             if field is None or receipt is None:
                 return False
             if _decision_recorded(field):
+                # A later user answer on a field whose chunk failed the dual
+                # review still closes the loop: the gap receipt records the
+                # residue, the recorded decision (bound to the same
+                # reconciliation) resolves it for the user.
+                if receipt.resolution == "unverifiable_gap" and (
+                    field.get("question_reconciliation_sha256") == reconciliation_sha256
+                    or field.get("decision_reconciliation_sha256") == reconciliation_sha256
+                ):
+                    continue
                 if (receipt.resolution != "escalated"
                         or field.get("question_reconciliation_sha256") != reconciliation_sha256
                         or field.get("decision_reconciliation_sha256") != reconciliation_sha256):
