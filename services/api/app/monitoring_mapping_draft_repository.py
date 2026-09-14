@@ -1872,6 +1872,11 @@ class MonitoringMappingDraftRepository:
         )
         domain = domain.strip()
         source_field = source_field.strip()
+        # unverifiable_gap carries no source candidate by design; the safe-id
+        # contract applies only to candidate-backed resolutions.
+        if resolution == "unverifiable_gap":
+            job_id = job_id.strip() or "system"
+            candidate_id = candidate_id.strip() or "system"
         job_id = _require_safe_identifier(job_id, "job_id")
         candidate_id = _require_safe_identifier(candidate_id, "candidate_id")
         cleaned_evidence = tuple(str(item).strip() for item in evidence_ids)
@@ -1886,20 +1891,30 @@ class MonitoringMappingDraftRepository:
             }
             for item in review_sources
         )
-        if (
-            not domain
-            or not source_field
-            or not cleaned_evidence
-            or any(not item for item in cleaned_evidence)
-            or len(cleaned_evidence) != len(set(cleaned_evidence))
-        ):
-            raise ValueError("adjudication receipt evidence is invalid")
-        if len(cleaned_reviews) != 2 or {
-            item["cohort"] for item in cleaned_reviews
-        } != {"primary", "verifier"}:
-            raise ValueError("adjudication receipt requires two review sources")
+        if resolution == "unverifiable_gap":
+            # A gap receipt records the durable absence of a resolution after
+            # the retry budget: no evidence set and no review sources by
+            # design; replay-safety still applies via the reconciliation hash.
+            if not domain or not source_field:
+                raise ValueError("adjudication receipt evidence is invalid")
+            cleaned_evidence = ()
+            cleaned_reviews = ()
+        else:
+            if (
+                not domain
+                or not source_field
+                or not cleaned_evidence
+                or any(not item for item in cleaned_evidence)
+                or len(cleaned_evidence) != len(set(cleaned_evidence))
+            ):
+                raise ValueError("adjudication receipt evidence is invalid")
+            if len(cleaned_reviews) != 2 or {
+                item["cohort"] for item in cleaned_reviews
+            } != {"primary", "verifier"}:
+                raise ValueError("adjudication receipt requires two review sources")
         if resolution not in {
-            "primary_retained", "adjudicated_mapping", "escalated"
+            "primary_retained", "adjudicated_mapping", "escalated",
+            "unverifiable_gap",
         }:
             raise ValueError("adjudication receipt resolution is invalid")
         now = self.clock()
