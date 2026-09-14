@@ -1936,25 +1936,28 @@ class MonitoringMappingDraftRepository:
                 raise MonitoringMappingStateConflictError(
                     "confirmed mapping draft cannot receive adjudication"
                 )
-            verified_reviews = tuple(
-                self._validated_adjudication_source(
-                    connection,
-                    project_id=project_id,
-                    domain=domain,
-                    source_field=source_field,
-                    **item,
+            if resolution == "unverifiable_gap":
+                selected = None
+            else:
+                verified_reviews = tuple(
+                    self._validated_adjudication_source(
+                        connection,
+                        project_id=project_id,
+                        domain=domain,
+                        source_field=source_field,
+                        **item,
+                    )
+                    for item in cleaned_reviews
                 )
-                for item in cleaned_reviews
-            )
-            selected = next(
-                (
-                    item for item in verified_reviews
-                    if item["job_id"] == job_id
-                    and item["candidate_id"] == candidate_id
-                ),
-                None,
-            )
-            if selected is None or tuple(selected["evidence_ids"]) != cleaned_evidence:
+                selected = next(
+                    (
+                        item for item in verified_reviews
+                        if item["job_id"] == job_id
+                        and item["candidate_id"] == candidate_id
+                    ),
+                    None,
+                )
+            if selected is not None and tuple(selected["evidence_ids"]) != cleaned_evidence:
                 connection.rollback()
                 raise MonitoringMappingStateConflictError(
                     "selected adjudication source is not one of the reviewers"
