@@ -680,6 +680,9 @@ class AdmissionMappingConfirmationService:
                             "mapping_bridge_failed"
                         )
                     continue
+                if receipt.resolution == "unverifiable_gap":
+                    previously_resolved += 1
+                    continue
                 if (
                     receipt.resolution
                     == "adjudicated_mapping"
@@ -785,26 +788,58 @@ class AdmissionMappingConfirmationService:
                         for field in payload.get("fields") or []
                     },
                 )
-            projected = self._draft_payload(draft)
-            projected["adjudication"] = {
-                "state": (
-                    "complete_with_gaps"
-                    if gap_fields
-                    else "blocked"
-                    if states.intersection({"failed", "blocked"})
-                    else "running"
-                ),
-                "resolved_count": 0,
-                "remaining_question_count": len(unresolved),
-                "gap_field_count": len(gap_fields),
-            }
             if gap_fields:
-                projected["adjudication"]["gap_fields"] = gap_fields
-                projected["adjudication"]["gap_note"] = (
-                    "以下字段在多轮双模型裁决后仍无法闭合，已列为不可评估能力；"
-                    "其余字段继续走确认流程。"
+                # Bounded-gap apply: restrict the review to non-gap fields and
+                # continue into the normal adoption path below.
+                gap_pairs = {
+                    (str(item.get("domain") or ""), str(item.get("source_field") or ""))
+                    for item in gap_fields
+                }
+                self._mark_gap_fields(
+                    project_id=project_id,
+                    draft_id=draft_id,
+                    draft=draft,
+                    gap_pairs=gap_pairs,
+                    reconciliation_sha256=reconciliation_sha256,
+                    divergence_pairs=divergence_pairs,
                 )
-            return projected
+                review_context = (
+                    {
+                        "divergences": [
+                            item
+                            for item in (reconciliation.get("divergences") or [])
+                            if (
+                                str(item.get("domain") or ""),
+                                str(item.get("source_field") or ""),
+                            )
+                            not in gap_pairs
+                        ]
+                    }
+                    if reconciliation is not None
+                    else None
+                )
+                unresolved = [
+                    field
+                    for field in unresolved
+                    if (
+                        str(field.get("domain") or ""),
+                        str(field.get("source_field") or ""),
+                    )
+                    not in gap_pairs
+                ]
+                divergence_pairs -= gap_pairs
+            else:
+                projected = self._draft_payload(draft)
+                projected["adjudication"] = {
+                    "state": (
+                        "blocked"
+                        if states.intersection({"failed", "blocked"})
+                        else "running"
+                    ),
+                    "resolved_count": 0,
+                    "remaining_question_count": len(unresolved),
+                }
+                return projected
 
         current_revisions: dict[str, str] = {}
         for result in cohort_results.values():
@@ -1107,6 +1142,75 @@ class AdmissionMappingConfirmationService:
                             {"domain": pair[0], "source_field": pair[1]}
                         )
         return gaps
+
+    def _mark_gap_fields(
+        self,
+        *,
+        project_id: str,
+        draft_id: str,
+        draft: Any,
+        gap_pairs: set,
+        reconciliation_sha256: str,
+        divergence_pairs: set,
+    ) -> None:
+        """Persist bounded residues as visible unverifiable gaps.
+
+        Gap fields get a system note (not a user question), their model
+        question flag is cleared so confirm is not blocked, and a receipt
+        with resolution ``unverifiable_gap`` records the durable outcome.
+        """
+        payload = draft.model_dump(mode="json") if hasattr(draft, "model_dump") else dict(draft)
+        current = self.mapping_repository.get_draft(project_id, draft_id)
+        for field in payload.get("fields") or []:
+            pair = (
+                str(field.get("domain") or ""),
+                str(field.get("source_field") or ""),
+            )
+            if pair not in gap_pairs:
+                continue
+            patch = {
+                "user_decision_required": False,
+                "user_action": (
+                    "系统复核：本字段多轮双模型裁决未能闭合，已列为不可评估能力；"
+                    "相关分析将显示覆盖不足，不阻塞其余字段确认。"
+                ),
+                "question_reconciliation_sha256": "",
+                "decision_reconciliation_sha256": "",
+            }
+            if any(current_field.get(key) != value for key, value in patch.items() for current_field in [
+                next(
+                    (f for f in (current.model_dump(mode="json").get("fields") or [])
+                     if (str(f.get("domain") or ""), str(f.get("source_field") or "")) == pair),
+                    {},
+                )
+            ]):
+                self.mapping_repository.edit_field(
+                    project_id,
+                    draft_id,
+                    domain=pair[0],
+                    source_field=pair[1],
+                    patch=patch,
+                    expected_version=int(current.version),
+                    actor="system_harness",
+                    idempotency_key=f"gap:{draft_id}:{pair[0]}:{pair[1]}",
+                )
+                current = self.mapping_repository.get_draft(project_id, draft_id)
+            if pair in divergence_pairs:
+                try:
+                    self.mapping_repository.record_adjudication(
+                        project_id,
+                        draft_id,
+                        domain=pair[0],
+                        source_field=pair[1],
+                        reconciliation_sha256=reconciliation_sha256,
+                        resolution="unverifiable_gap",
+                        job_id="",
+                        candidate_id="",
+                        evidence_ids=(),
+                        review_sources=(),
+                    )
+                except Exception:
+                    pass
 
     def reconcile_with_verifier(
         self,
