@@ -1524,3 +1524,7 @@ v15代四轮恢复后168/174完成：GLM 84完/3败、deepseek 84完/3败。6个
 本轮恢复会话（09-13 20:40至今）实施：v16/verifier-v14轴形状示例（轴对象合法/非法mini-example）；第五轮deepseek侧87/87全清；**等价复用两项关键修复**——signature()去prompt_version（frozen输入身份即复用契约）、equivalent-cohort分组跨digest（修复CM/EX两个顽固分片）；digest不含prompt/路由身份（路由切换不再分裂同工作单元）。收敛机制验证：每轮恢复约80%失败转化，失败持续下降26→8。
 
 恢复入口（下位Agent）：journal本段+implement.md→核对队列paused与v16计数→resume（cutover或watcher，verifier并行2）→status轮询至complete/blocked→**3个真实医学问题呈现用户**（AE/SAECAT、EG/EGABCSO、SH/SHCO——空值语义确认）→确认后confirm_draft→facts物化与原单元格抽查（LOOP-6）→P3纵切+Query工作区（LOOP-7）。若8残差仍卡，评估v17（治疗锚点类的补读示例）或对证书类的insufficient兜底呈现。
+
+### 2026-09-14 12:30 v16主体完成+bounded-gap机器落地；apply收束待下会话
+
+用户恢复goal（新指令：kangzhe-design-3d美学、ego测试、无阶段测试、宽屏only）。本轮：设计规范四文件全链加载（core 1325行/interactive/charts/interact）；kz资产（ECharts6+kz-charts+kz-interact+官网logo）入frontend/public/kz；令牌层medicalMonitoringKzTokens.css（品牌HEX/部门色/浅色only/卡层次/表格/按钮/lamp/stat/skeleton）；孤立CSS清理。v16双路主体完成：GLM 191完/7败、DS 181完/3败（八轮恢复）。bounded-gap机器三提交（1ccdde9/60e1720/137a0b8）：failed分片→可见不可评估gap、草稿标记+unverifiable_gap回执、confirm容忍。**遗留**：digest收窄试验（7afda9b）意外触发全量重提268+重复分片（新分块边界不同非字节等价，retire_unstarted不可用），已回退（ab548db）；队列paused=1、守护全停；apply链卡点=retry分支重排队致cohort state=running而非failed，second-review未及执行；gap标记已落草稿（v37，36字段）。恢复路径：①清点570 queued孤儿（今日创建）按"obsolete-digest namespace"整体退休（需新repository操作或逐key supersede）②对v16原namespace终态failed调adjudicate→gap apply→receipts→3用户问题→confirm→facts。runs/phase_c.../下watcher/status_loop均已停。
