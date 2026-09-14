@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 
-// 康哲图表引擎 React 封装：全部经 kzCharts.mount（'kz' 主题），绝不裸 echarts.init。
+// kz 图表引擎 React 封装：全部经 kzCharts.mount（'kz' 主题），绝不裸 echarts.init。
 // 业务侧只组装 option；果冻皮肤/动画分级/冻结态/resize 由执行层接管。
 
 const KZ_PALETTE = ["#FF9900", "#407AAA", "#587B3B", "#A85F34", "#FFCC00", "#AAA6A1"];
@@ -72,6 +72,7 @@ export function KzSubjectFlowSankey({ flow, selection = {}, onStageSelect, onLin
         formatter: () => {
           const lines = [stage.label, `到达 ${stage.reached} · 当前 ${stage.current}`];
           if (stage.risk > 0) lines.push(`中高 {red|${stage.risk}}`);
+          if (stage.reached === 0) lines.push("本截止点无人到达");
           return lines.join("\n");
         },
         rich: { red: { color: KZ_RISK_RED, fontWeight: 700 } },

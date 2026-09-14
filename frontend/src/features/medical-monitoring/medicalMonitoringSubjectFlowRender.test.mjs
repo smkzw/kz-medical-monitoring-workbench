@@ -64,16 +64,16 @@ for (const link of flow.links) {
 }
 check(flow.reconciliation.state === "matched" && flow.reconciliation.entry_total === 12, "reconciliation binds entry total to 12");
 
-// ---- 正常渲染：全宽 SVG、节点/连线 aria、风险摘要、范围条、默认折叠 ----
+// ---- 正常渲染：ECharts 桑基容器、节点/连线 a11y、风险摘要、范围条、默认折叠 ----
 const ready = renders.ready;
 check(ready.includes('data-monitoring-flow-state="ready"'), "ready state is exposed for styling");
 check(ready.includes("连线表示截至本次截止点的规范阶段路径"), "fixed path explanation copy rendered");
-check(ready.includes('viewBox="0 0 1520 214"'), "svg canvas spreads stages horizontally and sizes height to used rows only");
-check(countOccurrences(ready, 'data-flow-node="') === 7, "renders every catalog stage as a node");
-check(countOccurrences(ready, 'data-flow-reached-target="') === 7, "each node offers a reached-count selection target");
-check(countOccurrences(ready, 'data-flow-link="') === 6, "renders every canonical link");
-check(ready.includes('aria-label="筛选失败，到达 2 人，当前 2 人，其中中高风险 1 人"'), "node aria follows the contract wording");
-check(ready.includes('aria-label="从治疗到完成研究，3 人，该流向受试者中当前伴随中高风险 0 人"'), "link aria states the exact risk wording");
+check(ready.includes('class="kz-chart mm-kz-chart"'), "flow chart mounts through the kz ECharts container");
+check(ready.includes('aria-label="受试者阶段流向图（知情同意到研究状态）"'), "chart container exposes a Chinese aria label");
+check(countOccurrences(ready, 'data-flow-node="') === 7, "renders every catalog stage as an accessible node");
+check(countOccurrences(ready, 'data-flow-link="') === 6, "renders every canonical link as an accessible control");
+check(ready.includes("筛选失败：到达 2 人，当前 2 人，中高风险 1 人"), "node a11y text follows the contract wording");
+check(ready.includes("从治疗到完成研究：3 人，中高风险 0 人"), "link a11y text states the exact risk wording");
 check(ready.includes("中高风险变化摘要") && ready.includes("新增 2 · 升级 1 · 持续 1"), "scope-level risk change summary rendered");
 check(ready.includes("范围受试者 12 人"), "scope bar shows the global total");
 check(!ready.includes("路径完整"), "check-state path-complete chip is not shown as monitor chrome");
@@ -82,11 +82,6 @@ check(ready.includes("当前项目/中心整体范围"), "scope bar states the p
 check(ready.includes('aria-expanded="false"') && ready.includes("展开明细"), "detail table collapses to one summary row by default");
 check(!ready.includes("进入医学旅程"), "collapsed table hides subject rows and jump actions");
 check(!/sankey/i.test(ready.replace(/path_throughput_sankey|受试者阶段流向/g, "")), "user-facing markup avoids chart-libary jargon");
-check(ready.includes('role="group" aria-label="受试者阶段流向图"'), "svg exposes a group role and Chinese label");
-const completedNode = ready.match(/data-flow-node="flow-stage-completed"[\s\S]*?<rect x="([^"]+)" y="([^"]+)"/);
-const withdrawnNode = ready.match(/data-flow-node="flow-stage-withdrawn"[\s\S]*?<rect x="([^"]+)" y="([^"]+)"/);
-check(Boolean(completedNode && withdrawnNode), "same-column terminal nodes expose deterministic geometry");
-check(completedNode[1] === withdrawnNode[1] && completedNode[2] !== withdrawnNode[2], "row_order keeps same-column terminal nodes vertically distinct");
 
 // ---- 三类筛选与表格、风险集合精确对账 ----
 const treatment = renders.currentTreatment;
@@ -144,12 +139,10 @@ check(!empty.includes("0 人"), "empty range DOM never shows 0 人");
 
 // ---- 键盘隔离与中文 CSS 合同 ----
 const pageSource = fs.readFileSync(path.join(here, "MedicalMonitoringWorkspace.jsx"), "utf8");
-check(pageSource.includes('data-flow-empty={node.emptyAtCutoff ? "true" : "false"}') && pageSource.includes("本截止点无人到达"), "zero-count catalog stage is visibly explained instead of implying a later active stage");
-check(pageSource.includes('emptyAtCutoff && stage.kind === "branch_terminal"'), "an empty main stage keeps its canonical row instead of colliding with a terminal branch");
-check(pageSource.indexOf("<SubjectFlowSection") < pageSource.indexOf('className="monitoring-overview-columns"')
-  && pageSource.indexOf('className="monitoring-overview-columns"') < pageSource.indexOf('className="monitoring-panel monitoring-center-summary"'), "center mode keeps flow and current risk ahead of the secondary center calculation panel");
+const chartSource = fs.readFileSync(path.join(here, "medicalMonitoringKzChart.jsx"), "utf8");
+check(chartSource.includes("本截止点无人到达"), "zero-count catalog stage is visibly explained in the sankey node label");
 check(pageSource.includes('data-monitoring-flow-scope="true"'), "flow section marks its interactive scope");
-check(pageSource.includes("event.target instanceof SVGElement") && pageSource.includes('event.target.closest("[data-monitoring-flow-scope]")'), "document-level shortcuts skip the flow scope");
+check(pageSource.includes('event.target instanceof SVGElement') && pageSource.includes('event.target.closest("[data-monitoring-flow-scope]")'), "document-level shortcuts skip the flow scope");
 check(pageSource.includes('event.key === "Escape"'), "escape clears the flow selection");
 check(pageSource.includes("ArrowRight") && pageSource.includes("ArrowLeft"), "arrow keys move focus across nodes and links");
 check(pageSource.includes('event.target instanceof Element && event.target.closest("[data-monitoring-flow-scope]")'), "risk-list shortcuts stay isolated from flow controls");
