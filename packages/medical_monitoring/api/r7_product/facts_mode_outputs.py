@@ -74,6 +74,18 @@ class FactsModeOutputProvider:
             binding.setdefault("acceptance_evidence_hash", "facts-acceptance-v1")
         contract = mo.build_mode_contract(mode)
         context = mo.default_entry_context_for_mode(mode, run_binding=binding)
+        if mode == "post_lock_pre_cfdi":
+            # 锁定版本选择必须与本次运行声明的锁字段逐字一致（默认
+            # context 硬编码合成值，会与 facts 锁字段冲突）。
+            context["locked_version_selection"] = {
+                "local_os_user": str(binding.get("local_os_user") or "local-os-user"),
+                "snapshot_hash": str(
+                    binding.get("locked_snapshot_hash") or r5_packet.packet_digest
+                ),
+                "acceptance_evidence_hash": str(
+                    binding.get("acceptance_evidence_hash") or "facts-acceptance-v1"
+                ),
+            }
         digest = r5_packet.packet_digest
         refs = {
             "project_id": binding["project_id"],
@@ -131,9 +143,123 @@ class FactsModeOutputProvider:
                 revision_reason="锁库前全量风险核对（首次事实快照）",
                 entry_context=context,
             )
+        if mode == "post_lock_pre_cfdi":
+            return self._post_lock_outputs(binding, contract, refs, context, r5_packet)
         raise mo.ModeOutputError(
             mo.OUTPUT_NOT_ELIGIBLE,
             "facts mode outputs are not yet defined for this mode",
+        )
+
+    def _post_lock_outputs(
+        self,
+        binding: Mapping[str, Any],
+        contract: Mapping[str, Any],
+        refs: Mapping[str, Any],
+        context: Mapping[str, Any],
+        r5_packet: Any,
+    ) -> tuple[dict[str, Any], ...]:
+        # 锁库后固定总量：材料与清单围绕风险登记册（中高及以上，与日常
+        # 监查的行动集一致）；全量锚点计数在 project_summary 中如实声明。
+        register = [
+            risk for risk in r5_packet.risks
+            if risk.severity in ("critical", "high", "medium")
+        ]
+        subject_ids_by_site: dict[str, list[str]] = {}
+        for subject in r5_packet.subjects:
+            subject_ids_by_site.setdefault(subject.site_ref, []).append(subject.subject_ref)
+        risk_ids_by_site: dict[str, list[str]] = {site.site_ref: [] for site in r5_packet.sites}
+        risk_ids_by_subject: dict[str, list[str]] = {}
+        for risk in register:
+            risk_ids_by_site.setdefault(risk.site_ref, []).append(risk.risk_ref)
+            risk_ids_by_subject.setdefault(risk.subject_ref, []).append(risk.risk_ref)
+        evidence_refs = [
+            locator_ref
+            for risk in register[:50]
+            for locator_ref in risk.source_locator_refs
+        ]
+        severity_counts = Counter(risk.severity for risk in r5_packet.risks)
+        return mo.build_post_lock_mode_outputs(
+            binding,
+            contract,
+            authority_refs=refs,
+            coverage_refs=refs,
+            qc_refs=refs,
+            population_totals={
+                "site_count": len(r5_packet.sites),
+                "subject_count": len(r5_packet.subjects),
+                "risk_count": len(register),
+            },
+            report_version="facts-post-lock-v1",
+            project_summary={
+                "project_id": binding["project_id"],
+                "status": "locked",
+                "project_label": getattr(r5_packet, "project_label", binding["project_id"]),
+                "anchor_event_count": len(r5_packet.events),
+                "anchor_risk_total": sum(severity_counts.values()),
+            },
+            risk_summary={
+                "high_count": sum(risk.severity in {"critical", "high"} for risk in register),
+                "medium_count": sum(risk.severity == "medium" for risk in register),
+                "low_count": 0,
+                "risk_ids": [risk.risk_ref for risk in register],
+            },
+            evidence_refs=evidence_refs,
+            site_materials=[
+                {
+                    "site_id": site.site_ref,
+                    "subject_ids": subject_ids_by_site.get(site.site_ref, []),
+                    "risk_ids": risk_ids_by_site.get(site.site_ref, []),
+                    "evidence_refs": evidence_refs[:5],
+                    "locator": {"path": "facts.site", "record_id": site.site_ref},
+                }
+                for site in r5_packet.sites
+            ],
+            subject_materials=[
+                {
+                    "subject_id": subject.subject_ref,
+                    "site_id": subject.site_ref,
+                    "profile_ref": {"profile_id": f"profile-{subject.subject_ref}"},
+                    "timeline_ref": {"timeline_id": f"timeline-{subject.spine_ref}"},
+                    "risk_ids": risk_ids_by_subject.get(subject.subject_ref, []),
+                    "evidence_refs": evidence_refs[:3],
+                    "locator": {"path": "facts.subject", "record_id": subject.subject_ref},
+                }
+                for subject in r5_packet.subjects
+            ],
+            check_items=[
+                {
+                    "level": "project",
+                    "check_kind": "project_lock_review",
+                    "scope_id": binding["project_id"],
+                    "status": "ready",
+                    "risk_ids": [risk.risk_ref for risk in register[:20]],
+                    "evidence_refs": evidence_refs[:5],
+                    "locator": {"path": "facts.project", "record_id": binding["project_id"]},
+                },
+            ] + [
+                {
+                    "level": "site",
+                    "check_kind": "site_materials_review",
+                    "scope_id": site.site_ref,
+                    "status": "ready",
+                    "risk_ids": risk_ids_by_site.get(site.site_ref, [])[:20],
+                    "evidence_refs": evidence_refs[:3],
+                    "locator": {"path": "facts.site", "record_id": site.site_ref},
+                }
+                for site in r5_packet.sites
+            ] + [
+                {
+                    "level": "subject",
+                    "check_kind": "subject_profile_review",
+                    "scope_id": subject.subject_ref,
+                    "status": "ready",
+                    "risk_ids": risk_ids_by_subject.get(subject.subject_ref, [])[:20],
+                    "evidence_refs": evidence_refs[:3],
+                    "locator": {"path": "facts.subject", "record_id": subject.subject_ref},
+                }
+                for subject in r5_packet.subjects
+            ],
+            entry_context=context,
         )
 
     def _daily_findings(
