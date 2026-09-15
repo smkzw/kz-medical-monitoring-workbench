@@ -1835,7 +1835,7 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
   const aiFindings = Array.isArray(projection.aiQueryFindings) ? projection.aiQueryFindings : [];
   const aiAccepted = aiFindings.filter((item) => item.state === "accepted").length;
   const aiEscalated = aiFindings.filter((item) => item.state === "escalated").length;
-  const aiGaps = aiFindings.filter((item) => item.state === "unverifiable_gap").length;
+  const aiGaps = aiFindings.filter((item) => item.state === "unverifiable_gap" || item.state === "coverage_gap").length;
   return (
     <div className="monitoring-view-stack monitoring-query-workspace" data-monitoring-query-count={risks.length}>
       {aiFindings.length ? (

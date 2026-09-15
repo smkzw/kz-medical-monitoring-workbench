@@ -16,6 +16,7 @@ workspace; the facts publication mode outputs load them when present.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -229,6 +230,49 @@ def _clue_fingerprint(candidate: Any) -> frozenset[str]:
     )
 
 
+_ENTITY_RE = re.compile(r"[\u4e00-\u9fa5]{2,8}|[A-Za-z][A-Za-z0-9-]{2,14}")
+
+
+def _clue_entities(candidate: Any) -> frozenset[str]:
+    """Medical-entity words cited in a clue's title/text/claims."""
+    payload = getattr(candidate, "structured_payload", {}) or {}
+    parts = [
+        str(getattr(candidate, "title", "") or ""),
+        str(getattr(candidate, "text", "") or ""),
+    ]
+    for claim in payload.get("claims", []) or []:
+        if isinstance(claim, Mapping):
+            parts.append(str(claim.get("text", "")))
+    words: set[str] = set()
+    for part in parts:
+        words.update(_ENTITY_RE.findall(part[:1200]))
+    return frozenset(words)
+
+
+def _clue_domain_pair(candidate: Any) -> frozenset[str]:
+    payload = getattr(candidate, "structured_payload", {}) or {}
+    return frozenset(str(d).upper() for d in payload.get("domains", []) or [])
+
+
+def _clues_agree(primary: Any, verifier: Any) -> bool:
+    """Pairing: shared evidence rows, or same domain-pair with shared entities.
+
+    Two independent models often cite different rows of the same subject while
+    describing the same finding (e.g. both discuss the hypertension history,
+    one citing MH rows and the other CM rows). Evidence overlap alone would
+    mis-file those as disagreements.
+    """
+    if _clue_fingerprint(primary) & _clue_fingerprint(verifier):
+        return True
+    domains = _clue_domain_pair(primary) & _clue_domain_pair(verifier)
+    if not domains:
+        return False
+    shared = _clue_entities(primary) & _clue_entities(verifier)
+    # 共享≥2个医学实体词（如"高血压"+"剂量"）视为同一发现的不同表述；
+    # 单个常见词（"受试者""记录"等）不足以配对。
+    return len(shared) >= 2
+
+
 def _finding_text(candidate: Any) -> dict[str, Any]:
     payload = getattr(candidate, "structured_payload", {}) or {}
     return {
@@ -295,15 +339,18 @@ def adjudicate(
                 }
             )
             continue
+        # 单侧cohort未完成 = 覆盖缺口而非分歧：对侧没有表达任何不同意见，
+        # 不应按"待用户裁决"推给医学用户；标记为待补核（重试/定向核实轮兜底）。
+        primary_failed = bool(primary_id) and not primary_candidates
+        verifier_failed = bool(verifier_id) and not verifier_candidates
         used_verifier: set[str] = set()
         for primary_clue in primary_candidates:
             primary_text = _finding_text(primary_clue)
-            primary_evidence = _clue_fingerprint(primary_clue)
             matched_verifier = None
             for verifier_clue in verifier_candidates:
                 if verifier_clue.candidate_id in used_verifier:
                     continue
-                if primary_evidence & _clue_fingerprint(verifier_clue):
+                if _clues_agree(primary_clue, verifier_clue):
                     matched_verifier = verifier_clue
                     break
             if matched_verifier is not None:
@@ -312,9 +359,19 @@ def adjudicate(
                     {
                         "subject_label": subject_label,
                         "state": "accepted",
-                        "reason_zh": "主分析与独立盲核均引用相同原始记录，线索成立，待医学复核。",
+                        "reason_zh": "主分析与独立盲核均确认该线索（相同原始记录或同一发现的两种表述），待医学复核。",
                         "primary": primary_text,
                         "verifier": _finding_text(matched_verifier),
+                    }
+                )
+            elif verifier_failed:
+                findings.append(
+                    {
+                        "subject_label": subject_label,
+                        "state": "coverage_gap",
+                        "reason_zh": "盲核cohort本轮未完成，该线索尚缺独立核对（非分歧），待补核后自动定级。",
+                        "primary": primary_text,
+                        "verifier": None,
                     }
                 )
             else:
@@ -322,7 +379,7 @@ def adjudicate(
                     {
                         "subject_label": subject_label,
                         "state": "escalated",
-                        "reason_zh": "仅主分析提出该线索，独立盲核未引用相同原始记录；不得强行接受，请医学监察员裁决。",
+                        "reason_zh": "仅主分析提出该线索，独立盲核未确认同一发现；请医学监察员核对。",
                         "primary": primary_text,
                         "verifier": None,
                     }
@@ -330,18 +387,30 @@ def adjudicate(
         for verifier_clue in verifier_candidates:
             if verifier_clue.candidate_id in used_verifier:
                 continue
-            findings.append(
-                {
-                    "subject_label": subject_label,
-                    "state": "escalated",
-                    "reason_zh": "仅独立盲核提出该线索（主分析遗漏）；不得强行接受，请医学监察员裁决。",
-                    "primary": None,
-                    "verifier": _finding_text(verifier_clue),
-                }
-            )
+            verifier_text = _finding_text(verifier_clue)
+            if primary_failed:
+                findings.append(
+                    {
+                        "subject_label": subject_label,
+                        "state": "coverage_gap",
+                        "reason_zh": "主分析cohort本轮未完成，该线索尚缺独立核对（非分歧），待补核后自动定级。",
+                        "primary": None,
+                        "verifier": verifier_text,
+                    }
+                )
+            else:
+                findings.append(
+                    {
+                        "subject_label": subject_label,
+                        "state": "escalated",
+                        "reason_zh": "仅独立盲核提出该线索（主分析未覆盖），请医学监察员核对。",
+                        "primary": None,
+                        "verifier": verifier_text,
+                    }
+                )
     accepted = sum(1 for item in findings if item["state"] == "accepted")
     escalated = sum(1 for item in findings if item["state"] == "escalated")
-    gaps = sum(1 for item in findings if item["state"] == "unverifiable_gap")
+    gaps = sum(1 for item in findings if item["state"] in ("unverifiable_gap", "coverage_gap"))
     artifact = {
         "kind": "aemh_cross_findings",
         "snapshot_ref": facts_snapshot_ref,
@@ -353,7 +422,8 @@ def adjudicate(
         "counts": {
             "accepted": accepted,
             "escalated": escalated,
-            "unverifiable_gap": gaps,
+            "coverage_gap": sum(1 for item in findings if item["state"] == "coverage_gap"),
+            "unverifiable_gap": sum(1 for item in findings if item["state"] == "unverifiable_gap"),
         },
         "cohort_status": cohort_status,
         "findings": findings,
@@ -368,11 +438,190 @@ def adjudicate(
     return artifact
 
 
+def submit_focused_verifications(
+    *,
+    verifier_service: Any,
+    project_id: str,
+    domains: Mapping[str, list[dict[str, Any]]],
+    escalated: Sequence[Mapping[str, Any]],
+    facts_snapshot_ref: str,
+    max_attempts: int = 2,
+) -> tuple[str, ...]:
+    """Focused second-round verification for one-sided findings.
+
+    For each escalated clue (proposed by only one cohort), the OPPOSITE
+    model receives the same subject evidence packet plus a focused
+    instruction: confirm the observation against the rows, or refute it with
+    a data_gap candidate. The harness then re-pairs; only genuine refusals
+    remain escalated for the human reviewer.
+    """
+
+    from services.api.app.monitoring_ai_contracts import (  # noqa: PLC0415
+        MonitoringAiInputRevision,
+        MonitoringAiSourceBinding,
+        MonitoringAiTaskType,
+    )
+
+    job_ids: list[str] = []
+    for index, item in enumerate(escalated):
+        subject_label = str(item.get("subject_label", "")).strip()
+        clue = (item.get("primary") or item.get("verifier")) or {}
+        title = str(clue.get("title", "")).strip()
+        text = str(clue.get("text", "")).strip()
+        if not subject_label or (not title and not text):
+            continue
+        try:
+            evidence, source_hashes = build_subject_evidence(domains, subject_label)
+        except ValueError:
+            continue
+        input_revision = MonitoringAiInputRevision(
+            project_id=project_id,
+            batch_revision=f"facts:{facts_snapshot_ref}",
+            mapping_revision="facts-materialized",
+            rule_pack_revision="facts-baseline-rules-v1",
+            sources=tuple(
+                MonitoringAiSourceBinding(
+                    source_entry_id=f"facts:{table}",
+                    source_content_sha256=digest,
+                )
+                for table, digest in sorted(source_hashes.items())
+            ),
+        )
+        payload = {
+            "subject_context": {
+                "subject_id": subject_label,
+                "batch_id": facts_snapshot_ref,
+                "batch_version": 1,
+                "mapping_revision": "facts-materialized",
+                "rule_snapshot_id": "facts-baseline",
+                "rule_pack_id": "facts-baseline-rules-v1",
+                "rule_output_sha256": content_hash({"rules": "baseline"}),
+                "selection_reasons": ["aemh_focused_verification"],
+                "domains": sorted({item2["raw_fields"]["domain"] for item2 in evidence}),
+                "domain_semantics": dict(_DOMAIN_ROLE),
+                "medical_boundary": (
+                    "仅对待核实观察给出独立判断；不得自动判定AE/MH漏报、"
+                    "方案违背或生成Query。"
+                ),
+                "analysis_contract": (
+                    "本轮是定向核实：请针对下方focus_clue描述的观察，逐条"
+                    "比对evidence_packet中的原始字段值。若观察与证据一致，"
+                    "输出恰好一个确认该观察的候选（引用支持它的证据行，"
+                    "域对≥2）；若观察与证据不一致或证据不足，输出恰好一个"
+                    "data_gap候选并说明反证或缺口。不要输出其他候选。"
+                ),
+                "focus_clue": {
+                    "finding_id": f"aemh-fv-{index:04d}",
+                    "title": title[:200],
+                    "text": text[:2000],
+                    "proposer": "primary" if item.get("primary") else "verifier",
+                },
+            },
+            "evidence_packet": evidence,
+        }
+        job_ids.append(
+            verifier_service.submit_task(
+                project_id=project_id,
+                task_type=MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS,
+                input_revision=input_revision,
+                input_payload=payload,
+                business_key=(
+                    f"aemh:{facts_snapshot_ref}:focus:{subject_label}:{index:04d}"
+                ),
+                prompt_version=VERIFIER_PROMPT_VERSION,
+                max_attempts=max_attempts,
+            ).job_id
+        )
+    return tuple(job_ids)
+
+
+def merge_focused_verifications(
+    *,
+    ai_repository: Any,
+    project_id: str,
+    findings: Sequence[Mapping[str, Any]],
+    focused_job_by_index: Mapping[int, str],
+) -> list[dict[str, Any]]:
+    """Merge focused verification results into the findings list.
+
+    An escalated clue whose focused-verification candidate agrees with it
+    (``_clues_agree`` against the ORIGINAL clue's fingerprint/entities) is
+    reclassified ``accepted`` with both wordings; a data_gap/other candidate
+    keeps it ``escalated`` (genuine refusal) with the verification text
+    attached.
+    """
+
+    merged: list[dict[str, Any]] = []
+    original_clue_fingerprints: dict[int, frozenset[str]] = {}
+
+    class _ClueView:
+        """Minimal duck-typed view over a stored finding for _clues_agree."""
+
+        def __init__(self, title: str, text: str, evidence_ids: frozenset[str], domains: set[str]) -> None:
+            self.title = title
+            self.text = text
+            self.evidence = tuple(
+                type("E", (), {"evidence_id": eid})() for eid in evidence_ids
+            )
+            self.structured_payload = {"domains": sorted(domains), "claims": [{"text": text}]}
+
+    for index, item in enumerate(findings):
+        if item.get("state") != "escalated":
+            merged.append(dict(item))
+            continue
+        job_id = focused_job_by_index.get(index)
+        if not job_id:
+            merged.append(dict(item))
+            continue
+        candidates = ai_repository.candidates(project_id, job_id)
+        clue = (item.get("primary") or item.get("verifier")) or {}
+        original_view = _ClueView(
+            title=str(clue.get("title", "")),
+            text=str(clue.get("text", "")),
+            evidence_ids=frozenset(
+                str(eid)
+                for claim in (clue.get("payload", {}).get("claims", []) or [])
+                if isinstance(claim, Mapping)
+                for eid in (claim.get("evidence_ids", []) or [])
+            ),
+            domains=set(clue.get("domains", []) or []),
+        )
+        verification_texts: list[str] = []
+        confirmed = False
+        for candidate in candidates:
+            payload = getattr(candidate, "structured_payload", {}) or {}
+            is_gap = any(
+                str(claim.get("kind", "")) == "data_gap"
+                for claim in payload.get("claims", []) or []
+                if isinstance(claim, Mapping)
+            )
+            verification_texts.append(str(getattr(candidate, "title", "")))
+            if not is_gap and _clues_agree(original_view, candidate):
+                confirmed = True
+                break
+        new_item = dict(item)
+        if confirmed:
+            new_item["state"] = "accepted"
+            new_item["reason_zh"] = (
+                "单侧线索经对侧模型定向核实确认（第二轮聚焦核对通过），待医学复核。"
+            )
+            new_item["focused_verification"] = verification_texts[:2]
+        else:
+            new_item["reason_zh"] = (
+                "定向核实未确认该线索（反证或证据不足），请医学监察员裁决。"
+            )
+            new_item["focused_verification"] = verification_texts[:2]
+        merged.append(new_item)
+    return merged
+
+
 __all__ = [
     "AeMhSubmission",
     "PRIMARY_PROMPT_VERSION",
     "VERIFIER_PROMPT_VERSION",
     "adjudicate",
     "build_subject_evidence",
+    "merge_focused_verifications",
     "submit_cohorts",
+    "submit_focused_verifications",
 ]
