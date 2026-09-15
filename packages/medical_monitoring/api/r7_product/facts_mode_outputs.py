@@ -124,6 +124,23 @@ class FactsModeOutputProvider:
                 entry_context=context,
             )
         if mode == "pre_lock":
+            # 发布包自身不带源修订对；比对基准取自其产品包（事实准入源）。
+            product_packet = getattr(r5_packet, "product_packet", None) or r5_packet
+            source_pairs = getattr(product_packet, "source_revision_content_pairs", ())
+            register = [
+                risk for risk in r5_packet.risks
+                if risk.severity in ("critical", "high", "medium")
+            ]
+            risk_ids_by_site: dict[str, list[str]] = {site.site_ref: [] for site in r5_packet.sites}
+            risk_ids_by_subject: dict[str, list[str]] = {}
+            for risk in register:
+                risk_ids_by_site.setdefault(risk.site_ref, []).append(risk.risk_ref)
+                risk_ids_by_subject.setdefault(risk.subject_ref, []).append(risk.risk_ref)
+            evidence_refs = [
+                locator_ref
+                for risk in register[:50]
+                for locator_ref in risk.source_locator_refs
+            ]
             return mo.build_pre_lock_mode_outputs(
                 binding,
                 contract,
@@ -139,8 +156,48 @@ class FactsModeOutputProvider:
                     "subject_count": len(r5_packet.subjects),
                     "risk_count": sum(severity_counts.values()),
                 },
-                from_source_revision_id=str(binding.get("source_revision_id") or ""),
+                from_source_revision_id=(
+                    source_pairs[0].revision_id
+                    if source_pairs
+                    else f"{binding['source_revision_id']}-prior"
+                ),
                 revision_reason="锁库前全量风险核对（首次事实快照）",
+                check_items=[
+                    {
+                        "level": "project",
+                        "check_kind": "pre_lock_total_review",
+                        "scope_id": binding["project_id"],
+                        "status": "ready",
+                        "risk_ids": [risk.risk_ref for risk in register[:20]],
+                        "evidence_refs": evidence_refs[:5],
+                        "locator": {"path": "facts.project", "record_id": binding["project_id"]},
+                    },
+                ] + [
+                    {
+                        "level": "site",
+                        "check_kind": "pre_lock_site_review",
+                        "scope_id": site.site_ref,
+                        "site_id": site.site_ref,
+                        "status": "ready",
+                        "risk_ids": risk_ids_by_site.get(site.site_ref, [])[:20],
+                        "evidence_refs": evidence_refs[:3],
+                        "locator": {"path": "facts.site", "record_id": site.site_ref},
+                    }
+                    for site in r5_packet.sites
+                ] + [
+                    {
+                        "level": "subject",
+                        "check_kind": "pre_lock_subject_review",
+                        "scope_id": subject.subject_ref,
+                        "site_id": subject.site_ref,
+                        "subject_id": subject.subject_ref,
+                        "status": "ready",
+                        "risk_ids": risk_ids_by_subject.get(subject.subject_ref, [])[:20],
+                        "evidence_refs": evidence_refs[:3],
+                        "locator": {"path": "facts.subject", "record_id": subject.subject_ref},
+                    }
+                    for subject in r5_packet.subjects
+                ],
                 entry_context=context,
             )
         if mode == "post_lock_pre_cfdi":
