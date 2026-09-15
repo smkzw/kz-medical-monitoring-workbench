@@ -342,18 +342,22 @@ class FactsModeOutputProvider:
 
         if self._artifacts_dir is None:
             return None
-        candidates = sorted(
-            glob.glob(
+        candidates = [
+            path
+            for path in glob.glob(
                 os.path.join(
                     str(self._artifacts_dir),
                     "aemh-findings-facts-snapshot-001*.json",
                 )
             )
-        )
+        ]
         if not candidates:
             return None
+        # 最新裁决覆盖：按修改时间取最新工件（字典序会把 .r5 样例排在
+        # .full1 全量之后）。
+        latest = max(candidates, key=os.path.getmtime)
         try:
-            with open(candidates[-1], encoding="utf-8") as handle:
+            with open(latest, encoding="utf-8") as handle:
                 artifact = json.load(handle)
         except (OSError, ValueError):
             return None
