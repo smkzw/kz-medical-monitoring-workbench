@@ -96,6 +96,41 @@ _DOMAIN_BY_TABLE: dict[str, tuple[str, str]] = {
 # 非临床事件表：人口学与表单目录不进入八轨事件流
 _EXCLUDED_TABLES = {"DM", "TOC"}
 
+
+def _is_roster_form_table(rows: Sequence[dict[str, Any]]) -> bool:
+    """Generic roster/form-page exclusion.
+
+    A sheet whose only date-ish column is the page-metadata timestamp
+    (PAGELMDT/最后修改时间) and which carries no term/test/scale columns is
+    a subject roster or CRF form page — administrative, not clinical events.
+    """
+
+    if not rows:
+        return False
+    columns = set(rows[0].keys())
+    clinical_date = {
+        c
+        for c in columns
+        if (
+            c.endswith("DAT")
+            or c.endswith("日期")
+            or c.endswith("STDAT")
+            # 变体日期列带序号后缀：EXDAT1/EXDAT2 等
+            or re.search(r"DAT[0-9]{1,2}$", c)
+        )
+        and c.upper() not in ("PAGELMDT",)
+    }
+    has_term = any(
+        c.endswith(("TERM", "TRT", "TEST", "ABCO"))
+        or c in _TERM_EXACT
+        or c.endswith("名称")
+        for c in columns
+    )
+    has_scale = any(
+        _SCALE_ITEM_RE.match(c) or _SCALE_MEAN_RE.match(c) for c in columns
+    )
+    return not (clinical_date or has_term or has_scale)
+
 # subtype 英文标识 → 中文兜底标签（行内无术语列时使用）
 _SUBTYPE_LABEL_ZH = {
     "ae": "不良事件",
@@ -200,6 +235,8 @@ _DOMAIN_COLUMN_SIGNATURES: tuple[tuple[tuple[str, ...], tuple[str, str]], ...] =
     # 试验药：给药+剂量调整/依从性
     (("EXDOSE", "EXDAT"), ("ip", "ip_dose")),
     (("EXTRT", "EXDOSE"), ("ip", "ip_dose")),
+    # 给药执行页（通用形态）：{前缀}YN+{前缀}DAT+给药频次/时间列（ECA/ECB/EX等）
+    (("ECAYN", "ECADAT", "ECADOFRQ"), ("ip", "ip_dose")),
     # 实验室：结果+参考范围/单位
     (("实验室指标名称", "结果"), ("lab_exam", "lab")),
     (("LBTEST", "LBORRES"), ("lab_exam", "lab")),
@@ -213,6 +250,9 @@ _DOMAIN_COLUMN_SIGNATURES: tuple[tuple[tuple[str, ...], tuple[str, str]], ...] =
     (("IECAT", "IEYN"), ("protocol_compliance", "protocol_deviation")),
     (("PDTERM", "PDDAT"), ("protocol_compliance", "protocol_deviation")),
 )
+# 量表列模式：NNNNQ1/DLQIQ1类条目列、NNNNMEAN/NRSMEAN类均值列、*TSCOR/*SCOR总分列
+_SCALE_ITEM_RE = re.compile(r"^[A-Z]{2,6}(?:Q|SC)[0-9]{1,3}$")
+_SCALE_MEAN_RE = re.compile(r"^[A-Z]{2,6}MEAN$|^[A-Z]{2,6}TSCOR$|^[A-Z]{2,6}SCORE$|^[A-Z]{2,6}TS$")
 
 
 def _infer_domain_by_columns(
@@ -232,6 +272,11 @@ def _infer_domain_by_columns(
         return ("ip", "ip_dose")
     if "实验室指标名称" in columns or any(c.startswith("LB") for c in columns):
         return ("lab_exam", "lab")
+    # 量表/疗效评分：多个条目列或总分/均值列（SCORAD/DLQI/NRS/PROMIS等形态）
+    scale_items = [c for c in columns if _SCALE_ITEM_RE.match(c)]
+    scale_scores = [c for c in columns if _SCALE_MEAN_RE.match(c)]
+    if len(scale_items) >= 2 or scale_scores:
+        return ("symptom_efficacy", "scale")
     return ("protocol_compliance", "protocol_deviation")
 
 
@@ -468,7 +513,7 @@ class FactsPublicationAuthorityProvider:
 
         # 八轨事件
         for table, rows in domains.items():
-            if table in _EXCLUDED_TABLES:
+            if table in _EXCLUDED_TABLES or _is_roster_form_table(rows):
                 continue
             domain, subtype = _domain_for(table, rows)
             raw_date_keys = [k for k in rows[0].keys() if k.endswith("DAT") or k in ("SHDAT",)] if rows else []

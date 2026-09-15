@@ -158,6 +158,25 @@ def _protocol_profile_payload(workspace: Path | None) -> dict[str, Any] | None:
     return payload
 
 
+def _layout_payload(workspace: Path | None) -> dict[str, Any] | None:
+    """Load the listing layout profile and project the contract summary."""
+
+    from .listing_layout import layout_artifact_path, layout_summary_for_contract  # noqa: PLC0415
+
+    if workspace is None or not workspace.is_dir():
+        return None
+    artifact = layout_artifact_path(workspace)
+    if not artifact.is_file():
+        return None
+    try:
+        import json as _json
+
+        profile = _json.loads(artifact.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return layout_summary_for_contract(profile)
+
+
 def submit_cohorts(
     *,
     primary_service: Any,
@@ -179,6 +198,7 @@ def submit_cohorts(
     verifier_ids: list[str] = []
     used: list[str] = []
     profile_payload = _protocol_profile_payload(protocol_workspace)
+    layout_payload = _layout_payload(protocol_workspace)
     for subject_label in subject_labels:
         try:
             evidence, source_hashes = build_subject_evidence(domains, subject_label)
@@ -219,6 +239,7 @@ def submit_cohorts(
                     "AE/MH漏报、方案违背或生成Query。"
                 ),
                 "protocol_profile": profile_payload,
+                "listing_layout": layout_payload,
                 "analysis_contract": (
                     "每个线索候选的claims.evidence_ids必须合计引用至少两个"
                     "不同domain（如AE+MH、CM+EX、AE+CM）的evidence_id；"
