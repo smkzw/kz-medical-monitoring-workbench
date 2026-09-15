@@ -170,12 +170,68 @@ def _term_keys_for(table: str, columns: list[str]) -> list[str]:
     return ordered
 
 
-def _domain_for(table: str) -> tuple[str, str]:
+def _domain_for(table: str, rows: Sequence[dict[str, Any]] | None = None) -> tuple[str, str]:
     if table in _DOMAIN_BY_TABLE:
         return _DOMAIN_BY_TABLE[table]
     for prefix, mapping in _DOMAIN_BY_TABLE.items():
         if table.startswith(prefix):
             return mapping
+    # 通用列签名推断：不看表名，看这张表实际承载的列/值形态——
+    # 不同项目的listing表名各异（AE/AELOG/不良事件…），但语义列签名稳定。
+    if rows:
+        columns = set(rows[0].keys()) if rows else set()
+        return _infer_domain_by_columns(table, columns)
+    return ("protocol_compliance", "protocol_deviation")
+
+
+# 列签名 → (domain, subtype)。签名按强度排序，首个命中即返回。
+# 组合签名（多列同时存在）优先于单列签名。
+_DOMAIN_COLUMN_SIGNATURES: tuple[tuple[tuple[str, ...], tuple[str, str]], ...] = (
+    # 不良事件：术语+严重程度+与试验药关系（CTCAE分级版本由方案解构层给出）
+    (("AETERM", "AESEV"), ("ae", "ae")),
+    (("AETERM", "AESER"), ("ae", "ae")),
+    (("AESEV", "AEREL"), ("ae", "ae")),
+    # 病史：术语+起止+持续
+    (("MHTERM", "MHSTDAT"), ("mh", "mh")),
+    (("MHTERM", "MHONGO"), ("mh", "mh")),
+    # 合并用药：药物+剂量单位+给药途径
+    (("CMTRT", "CMDOSU"), ("cm", "concomitant_medication")),
+    (("CMTRT", "CMROUTE"), ("cm", "concomitant_medication")),
+    # 试验药：给药+剂量调整/依从性
+    (("EXDOSE", "EXDAT"), ("ip", "ip_dose")),
+    (("EXTRT", "EXDOSE"), ("ip", "ip_dose")),
+    # 实验室：结果+参考范围/单位
+    (("实验室指标名称", "结果"), ("lab_exam", "lab")),
+    (("LBTEST", "LBORRES"), ("lab_exam", "lab")),
+    (("LBTEST", "单位"), ("lab_exam", "lab")),
+    # 检查：项目+结论
+    (("VSTEST", "VSORRES"), ("lab_exam", "exam")),
+    (("PETEST", "PECO"), ("lab_exam", "exam")),
+    # 疗效/量表：评分组
+    (("RQLSC1", "RQLYN"), ("symptom_efficacy", "scale")),
+    # 方案符合：入排/偏离
+    (("IECAT", "IEYN"), ("protocol_compliance", "protocol_deviation")),
+    (("PDTERM", "PDDAT"), ("protocol_compliance", "protocol_deviation")),
+)
+
+
+def _infer_domain_by_columns(
+    table: str, columns: set[str]
+) -> tuple[str, str]:
+    for required, mapping in _DOMAIN_COLUMN_SIGNATURES:
+        if all(col in columns for col in required):
+            return mapping
+    # 单列强信号兜底
+    if any(c.startswith("AE") and c.endswith("TERM") for c in columns):
+        return ("ae", "ae")
+    if any(c.startswith("MH") and c.endswith("TERM") for c in columns):
+        return ("mh", "mh")
+    if any(c.endswith("TRT") and c.startswith("CM") for c in columns):
+        return ("cm", "concomitant_medication")
+    if any(c.startswith("EX") and c.endswith("DAT") for c in columns):
+        return ("ip", "ip_dose")
+    if "实验室指标名称" in columns or any(c.startswith("LB") for c in columns):
+        return ("lab_exam", "lab")
     return ("protocol_compliance", "protocol_deviation")
 
 
@@ -414,7 +470,7 @@ class FactsPublicationAuthorityProvider:
         for table, rows in domains.items():
             if table in _EXCLUDED_TABLES:
                 continue
-            domain, subtype = _domain_for(table)
+            domain, subtype = _domain_for(table, rows)
             raw_date_keys = [k for k in rows[0].keys() if k.endswith("DAT") or k in ("SHDAT",)] if rows else []
             # 起始日期列优先（*STDAT/{表}DAT），结束列（*ENDAT）不充当起始
             date_keys = sorted(raw_date_keys, key=lambda k: (1 if "END" in k.upper() else 0, raw_date_keys.index(k)))
@@ -552,7 +608,7 @@ class FactsPublicationAuthorityProvider:
         # 治疗：EX* 任一日期列的最早精确日期；兜底随机日期
         treatment_by_subject: dict[str, tuple[date, str, int]] = {}
         for table, rows in domains.items():
-            if _domain_for(table)[0] != "ip":
+            if _domain_for(table, rows)[0] != "ip":
                 continue
             date_cols = [c for c in (rows[0].keys() if rows else []) if c.endswith("DAT")]
             for index, row in enumerate(rows):
