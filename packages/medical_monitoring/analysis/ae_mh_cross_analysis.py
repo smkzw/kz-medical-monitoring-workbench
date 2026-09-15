@@ -19,7 +19,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 from ..intelligence.primitives import content_hash
 
@@ -123,6 +123,41 @@ def build_subject_evidence(
     return evidence, source_hashes
 
 
+_PROFILE_CACHE: dict[str, Any] = {"signature": None, "profile": None}
+
+
+def _protocol_profile_payload(workspace: Path | None) -> dict[str, Any] | None:
+    """Load the project's protocol/IB profile (cached per process).
+
+    Injected into every analysis job so models know the CTCAE grading
+    version, MedDRA version and the drug-background risk direction —
+    derived from documents, never hard-coded per project.
+    """
+    from .protocol_profile import load_or_build_profile  # noqa: PLC0415
+
+    if workspace is None or not workspace.is_dir():
+        return None
+    try:
+        signature = str(workspace)
+        if _PROFILE_CACHE["signature"] == signature and _PROFILE_CACHE["profile"] is not None:
+            profile = _PROFILE_CACHE["profile"]
+        else:
+            profile = load_or_build_profile(workspace)
+            _PROFILE_CACHE.update(signature=signature, profile=profile)
+    except Exception:
+        return None
+    if profile is None:
+        return None
+    payload = profile.to_payload()
+    if payload.get("unknown_visible"):
+        # 覆盖不足可见：没有方案证据时显式告知模型不要假设分级标准。
+        return {
+            "note_zh": "方案/IB尚未注册或未识别到分级标准版本；不要假设CTCAE版本，严重程度按原始记录表述。",
+            "unknown_visible": True,
+        }
+    return payload
+
+
 def submit_cohorts(
     *,
     primary_service: Any,
@@ -132,6 +167,7 @@ def submit_cohorts(
     subject_labels: Sequence[str],
     facts_snapshot_ref: str,
     max_attempts: int = 2,
+    protocol_workspace: Optional[Path] = None,
 ) -> AeMhSubmission:
     """Submit primary + blind verifier jobs for each subject."""
 
@@ -142,6 +178,7 @@ def submit_cohorts(
     primary_ids: list[str] = []
     verifier_ids: list[str] = []
     used: list[str] = []
+    profile_payload = _protocol_profile_payload(protocol_workspace)
     for subject_label in subject_labels:
         try:
             evidence, source_hashes = build_subject_evidence(domains, subject_label)
@@ -181,13 +218,17 @@ def submit_cohorts(
                     "仅生成待当前医学用户复核的跨表线索；不得自动判定"
                     "AE/MH漏报、方案违背或生成Query。"
                 ),
+                "protocol_profile": profile_payload,
                 "analysis_contract": (
                     "每个线索候选的claims.evidence_ids必须合计引用至少两个"
                     "不同domain（如AE+MH、CM+EX、AE+CM）的evidence_id；"
                     "只引用单一domain证据的候选会被系统直接拒绝。"
                     "evidence_packet每条证据的raw_fields.domain标明了所属域。"
                     "AE强度、严重性、预期性、因果性与监查优先级必须分开表述，"
-                    "不得合并；证据不足时输出data_gap主张，不得补造。"
+                    "不得合并；严重程度表述必须遵循subject_context."
+                    "protocol_profile.ctcae_version对应的分级标准（若"
+                    "unknown_visible为true则按原始记录表述并标注口径未知）；"
+                    "证据不足时输出data_gap候选，不得补造。"
                 ),
             },
             "evidence_packet": evidence,
@@ -509,6 +550,10 @@ def submit_focused_verifications(
                     "输出恰好一个确认该观察的候选（引用支持它的证据行，"
                     "域对≥2）；若观察与证据不一致或证据不足，输出恰好一个"
                     "data_gap候选并说明反证或缺口。不要输出其他候选。"
+                    "候选对象只允许输出schema定义的字段（candidate_type/"
+                    "title/text/claims/evidence等），严禁添加"
+                    "system_generated_evidence等任何额外字段；证据引用只能"
+                    "使用evidence_packet中已有的evidence_id。"
                 ),
                 "focus_clue": {
                     "finding_id": f"aemh-fv-{index:04d}",
