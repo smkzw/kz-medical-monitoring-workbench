@@ -142,4 +142,50 @@ class FactsPublicationAdapter:
         return packet
 
 
-__all__ = ["FACTS_AUTHORITY_CONTRACT_ID", "FactsPublicationAdapter"]
+class FactsProviderDispatcher:
+    """Route to the per-project facts provider at call time.
+
+    Keeps the R5/R7 routers project-generic: the dispatcher holds one
+    provider per materialized-facts project workspace and resolves by the
+    project reference carried on each request/identity.
+    """
+
+    fixture_mode = False
+
+    def __init__(self, providers_by_project: dict[str, Any]) -> None:
+        self._providers = dict(providers_by_project)
+        self._fallback = next(iter(self._providers.values()), None)
+
+    def _provider_for(self, project_ref: Any) -> Any:
+        provider = self._providers.get(str(project_ref or ""))
+        if provider is not None:
+            return provider
+        if len(self._providers) == 1:
+            return self._fallback
+        raise KeyError(
+            f"no materialized facts provider for project {project_ref!r} "
+            f"(available: {sorted(self._providers)})"
+        )
+
+    def get_packet(
+        self,
+        project_ref: str,
+        run_ref: Optional[str] = None,
+        snapshot_ref: Optional[str] = None,
+        cutoff_ref: Optional[str] = None,
+    ) -> Any:
+        return self._provider_for(project_ref).get_packet(
+            project_ref, run_ref, snapshot_ref, cutoff_ref
+        )
+
+    def get_authority(self, identity: Any, **_: Any) -> Any:
+        return self._provider_for(getattr(identity, "project_ref", "")).get_authority(
+            identity
+        )
+
+
+__all__ = [
+    "FACTS_AUTHORITY_CONTRACT_ID",
+    "FactsPublicationAdapter",
+    "FactsProviderDispatcher",
+]

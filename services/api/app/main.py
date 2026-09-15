@@ -3670,15 +3670,27 @@ from packages.medical_monitoring.projections.facts_publication import (  # noqa:
     FactsPublicationAuthorityProvider as _FactsPublicationProvider,
 )
 
+# Generic multi-project facts lane: every project workspace with a
+# materialized-facts artifact directory gets its own provider; no project
+# identity is special-cased.
+_r7_facts_providers_by_project: dict[str, Any] = {}
+_r7_facts_root = RUNTIME_DIR / "medical_monitoring_r7"
+if _r7_facts_root.is_dir():
+    for _facts_workspace in sorted(_r7_facts_root.iterdir()):
+        if not (_facts_workspace / "runtime" / "artifacts").is_dir():
+            continue
+        _project_dir_name = _facts_workspace.name
+        _r7_facts_providers_by_project[_project_dir_name] = (
+            _FactsPublicationProvider(
+                _facts_workspace, project_label=_project_dir_name
+            )
+        )
 _FACTS_WORKSPACE_DIR = (
     RUNTIME_DIR / "medical_monitoring_r7" / "proj_mgk10_sar_real"
 )
-if (_FACTS_WORKSPACE_DIR / "runtime" / "artifacts").is_dir():
-    _r7_facts_publication_provider = _FactsPublicationProvider(
-        _FACTS_WORKSPACE_DIR, project_label="MG-K10-SAR"
-    )
-else:
-    _r7_facts_publication_provider = None
+_r7_facts_publication_provider = _r7_facts_providers_by_project.get(
+    "proj_mgk10_sar_real"
+)
 if _r5_s7_fixture_mode:
     from packages.medical_monitoring.api.r7_product.synthetic_publication import (
         SyntheticModeOutputProvider,
@@ -3712,24 +3724,22 @@ if _r5_s7_fixture_mode:
 def _r7_real_setup_inputs(canonical_project_id: str):
     """Facts-backed R7 setup inputs for a project with materialized facts.
 
-    The single current snapshot mirrors the verified fact materialization of
-    the newest admitted attempt; published baselines stay empty until runs
-    of the same mode have been published.
+    Generic across projects: any project workspace under
+    ``medical_monitoring_r7/<project>/runtime/artifacts`` with a verified
+    materialization serves the facts lane — no project identity is special.
     """
     from packages.medical_monitoring.admission import fact_materialization as _fm
     from packages.medical_monitoring.runtime import run_setup as _rs
 
+    workspace = RUNTIME_DIR / "medical_monitoring_r7" / canonical_project_id
+    provider = _r7_facts_providers_by_project.get(canonical_project_id)
     if (
-        _r7_facts_publication_provider is None
-        or canonical_project_id != "proj_mgk10_sar_real"
-        or not _fm.latest_fact_materialization_ready(
-            canonical_project_id, _FACTS_WORKSPACE_DIR
-        )
+        provider is None
+        or not (workspace / "runtime" / "artifacts").is_dir()
+        or not _fm.latest_fact_materialization_ready(canonical_project_id, workspace)
     ):
         raise _rs.RunSetupError("run_data_not_ready")
-    packet = _r7_facts_publication_provider.get_packet(
-        canonical_project_id, None, None, None
-    )
+    packet = provider.get_packet(canonical_project_id, None, None, None)
     cutoff = max(
         (
             e.start_date
@@ -3741,7 +3751,7 @@ def _r7_real_setup_inputs(canonical_project_id: str):
     imported_at = ""
     fact_summary: dict = {}
     try:
-        _admission_dir = _FACTS_WORKSPACE_DIR / "admissions"
+        _admission_dir = workspace / "admissions"
         attempts = [
             _fm.load_attempt(_admission_dir, _attempt_id, verify_files=False)
             for _attempt_id in _fm.list_attempt_ids(_admission_dir)
@@ -3751,7 +3761,7 @@ def _r7_real_setup_inputs(canonical_project_id: str):
                 attempts, key=lambda item: (item.created_at, item.attempt_id)
             )
             imported_at = str(_latest_attempt.created_at or "")
-            _store = _fm._store(_FACTS_WORKSPACE_DIR)
+            _store = _fm._store(workspace)
             try:
                 _persisted = _store.get_domain_object(
                     _fm.FACT_MATERIALIZATION_KIND, _latest_attempt.attempt_id
@@ -3790,19 +3800,24 @@ def _r7_real_setup_inputs(canonical_project_id: str):
 
 _r7_facts_mode_output_provider = None
 _r7_facts_publication_adapter = None
-if _r7_facts_publication_provider is not None:
+if _r7_facts_providers_by_project:
     from packages.medical_monitoring.api.r7_product.facts_mode_outputs import (  # noqa: E402
         FactsModeOutputProvider as _FactsModeOutputProvider,
     )
     from packages.medical_monitoring.api.r7_product.facts_publication_adapter import (  # noqa: E402
         FactsPublicationAdapter as _FactsPublicationAdapter,
+        FactsProviderDispatcher as _FactsProviderDispatcher,
     )
 
+    _r7_facts_adapters_by_project = {
+        project: _FactsPublicationAdapter(provider)
+        for project, provider in _r7_facts_providers_by_project.items()
+    }
+    _r7_facts_publication_adapter = _FactsProviderDispatcher(
+        _r7_facts_adapters_by_project
+    )
     _r7_facts_mode_output_provider = _FactsModeOutputProvider(
         _FACTS_WORKSPACE_DIR / "runtime" / "artifacts"
-    )
-    _r7_facts_publication_adapter = _FactsPublicationAdapter(
-        _r7_facts_publication_provider
     )
 
 
