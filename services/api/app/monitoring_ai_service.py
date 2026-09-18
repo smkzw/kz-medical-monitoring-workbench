@@ -3468,6 +3468,10 @@ class MonitoringAiService:
                 "不足两个domain的候选必须补引其他domain的对照证据行"
                 "（如用药记录对照病史、访视日期对照给药窗口），无法补引就"
                 "删除该候选——系统会直接拒绝任何单domain候选。"
+                " 候选对象只允许schema定义的字段（candidate_type/title/text/"
+                "claims/evidence/structured字段等），严禁添加"
+                "system_generated_evidence等任何额外字段；证据引用只能"
+                "使用evidence_packet中已有的evidence_id。"
             )
         elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS:
             system_prompt += (
@@ -3900,8 +3904,24 @@ class MonitoringAiService:
                         MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
                         MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
                     }
-                    else 24_000
-                )
+                    # 跨表线索经独立盲核角色运行（deepseek-v4.1-flash等
+                    # 思考模型在max档推理即耗数万token），24_000默认预算
+                    # 会被推理耗尽导致正文为空；预算按角色profile的
+                    # OUTPUT_TOKEN_BUDGET（65_536）给出。
+                    else int(
+                        self._monitoring_provider_env(
+                            # 跨表线索的盲核角色跑在独立verifier runtime上
+                            # （deepseek-v4.1-flash等思考模型在max档推理即耗
+                            # 数万token），预算按其profile的
+                            # OUTPUT_TOKEN_BUDGET（65_536）取。
+                            resolve_monitoring_verifier_ai_runtime().env
+                            if job.profile_id.startswith(
+                                "medical_monitoring_verifier_ai__"
+                            )
+                            else resolve_monitoring_ai_runtime().env
+                        ).get("WORKBENCH_AI_OUTPUT_TOKEN_BUDGET", "0")
+                        or 48_000
+                    )                )
             ),
         )
 
