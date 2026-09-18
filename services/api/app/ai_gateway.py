@@ -1368,10 +1368,17 @@ def _chat_completion_content(response_body: str) -> str:
         payload = json.loads(response_body)
     except json.JSONDecodeError:
         return _sse_completion_content(response_body)
-    content = payload["choices"][0]["message"]["content"]
-    if not isinstance(content, str) or not content:
-        raise ValueError("chat completion content is empty")
-    return content
+    message = payload["choices"][0]["message"]
+    content = message.get("content")
+    if isinstance(content, str) and content:
+        return content
+    # 思考模型（如 deepseek-v4.1-flash）在 max 思考档可能把推理写入
+    # reasoning 字段而正文为空；把推理文本作为正文回退，交给上层
+    # JSON 解析/修复器处理，而不是直接判空失败。
+    reasoning = message.get("reasoning") or message.get("reasoning_content")
+    if isinstance(reasoning, str) and reasoning.strip():
+        return reasoning
+    raise ValueError("chat completion content is empty")
 
 
 def _sse_completion_content(response_body: str) -> str:
