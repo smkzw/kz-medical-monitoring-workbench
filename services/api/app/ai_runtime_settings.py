@@ -66,6 +66,9 @@ class AiProviderProfile:
     # are DATA on the profile, never if-model-name branches in code.
     output_token_budget: int = 0          # 0 = task default
     output_discipline: str = ""           # e.g. "strict_single_json"
+    # Provider-specific request headers (JSON object string), e.g.
+    # {"x-opencode-session": "..."} — transport-level data, not model branching.
+    extra_headers_json: str = ""
 
 
 class AiProviderProfileUpsertRequest(BaseModel):
@@ -613,6 +616,10 @@ class AiRuntimeSettingsStore:
                 **(
                     {"WORKBENCH_AI_OUTPUT_DISCIPLINE": profile.output_discipline}
                     if profile.output_discipline else {}
+                ),
+                **(
+                    {"WORKBENCH_AI_EXTRA_HEADERS": profile.extra_headers_json}
+                    if profile.extra_headers_json else {}
                 ),
                 "WORKBENCH_AI_EXPECTED_RESPONSE_MODEL": (
                     profile.expected_response_model or profile.model
