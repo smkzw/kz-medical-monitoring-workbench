@@ -1082,6 +1082,7 @@ class OpenAICompatibleAiProvider:
         max_attempts: Optional[int] = None,
         default_thinking: Optional[str] = None,
         default_reasoning_effort: Optional[str] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
     ):
         if not base_url.strip():
             raise AiGatewayConfigurationError("AI provider base_url is required")
@@ -1096,6 +1097,9 @@ class OpenAICompatibleAiProvider:
         self.transport_name = "openai_compatible"
         self.timeout_seconds = timeout_seconds
         self.expected_response_model = expected_response_model.strip()
+        # Provider-specific request headers (e.g. x-opencode-session) —
+        # configured as data on the profile, never per-model code branches.
+        self.extra_headers: Dict[str, str] = dict(extra_headers or {})
         self.default_thinking = (
             default_thinking.strip().lower()
             if isinstance(default_thinking, str) and default_thinking.strip()
@@ -1151,8 +1155,12 @@ class OpenAICompatibleAiProvider:
             f"{self.base_url}/chat/completions",
             data=json.dumps(request_payload, ensure_ascii=False).encode("utf-8"),
             headers={
+                # 默认产品UA：urllib默认签名（Python-urllib/x）会被部分
+                # 提供商的Cloudflare规则按签名封禁（error 1010）。
+                "User-Agent": "kz-workbench-ai/1.0",
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
+                **self.extra_headers,
             },
             method="POST",
         )
@@ -1625,12 +1633,26 @@ def configured_ai_provider_from_env(
         )
     if not base_url or not api_key or not model:
         return DisabledAiProvider()
+    extra_headers: Dict[str, str] = {}
+    raw_extra = values.get("WORKBENCH_AI_EXTRA_HEADERS", "").strip()
+    if raw_extra:
+        try:
+            parsed_extra = json.loads(raw_extra)
+            if isinstance(parsed_extra, dict):
+                extra_headers = {
+                    str(k): str(v)
+                    for k, v in parsed_extra.items()
+                    if str(k).strip() and v is not None
+                }
+        except json.JSONDecodeError:
+            pass
     return OpenAICompatibleAiProvider(
         base_url=base_url,
         api_key=api_key,
         model_name=model,
         provider_name=provider,
         timeout_seconds=float(values.get("WORKBENCH_AI_TIMEOUT_SECONDS", "300")),
+        extra_headers=extra_headers,
         expected_response_model=(
             model
             if provider in {"deepseek", ALIBABA_TOKEN_PLAN_PROVIDER}
