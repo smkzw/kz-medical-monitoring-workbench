@@ -755,7 +755,13 @@ class AiRoleRuntimeSettingsStore:
             raise ValueError(f"{role_id} binding model does not match provider profile")
         values = self.provider_store.profile_env(profile, base_env)
         values["WORKBENCH_AI_MODEL"] = binding.model
-        values["WORKBENCH_AI_EXPECTED_RESPONSE_MODEL"] = binding.model
+        if profile.expected_response_model:
+            values["WORKBENCH_AI_EXPECTED_RESPONSE_MODEL"] = binding.model
+        else:
+            # 空expected=该角色profile不主张响应模型身份断言（如本地MTPLX
+            # 端点跨重启会切换模型变体ID）——移除该键以跳过网关与resolver
+            # 的身份校验。
+            values.pop("WORKBENCH_AI_EXPECTED_RESPONSE_MODEL", None)
         values["WORKBENCH_AI_ROLE"] = role_id
         values["WORKBENCH_AI_THINKING"] = binding.thinking
         values["WORKBENCH_AI_REASONING_EFFORT"] = binding.reasoning_effort
