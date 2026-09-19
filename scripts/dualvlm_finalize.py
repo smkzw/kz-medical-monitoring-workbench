@@ -48,10 +48,18 @@ def main() -> None:
         for subj, jid in zip(batch["subjects"], batch["primary"])
         if ok(jid)
     }
-    # p2主作业（glm-5.3-flash重发代）覆盖MTPLX代的completed
+    # p2主作业（glm重发代）覆盖MTPLX代的completed
     try:
         p2map = json.load(open("/tmp/aemh_dualvlm_batch_p2_primary.json"))
         for subj, jid in p2map.items():
+            if ok(jid):
+                prim_map[subj] = jid
+    except (OSError, ValueError):
+        pass
+    # p4主作业（glm重试代）覆盖前代completed
+    try:
+        p4map = json.load(open("/tmp/aemh_dualvlm_batch_p4_primary.json"))
+        for subj, jid in p4map.items():
             if ok(jid):
                 prim_map[subj] = jid
     except (OSError, ValueError):
