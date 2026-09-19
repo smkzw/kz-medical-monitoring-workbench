@@ -1507,7 +1507,9 @@ def _resolve_monitoring_role_runtime(
             "WORKBENCH_AI_EXPECTED_RESPONSE_MODEL",
             "",
         ).strip()
-        if expected_response_model != model:
+        # 空expected=该角色profile不主张响应模型身份断言（本地端点跨重启
+        # 会切换模型变体ID）；非空时才要求与请求模型一致。
+        if expected_response_model and expected_response_model != model:
             return MonitoringAiRuntimeBinding.unavailable(
                 "independent AI expected response model does not match the "
                 "selected model",
@@ -8317,7 +8319,9 @@ class MonitoringAiService:
             "WORKBENCH_AI_EXPECTED_RESPONSE_MODEL",
             "",
         ).strip()
-        if expected != runtime.model:
+        # 空expected=该角色profile不主张响应模型身份断言（本地端点跨重启
+        # 会切换模型变体ID）；非空时才要求与绑定模型一致。
+        if expected and expected != runtime.model:
             raise MonitoringAiResponseIdentityError(
                 "independent AI expected response model identity is missing "
                 "or mismatched"

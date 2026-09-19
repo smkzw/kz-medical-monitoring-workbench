@@ -621,12 +621,19 @@ class AiRuntimeSettingsStore:
                     {"WORKBENCH_AI_EXTRA_HEADERS": profile.extra_headers_json}
                     if profile.extra_headers_json else {}
                 ),
-                "WORKBENCH_AI_EXPECTED_RESPONSE_MODEL": (
-                    profile.expected_response_model or profile.model
+                **(
+                    # 空expected=不校验响应模型身份（本地端点跨重启会切换
+                    # 模型变体ID）；此时必须从env中移除该键，否则下游
+                    # 网关会拿base_env里的旧值做身份校验。
+                    {"WORKBENCH_AI_EXPECTED_RESPONSE_MODEL": ""}
+                    if profile.expected_response_model
+                    else {}
                 ),
                 "WORKBENCH_AI_API_KEY": api_key,
             }
         )
+        if not profile.expected_response_model:
+            values.pop("WORKBENCH_AI_EXPECTED_RESPONSE_MODEL", None)
         if profile.api_key_env and api_key:
             values[profile.api_key_env] = api_key
         return values
