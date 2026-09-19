@@ -508,6 +508,7 @@ def submit_focused_verifications(
     escalated: Sequence[Mapping[str, Any]],
     facts_snapshot_ref: str,
     max_attempts: int = 2,
+    primary_service: Any = None,
 ) -> tuple[str, ...]:
     """Focused second-round verification for one-sided findings.
 
@@ -515,7 +516,10 @@ def submit_focused_verifications(
     model receives the same subject evidence packet plus a focused
     instruction: confirm the observation against the rows, or refute it with
     a data_gap candidate. The harness then re-pairs; only genuine refusals
-    remain escalated for the human reviewer.
+    remain escalated for the human reviewer. Clues proposed by the primary
+    cohort go to the verifier service; clues proposed by the verifier cohort
+    go to the primary service when one is supplied (真对侧盲核), otherwise
+    they fall back to the verifier service.
     """
 
     from services.api.app.monitoring_ai_contracts import (  # noqa: PLC0415
@@ -585,16 +589,26 @@ def submit_focused_verifications(
             },
             "evidence_packet": evidence,
         }
+        # 对侧定向核实：主侧提出的线索由盲核模型核实；盲核侧提出的线索由
+        # 主模型核实（真对侧盲核），未提供主服务时回退盲核服务。
+        if not item.get("primary") and primary_service is not None:
+            service = primary_service
+            prompt_version = PRIMARY_PROMPT_VERSION
+            side_tag = "focus-p"
+        else:
+            service = verifier_service
+            prompt_version = VERIFIER_PROMPT_VERSION
+            side_tag = "focus"
         job_ids.append(
-            verifier_service.submit_task(
+            service.submit_task(
                 project_id=project_id,
                 task_type=MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS,
                 input_revision=input_revision,
                 input_payload=payload,
                 business_key=(
-                    f"aemh:{facts_snapshot_ref}:focus:{subject_label}:{index:04d}"
+                    f"aemh:{facts_snapshot_ref}:{side_tag}:{subject_label}:{index:04d}"
                 ),
-                prompt_version=VERIFIER_PROMPT_VERSION,
+                prompt_version=prompt_version,
                 max_attempts=max_attempts,
             ).job_id
         )
