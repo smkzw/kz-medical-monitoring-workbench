@@ -8369,8 +8369,11 @@ class MonitoringAiService:
             raise MonitoringAiRuntimeUnavailableError(
                 "configured provider identity does not match the submitted job"
             )
+        # 空expected_response_model=该角色profile不主张响应模型身份断言
+        # （本地MTPLX端点跨重启会切换模型变体ID）；非空时才要求一致。
         if (
             str(getattr(provider, "expected_response_model", "")).strip()
+            and str(getattr(provider, "expected_response_model", "")).strip()
             != job.requested_model
         ):
             raise MonitoringAiResponseIdentityError(
