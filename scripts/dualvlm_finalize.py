@@ -58,6 +58,29 @@ def main() -> None:
     if sentinel.exists() and not dry_run:
         print("finalize already done (sentinel present); skip")
         return
+    # 预检：批跑（p4/p5主lane）必须全终态才允许收尾——防旧自动化入口
+    # 在批跑中途按过时映射早发布，也防大规模核实波挤占批跑队列。
+    if not dry_run:
+        import sqlite3 as _sq
+
+        db_path = (
+            Path(os.environ["WORKBENCH_RUNTIME_DIR"])
+            / "medical_monitoring_ai.sqlite3"
+        )
+        conn = _sq.connect(f"file:{db_path}?mode=ro", uri=True)
+        active = conn.execute(
+            "SELECT COUNT(*) FROM monitoring_ai_jobs "
+            "WHERE business_key LIKE "
+            "'aemh:facts-snapshot-001.dualvlm-full1-p%:primary:%' "
+            "AND status IN ('queued','running')"
+        ).fetchone()[0]
+        conn.close()
+        if active:
+            print(
+                f"batch still processing ({active} active p4/p5 primary "
+                "jobs); finalize aborted"
+            )
+            sys.exit(2)
     from packages.medical_monitoring.analysis.ae_mh_cross_analysis import (
         adjudicate,
         merge_focused_verifications,
