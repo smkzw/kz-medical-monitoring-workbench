@@ -54,6 +54,10 @@ def _load_json(name: str):
 
 def main() -> None:
     dry_run = "--dry-run" in sys.argv
+    sentinel = Path("/tmp/aemh_dualvlm_finalize_done.flag")
+    if sentinel.exists() and not dry_run:
+        print("finalize already done (sentinel present); skip")
+        return
     from packages.medical_monitoring.analysis.ae_mh_cross_analysis import (
         adjudicate,
         merge_focused_verifications,
@@ -221,6 +225,7 @@ def main() -> None:
     ) as r:
         entry = json.loads(r.read())
     Path("/tmp/result_token.txt").write_text(entry["result_context_token"])
+    sentinel.write_text(entry["result_context_token"])
     print("TOKEN", entry["result_context_token"])
 
 
