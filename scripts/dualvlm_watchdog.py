@@ -15,6 +15,7 @@ import json
 import sqlite3
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 WORKBENCH = Path(__file__).resolve().parents[1]
@@ -45,6 +46,19 @@ def main() -> int:
     if SENTINEL.exists():
         print("finalize already done; nothing to do")
         return 0
+    # 保活+僵尸租约回收：resume幂等，触发expire_exhausted_leases
+    # （running中lease已过期的僵尸claim→failed，由p5重试波覆盖）并唤醒worker。
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:8910/api/projects/proj_mgk10_sar_real"
+            "/modules/medical-monitoring/ai/queue/resume",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=15).read()
+    except Exception as exc:
+        print(f"resume keepalive failed: {exc}")
     p4 = cohort_states(P4_REF)
     active_p4 = p4.get("queued", 0) + p4.get("running", 0)
     p5 = cohort_states(P5_REF)
