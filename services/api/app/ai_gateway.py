@@ -1083,6 +1083,7 @@ class OpenAICompatibleAiProvider:
         default_thinking: Optional[str] = None,
         default_reasoning_effort: Optional[str] = None,
         extra_headers: Optional[Dict[str, str]] = None,
+        stream_enabled: bool = True,
     ):
         if not base_url.strip():
             raise AiGatewayConfigurationError("AI provider base_url is required")
@@ -1097,6 +1098,10 @@ class OpenAICompatibleAiProvider:
         self.transport_name = "openai_compatible"
         self.timeout_seconds = timeout_seconds
         self.expected_response_model = expected_response_model.strip()
+        # 流式传输（OpenAI-compatible SSE）：本地中继/网关常对非流式请求施加
+        # 固定执行时限（如 OmniRoute requestQueue.maxWaitMs=15s），大载荷思考
+        # 模型必然超时被杀；流式下字节持续回流即不受该执行过期约束。
+        self.stream_enabled = bool(stream_enabled)
         # Provider-specific request headers (e.g. x-opencode-session) —
         # configured as data on the profile, never per-model code branches.
         self.extra_headers: Dict[str, str] = dict(extra_headers or {})
@@ -1143,6 +1148,8 @@ class OpenAICompatibleAiProvider:
             "temperature": 0,
             "response_format": {"type": "json_object"},
         }
+        if self.stream_enabled:
+            request_payload["stream"] = True
         thinking = self.default_thinking or envelope.thinking
         reasoning_effort = self.default_reasoning_effort or envelope.reasoning_effort
         if thinking in {"enabled", "disabled"}:
@@ -1391,6 +1398,7 @@ def _chat_completion_content(response_body: str) -> str:
 
 def _sse_completion_content(response_body: str) -> str:
     chunks: List[str] = []
+    reasoning_chunks: List[str] = []
     saw_event = False
     for line in response_body.splitlines():
         if not line.startswith("data:"):
@@ -1399,8 +1407,17 @@ def _sse_completion_content(response_body: str) -> str:
         data = line[5:].strip()
         if not data or data == "[DONE]":
             continue
-        event = json.loads(data)
-        choice = event["choices"][0]
+        try:
+            event = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        choices = event.get("choices")
+        # 传输层保活块（choices 为空列表）与 usage 收尾块不含正文。
+        if not isinstance(choices, list) or not choices:
+            continue
+        choice = choices[0]
         delta = choice.get("delta") if isinstance(choice, dict) else None
         message = choice.get("message") if isinstance(choice, dict) else None
         content = ""
@@ -1412,9 +1429,21 @@ def _sse_completion_content(response_body: str) -> str:
             content = choice.get("text") or ""
         if content:
             chunks.append(str(content))
-    if not saw_event or not chunks:
+            continue
+        reasoning = ""
+        if isinstance(delta, dict):
+            reasoning = delta.get("reasoning_content") or delta.get("reasoning") or ""
+        if not reasoning and isinstance(message, dict):
+            reasoning = message.get("reasoning_content") or message.get("reasoning") or ""
+        if reasoning:
+            reasoning_chunks.append(str(reasoning))
+    if not saw_event or not (chunks or reasoning_chunks):
         raise ValueError("SSE completion contains no content events")
-    return "".join(chunks)
+    # 正文优先；思考模型把推理流入 reasoning_content 且正文为空时，
+    # 与非流式路径一致地将推理文本回退为正文。
+    if chunks:
+        return "".join(chunks)
+    return "".join(reasoning_chunks)
 
 
 def _response_status(response: Any) -> Optional[int]:
@@ -1537,7 +1566,8 @@ def _completion_response_model(response_body: str) -> str:
                 continue
             event = json.loads(data)
             model = event.get("model") if isinstance(event, dict) else None
-            if isinstance(model, str) and model:
+            # 传输层保活块标记为 keepalive，不代表真实端点模型身份。
+            if isinstance(model, str) and model and model != "keepalive":
                 models.add(model)
         if len(models) == 1:
             return models.pop()
@@ -1661,6 +1691,10 @@ def configured_ai_provider_from_env(
         max_attempts=max_attempts,
         default_thinking=values.get("WORKBENCH_AI_THINKING"),
         default_reasoning_effort=values.get("WORKBENCH_AI_REASONING_EFFORT"),
+        stream_enabled=(
+            values.get("WORKBENCH_AI_STREAM", "1").strip().lower()
+            not in {"0", "false", "no", "off"}
+        ),
     )
 
 

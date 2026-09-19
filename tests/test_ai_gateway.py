@@ -992,6 +992,7 @@ class AiGatewayTests(unittest.TestCase):
             provider_name="deepseek",
             expected_response_model="deepseek-v4-flash",
             timeout_seconds=1,
+            stream_enabled=False,
         )
         with patch("services.api.app.ai_gateway.urllib.request.urlopen") as urlopen:
             urlopen.return_value = _FakeResponse(
@@ -1008,6 +1009,56 @@ class AiGatewayTests(unittest.TestCase):
                     ],
                 }
             )
+            # 思考模型把推理写入 reasoning_content 而正文为空时，推理文本
+            # 会作为正文回退交给 JSON 解析；非 JSON 推理文本按
+            # provider_response_invalid_json 失败，同时保留安全形状遥测
+            # （正文0字符、推理非0字符、不落原始响应体）。
+            with self.assertRaisesRegex(
+                AiProviderRuntimeError, "not valid JSON"
+            ) as raised:
+                provider.run(envelope)
+
+        diagnostics = raised.exception.diagnostics
+        self.assertEqual("provider_response_invalid_json", diagnostics["failure_code"])
+        self.assertEqual("json", diagnostics["wire_format"])
+        self.assertEqual(0, diagnostics["message_content_chars"])
+        self.assertGreater(diagnostics["message_reasoning_content_chars"], 0)
+        self.assertEqual("deepseek-v4-flash", provider.response_model)
+        self.assertNotIn("response_body", diagnostics)
+        self.assertEqual(64, len(diagnostics["response_sha256"]))
+
+    def test_openai_compatible_provider_reports_empty_when_content_and_reasoning_both_empty(self):
+        envelope = AiPromptEnvelope(
+            task_id="task_truly_empty_content",
+            task_type=AiTaskType.COMPETITIVE_INTELLIGENCE,
+            prompt_version="corpus_analysis_v11",
+            system_prompt="Return a JSON object in message.content.",
+            payload={"value": "x"},
+            thinking="enabled",
+            reasoning_effort="xhigh",
+            max_output_tokens=32_768,
+        )
+        provider = OpenAICompatibleAiProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="deepseek-v4-flash",
+            provider_name="deepseek",
+            expected_response_model="deepseek-v4-flash",
+            timeout_seconds=1,
+            stream_enabled=False,
+        )
+        with patch("services.api.app.ai_gateway.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _FakeResponse(
+                {
+                    "model": "deepseek-v4-flash",
+                    "choices": [
+                        {
+                            "finish_reason": "stop",
+                            "message": {"content": "", "reasoning_content": ""},
+                        }
+                    ],
+                }
+            )
             with self.assertRaisesRegex(
                 AiProviderRuntimeError, "provider_response_empty"
             ) as raised:
@@ -1017,10 +1068,77 @@ class AiGatewayTests(unittest.TestCase):
         self.assertEqual("provider_response_empty", diagnostics["failure_code"])
         self.assertEqual("json", diagnostics["wire_format"])
         self.assertEqual(0, diagnostics["message_content_chars"])
-        self.assertGreater(diagnostics["message_reasoning_content_chars"], 0)
         self.assertEqual("deepseek-v4-flash", provider.response_model)
         self.assertNotIn("response_body", diagnostics)
         self.assertEqual(64, len(diagnostics["response_sha256"]))
+
+    def test_openai_compatible_provider_streams_sse_with_keepalive_chunks(self):
+        spec = AiTaskSpec(
+            task_id="task_stream_sse_001",
+            task_type=AiTaskType.PROTOCOL_RULE_EXTRACTION,
+            prompt_version="protocol_rule_extraction_v0_1",
+            allowed_sources=[self.source()],
+        )
+        provider = OpenAICompatibleAiProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="glm-5.3-flash",
+            timeout_seconds=1,
+        )
+        expected = {"answer": 42}
+        sse_body = "\n".join(
+            [
+                # 传输层保活块：model=keepalive、choices 空对象 delta。
+                'data: {"id":"chatcmpl-keepalive","model":"keepalive","choices":[{"index":0,"delta":{},"finish_reason":null}]}',
+                "",
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{"role":"assistant","content":""},"finish_reason":null}]}',
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{"content":"{\\"answer\\":"},"finish_reason":null}]}',
+                # reasoning 块不应混入正文。
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{"reasoning_content":"核对分级版本。"},"finish_reason":null}]}',
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{"content":" 42}"},"finish_reason":null}]}',
+                # usage 收尾块：choices 为空列表，聚合器必须安全跳过。
+                'data: {"model":"glm-5.3-flash","choices":[],"usage":{"total_tokens":9}}',
+                "data: [DONE]",
+                "",
+            ]
+        )
+        with patch("services.api.app.ai_gateway.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _FakeStreamResponse(sse_body)
+            parsed = provider.run(PromptRegistry().build(spec))
+            request_body = json.loads(
+                urlopen.call_args[0][0].data.decode("utf-8")
+            )
+        self.assertEqual(True, request_body.get("stream"))
+        self.assertEqual(expected, parsed)
+        self.assertEqual("glm-5.3-flash", provider.response_model)
+
+    def test_openai_compatible_provider_stream_can_be_disabled(self):
+        spec = AiTaskSpec(
+            task_id="task_stream_off_001",
+            task_type=AiTaskType.PROTOCOL_RULE_EXTRACTION,
+            prompt_version="protocol_rule_extraction_v0_1",
+            allowed_sources=[self.source()],
+        )
+        provider = OpenAICompatibleAiProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="glm-5.3-flash",
+            timeout_seconds=1,
+            stream_enabled=False,
+        )
+        with patch("services.api.app.ai_gateway.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _FakeResponse(
+                {
+                    "model": "glm-5.3-flash",
+                    "choices": [{"message": {"content": json.dumps({"ok": 1})}}],
+                }
+            )
+            parsed = provider.run(PromptRegistry().build(spec))
+            request_body = json.loads(
+                urlopen.call_args[0][0].data.decode("utf-8")
+            )
+        self.assertNotIn("stream", request_body)
+        self.assertEqual({"ok": 1}, parsed)
 
     def test_openai_compatible_provider_accepts_json_wrapped_by_thinking_text(self):
         spec = AiTaskSpec(
@@ -1658,6 +1776,14 @@ class _FakeRawResponse(_FakeResponse):
 
     def read(self) -> bytes:
         return self.body.encode("utf-8")
+
+
+class _FakeStreamResponse(_FakeRawResponse):
+    """SSE 响应模拟：带 Content-Type 以覆盖流式聚合路径。"""
+
+    def __init__(self, body: str, content_type: str = "text/event-stream"):
+        super().__init__(body)
+        self.headers = {"Content-Type": content_type}
 
 
 if __name__ == "__main__":
