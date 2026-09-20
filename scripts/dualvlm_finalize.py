@@ -320,7 +320,8 @@ def main() -> None:
         # （D-11唤醒衔接——retry_failed已有，finalize同样必须有）。
         try:
             wake = urllib.request.Request(
-                f"{BASE}/ai/queue/resume",
+                # BASE指向r7产品面；queue控制面在modules/medical-monitoring层
+                f"{BASE.rsplit('/r7', 1)[0]}/ai/queue/resume",
                 data=b"{}",
                 headers={"Content-Type": "application/json"},
                 method="POST",
