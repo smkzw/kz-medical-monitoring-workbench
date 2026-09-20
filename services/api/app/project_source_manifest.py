@@ -334,7 +334,7 @@ class ProjectSourceManifestService:
                     "dashboard",
                     project_id,
                     implementation_status="authoring_ready",
-                    notes=["用户创建的医学写作项目。"],
+                    notes=["用户创建的项目。"],
                 ),
                 self._binding(
                     "medical_writing",
@@ -347,6 +347,21 @@ class ProjectSourceManifestService:
                     "approvals",
                     project_id,
                     implementation_status="authoring_ready",
+                ),
+                # 监查意图项目：注入medical_monitoring模块绑定（数据接入
+                # 前即声明入口，r7数据接入向导据此可达；实测此前无绑定=
+                # 功能未配置死胡同，测试轮1R P0-4）。
+                *(
+                    [
+                        self._binding(
+                            "medical_monitoring",
+                            project_id,
+                            implementation_status="intake_pending",
+                            notes=["数据接入待完成：上传Data Listing后进入监查。"],
+                        )
+                    ]
+                    if "medical_monitoring" in (record.modules or ())
+                    else []
                 ),
             ],
             sources=[],

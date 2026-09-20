@@ -86,6 +86,11 @@ class UserProjectCreateRequest(WorkbenchModel):
     protocol_version: str = Field(default="草案", max_length=40)
     protocol_date: str = Field(default="", max_length=20)
     entry_mode: Literal["from_zero", "synopsis_import"] = "from_zero"
+    modules: list[Literal["medical_writing", "medical_monitoring", "eligibility_review"]] = Field(
+        default=["medical_writing"],
+        min_length=1,
+        max_length=3,
+    )
     actor: str = Field(default="medical_manager", min_length=2, max_length=80)
     idempotency_key: str = Field(min_length=8, max_length=160)
 

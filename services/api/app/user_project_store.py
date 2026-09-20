@@ -30,6 +30,7 @@ class UserProjectRecord:
     created_by: str
     created_at: str
     updated_at: str
+    modules: tuple[str, ...] = ("medical_writing",)
 
 
 class UserProjectStore:
@@ -54,13 +55,16 @@ class UserProjectStore:
                 raise ValueError(f"项目编号已存在：{request.project_code}")
             now = datetime.now(timezone.utc).isoformat()
             project_id = f"proj_user_{uuid4().hex[:12]}"
+            modules = getattr(request, "modules", None) or ["medical_writing"]
+            import json as _json
             connection.execute(
                 """
                 INSERT INTO user_projects (
                     project_id, project_code, project_name, indication, product_name,
                     study_phase, protocol_id, protocol_version, protocol_date,
-                    entry_mode, status, created_by, idempotency_key, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+                    entry_mode, status, created_by, idempotency_key, created_at, updated_at,
+                    modules
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
                 """,
                 (
                     project_id,
@@ -77,6 +81,7 @@ class UserProjectStore:
                     request.idempotency_key,
                     now,
                     now,
+                    _json.dumps(list(modules), ensure_ascii=False),
                 ),
             )
             row = connection.execute(
@@ -111,6 +116,20 @@ class UserProjectStore:
             )
             connection.commit()
         return True
+
+    def project_modules(self, project_id: str) -> tuple[str, ...]:
+        record = self.get(project_id)
+        return record.modules if record else ()
+
+    def set_project_modules(self, project_id: str, modules: list[str]) -> bool:
+        import json as _json
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE user_projects SET modules = ?, updated_at = ? WHERE project_id = ?",
+                (_json.dumps(list(modules), ensure_ascii=False), _utcnow_iso(), project_id),
+            )
+            connection.commit()
+        return cursor.rowcount > 0
 
     def archived_project_ids(self) -> set[str]:
         with self._connect() as connection:
@@ -162,6 +181,13 @@ class UserProjectStore:
             connection.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS user_projects_code_ci ON user_projects(lower(project_code))"
             )
+            # 迁移：modules列（JSON数组，旧行默认写作）
+            columns = connection.execute("PRAGMA table_info(user_projects)").fetchall()
+            if all(str(col[1]) != "modules" for col in columns):
+                connection.execute(
+                    "ALTER TABLE user_projects ADD COLUMN modules TEXT NOT NULL DEFAULT '[\"medical_writing\"]'"
+                )
+            connection.commit()
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path, timeout=30)
@@ -170,7 +196,14 @@ class UserProjectStore:
 
     @staticmethod
     def _record(row: sqlite3.Row) -> UserProjectRecord:
-        return UserProjectRecord(**{
-            field: row[field]
-            for field in UserProjectRecord.__dataclass_fields__
-        })
+        import json as _json
+        fields = {}
+        for field in UserProjectRecord.__dataclass_fields__:
+            if field == "modules":
+                try:
+                    fields[field] = tuple(_json.loads(row["modules"] or "[]")) or ("medical_writing",)
+                except (TypeError, ValueError, KeyError):
+                    fields[field] = ("medical_writing",)
+            elif field in row.keys():
+                fields[field] = row[field]
+        return UserProjectRecord(**fields)
