@@ -72,6 +72,7 @@ const DOMAINS = Object.freeze({
   hospital_procedure: { label: "住院/操作", shape: "doorframe", line: "solid" },
   symptom_efficacy: { label: "症状/疗效", shape: "circle", line: "trend" },
   protocol_compliance: { label: "方案符合性", shape: "single_flag", line: "bracket" },
+  uncategorized: { label: "未分类", shape: "circle", line: "dot_dash" },
 });
 
 const SEVERITIES = Object.freeze({
