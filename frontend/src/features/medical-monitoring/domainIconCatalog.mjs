@@ -10,6 +10,7 @@ export const DOMAIN_ICON_NAMES = Object.freeze({
   hospital_procedure: "Hospital",
   symptom_efficacy: "TrendingUp",
   protocol_compliance: "ClipboardCheck",
+  uncategorized: "CircleHelp",
 });
 
 /** @type {Readonly<MedicalDomainKey[]>} */

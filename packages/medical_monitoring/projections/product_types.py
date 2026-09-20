@@ -34,6 +34,7 @@ DOMAINS = (
     "hospital_procedure",
     "symptom_efficacy",
     "protocol_compliance",
+    "uncategorized",
 )
 DOMAIN_ENCODING = {
     "ae": {"event_shape": "rounded_rect", "line_style": "solid", "short_label_zh": "AE"},
@@ -44,6 +45,7 @@ DOMAIN_ENCODING = {
     "hospital_procedure": {"event_shape": "doorframe", "line_style": "solid", "short_label_zh": "住院/操作"},
     "symptom_efficacy": {"event_shape": "circle", "line_style": "trend", "short_label_zh": "症状/疗效"},
     "protocol_compliance": {"event_shape": "single_flag", "line_style": "bracket", "short_label_zh": "方案符合"},
+    "uncategorized": {"event_shape": "circle", "line_style": "dot_dash", "short_label_zh": "未分类"},
 }
 SEVERITIES = ("critical", "high", "medium", "low")
 DATE_STATES = ("exact", "partial", "conflicted", "missing")
@@ -234,6 +236,7 @@ class R5EventRecord:
             "ae", "mh", "concomitant_medication", "ip_dose", "ip_pause", "ip_resume",
             "lab", "exam", "hospitalization", "procedure", "symptom", "efficacy",
             "scale", "outcome", "trend", "protocol_deviation",
+            "eligibility_randomization", "unclassified",
         }:
             raise R5ProductAdapterError("SUBTYPE_UNKNOWN", f"unsupported subtype: {self.subtype}")
         expected_domain = {
@@ -244,7 +247,8 @@ class R5EventRecord:
             "lab_exam": {"lab", "exam"},
             "hospital_procedure": {"hospitalization", "procedure"},
             "symptom_efficacy": {"symptom", "efficacy", "scale", "outcome", "trend"},
-            "protocol_compliance": {"protocol_deviation"},
+            "protocol_compliance": {"protocol_deviation", "eligibility_randomization"},
+            "uncategorized": {"unclassified"},
         }[self.domain]
         if self.subtype not in expected_domain:
             raise R5ProductAdapterError("DOMAIN_SUBTYPE_MISMATCH", self.subtype)

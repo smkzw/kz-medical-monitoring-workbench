@@ -28,6 +28,7 @@ _DENSITY_LABELS = {
     "hospital_procedure": "住院或操作记录核查",
     "symptom_efficacy": "症状与疗效趋势核查",
     "protocol_compliance": "方案执行核查",
+    "uncategorized": "未分类记录核查",
 }
 
 
@@ -49,7 +50,7 @@ def build_density_records(snapshot_ref: str) -> tuple:
             site_ref=subject.site_ref,
             spine_ref=subject.spine_ref,
             domain=DOMAINS[index % len(DOMAINS)],
-            subtype=("ae", "mh", "concomitant_medication", "ip_dose", "lab", "hospitalization", "symptom", "protocol_deviation")[index % 8],
+            subtype=("ae", "mh", "concomitant_medication", "ip_dose", "lab", "hospitalization", "symptom", "protocol_deviation", "unclassified")[index % 9],
             date_state="exact",
             start_date=date(2026, 1, 1) + timedelta(days=(index - 1) % len(visits)),
             end_date=None,

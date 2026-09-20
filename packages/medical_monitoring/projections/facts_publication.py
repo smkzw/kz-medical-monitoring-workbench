@@ -7,8 +7,11 @@ risks and subject-flow paths. No synthetic fixtures are involved.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
+import tempfile
 from dataclasses import fields
 from datetime import date
 from pathlib import Path
@@ -71,15 +74,18 @@ _DOMAIN_BY_TABLE: dict[str, tuple[str, str]] = {
     "PR": ("hospital_procedure", "procedure"),
     "PT": ("symptom_efficacy", "symptom"),
     "NE": ("symptom_efficacy", "efficacy"),
-    "NS": ("symptom_efficacy", "efficacy"),
+    # NS=下次访视状态（访视管理），不是疗效评估；PC=采样记录，不是结局
+    "NS": ("uncategorized", "unclassified"),
     "RQL": ("symptom_efficacy", "scale"),
-    "PC": ("symptom_efficacy", "outcome"),
+    "PC": ("uncategorized", "unclassified"),
     "PD": ("protocol_compliance", "protocol_deviation"),
-    "IE": ("protocol_compliance", "protocol_deviation"),
-    "ICF": ("protocol_compliance", "protocol_deviation"),
-    "RAN": ("protocol_compliance", "protocol_deviation"),
+    # 入排/知情/随机=资格与管理评估，不是"偏离"
+    "IE": ("protocol_compliance", "eligibility_randomization"),
+    "ICF": ("protocol_compliance", "eligibility_randomization"),
+    "RAN": ("protocol_compliance", "eligibility_randomization"),
     "DS": ("protocol_compliance", "protocol_deviation"),
-    "FW": ("protocol_compliance", "protocol_deviation"),
+    # FW=花粉/天气等环境背景记录，不是方案偏离（语义按列签名/映射层定）
+    "FW": ("uncategorized", "unclassified"),
     "RES": ("symptom_efficacy", "efficacy"),
     "PE": ("lab_exam", "exam"),
     "MO": ("lab_exam", "exam"),
@@ -147,6 +153,8 @@ _SUBTYPE_LABEL_ZH = {
     "outcome": "结局",
     "trend": "趋势",
     "protocol_deviation": "方案偏离",
+    "eligibility_randomization": "入排/随机",
+    "unclassified": "未分类",
 }
 
 # 表级中文兜底标签：同 subtype 下区分不同来源表（如 ICF/随机/访视记录）
@@ -216,7 +224,8 @@ def _domain_for(table: str, rows: Sequence[dict[str, Any]] | None = None) -> tup
     if rows:
         columns = set(rows[0].keys()) if rows else set()
         return _infer_domain_by_columns(table, columns)
-    return ("protocol_compliance", "protocol_deviation")
+    # 语义边界：无法判定的表=未分类/不适用，绝不默认"方案偏离"
+    return ("uncategorized", "unclassified")
 
 
 # 列签名 → (domain, subtype)。签名按强度排序，首个命中即返回。
@@ -277,7 +286,7 @@ def _infer_domain_by_columns(
     scale_scores = [c for c in columns if _SCALE_MEAN_RE.match(c)]
     if len(scale_items) >= 2 or scale_scores:
         return ("symptom_efficacy", "scale")
-    return ("protocol_compliance", "protocol_deviation")
+    return ("uncategorized", "unclassified")
 
 
 def _parse_date(value: Any) -> date | None:
@@ -312,6 +321,84 @@ def _clean(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "").strip())
 
 
+_FACTS_MANIFEST_NAME = "facts-manifest.json"
+_FACTS_MANIFEST_SCHEMA = "facts-table-manifest-v1"
+_ARTIFACT_NAME_RE = re.compile(r"^[0-9a-f]{64}\.json$")
+
+
+class FactsPublicationError(ValueError):
+    """事实工件清单校验失败（篡改/缺失/形态不符）。"""
+
+
+def _build_facts_manifest(artifacts: Path) -> dict[str, Any]:
+    """从严格形态文件构建不可变清单：每表一个条目（mtime最新者当选）。"""
+    candidates: dict[str, list[tuple[float, str, str]]] = {}
+    skipped: list[dict[str, str]] = []
+    if not artifacts.is_dir():
+        raise FactsPublicationError(f"facts artifacts dir missing: {artifacts}")
+    for path in sorted(artifacts.glob("*.json")):
+        name = path.name
+        if not _ARTIFACT_NAME_RE.match(name):
+            skipped.append({"file": name, "reason": "non_canonical_name"})
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            skipped.append({"file": name, "reason": f"unreadable: {exc}"})
+            continue
+        if (
+            not isinstance(payload, dict)
+            or len(payload) != 1
+            or not isinstance(next(iter(payload.values()), None), list)
+        ):
+            skipped.append({"file": name, "reason": "not_single_table_shape"})
+            continue
+        table = str(next(iter(payload.keys())))
+        rows = payload[table]
+        if not rows or not isinstance(rows[0], dict):
+            skipped.append({"file": name, "reason": "empty_or_nonrow_table"})
+            continue
+        mtime = path.stat().st_mtime
+        sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        candidates.setdefault(table, []).append((mtime, name, sha))
+    tables: list[dict[str, str]] = []
+    superseded: list[dict[str, str]] = []
+    for table in sorted(candidates):
+        entries = sorted(candidates[table], reverse=True)
+        chosen_mtime, chosen_file, chosen_sha = entries[0]
+        tables.append({"table": table, "file": chosen_file, "sha256": chosen_sha})
+        for mtime, name, sha in entries[1:]:
+            superseded.append(
+                {"table": table, "file": name, "sha256": sha, "mtime": str(mtime)}
+            )
+        del chosen_mtime
+    return {
+        "schema": _FACTS_MANIFEST_SCHEMA,
+        "tables": tables,
+        "superseded": superseded,
+        "skipped": skipped,
+    }
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=1)
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f"{path.stem}.", suffix=".tmp", dir=str(path.parent)
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            output.write(encoded)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temp_name, path)
+    except BaseException:
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        raise
+
+
 class FactsPublicationAuthorityProvider:
     """Typed R5 authority built from the materialized facts of one project."""
 
@@ -325,15 +412,48 @@ class FactsPublicationAuthorityProvider:
     # -- loading -----------------------------------------------------------
 
     def _load_domains(self) -> dict[str, list[dict[str, Any]]]:
+        """按持久化不可变清单加载事实表（WP1：不扫描碰巧同名的JSON）。
+
+        首次加载时从"64位十六进制内容hash命名+单表结构"的严格形态文件
+        构建facts-manifest.json（同表多文件取mtime最新，其余记为
+        superseded）；此后一律按清单逐文件校验sha256后加载——同目录的
+        findings/布局/方案画像等非事实文件永不混入，字节篡改fail-closed。
+        """
         artifacts = self._workspace / "runtime" / "artifacts"
+        manifest_path = artifacts / _FACTS_MANIFEST_NAME
+        manifest: dict[str, Any] | None = None
+        if manifest_path.is_file():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                manifest = None
+            if not isinstance(manifest, dict) or manifest.get("schema") != _FACTS_MANIFEST_SCHEMA:
+                manifest = None
+        if manifest is None:
+            manifest = _build_facts_manifest(artifacts)
+            _atomic_write_json(manifest_path, manifest)
         domains: dict[str, list[dict[str, Any]]] = {}
-        for path in sorted(artifacts.glob("*.json")):
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            if not isinstance(payload, dict):
-                continue
-            for table, rows in payload.items():
-                if isinstance(rows, list) and rows and isinstance(rows[0], dict):
-                    domains[str(table)] = rows
+        for entry in manifest.get("tables", []):
+            path = artifacts / str(entry["file"])
+            try:
+                raw = path.read_bytes()
+            except OSError as exc:
+                raise FactsPublicationError(
+                    f"facts manifest entry unreadable: {entry['file']}: {exc}"
+                ) from exc
+            if hashlib.sha256(raw).hexdigest() != entry["sha256"]:
+                raise FactsPublicationError(
+                    f"facts manifest digest mismatch (tampered or replaced "
+                    f"artifact): {entry['file']}"
+                )
+            payload = json.loads(raw.decode("utf-8"))
+            table = str(entry["table"])
+            rows = payload.get(table) if isinstance(payload, dict) else None
+            if not isinstance(rows, list):
+                raise FactsPublicationError(
+                    f"facts manifest entry shape invalid: {entry['file']}"
+                )
+            domains[table] = rows
         return domains
 
     # -- packet ------------------------------------------------------------
