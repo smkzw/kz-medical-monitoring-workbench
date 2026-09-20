@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import subprocess
+import time
 import unittest
 from unittest.mock import patch
 import http.client
@@ -1010,16 +1011,16 @@ class AiGatewayTests(unittest.TestCase):
                 }
             )
             # 思考模型把推理写入 reasoning_content 而正文为空时，推理文本
-            # 会作为正文回退交给 JSON 解析；非 JSON 推理文本按
-            # provider_response_invalid_json 失败，同时保留安全形状遥测
-            # （正文0字符、推理非0字符、不落原始响应体）。
+            # 不得作为最终医学正文（即使非JSON也不得进解析修复）；返回
+            # 可追溯的 provider_reasoning_only 技术状态，同时保留安全形状
+            # 遥测（正文0字符、推理非0字符、不落原始响应体）。
             with self.assertRaisesRegex(
-                AiProviderRuntimeError, "not valid JSON"
+                AiProviderRuntimeError, "reasoning"
             ) as raised:
                 provider.run(envelope)
 
         diagnostics = raised.exception.diagnostics
-        self.assertEqual("provider_response_invalid_json", diagnostics["failure_code"])
+        self.assertEqual("provider_reasoning_only", diagnostics["failure_code"])
         self.assertEqual("json", diagnostics["wire_format"])
         self.assertEqual(0, diagnostics["message_content_chars"])
         self.assertGreater(diagnostics["message_reasoning_content_chars"], 0)
@@ -1096,6 +1097,8 @@ class AiGatewayTests(unittest.TestCase):
                 # reasoning 块不应混入正文。
                 'data: {"model":"glm-5.3-flash","choices":[{"delta":{"reasoning_content":"核对分级版本。"},"finish_reason":null}]}',
                 'data: {"model":"glm-5.3-flash","choices":[{"delta":{"content":" 42}"},"finish_reason":null}]}',
+                # 正常终止合同：finish_reason=stop + [DONE] 双条件齐备。
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{},"finish_reason":"stop"}]}',
                 # usage 收尾块：choices 为空列表，聚合器必须安全跳过。
                 'data: {"model":"glm-5.3-flash","choices":[],"usage":{"total_tokens":9}}',
                 "data: [DONE]",
@@ -1111,6 +1114,330 @@ class AiGatewayTests(unittest.TestCase):
         self.assertEqual(True, request_body.get("stream"))
         self.assertEqual(expected, parsed)
         self.assertEqual("glm-5.3-flash", provider.response_model)
+
+    def _stream_spec(self, task_id: str) -> AiTaskSpec:
+        return AiTaskSpec(
+            task_id=task_id,
+            task_type=AiTaskType.PROTOCOL_RULE_EXTRACTION,
+            prompt_version="protocol_rule_extraction_v0_1",
+            allowed_sources=[self.source()],
+        )
+
+    def test_sse_error_event_after_parseable_content_fails(self):
+        # D-04a：可解析正文之后出现的 error 事件必须使整个调用受控失败，
+        # 不得因残留 JSON 可解析而当作正常医学输出。
+        sse_body = "\n".join(
+            [
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{"content":"{\\"answer\\": 42}"},"finish_reason":null}]}',
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{},"finish_reason":"stop"}]}',
+                'data: {"error":{"message":"upstream exploded","code":502}}',
+                "data: [DONE]",
+                "",
+            ]
+        )
+        provider = OpenAICompatibleAiProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="glm-5.3-flash",
+            timeout_seconds=1,
+        )
+        with patch("services.api.app.ai_gateway.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _FakeStreamResponse(sse_body)
+            with self.assertRaises(AiProviderRuntimeError) as raised:
+                provider.run(PromptRegistry().build(self._stream_spec("task_sse_err")))
+        self.assertEqual(
+            "provider_sse_error_event", raised.exception.diagnostics["failure_code"]
+        )
+
+    def test_sse_length_truncation_fails_even_with_parseable_json(self):
+        # D-04b：finish_reason=length 属于截断，不得静默成为临床候选。
+        sse_body = "\n".join(
+            [
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{"content":"{\\"answer\\": 42}"},"finish_reason":null}]}',
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{},"finish_reason":"length"}]}',
+                "data: [DONE]",
+                "",
+            ]
+        )
+        provider = OpenAICompatibleAiProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="glm-5.3-flash",
+            timeout_seconds=1,
+        )
+        with patch("services.api.app.ai_gateway.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _FakeStreamResponse(sse_body)
+            with self.assertRaises(AiProviderRuntimeError) as raised:
+                provider.run(
+                    PromptRegistry().build(self._stream_spec("task_sse_len"))
+                )
+        self.assertEqual(
+            "provider_response_truncated", raised.exception.diagnostics["failure_code"]
+        )
+
+    def test_sse_abrupt_end_without_done_or_finish_fails(self):
+        # D-04c：连接在无 [DONE]、无 finish_reason 的异常断开下结束——即使
+        # 已聚合出可解析 JSON 也必须判为传输截断。
+        sse_body = "\n".join(
+            [
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{"content":"{\\"answer\\": 42}"},"finish_reason":null}]}',
+                "",
+            ]
+        )
+        provider = OpenAICompatibleAiProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="glm-5.3-flash",
+            timeout_seconds=1,
+        )
+        with patch("services.api.app.ai_gateway.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _FakeStreamResponse(sse_body)
+            with self.assertRaises(AiProviderRuntimeError) as raised:
+                provider.run(
+                    PromptRegistry().build(self._stream_spec("task_sse_cut"))
+                )
+        self.assertEqual(
+            "provider_sse_truncated", raised.exception.diagnostics["failure_code"]
+        )
+
+    def test_sse_reasoning_only_is_not_final_medical_content(self):
+        # D-05：仅有 reasoning_content（即使其中含可解析 JSON）不得作为
+        # 最终医学正文；必须返回可追溯的 provider_reasoning_only 技术状态。
+        sse_body = "\n".join(
+            [
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{"reasoning_content":"{\\"answer\\": 1}"},"finish_reason":null}]}',
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{},"finish_reason":"stop"}]}',
+                "data: [DONE]",
+                "",
+            ]
+        )
+        provider = OpenAICompatibleAiProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="glm-5.3-flash",
+            timeout_seconds=1,
+        )
+        with patch("services.api.app.ai_gateway.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _FakeStreamResponse(sse_body)
+            with self.assertRaises(AiProviderRuntimeError) as raised:
+                provider.run(PromptRegistry().build(self._stream_spec("task_sse_think")))
+        self.assertEqual(
+            "provider_reasoning_only", raised.exception.diagnostics["failure_code"]
+        )
+
+    def test_nonstream_reasoning_only_is_not_final_medical_content(self):
+        envelope = AiPromptEnvelope(
+            task_id="task_json_think_only",
+            task_type=AiTaskType.COMPETITIVE_INTELLIGENCE,
+            prompt_version="corpus_analysis_v11",
+            system_prompt="Return a JSON object in message.content.",
+            payload={"value": "x"},
+            thinking="enabled",
+            reasoning_effort="xhigh",
+            max_output_tokens=32_768,
+        )
+        provider = OpenAICompatibleAiProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="deepseek-v4-flash",
+            provider_name="deepseek",
+            expected_response_model="deepseek-v4-flash",
+            timeout_seconds=1,
+            stream_enabled=False,
+        )
+        with patch("services.api.app.ai_gateway.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _FakeResponse(
+                {
+                    "model": "deepseek-v4-flash",
+                    "choices": [
+                        {
+                            "finish_reason": "stop",
+                            "message": {
+                                "content": "",
+                                "reasoning_content": '{"answer": 1}',
+                            },
+                        }
+                    ],
+                }
+            )
+            with self.assertRaises(AiProviderRuntimeError) as raised:
+                provider.run(envelope)
+        self.assertEqual(
+            "provider_reasoning_only", raised.exception.diagnostics["failure_code"]
+        )
+
+    def test_sse_malformed_business_event_is_controlled_failure(self):
+        # D-06：畸形 data 业务事件必须受控失败（不静默丢token继续接受剩余
+        # JSON，也不裸抛 JSONDecodeError）；身份解析共用同一解析结果。
+        sse_body = "\n".join(
+            [
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{"content":"{\\"answer\\": 42}"},"finish_reason":null}]}',
+                "data: {broken json without terminator",
+                'data: {"model":"glm-5.3-flash","choices":[{"delta":{},"finish_reason":"stop"}]}',
+                "data: [DONE]",
+                "",
+            ]
+        )
+        provider = OpenAICompatibleAiProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="glm-5.3-flash",
+            timeout_seconds=1,
+        )
+        with patch("services.api.app.ai_gateway.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _FakeStreamResponse(sse_body)
+            with self.assertRaises(AiProviderRuntimeError) as raised:
+                provider.run(
+                    PromptRegistry().build(self._stream_spec("task_sse_bad"))
+                )
+        self.assertEqual(
+            "provider_sse_malformed_event",
+            raised.exception.diagnostics["failure_code"],
+        )
+
+    def test_sse_keepalive_cannot_extend_total_deadline(self):
+        # 持续保活流不得无限延长任务：绝对deadline到点后受控终止。
+        provider = OpenAICompatibleAiProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="glm-5.3-flash",
+            timeout_seconds=30,
+            total_deadline_seconds=0.6,
+        )
+        with patch("services.api.app.ai_gateway.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _FakeEndlessKeepaliveResponse(delay=0.05)
+            with self.assertRaises(AiProviderRuntimeError) as raised:
+                provider.run(
+                    PromptRegistry().build(self._stream_spec("task_sse_dead"))
+                )
+        self.assertEqual(
+            "provider_deadline_exceeded", raised.exception.diagnostics["failure_code"]
+        )
+
+    def test_sse_response_byte_cap_enforced(self):
+        provider = OpenAICompatibleAiProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="glm-5.3-flash",
+            timeout_seconds=30,
+            max_response_bytes=64,
+        )
+        sse_body = "data: " + json.dumps(
+            {
+                "model": "glm-5.3-flash",
+                "choices": [
+                    {"delta": {"content": "x" * 256}, "finish_reason": None}
+                ],
+            }
+        )
+        with patch("services.api.app.ai_gateway.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _FakeStreamResponse(sse_body)
+            with self.assertRaises(AiProviderRuntimeError) as raised:
+                provider.run(
+                    PromptRegistry().build(self._stream_spec("task_sse_cap"))
+                )
+        self.assertEqual(
+            "provider_response_too_large", raised.exception.diagnostics["failure_code"]
+        )
+
+    def test_visual_provider_preserves_stream_and_header_config(self):
+        # D-12：视觉适配路径不得丢失流式开关与provider特俗头。
+        from services.api.app.monitoring_visual_tool_bridge import visual_provider
+
+        gateway_provider = OpenAICompatibleAiProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="glm-5.3-flash",
+            timeout_seconds=7,
+            stream_enabled=False,
+            extra_headers={"x-opencode-session": "sess-1"},
+            total_deadline_seconds=99.0,
+        )
+        adapted = visual_provider(gateway_provider)
+        self.assertEqual(False, adapted.stream_enabled)
+        self.assertEqual({"x-opencode-session": "sess-1"}, adapted.extra_headers)
+        self.assertEqual(99.0, adapted.total_deadline_seconds)
+
+    def test_visual_strict_run_sends_stream_and_extra_headers(self):
+        from services.api.app import monitoring_visual_transport as vt
+
+        provider = vt.MonitoringVisualOpenAIProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="glm-5.3-flash",
+            timeout_seconds=1,
+            stream_enabled=True,
+            extra_headers={"x-opencode-session": "sess-9"},
+        )
+        envelope = AiPromptEnvelope(
+            task_id="task_visual_stream_001",
+            task_type=AiTaskType.PROTOCOL_RULE_EXTRACTION,
+            prompt_version="protocol_rule_extraction_v0_1",
+            system_prompt="Return JSON.",
+            payload={"value": "x"},
+        )
+        completion = {
+            "model": "glm-5.3-flash",
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {"content": json.dumps({"ok": 1})},
+                }
+            ],
+        }
+        with patch(
+            "services.api.app.ai_gateway.urllib.request.urlopen",
+            return_value=_FakeResponse(completion),
+        ):
+            provider._run_completion(
+                envelope=envelope,
+                request_payload={"model": provider.model_name, "messages": []},
+                visual_extra={},
+            )
+            request = _last_urlopen_request()
+        body = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(True, body.get("stream"))
+        self.assertEqual("kz-workbench-ai/1.0", request.headers.get("User-agent"))
+        self.assertEqual("sess-9", request.headers.get("X-opencode-session"))
+
+    def test_visual_strict_run_honors_stream_disabled(self):
+        from services.api.app import monitoring_visual_transport as vt
+
+        provider = vt.MonitoringVisualOpenAIProvider(
+            base_url="https://ai.example.test/v1",
+            api_key="test-key",
+            model_name="glm-5.3-flash",
+            timeout_seconds=1,
+            stream_enabled=False,
+        )
+        envelope = AiPromptEnvelope(
+            task_id="task_visual_nostream_001",
+            task_type=AiTaskType.PROTOCOL_RULE_EXTRACTION,
+            prompt_version="protocol_rule_extraction_v0_1",
+            system_prompt="Return JSON.",
+            payload={"value": "x"},
+        )
+        completion = {
+            "model": "glm-5.3-flash",
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {"content": json.dumps({"ok": 1})},
+                }
+            ],
+        }
+        with patch(
+            "services.api.app.ai_gateway.urllib.request.urlopen",
+            return_value=_FakeResponse(completion),
+        ):
+            provider._run_completion(
+                envelope=envelope,
+                request_payload={"model": provider.model_name, "messages": []},
+                visual_extra={},
+            )
+            request = _last_urlopen_request()
+        body = json.loads(request.data.decode("utf-8"))
+        self.assertNotIn("stream", body)
 
     def test_openai_compatible_provider_stream_can_be_disabled(self):
         spec = AiTaskSpec(
@@ -1273,6 +1600,8 @@ class AiGatewayTests(unittest.TestCase):
                 "",
                 "data: "
                 + json.dumps({"choices": [{"delta": {"content": content[midpoint:]}}]}),
+                "",
+                "data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": "stop"}]}),
                 "",
                 "data: [DONE]",
                 "",
@@ -1756,6 +2085,13 @@ class AiGatewayTests(unittest.TestCase):
         )
 
 
+def _last_urlopen_request():
+    """Return the Request object from the most recent patched urlopen call."""
+    from services.api.app import ai_gateway as gateway_module
+
+    return gateway_module.urllib.request.urlopen.call_args.args[0]
+
+
 class _FakeResponse:
     def __init__(self, payload: dict):
         self.payload = payload
@@ -1769,6 +2105,10 @@ class _FakeResponse:
     def read(self) -> bytes:
         return json.dumps(self.payload).encode("utf-8")
 
+    def __iter__(self):
+        # 真实HTTP响应可逐行迭代；JSON响应等价于单块返回。
+        yield self.read()
+
 
 class _FakeRawResponse(_FakeResponse):
     def __init__(self, body: str):
@@ -1779,11 +2119,37 @@ class _FakeRawResponse(_FakeResponse):
 
 
 class _FakeStreamResponse(_FakeRawResponse):
-    """SSE 响应模拟：带 Content-Type 以覆盖流式聚合路径。"""
+    """SSE 响应模拟：带 Content-Type，支持逐行迭代（流式增量读取路径）。"""
 
     def __init__(self, body: str, content_type: str = "text/event-stream"):
         super().__init__(body)
         self.headers = {"Content-Type": content_type}
+
+    def __iter__(self):
+        for line in self.body.splitlines(keepends=True):
+            yield line.encode("utf-8")
+
+
+class _FakeEndlessKeepaliveResponse:
+    """永不结束的保活流：用于验证绝对deadline。"""
+
+    headers = {"Content-Type": "text/event-stream"}
+
+    def __init__(self, delay: float = 0.0):
+        self._delay = delay
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def __iter__(self):
+        line = b'data: {"id":"chatcmpl-keepalive","model":"keepalive","choices":[{"index":0,"delta":{},"finish_reason":null}]}\n\n'
+        while True:
+            if self._delay:
+                time.sleep(self._delay)
+            yield line
 
 
 if __name__ == "__main__":

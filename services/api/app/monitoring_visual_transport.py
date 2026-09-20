@@ -488,6 +488,10 @@ class MonitoringVisualOpenAIProvider(OpenAICompatibleAiProvider):
         max_attempts: Optional[int] = None,
         default_thinking: Optional[str] = None,
         default_reasoning_effort: Optional[str] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
+        stream_enabled: bool = True,
+        total_deadline_seconds: float = 1200.0,
+        max_response_bytes: int = 128 * 1024 * 1024,
         *,
         strict_response_shape: bool = False,
     ) -> None:
@@ -501,6 +505,10 @@ class MonitoringVisualOpenAIProvider(OpenAICompatibleAiProvider):
             max_attempts=max_attempts,
             default_thinking=default_thinking,
             default_reasoning_effort=default_reasoning_effort,
+            extra_headers=extra_headers,
+            stream_enabled=stream_enabled,
+            total_deadline_seconds=total_deadline_seconds,
+            max_response_bytes=max_response_bytes,
         )
         self.strict_response_shape = bool(strict_response_shape)
         self.strict_response_diagnostics = {}
@@ -537,129 +545,20 @@ class MonitoringVisualOpenAIProvider(OpenAICompatibleAiProvider):
         return request_payload
 
     def _run_completion(self, *, envelope, request_payload, visual_extra):
-        """Shared monitoring POST; strict mode only changes response parsing."""
-        request = Request(
-            f"{self.base_url}/chat/completions",
-            data=json.dumps(request_payload, ensure_ascii=False).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        response_body = ""
-        response_status: Optional[int] = None
-        response_content_type = ""
-        for attempt in range(self.max_attempts):
-            try:
-                with urlopen(request, timeout=self.timeout_seconds) as response:
-                    response_status = _gateway._response_status(response)
-                    response_content_type = _gateway._response_content_type(response)
-                    response_body = response.read().decode("utf-8")
-                break
-            except urllib.error.HTTPError as exc:
-                if (
-                    exc.code not in AI_PROVIDER_RETRYABLE_HTTP_CODES
-                    or attempt == self.max_attempts - 1
-                ):
-                    suffix = (
-                        " after bounded retries"
-                        if exc.code in AI_PROVIDER_RETRYABLE_HTTP_CODES
-                        and attempt > 0
-                        else ""
-                    )
-                    raise AiProviderRuntimeError(
-                        f"AI provider request failed{suffix}: HTTP {exc.code}",
-                        diagnostics={
-                            "failure_code": "provider_http_error",
-                            "http_status": int(exc.code),
-                            **visual_extra,
-                        },
-                    ) from exc
-            except (
-                urllib.error.URLError,
-                http.client.IncompleteRead,
-                http.client.RemoteDisconnected,
-                ConnectionResetError,
-                TimeoutError,
-            ) as exc:
-                if attempt == self.max_attempts - 1:
-                    prefix = (
-                        "AI provider request failed after bounded retries"
-                        if attempt > 0
-                        else "AI provider request failed"
-                    )
-                    raise AiProviderRuntimeError(
-                        f"{prefix}: {type(exc).__name__}",
-                        diagnostics={
-                            "failure_code": "provider_transport_error",
-                            "exception_type": type(exc).__name__,
-                            **visual_extra,
-                        },
-                    ) from exc
-            backoff_seconds = (0.5 * (2**attempt)) + random.uniform(0.0, 0.25)
-            time.sleep(backoff_seconds)
-        # Same model-identity verification contract as the shared gateway.
-        verified_response_model = _gateway._completion_response_model(response_body)
-        self.response_diagnostics = {
-            **_gateway._completion_response_diagnostics(
-                response_body,
-                http_status=response_status,
-                content_type=response_content_type,
-            ),
-            **visual_extra,
-        }
-        self.response_model = verified_response_model
-        if self.expected_response_model and not verified_response_model:
-            raise AiProviderRuntimeError(
-                "AI provider response did not include the configured model name",
-                diagnostics={
-                    **self.response_diagnostics,
-                    "failure_code": "provider_response_model_missing",
-                },
-            )
-        if (
-            self.expected_response_model
-            and verified_response_model != self.expected_response_model
-        ):
-            raise AiProviderRuntimeError(
-                "AI provider response model identity does not match the configured model "
-                f"(actual={verified_response_model or 'missing'}, "
-                f"expected={self.expected_response_model})",
-                diagnostics={
-                    **self.response_diagnostics,
-                    "failure_code": "provider_response_model_mismatch",
-                },
-            )
-        try:
-            content = _gateway._chat_completion_content(response_body)
-        except (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError) as exc:
-            failure_code = (
-                "provider_response_empty"
-                if "empty" in str(exc).lower() or "no content" in str(exc).lower()
-                else "provider_response_invalid"
-            )
-            raise AiProviderRuntimeError(
-                "AI provider response is not valid JSON completion or SSE stream "
-                f"({failure_code})",
-                diagnostics={
-                    **self.response_diagnostics,
-                    "failure_code": failure_code,
-                },
-            ) from exc
+        """Shared monitoring POST; strict mode only changes response parsing.
+
+        传输/解析完全复用网关``_post_and_parse``：流式开关、provider特俗头、
+        产品UA、绝对deadline、字节上限、SSE终态合同与模型身份校验一次实现，
+        视觉路径不再维护第二套发送逻辑。
+        """
+        if self.stream_enabled:
+            request_payload = {**request_payload, "stream": True}
+        request = self._build_request(request_payload)
+        parsed, content = self._post_and_parse(request, extra_diagnostics=visual_extra)
         if self._strict_response_enabled(envelope):
             return self._parse_strict_response(content)
-        try:
-            parsed = _gateway._parse_json_content(content)
-        except AiProviderRuntimeError as exc:
-            raise AiProviderRuntimeError(
-                str(exc),
-                diagnostics={
-                    **self.response_diagnostics,
-                    "failure_code": "provider_response_invalid_json",
-                },
-            ) from exc
         return parsed
+
     def _parse_strict_response(self, content):
         finish_reasons = list(self.response_diagnostics.get("finish_reasons") or [])
         try:
@@ -760,6 +659,10 @@ def provider_from_shared_config(
     max_attempts: Optional[int] = None,
     default_thinking: Optional[str] = None,
     default_reasoning_effort: Optional[str] = None,
+    extra_headers: Optional[Dict[str, str]] = None,
+    stream_enabled: bool = True,
+    total_deadline_seconds: float = 1200.0,
+    max_response_bytes: int = 128 * 1024 * 1024,
 ) -> MonitoringVisualOpenAIProvider:
     """Build the harness provider from existing gateway config values.
 
@@ -779,6 +682,10 @@ def provider_from_shared_config(
             max_attempts=max_attempts,
             default_thinking=default_thinking,
             default_reasoning_effort=default_reasoning_effort,
+            extra_headers=extra_headers,
+            stream_enabled=stream_enabled,
+            total_deadline_seconds=total_deadline_seconds,
+            max_response_bytes=max_response_bytes,
         )
     except AiGatewayConfigurationError:
         raise
