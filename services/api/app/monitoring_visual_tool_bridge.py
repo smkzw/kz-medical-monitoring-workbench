@@ -11,8 +11,11 @@ from .monitoring_visual_transport import (
 
 def visual_provider(provider):
     if type(provider) is OpenAICompatibleAiProvider:
+        # 流式开关、provider特俗头、deadline与字节上限必须随适配传播，
+        # 不得在视觉路径丢失（与网关行为保持一致）。
         keys = ('base_url', 'api_key', 'model_name', 'provider_name', 'timeout_seconds',
-                'expected_response_model', 'max_attempts', 'default_thinking', 'default_reasoning_effort')
+                'expected_response_model', 'max_attempts', 'default_thinking', 'default_reasoning_effort',
+                'extra_headers', 'stream_enabled', 'total_deadline_seconds', 'max_response_bytes')
         return provider_from_shared_config(**{key: getattr(provider, key) for key in keys})
     # Already adapted providers and injected test providers retain identity.
     return provider

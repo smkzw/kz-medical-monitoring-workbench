@@ -1,10 +1,10 @@
 """Focused tests for the isolated monitoring visual transport harness.
 
-All HTTP is faked by patching this module's own ``urlopen`` binding
-(``services.api.app.monitoring_visual_transport.urlopen``); the shared
-gateway's ``urllib`` state is never touched here except for the explicit
-text-delegation test, which patches the gateway module the same way the
-existing gateway tests do.  No real API calls, no network, no model calls.
+All HTTP is faked by patching the shared gateway's ``urlopen`` binding
+(``services.api.app.ai_gateway.urllib.request.urlopen``): since the strict
+transport unification, the visual provider delegates POST/retry/read/parse
+entirely to the shared gateway pipeline.  No real API calls, no network,
+no model calls.
 """
 
 from __future__ import annotations
@@ -117,6 +117,10 @@ class _FakeResponse:
     def read(self) -> bytes:
         return json.dumps(self.payload).encode("utf-8")
 
+    def __iter__(self):
+        # 共享网关流式读取路径按行迭代响应。
+        yield self.read()
+
 
 def _http_error(code: int) -> urllib.error.HTTPError:
     return urllib.error.HTTPError(
@@ -134,17 +138,11 @@ class MonitoringVisualTransportTests(unittest.TestCase):
         envelope = _make_envelope(images=[image])
         provider = _make_provider()
 
-        with patch.object(
-            visual_transport, "urlopen", return_value=_FakeResponse({"passed": True})
+        with patch(
+            "services.api.app.ai_gateway.urllib.request.urlopen",
+            return_value=_FakeResponse(_completion_payload()),
         ) as urlopen:
-            # Bypass completion parsing: raw dict body is accepted by the
-            # shared _parse_json_content helper path used by run_visual.
-            with patch.object(
-                visual_transport._gateway,
-                "_chat_completion_content",
-                return_value=json.dumps({"passed": True}),
-            ):
-                result = provider.run(envelope)
+            result = provider.run(envelope)
 
         self.assertEqual({"passed": True}, result)
         request = urlopen.call_args.args[0]
@@ -177,16 +175,15 @@ class MonitoringVisualTransportTests(unittest.TestCase):
         )
         provider = _make_provider(default_reasoning_effort="xhigh")
 
-        with patch.object(
-            visual_transport, "urlopen", return_value=_FakeResponse({"ok": True})
+        with patch(
+            "services.api.app.ai_gateway.urllib.request.urlopen",
+            return_value=_FakeResponse(_completion_payload()),
         ):
-            with patch.object(
-                visual_transport._gateway,
-                "_chat_completion_content",
-                return_value=json.dumps({"ok": True}),
-            ):
-                provider.run(envelope)
-                request = visual_transport.urlopen.call_args.args[0]
+            provider.run(envelope)
+            request = (
+                __import__("services.api.app.ai_gateway", fromlist=["urllib"])
+                .urllib.request.urlopen.call_args.args[0]
+            )
 
         body = json.loads(request.data.decode("utf-8"))
         self.assertEqual({"type": "disabled"}, body["thinking"])
@@ -196,9 +193,8 @@ class MonitoringVisualTransportTests(unittest.TestCase):
         provider = _make_provider(expected_response_model="vision-expected")
         envelope = _make_envelope()
 
-        with patch.object(
-            visual_transport,
-            "urlopen",
+        with patch(
+            "services.api.app.ai_gateway.urllib.request.urlopen",
             return_value=_FakeResponse(_completion_payload(model="vision-other")),
         ):
             with self.assertRaisesRegex(
@@ -217,9 +213,8 @@ class MonitoringVisualTransportTests(unittest.TestCase):
         provider = _make_provider(expected_response_model="vision-expected")
         envelope = _make_envelope()
 
-        with patch.object(
-            visual_transport,
-            "urlopen",
+        with patch(
+            "services.api.app.ai_gateway.urllib.request.urlopen",
             return_value=_FakeResponse(
                 {"choices": [{"message": {"content": '{"ok":true}'}}]}
             ),
@@ -237,8 +232,9 @@ class MonitoringVisualTransportTests(unittest.TestCase):
         provider = _make_provider()
         envelope = _make_envelope()
 
-        with patch.object(
-            visual_transport, "urlopen", side_effect=_http_error(400)
+        with patch(
+            "services.api.app.ai_gateway.urllib.request.urlopen",
+            side_effect=_http_error(400),
         ) as urlopen:
             with self.assertRaisesRegex(AiProviderRuntimeError, "HTTP 400"):
                 provider.run(envelope)
@@ -254,22 +250,16 @@ class MonitoringVisualTransportTests(unittest.TestCase):
         envelope = _make_envelope()
 
         with (
-            patch.object(
-                visual_transport,
-                "urlopen",
+            patch(
+                "services.api.app.ai_gateway.urllib.request.urlopen",
                 side_effect=[
                     _http_error(500),
                     _FakeResponse(_completion_payload()),
                 ],
             ) as urlopen,
-            patch.object(visual_transport.time, "sleep") as sleep,
-            patch.object(
-                visual_transport.random, "uniform", return_value=0.0
-            ),
-            patch.object(
-                visual_transport._gateway,
-                "_chat_completion_content",
-                return_value=json.dumps({"passed": True}),
+            patch("services.api.app.ai_gateway.time.sleep") as sleep,
+            patch(
+                "services.api.app.ai_gateway.random.uniform", return_value=0.0
             ),
         ):
             result = provider.run(envelope)

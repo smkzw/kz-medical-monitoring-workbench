@@ -98,6 +98,10 @@ class _FakeHttpResponse:
     def read(self) -> bytes:
         return self._body.encode("utf-8")
 
+    def __iter__(self):
+        # 共享网关流式读取路径按行迭代响应。
+        yield self._body.encode("utf-8")
+
     def __enter__(self) -> "_FakeHttpResponse":
         return self
 

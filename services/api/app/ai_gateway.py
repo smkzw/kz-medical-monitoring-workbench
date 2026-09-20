@@ -1084,6 +1084,8 @@ class OpenAICompatibleAiProvider:
         default_reasoning_effort: Optional[str] = None,
         extra_headers: Optional[Dict[str, str]] = None,
         stream_enabled: bool = True,
+        total_deadline_seconds: float = 1200.0,
+        max_response_bytes: int = 128 * 1024 * 1024,
     ):
         if not base_url.strip():
             raise AiGatewayConfigurationError("AI provider base_url is required")
@@ -1102,6 +1104,18 @@ class OpenAICompatibleAiProvider:
         # 固定执行时限（如 OmniRoute requestQueue.maxWaitMs=15s），大载荷思考
         # 模型必然超时被杀；流式下字节持续回流即不受该执行过期约束。
         self.stream_enabled = bool(stream_enabled)
+        # 整调用绝对deadline（单调时钟）：保活块不得无限延长任务。
+        if total_deadline_seconds <= 0:
+            raise AiGatewayConfigurationError(
+                "AI provider total_deadline_seconds must be positive"
+            )
+        self.total_deadline_seconds = float(total_deadline_seconds)
+        # 响应字节上限：SSE流按累计读取字节计算，防 runaway 输出。
+        if max_response_bytes <= 0:
+            raise AiGatewayConfigurationError(
+                "AI provider max_response_bytes must be positive"
+            )
+        self.max_response_bytes = int(max_response_bytes)
         # Provider-specific request headers (e.g. x-opencode-session) —
         # configured as data on the profile, never per-model code branches.
         self.extra_headers: Dict[str, str] = dict(extra_headers or {})
@@ -1158,7 +1172,12 @@ class OpenAICompatibleAiProvider:
             request_payload["reasoning_effort"] = reasoning_effort
         if envelope.max_output_tokens is not None:
             request_payload["max_tokens"] = int(envelope.max_output_tokens)
-        request = urllib.request.Request(
+        request = self._build_request(request_payload)
+        parsed, _content = self._post_and_parse(request)
+        return parsed
+
+    def _build_request(self, request_payload: Dict[str, Any]) -> urllib.request.Request:
+        return urllib.request.Request(
             f"{self.base_url}/chat/completions",
             data=json.dumps(request_payload, ensure_ascii=False).encode("utf-8"),
             headers={
@@ -1171,66 +1190,182 @@ class OpenAICompatibleAiProvider:
             },
             method="POST",
         )
+
+    def _read_provider_response(
+        self, request: urllib.request.Request
+    ) -> tuple[str, Optional[int], str, Dict[str, Any]]:
+        """POST once and read the full body under transport guardrails.
+
+        流式响应逐行增量读取：整调用绝对deadline（保活不能无限延长任务）、
+        累计字节上限、socket空闲超时三层防护；遥测记录真实首数据时间，
+        不把总读取时长冒充首token时间。
+        """
+        started = time.monotonic()
+        response_status: Optional[int] = None
+        response_content_type = ""
+        transport_diag: Dict[str, Any] = {}
+        try:
+            with urllib.request.urlopen(
+                request, timeout=self.timeout_seconds
+            ) as response:
+                response_status = _response_status(response)
+                response_content_type = _response_content_type(response)
+                if self.stream_enabled:
+                    parts: List[str] = []
+                    total_bytes = 0
+                    first_data_seconds: Optional[float] = None
+                    deadline = started + self.total_deadline_seconds
+                    for raw_line in response:
+                        now = time.monotonic()
+                        if now > deadline:
+                            raise AiProviderRuntimeError(
+                                "AI provider total deadline exceeded "
+                                f"({self.total_deadline_seconds:g}s); keepalives "
+                                "cannot extend the absolute budget",
+                                diagnostics={
+                                    "failure_code": "provider_deadline_exceeded",
+                                    "deadline_seconds": self.total_deadline_seconds,
+                                    "stream_bytes": total_bytes,
+                                },
+                            )
+                        total_bytes += len(raw_line)
+                        if total_bytes > self.max_response_bytes:
+                            raise AiProviderRuntimeError(
+                                "AI provider response exceeded the byte cap "
+                                f"({self.max_response_bytes})",
+                                diagnostics={
+                                    "failure_code": "provider_response_too_large",
+                                    "max_response_bytes": self.max_response_bytes,
+                                    "stream_bytes": total_bytes,
+                                },
+                            )
+                        if first_data_seconds is None and raw_line.lstrip()[
+                            :5
+                        ] == b"data:":
+                            first_data_seconds = round(now - started, 3)
+                        parts.append(raw_line.decode("utf-8", errors="replace"))
+                    response_body = "".join(parts)
+                    transport_diag = {
+                        "wire": "sse",
+                        "sse_bytes": total_bytes,
+                        "sse_read_seconds": round(time.monotonic() - started, 3),
+                    }
+                    if first_data_seconds is not None:
+                        transport_diag["sse_first_data_seconds"] = first_data_seconds
+                else:
+                    response_body = response.read().decode("utf-8")
+                    transport_diag = {
+                        "wire": "json",
+                        "response_bytes": len(response_body.encode("utf-8")),
+                        "read_seconds": round(time.monotonic() - started, 3),
+                    }
+        except AiProviderRuntimeError:
+            raise
+        except urllib.error.HTTPError as exc:
+            raise AiProviderRuntimeError(
+                f"AI provider request failed: HTTP {exc.code}",
+                diagnostics={
+                    "failure_code": "provider_http_error",
+                    "http_status": int(exc.code),
+                },
+            ) from exc
+        except (
+            urllib.error.URLError,
+            http.client.IncompleteRead,
+            http.client.RemoteDisconnected,
+            ConnectionResetError,
+            TimeoutError,
+        ) as exc:
+            raise AiProviderRuntimeError(
+                f"AI provider request failed: {type(exc).__name__}",
+                diagnostics={
+                    "failure_code": "provider_transport_error",
+                    "exception_type": type(exc).__name__,
+                },
+            ) from exc
+        return response_body, response_status, response_content_type, transport_diag
+
+    def _post_and_parse(
+        self,
+        request: urllib.request.Request,
+        extra_diagnostics: Optional[Dict[str, Any]] = None,
+    ) -> tuple[Dict[str, Any], str]:
+        """Bounded-retry POST, then completeness-enforced parse.
+
+        单一解析状态（content/reasoning/model/usage/finish/EOS/error）由
+        ``_extract_completion`` 一次产出；模型身份、正文与终态共用同一结果，
+        不存在两套容错。返回 (parsed_json, content_text)。
+        """
         response_body = ""
         response_status: Optional[int] = None
         response_content_type = ""
+        transport_diag: Dict[str, Any] = {}
         for attempt in range(self.max_attempts):
             try:
-                with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                    response_status = _response_status(response)
-                    response_content_type = _response_content_type(response)
-                    response_body = response.read().decode("utf-8")
+                (
+                    response_body,
+                    response_status,
+                    response_content_type,
+                    transport_diag,
+                ) = self._read_provider_response(request)
                 break
-            except urllib.error.HTTPError as exc:
-                if (
-                    exc.code not in AI_PROVIDER_RETRYABLE_HTTP_CODES
-                    or attempt == self.max_attempts - 1
-                ):
-                    suffix = (
-                        " after bounded retries"
-                        if exc.code in AI_PROVIDER_RETRYABLE_HTTP_CODES
-                        and attempt > 0
-                        else ""
-                    )
-                    raise AiProviderRuntimeError(
-                        f"AI provider request failed{suffix}: HTTP {exc.code}",
-                        diagnostics={
-                            "failure_code": "provider_http_error",
-                            "http_status": int(exc.code),
-                        },
-                    ) from exc
-            except (
-                urllib.error.URLError,
-                http.client.IncompleteRead,
-                http.client.RemoteDisconnected,
-                ConnectionResetError,
-                TimeoutError,
-            ) as exc:
-                if attempt == self.max_attempts - 1:
-                    prefix = (
-                        "AI provider request failed after bounded retries"
-                        if attempt > 0
-                        else "AI provider request failed"
-                    )
-                    raise AiProviderRuntimeError(
-                        f"{prefix}: {type(exc).__name__}",
-                        diagnostics={
-                            "failure_code": "provider_transport_error",
-                            "exception_type": type(exc).__name__,
-                        },
-                    ) from exc
+            except AiProviderRuntimeError as exc:
+                failure_code = str(
+                    (exc.diagnostics or {}).get("failure_code", "")
+                )
+                retryable = failure_code in {
+                    "provider_http_error",
+                    "provider_transport_error",
+                } and (
+                    failure_code != "provider_http_error"
+                    or int((exc.diagnostics or {}).get("http_status", 0))
+                    in AI_PROVIDER_RETRYABLE_HTTP_CODES
+                )
+                if not retryable or attempt == self.max_attempts - 1:
+                    if extra_diagnostics:
+                        exc.diagnostics = {
+                            **(exc.diagnostics or {}),
+                            **extra_diagnostics,
+                        }
+                    if retryable and attempt > 0:
+                        raise AiProviderRuntimeError(
+                            f"{exc} after bounded retries",
+                            diagnostics=exc.diagnostics,
+                        ) from exc
+                    raise
             backoff_seconds = (0.5 * (2**attempt)) + random.uniform(0.0, 0.25)
             time.sleep(backoff_seconds)
-        verified_response_model = _completion_response_model(response_body)
-        self.response_diagnostics = _completion_response_diagnostics(
-            response_body,
-            http_status=response_status,
-            content_type=response_content_type,
-        )
-        # Persist the observed endpoint identity before enforcing the expected
-        # model so a failed run remains auditable instead of recording an empty
-        # actual_response_model.
+        self.response_diagnostics = {
+            **_completion_response_diagnostics(
+                response_body,
+                http_status=response_status,
+                content_type=response_content_type,
+            ),
+            **transport_diag,
+        }
+        if extra_diagnostics:
+            self.response_diagnostics = {**self.response_diagnostics, **extra_diagnostics}
+        try:
+            content, verified_response_model, contract_diag = _extract_completion(
+                response_body
+            )
+        except _CompletionContractError as exc:
+            # Persist the observed endpoint identity (when extractable) before
+            # raising so a failed run stays auditable.
+            self.response_model = exc.observed_model
+            self.response_diagnostics = {
+                **self.response_diagnostics,
+                **exc.diagnostics,
+            }
+            raise AiProviderRuntimeError(
+                f"{exc.message} (failure_code={exc.diagnostics['failure_code']})",
+                diagnostics=self.response_diagnostics,
+            ) from exc
         self.response_model = verified_response_model
+        self.response_diagnostics = {
+            **self.response_diagnostics,
+            **contract_diag,
+        }
         if self.expected_response_model and not verified_response_model:
             raise AiProviderRuntimeError(
                 "AI provider response did not include the configured model name",
@@ -1253,22 +1388,6 @@ class OpenAICompatibleAiProvider:
                 },
             )
         try:
-            content = _chat_completion_content(response_body)
-        except (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError) as exc:
-            failure_code = (
-                "provider_response_empty"
-                if "empty" in str(exc).lower() or "no content" in str(exc).lower()
-                else "provider_response_invalid"
-            )
-            raise AiProviderRuntimeError(
-                "AI provider response is not valid JSON completion or SSE stream "
-                f"({failure_code})",
-                diagnostics={
-                    **self.response_diagnostics,
-                    "failure_code": failure_code,
-                },
-            ) from exc
-        try:
             parsed = _parse_json_content(content)
         except AiProviderRuntimeError as exc:
             raise AiProviderRuntimeError(
@@ -1278,7 +1397,7 @@ class OpenAICompatibleAiProvider:
                     "failure_code": "provider_response_invalid_json",
                 },
             ) from exc
-        return parsed
+        return parsed, content
 
 
 class HermesCliAiProvider:
@@ -1378,48 +1497,94 @@ class HermesCliAiProvider:
         raise AiProviderRuntimeError("Hermes CLI response contains no final JSON object")
 
 
-def _chat_completion_content(response_body: str) -> str:
-    try:
-        payload = json.loads(response_body)
-    except json.JSONDecodeError:
-        return _sse_completion_content(response_body)
-    message = payload["choices"][0]["message"]
-    content = message.get("content")
-    if isinstance(content, str) and content:
-        return content
-    # 思考模型（如 deepseek-v4.1-flash）在 max 思考档可能把推理写入
-    # reasoning 字段而正文为空；把推理文本作为正文回退，交给上层
-    # JSON 解析/修复器处理，而不是直接判空失败。
-    reasoning = message.get("reasoning") or message.get("reasoning_content")
-    if isinstance(reasoning, str) and reasoning.strip():
-        return reasoning
-    raise ValueError("chat completion content is empty")
+class _SseStreamResult:
+    """Single SSE parse state shared by identity/content/usage/termination.
+
+    身份（models）、正文（chunks）、推理（reasoning_chunks）、usage、
+    终止（finish_reason + [DONE]）、error 事件与畸形事件计数都从同一次
+    扫描产出；消费方不得各自再扫描一遍。
+    """
+
+    __slots__ = (
+        "chunks",
+        "reasoning_chunks",
+        "models",
+        "usage",
+        "finish_reason",
+        "saw_done",
+        "saw_event",
+        "error_event",
+        "keepalive_events",
+        "malformed_events",
+    )
+
+    def __init__(self) -> None:
+        self.chunks: List[str] = []
+        self.reasoning_chunks: List[str] = []
+        self.models: set = set()
+        self.usage: Optional[Dict[str, Any]] = None
+        self.finish_reason: str = ""
+        self.saw_done: bool = False
+        self.saw_event: bool = False
+        self.error_event: Optional[Any] = None
+        self.keepalive_events: int = 0
+        self.malformed_events: int = 0
 
 
-def _sse_completion_content(response_body: str) -> str:
-    chunks: List[str] = []
-    reasoning_chunks: List[str] = []
-    saw_event = False
-    for line in response_body.splitlines():
-        if not line.startswith("data:"):
+def _parse_sse_stream(response_body: str) -> _SseStreamResult:
+    """Strict SSE framing scan.
+
+    合法注释（``:``）与空行忽略；``data:`` 载荷必须为 JSON 业务事件或
+    ``[DONE]``；畸形业务事件计数后由终态合同判定失败——不静默丢token。
+    """
+    result = _SseStreamResult()
+    for raw_line in response_body.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith(":"):
             continue
-        saw_event = True
-        data = line[5:].strip()
-        if not data or data == "[DONE]":
+        if not stripped.startswith("data:"):
+            continue  # event:/id:/retry: 等framing字段不承载业务载荷
+        result.saw_event = True
+        data = stripped[5:].strip()
+        if data == "[DONE]":
+            result.saw_done = True
+            continue
+        if not data:
             continue
         try:
             event = json.loads(data)
         except json.JSONDecodeError:
+            result.malformed_events += 1
             continue
         if not isinstance(event, dict):
+            result.malformed_events += 1
             continue
+        if isinstance(event.get("error"), (dict, str)):
+            result.error_event = event["error"]
+            continue
+        model = event.get("model")
+        if isinstance(model, str) and model:
+            if model == "keepalive":
+                # 传输层保活块不代表真实端点模型身份。
+                result.keepalive_events += 1
+            else:
+                result.models.add(model)
+        usage = event.get("usage")
+        if isinstance(usage, dict):
+            result.usage = usage
         choices = event.get("choices")
-        # 传输层保活块（choices 为空列表）与 usage 收尾块不含正文。
+        # usage 收尾块/无choices的保活块不承载正文。
         if not isinstance(choices, list) or not choices:
             continue
         choice = choices[0]
-        delta = choice.get("delta") if isinstance(choice, dict) else None
-        message = choice.get("message") if isinstance(choice, dict) else None
+        if not isinstance(choice, dict):
+            result.malformed_events += 1
+            continue
+        finish_reason = choice.get("finish_reason")
+        if isinstance(finish_reason, str) and finish_reason:
+            result.finish_reason = finish_reason
+        delta = choice.get("delta")
+        message = choice.get("message")
         content = ""
         if isinstance(delta, dict):
             content = delta.get("content") or ""
@@ -1428,22 +1593,172 @@ def _sse_completion_content(response_body: str) -> str:
         if not content and isinstance(choice, dict):
             content = choice.get("text") or ""
         if content:
-            chunks.append(str(content))
+            result.chunks.append(str(content))
             continue
         reasoning = ""
         if isinstance(delta, dict):
             reasoning = delta.get("reasoning_content") or delta.get("reasoning") or ""
         if not reasoning and isinstance(message, dict):
-            reasoning = message.get("reasoning_content") or message.get("reasoning") or ""
+            reasoning = (
+                message.get("reasoning_content") or message.get("reasoning") or ""
+            )
         if reasoning:
-            reasoning_chunks.append(str(reasoning))
-    if not saw_event or not (chunks or reasoning_chunks):
-        raise ValueError("SSE completion contains no content events")
-    # 正文优先；思考模型把推理流入 reasoning_content 且正文为空时，
-    # 与非流式路径一致地将推理文本回退为正文。
-    if chunks:
-        return "".join(chunks)
-    return "".join(reasoning_chunks)
+            result.reasoning_chunks.append(str(reasoning))
+    return result
+
+
+class _CompletionContractError(Exception):
+    """Endpoint completeness/terminal-contract violation (pre-JSON-parse).
+
+    携带可提取的端点模型身份与安全诊断；由调用方转换为
+    AiProviderRuntimeError 并保留响应形状遥测。
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        failure_code: str,
+        observed_model: str = "",
+        extra: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(message)
+        self.message = message
+        self.observed_model = observed_model
+        self.diagnostics = {"failure_code": failure_code, **(extra or {})}
+
+
+def _completion_contract_diag(
+    stream: Optional[_SseStreamResult],
+) -> Dict[str, Any]:
+    if stream is None:
+        return {}
+    return {
+        "sse_done": stream.saw_done,
+        "sse_finish_reason": stream.finish_reason,
+        "sse_keepalive_events": stream.keepalive_events,
+        "sse_malformed_events": stream.malformed_events,
+        "sse_error_event": bool(stream.error_event),
+    }
+
+
+def _extract_completion(response_body: str) -> tuple[str, str, Dict[str, Any]]:
+    """Enforce the endpoint completeness contract and split the channels.
+
+    Returns ``(final_content, model, contract_diagnostics)``. Final medical
+    content may only come from the final answer channel; reasoning text is
+    never silently adopted (``provider_reasoning_only`` instead). Truncation,
+    upstream error events, malformed business events, and streams that end
+    without a terminal contract fail with traceable subcodes even when the
+    partial text still parses as JSON.
+    """
+    try:
+        payload = json.loads(response_body)
+    except json.JSONDecodeError:
+        stream = _parse_sse_stream(response_body)
+        if stream.error_event is not None:
+            summary = str(stream.error_event)[:200]
+            raise _CompletionContractError(
+                f"AI provider stream reported an upstream error event: {summary}",
+                failure_code="provider_sse_error_event",
+                observed_model=next(iter(stream.models), ""),
+                extra=_completion_contract_diag(stream),
+            )
+        if stream.malformed_events:
+            raise _CompletionContractError(
+                f"AI provider stream contained {stream.malformed_events} malformed "
+                "business event(s); the aggregated text may be silently incomplete",
+                failure_code="provider_sse_malformed_event",
+                observed_model=next(iter(stream.models), ""),
+                extra=_completion_contract_diag(stream),
+            )
+        if not stream.saw_done or not stream.finish_reason:
+            raise _CompletionContractError(
+                "AI provider stream ended without a terminal contract "
+                f"(done={stream.saw_done}, finish_reason={stream.finish_reason!r})",
+                failure_code="provider_sse_truncated",
+                observed_model=next(iter(stream.models), ""),
+                extra=_completion_contract_diag(stream),
+            )
+        if stream.finish_reason == "length":
+            raise _CompletionContractError(
+                "AI provider response truncated by output token limit "
+                "(finish_reason=length)",
+                failure_code="provider_response_truncated",
+                observed_model=next(iter(stream.models), ""),
+                extra=_completion_contract_diag(stream),
+            )
+        model = next(iter(stream.models)) if len(stream.models) == 1 else ""
+        content = "".join(stream.chunks)
+        diag = {
+            "wire_format": "sse",
+            "sse_reasoning_chars": sum(len(c) for c in stream.reasoning_chunks),
+            "sse_usage_total_tokens": (
+                stream.usage.get("total_tokens")
+                if isinstance(stream.usage, dict)
+                else None
+            ),
+            **_completion_contract_diag(stream),
+        }
+        if content:
+            return content, model, diag
+        reasoning = "".join(stream.reasoning_chunks)
+        if reasoning.strip():
+            raise _CompletionContractError(
+                "AI provider returned only reasoning tokens with no final "
+                "answer channel; reasoning is not accepted as medical content",
+                failure_code="provider_reasoning_only",
+                observed_model=model,
+                extra=diag,
+            )
+        raise _CompletionContractError(
+            "SSE completion contains no final content events",
+            failure_code="provider_response_empty",
+            observed_model=model,
+            extra=diag,
+        )
+    if not isinstance(payload, dict):
+        raise _CompletionContractError(
+            "AI provider response is not a JSON completion object",
+            failure_code="provider_response_invalid",
+        )
+    choices = payload.get("choices")
+    model = payload.get("model") if isinstance(payload.get("model"), str) else ""
+    choice = choices[0] if isinstance(choices, list) and choices else {}
+    message = choice.get("message") if isinstance(choice, dict) else None
+    finish_reason = (
+        choice.get("finish_reason")
+        if isinstance(choice, dict) and isinstance(choice.get("finish_reason"), str)
+        else ""
+    )
+    if finish_reason == "length":
+        raise _CompletionContractError(
+            "AI provider response truncated by output token limit "
+            "(finish_reason=length)",
+            failure_code="provider_response_truncated",
+            observed_model=model,
+        )
+    content = message.get("content") if isinstance(message, dict) else None
+    diag = {"wire_format": "json", "json_finish_reason": finish_reason}
+    if isinstance(content, str) and content:
+        return content, model, diag
+    reasoning = ""
+    if isinstance(message, dict):
+        reasoning = message.get("reasoning") or message.get("reasoning_content") or ""
+    if isinstance(reasoning, str) and reasoning.strip():
+        raise _CompletionContractError(
+            "AI provider returned only reasoning tokens with no final "
+            "answer channel; reasoning is not accepted as medical content",
+            failure_code="provider_reasoning_only",
+            observed_model=model,
+            extra=diag,
+        )
+    raise _CompletionContractError(
+        "chat completion content is empty",
+        failure_code="provider_response_empty",
+        observed_model=model,
+        extra=diag,
+    )
 
 
 def _response_status(response: Any) -> Optional[int]:
@@ -1551,29 +1866,6 @@ def _completion_response_diagnostics(
                 for choice in choices:
                     observe_choice(choice)
     return diagnostics
-
-
-def _completion_response_model(response_body: str) -> str:
-    try:
-        payload = json.loads(response_body)
-    except json.JSONDecodeError:
-        models = set()
-        for line in response_body.splitlines():
-            if not line.startswith("data:"):
-                continue
-            data = line[5:].strip()
-            if not data or data == "[DONE]":
-                continue
-            event = json.loads(data)
-            model = event.get("model") if isinstance(event, dict) else None
-            # 传输层保活块标记为 keepalive，不代表真实端点模型身份。
-            if isinstance(model, str) and model and model != "keepalive":
-                models.add(model)
-        if len(models) == 1:
-            return models.pop()
-        return ""
-    model = payload.get("model") if isinstance(payload, dict) else None
-    return model if isinstance(model, str) else ""
 
 
 def _configured_direct_provider_values(values: Dict[str, str]) -> tuple[str, str, str, str]:
@@ -1694,6 +1986,12 @@ def configured_ai_provider_from_env(
         stream_enabled=(
             values.get("WORKBENCH_AI_STREAM", "1").strip().lower()
             not in {"0", "false", "no", "off"}
+        ),
+        total_deadline_seconds=float(
+            values.get("WORKBENCH_AI_TOTAL_DEADLINE_SECONDS", "1200")
+        ),
+        max_response_bytes=int(
+            values.get("WORKBENCH_AI_MAX_RESPONSE_BYTES", str(128 * 1024 * 1024))
         ),
     )
 
