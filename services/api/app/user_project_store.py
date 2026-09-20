@@ -10,6 +10,10 @@ from uuid import uuid4
 from packages.contracts.workbench_contracts import UserProjectCreateRequest
 
 
+def _utcnow_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 @dataclass(frozen=True)
 class UserProjectRecord:
     project_id: str
@@ -89,6 +93,32 @@ class UserProjectStore:
             ).fetchone()
         return self._record(row) if row is not None else None
 
+    def archive_project(self, project_id: str) -> bool:
+        """归档项目（软删除）：列表/选择器隐藏，磁盘数据保留可逆。"""
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO project_visibility (project_id, archived_at) "
+                "VALUES (?, ?)",
+                (project_id, _utcnow_iso()),
+            )
+            connection.commit()
+        return True
+
+    def restore_project(self, project_id: str) -> bool:
+        with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM project_visibility WHERE project_id = ?", (project_id,)
+            )
+            connection.commit()
+        return True
+
+    def archived_project_ids(self) -> set[str]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT project_id FROM project_visibility"
+            ).fetchall()
+        return {str(row["project_id"]) for row in rows}
+
     def records(self) -> Iterable[UserProjectRecord]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -97,6 +127,16 @@ class UserProjectStore:
         return [self._record(row) for row in rows]
 
     def _initialize(self) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS project_visibility (
+                    project_id TEXT PRIMARY KEY,
+                    archived_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.commit()
         with self._connect() as connection:
             connection.execute(
                 """

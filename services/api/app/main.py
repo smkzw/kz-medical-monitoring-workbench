@@ -4508,6 +4508,8 @@ def writing_reference_translation_ai_status():
 @app.get("/api/projects")
 def list_projects():
     projects = project_source_manifest_service.list_public_projects()
+    archived = user_project_store.archived_project_ids()
+    projects = [p for p in projects if p.get("project_id") not in archived]
     if not _r5_s7_fixture_mode:
         return projects
     return [
@@ -4535,6 +4537,26 @@ def list_projects():
             ],
         },
     ]
+
+
+@app.delete("/api/projects/{project_id}")
+def archive_project(project_id: str):
+    """归档项目（软删除）：从列表与选择器隐藏；磁盘数据保留可恢复。"""
+    archived_ids = user_project_store.archived_project_ids()
+    known = any(
+        p.get("project_id") == project_id
+        for p in project_source_manifest_service.list_public_projects()
+    ) or project_id in {rec.project_id for rec in user_project_store.records()}
+    if not known:
+        raise HTTPException(status_code=404, detail="project not found")
+    user_project_store.archive_project(project_id)
+    return {"archived": True, "project_id": project_id}
+
+
+@app.post("/api/projects/{project_id}/restore")
+def restore_project(project_id: str):
+    user_project_store.restore_project(project_id)
+    return {"restored": True, "project_id": project_id}
 
 
 @app.post("/api/projects", status_code=201)
