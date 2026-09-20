@@ -513,6 +513,11 @@ class MonitoringVisualOpenAIProvider(OpenAICompatibleAiProvider):
         self.strict_response_shape = bool(strict_response_shape)
         self.strict_response_diagnostics = {}
 
+    def _truncation_policy(self) -> str:
+        # 严格修复模式：length截断的正文交既有单轮修复（不静默采纳）；
+        # 宽松路径保持默认fail（拒绝截断输出）。
+        return "repair"
+
     def _strict_response_enabled(self, envelope: AiPromptEnvelope) -> bool:
         if bool(getattr(self, "strict_response_shape", False)):
             return True
@@ -554,8 +559,13 @@ class MonitoringVisualOpenAIProvider(OpenAICompatibleAiProvider):
         if self.stream_enabled:
             request_payload = {**request_payload, "stream": True}
         request = self._build_request(request_payload)
-        parsed, content = self._post_and_parse(request, extra_diagnostics=visual_extra)
-        if self._strict_response_enabled(envelope):
+        strict = self._strict_response_enabled(envelope)
+        parsed, content = self._post_and_parse(
+            request,
+            extra_diagnostics=visual_extra,
+            final_content_policy="raw" if strict else "json_object",
+        )
+        if strict:
             return self._parse_strict_response(content)
         return parsed
 

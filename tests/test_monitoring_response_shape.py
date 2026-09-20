@@ -133,6 +133,9 @@ class _FakeShapeResponse:
     def __exit__(self, exc_type, exc, tb):
         return False
 
+    def __iter__(self):
+        yield self.read()
+
     def read(self) -> bytes:
         return json.dumps(self.payload).encode("utf-8")
 
@@ -148,8 +151,11 @@ def _http_error(code: int) -> urllib.error.HTTPError:
 
 
 def _run_strict(provider, envelope, payload, **patches):
-    with patch.object(
-        visual_transport, "urlopen", return_value=_FakeShapeResponse(payload)
+    # WP0A传输统一后，provider经共享网关_post_and_parse发请求：
+    # patch目标是ai_gateway的urlopen，不再是visual_transport模块绑定。
+    with patch(
+        "services.api.app.ai_gateway.urllib.request.urlopen",
+        return_value=_FakeShapeResponse(payload),
     ) as urlopen:
         result = provider.run(envelope)
     return result, urlopen
@@ -294,9 +300,8 @@ class MonitoringStrictResponseShapeTests(unittest.TestCase):
         envelope = _make_envelope()
         payload = _completion_payload(COMPLETE_OBJECT, model="vision-other")
 
-        with patch.object(
-            visual_transport,
-            "urlopen",
+        with patch(
+            "services.api.app.ai_gateway.urllib.request.urlopen",
             return_value=_FakeShapeResponse(payload),
         ):
             with self.assertRaisesRegex(
@@ -316,16 +321,17 @@ class MonitoringStrictResponseShapeTests(unittest.TestCase):
         payload = _completion_payload(COMPLETE_OBJECT)
 
         with (
-            patch.object(
-                visual_transport,
-                "urlopen",
+            patch(
+                "services.api.app.ai_gateway.urllib.request.urlopen",
                 side_effect=[
                     _http_error(500),
                     _FakeShapeResponse(payload),
                 ],
             ) as urlopen,
-            patch.object(visual_transport.time, "sleep") as sleep,
-            patch.object(visual_transport.random, "uniform", return_value=0.0),
+            patch("services.api.app.ai_gateway.time.sleep") as sleep,
+            patch(
+                "services.api.app.ai_gateway.random.uniform", return_value=0.0
+            ),
         ):
             result = provider.run(envelope)
 

@@ -1176,6 +1176,11 @@ class OpenAICompatibleAiProvider:
         parsed, _content = self._post_and_parse(request)
         return parsed
 
+    def _truncation_policy(self) -> str:
+        """截断正文的处理策略：'fail'（默认，拒绝截断输出）或'repair'
+        （严格修复模式：截断正文交有界修复轮，不静默采纳）。"""
+        return "fail"
+
     def _build_request(self, request_payload: Dict[str, Any]) -> urllib.request.Request:
         return urllib.request.Request(
             f"{self.base_url}/chat/completions",
@@ -1289,6 +1294,7 @@ class OpenAICompatibleAiProvider:
         self,
         request: urllib.request.Request,
         extra_diagnostics: Optional[Dict[str, Any]] = None,
+        final_content_policy: Optional[str] = None,
     ) -> tuple[Dict[str, Any], str]:
         """Bounded-retry POST, then completeness-enforced parse.
 
@@ -1347,7 +1353,7 @@ class OpenAICompatibleAiProvider:
             self.response_diagnostics = {**self.response_diagnostics, **extra_diagnostics}
         try:
             content, verified_response_model, contract_diag = _extract_completion(
-                response_body
+                response_body, truncation_policy=self._truncation_policy()
             )
         except _CompletionContractError as exc:
             # Persist the observed endpoint identity (when extractable) before
@@ -1387,6 +1393,10 @@ class OpenAICompatibleAiProvider:
                     "failure_code": "provider_response_model_mismatch",
                 },
             )
+        # 严格修复模式（final_content_policy='raw'）不做宽松JSON对象强制：
+        # 原样交回正文供上游严格解析/修复轮裁决。
+        if (final_content_policy or "json_object") == "raw":
+            return {"raw_content": True}, content
         try:
             parsed = _parse_json_content(content)
         except AiProviderRuntimeError as exc:
@@ -1642,7 +1652,9 @@ def _completion_contract_diag(
     }
 
 
-def _extract_completion(response_body: str) -> tuple[str, str, Dict[str, Any]]:
+def _extract_completion(
+    response_body: str, *, truncation_policy: str = "fail"
+) -> tuple[str, str, Dict[str, Any]]:
     """Enforce the endpoint completeness contract and split the channels.
 
     Returns ``(final_content, model, contract_diagnostics)``. Final medical
@@ -1680,7 +1692,7 @@ def _extract_completion(response_body: str) -> tuple[str, str, Dict[str, Any]]:
                 observed_model=next(iter(stream.models), ""),
                 extra=_completion_contract_diag(stream),
             )
-        if stream.finish_reason == "length":
+        if stream.finish_reason == "length" and truncation_policy != "repair":
             raise _CompletionContractError(
                 "AI provider response truncated by output token limit "
                 "(finish_reason=length)",
@@ -1731,7 +1743,7 @@ def _extract_completion(response_body: str) -> tuple[str, str, Dict[str, Any]]:
         if isinstance(choice, dict) and isinstance(choice.get("finish_reason"), str)
         else ""
     )
-    if finish_reason == "length":
+    if finish_reason == "length" and truncation_policy != "repair":
         raise _CompletionContractError(
             "AI provider response truncated by output token limit "
             "(finish_reason=length)",
@@ -1740,6 +1752,9 @@ def _extract_completion(response_body: str) -> tuple[str, str, Dict[str, Any]]:
         )
     content = message.get("content") if isinstance(message, dict) else None
     diag = {"wire_format": "json", "json_finish_reason": finish_reason}
+    if finish_reason == "length":
+        # repair策略：截断正文交严格修复轮，遥测显式标记。
+        diag["truncated_repair"] = True
     if isinstance(content, str) and content:
         return content, model, diag
     reasoning = ""
