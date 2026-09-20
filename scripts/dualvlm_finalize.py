@@ -316,8 +316,20 @@ def main() -> None:
             f"FOCUSED submitted={len(submission.job_by_finding_id)} "
             f"skipped={len(submission.skipped)}"
         )
-        # 等待聚焦核实轮终态（最多120分钟）；超时项以执行状态入合并，不伪装成医学反证
-        deadline = time.time() + 120 * 60
+        # 唤醒worker：本进程直写仓库提交的作业，API侧worker只认wake事件
+        # （D-11唤醒衔接——retry_failed已有，finalize同样必须有）。
+        try:
+            wake = urllib.request.Request(
+                f"{BASE}/ai/queue/resume",
+                data=b"{}",
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            urllib.request.urlopen(wake, timeout=15).read()
+        except Exception as exc:
+            print(f"WARN: post-submit wake failed ({exc})")
+        # 等待聚焦核实轮终态（最多300分钟）；超时项以执行状态入合并，不伪装成医学反证
+        deadline = time.time() + 300 * 60
         while time.time() < deadline:
             time.sleep(120)
             active = 0
