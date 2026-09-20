@@ -147,3 +147,34 @@ def test_severity_source_honesty(tmp_path: Path) -> None:
     assert headache.severity == "critical" and headache.severity_source == "recorded"
     assert fatigue.severity_source == "unknown"
     assert aspirin.severity_source == "inferred"
+
+
+def test_event_carries_original_record_id(tmp_path: Path) -> None:
+    # WP2：原始记录号与源位置分离——重排/增量下跨表引用不漂移。
+    workspace = _workspace(
+        tmp_path,
+        {
+            "AE": [
+                {
+                    "SUBJID": "01001",
+                    "AETERM": "头痛",
+                    "AESEV": "1",
+                    "AESTDAT": "2026-01-05",
+                    "Block顺序号": "A-0042",
+                },
+                {
+                    "SUBJID": "01001",
+                    "AETERM": "腹泻",
+                    "AESEV": "2",
+                    "AESTDAT": "2026-02-03",
+                    # 源无记录号：空串，不编造
+                },
+            ],
+        },
+    )
+    provider = FactsPublicationAuthorityProvider(workspace)
+    packet = provider.get_packet("proj-test", snapshot_ref="facts-s5")
+    headache = next(e for e in packet.events if "头痛" in (e.label_zh or ""))
+    diarrhea = next(e for e in packet.events if "腹泻" in (e.label_zh or ""))
+    assert headache.source_record_id == "A-0042"
+    assert diarrhea.source_record_id == ""
