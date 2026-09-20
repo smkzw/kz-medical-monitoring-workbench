@@ -205,6 +205,10 @@ class GenericOmlxFailClosedTests(unittest.TestCase):
         def __exit__(self, exc_type, exc, traceback):
             return False
 
+        def __iter__(self):
+            # 共享网关流式读取路径按行迭代响应。
+            yield _ok_response("{}")
+
         def read(self):
             return _ok_response("{}")
 
