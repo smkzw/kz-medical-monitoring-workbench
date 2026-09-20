@@ -308,8 +308,16 @@ class R5RiskRecord:
     change_kind: str = "continued"
     change_cause: Optional[str] = None
     prior_snapshot_ref: Optional[str] = None
+    # 严重度来源：recorded=源记录载明；inferred=系统按表/域默认推定；
+    # unknown=源记录缺失（severity仅为兼容占位，不等于医学"中度"）。
+    # WP2：默认medium不得掩盖未知。
+    severity_source: str = "recorded"
 
     def __post_init__(self) -> None:
+        if self.severity_source not in ("recorded", "inferred", "unknown"):
+            raise R5ProductAdapterError(
+                "SEVERITY_SOURCE_UNKNOWN", self.severity_source
+            )
         for name in (
             "risk_ref", "risk_instance_ref", "risk_key", "site_ref", "subject_ref",
             "spine_ref", "risk_type_zh", "risk_anchor_ref",
