@@ -44,3 +44,25 @@ F1-F4落地后重派三测试者（换新研究：可从研究方案库选Povor 
   *_round1_invalid_wrongapp.md）。入排应用自身P0（解构草稿失败job=
   653676a/1414ed57、项目名冲突阻断提交、xlsx无入口）属另一子系统，
   转交其负责方。
+
+## F2实测进展（2026-09-21，端到端API序列已验证至第4步）
+1. POST /api/projects（modules=["medical_monitoring"]）→ proj_user_*创建 ✅（F1）
+2. manifest自动含medical_monitoring绑定（intake_pending）→ r7可达 ✅（F2/F4）
+3. POST r7/data-admissions/upload（multipart xlsx）→ attempt创建，10表/590行profile ✅
+4. POST r7/data-admissions/{a}/study-documents/analyze（方案docx）→ 202，
+   双AI（document-authority primary+verifier）后台完成 ✅（需mapping_gate
+   常量对齐现役路由——已修，见下）
+5. **当前卡点**：POST .../study-documents/resolve（batch_id）返回
+   state=reviewing不推进promoted，尽管双AI job已completed且候选已产出。
+   待查：advance()对completed job的候选聚合条件（_ANALYSIS_GENERATION
+   版本匹配/候选挂载位置）。
+6. ready后链路：mapping-candidates→mapping-draft→adjudicate→confirm→
+   facts（fact_routes POST /data-admissions/{a}/facts）→监查模块就绪。
+
+## mapping_gate常量对齐（已完成）
+- MONITORING_C3_MAPPING_PROVIDER: zhipu-coding-plan→cms-router（主）
+- MONITORING_C3_VERIFIER_PROVIDER: deepseek→opencode-go（盲核）
+- 历史身份zhipu保留进PRIMARY_RUNTIME_PAIRS（旧作业/回执可重验）
+- 文档权威工作流身份校验因此修复（此前500：runtime identity does not match）
+- 注意：eCRF文档为readiness必需项（protocol+ecrf required_now=true），
+  测试场景包需补合成eCRF docx（generate_test_listing.py待扩展）。
