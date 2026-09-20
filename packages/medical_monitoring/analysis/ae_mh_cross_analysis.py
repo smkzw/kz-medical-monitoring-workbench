@@ -745,7 +745,10 @@ def merge_focused_verifications(
         job_id = focused_job_by_finding_id[finding_id]
         try:
             job = ai_repository.get(project_id, job_id)
-            job_status = str(getattr(job, "status", "missing"))
+            raw_status = getattr(job, "status", "missing")
+            # 仓库返回pydantic模型时status是枚举：取.value归一为字符串，
+            # 否则str(enum)永远不等于"completed"，全部误判为失败。
+            job_status = str(getattr(raw_status, "value", raw_status))
         except Exception:
             job_status = "query_error"
         if finding_id in (wait_timed_out_ids or set()) or job_status in (
