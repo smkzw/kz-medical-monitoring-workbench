@@ -26,7 +26,9 @@ MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION = "mm-c3-dual-mapping-cohort-v1"
 # PRIMARY_RUNTIME_PAIRS set below admits every current and historical
 # primary identity so persisted jobs/receipts keep revalidating across
 # route changes.
-MONITORING_C3_MAPPING_PROVIDER = "zhipu-coding-plan"
+# 2026-09-20 现役主身份对齐用户最终指令（glm-5.3-flash@cms-router，
+# 完整批跑185+43作业在该路由成功）；zhipu-coding-plan保留为历史身份。
+MONITORING_C3_MAPPING_PROVIDER = "cms-router"
 MONITORING_C3_MAPPING_MODEL = "glm-5.3-flash"
 MONITORING_C3_MAPPING_PROFILE_ID = (
     "medical_monitoring_ai__zhipu_glm_flash_high"
@@ -51,10 +53,12 @@ MONITORING_C3_ALTERNATE_MODEL = "minimax-m3"
 # (high) as primary + deepseek-flash (high) as the blind verifier. The
 # local MTPLX verifier from the interim directive exits the active
 # configuration and remains a historical identity only.
-MONITORING_C3_VERIFIER_PROVIDER = "deepseek"
+# 2026-09-20 现役盲核身份对齐用户最终指令（deepseek-flash@opencode-go，
+# r3盲核252/278+fv波在该路由完成）；deepseek直连保留为历史身份。
+MONITORING_C3_VERIFIER_PROVIDER = "opencode-go"
 MONITORING_C3_VERIFIER_MODEL = "deepseek-flash"
 MONITORING_C3_VERIFIER_PROFILE_ID = (
-    "medical_monitoring_verifier__deepseek_flash"
+    "medical_monitoring_verifier_ai__opencode_go_dsf"
 )
 MONITORING_C3_MTPLX_VERIFIER_PROVIDER = "mtplx"
 MONITORING_C3_MTPLX_VERIFIER_MODEL = "mtplx-flash-next-optimized-speed"
@@ -117,6 +121,8 @@ MONITORING_C3_VERIFIER_RUNTIME_PAIRS = frozenset({
 })
 MONITORING_C3_PRIMARY_RUNTIME_PAIRS = frozenset({
     (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
+    # 历史身份：zhipu-coding-plan直连（路由迁移前的持久作业/回执仍可重验）
+    ("zhipu-coding-plan", "glm-5.3-flash"),
     (MONITORING_C3_DEEPSEEK_PRIMARY_PROVIDER, MONITORING_C3_DEEPSEEK_PRIMARY_MODEL),
     (MONITORING_C3_CMS_PRIMARY_PROVIDER, MONITORING_C3_CMS_PRIMARY_MODEL),
     (MONITORING_C3_ALTERNATE_PROVIDER, MONITORING_C3_ALTERNATE_MODEL),
