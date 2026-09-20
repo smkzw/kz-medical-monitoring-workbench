@@ -584,7 +584,9 @@ def test_normal_output_preserves_all_field_profiles_and_response_identity(
     )
     assert "claims" not in prompt.payload["output_schema"]["candidates"][0]
     assert "evidence" not in prompt.payload["output_schema"]["candidates"][0]
-    assert prompt.max_output_tokens == 12_000
+    # 语义映射按角色profile的输出预算取（本runtime profile=65_536；
+    # 生产278个映射作业在该预算下完成），不再用旧的12_000任务默认。
+    assert prompt.max_output_tokens == 65_536
 
 
 def test_provider_confidences_reject_boolean_values() -> None:
