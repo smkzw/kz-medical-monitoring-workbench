@@ -224,6 +224,9 @@ class R5EventRecord:
     risk_anchor_refs: Tuple[str, ...]
     source_locator_refs: Tuple[str, ...]
     label_zh: str
+    # 原始记录号（如listing的Block顺序号）：与源位置分离的逻辑记录身份，
+    # 重排/增量下跨表引用（CM的CMAENO/CMMHNO）不漂移。空串=源无此列。
+    source_record_id: str = ""
 
     def __post_init__(self) -> None:
         for name in ("event_ref", "subject_ref", "site_ref", "spine_ref", "label_zh"):

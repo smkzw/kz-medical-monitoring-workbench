@@ -551,6 +551,7 @@ class FactsPublicationAuthorityProvider:
             label: str,
             severity_hint: str = "low",
             end_raw: Any = None,
+            record_id: str = "",
         ) -> R5EventRecord | None:
             subj_ref = f"subject-{subj}"
             site_ref = subject_site.get(subj, "site-unknown")
@@ -580,6 +581,7 @@ class FactsPublicationAuthorityProvider:
                 risk_anchor_refs=(),
                 source_locator_refs=(_locator(table, index).locator_ref,),
                 label_zh=label[:60] or _SUBTYPE_LABEL_ZH.get(subtype, subtype),
+                source_record_id=record_id,
             )
             events.append(record)
             # 初步风险：AE严重度取自源记录（AESEV），缺失时标记unknown
@@ -673,6 +675,7 @@ class FactsPublicationAuthorityProvider:
                     table=table, index=index, subj=subj, subtype=subtype,
                     domain=domain, start_raw=start_raw, label=label,
                     end_raw=end_raw,
+                    record_id=_clean(row.get("Block顺序号")),
                 )
 
         # 受试者流向（SV/筛选表：ICF→筛选→治疗→研究状态）
