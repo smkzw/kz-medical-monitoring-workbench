@@ -500,7 +500,16 @@ def validate_candidates_for_job(
     if job.task_type == MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS and not (
         2 <= len(candidates) <= 3
     ):
-        raise ValueError("cross-table clue task requires 2 to 3 candidates")
+        # 版本化定向核实子合同（business_key侧别标记focus/focus-p）：
+        # 恰好一个核实候选（确认或data_gap反证），与普通综合分析
+        # 的2-3候选合同显式区分。
+        focused = ":focus:" in job.business_key or ":focus-p:" in job.business_key
+        if focused and len(candidates) != 1:
+            raise ValueError(
+                "focused verification requires exactly one candidate"
+            )
+        if not focused:
+            raise ValueError("cross-table clue task requires 2 to 3 candidates")
     if (
         job.task_type
         in {

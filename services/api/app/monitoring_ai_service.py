@@ -4732,8 +4732,16 @@ class MonitoringAiService:
                         "focused verification requires exactly one candidate"
                     )
             else:
+                # 诊断：携带标记匹配状态，便于区分"非focused作业按通用合同
+                # 拒绝"与"focused标记在运行时意外缺失"。
+                marker_present = isinstance(focused_contract, dict) and bool(
+                    focused_contract
+                )
                 raise MonitoringAiOutputValidationError(
-                    "cross-table clue task requires 2 to 3 candidates"
+                    "cross-table clue task requires 2 to 3 candidates "
+                    f"(focused_marker_present={marker_present}, "
+                    f"payload_is_dict={isinstance(input_payload, dict)}, "
+                    f"subject_context_keys={sorted(subject_context.keys())[:6] if isinstance(subject_context, dict) else 'n/a'})"
                 )
         if (
             job.task_type
