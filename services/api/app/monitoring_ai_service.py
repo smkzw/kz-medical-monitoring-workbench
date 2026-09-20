@@ -4710,9 +4710,31 @@ class MonitoringAiService:
             job.task_type == MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS
             and not 2 <= len(parsed.candidates) <= 3
         ):
-            raise MonitoringAiOutputValidationError(
-                "cross-table clue task requires 2 to 3 candidates"
+            # 版本化定向核实子合同（submit_focused_verifications注入）：
+            # 恰好一个核实候选（确认或data_gap反证），与普通综合分析
+            # 的2-3候选合同显式区分，不靠隐式约定。
+            subject_context = (
+                input_payload.get("subject_context") or {}
+                if isinstance(input_payload, dict)
+                else {}
             )
+            focused_contract = (
+                subject_context.get("focused_contract") or {}
+                if isinstance(subject_context, dict)
+                else {}
+            )
+            if (
+                isinstance(focused_contract, dict)
+                and str(focused_contract.get("version", "")) == "aemh-focused-v1"
+            ):
+                if len(parsed.candidates) != 1:
+                    raise MonitoringAiOutputValidationError(
+                        "focused verification requires exactly one candidate"
+                    )
+            else:
+                raise MonitoringAiOutputValidationError(
+                    "cross-table clue task requires 2 to 3 candidates"
+                )
         if (
             job.task_type
             in (

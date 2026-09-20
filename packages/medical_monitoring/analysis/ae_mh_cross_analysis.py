@@ -345,6 +345,21 @@ def _finding_text(candidate: Any) -> dict[str, Any]:
     }
 
 
+def _stable_finding_id(subject_label: str, side: str, clue: Mapping[str, Any]) -> str:
+    """Deterministic finding identity: subject + proposing side + clue text.
+
+    稳定finding_id：同一线索在重跑/重合并/JSON往返后身份不变，取代
+    位置索引（zip/index）作为定向核实的关联键。
+    """
+    title = str(clue.get("title", "") or "")
+    text = str(clue.get("text", "") or "")
+    domains = ",".join(sorted(str(d) for d in (clue.get("domains", []) or [])))
+    digest = content_hash(
+        {"subject": subject_label, "side": side, "title": title, "text": text, "domains": domains}
+    )
+    return f"aemh-{subject_label}-{side}-{digest[:12]}"
+
+
 def adjudicate(
     *,
     ai_repository: Any,
@@ -353,7 +368,7 @@ def adjudicate(
     facts_snapshot_ref: str,
     primary_job_by_subject: Mapping[str, str],
     verifier_job_by_subject: Mapping[str, str],
-    artifacts_dir: Path,
+    artifacts_dir: Path | None,
 ) -> dict[str, Any]:
     """Pair the two cohorts per subject into visible findings.
 
@@ -361,6 +376,9 @@ def adjudicate(
     agree when they cite at least one shared original evidence row. Unpaired
     clues from either cohort stay ``escalated`` (never force-accepted); a
     subject whose cohort job did not complete stays ``unverifiable_gap``.
+    Each finding carries a stable ``finding_id`` used by the focused
+    verification round; pass ``artifacts_dir=None`` for in-memory evaluation
+    with no artifact side effects (dry-run/只读探查).
     """
 
     findings: list[dict[str, Any]] = []
@@ -394,6 +412,7 @@ def adjudicate(
             findings.append(
                 {
                     "subject_label": subject_label,
+                    "finding_id": f"aemh-{subject_label}-subjectgap",
                     "state": "unverifiable_gap",
                     "reason_zh": "双cohort均无可用候选（未完成或输出无效），本轮不可核实。",
                     "primary": None,
@@ -420,6 +439,7 @@ def adjudicate(
                 findings.append(
                     {
                         "subject_label": subject_label,
+                        "finding_id": _stable_finding_id(subject_label, "primary", primary_text),
                         "state": "accepted",
                         "reason_zh": "主分析与独立盲核均确认该线索（相同原始记录或同一发现的两种表述），待医学复核。",
                         "primary": primary_text,
@@ -430,6 +450,7 @@ def adjudicate(
                 findings.append(
                     {
                         "subject_label": subject_label,
+                        "finding_id": _stable_finding_id(subject_label, "primary", primary_text),
                         "state": "coverage_gap",
                         "reason_zh": "盲核cohort本轮未完成，该线索尚缺独立核对（非分歧），待补核后自动定级。",
                         "primary": primary_text,
@@ -440,6 +461,7 @@ def adjudicate(
                 findings.append(
                     {
                         "subject_label": subject_label,
+                        "finding_id": _stable_finding_id(subject_label, "primary", primary_text),
                         "state": "escalated",
                         "reason_zh": "仅主分析提出该线索，独立盲核未确认同一发现；请医学监察员核对。",
                         "primary": primary_text,
@@ -454,6 +476,7 @@ def adjudicate(
                 findings.append(
                     {
                         "subject_label": subject_label,
+                        "finding_id": _stable_finding_id(subject_label, "verifier", verifier_text),
                         "state": "coverage_gap",
                         "reason_zh": "主分析cohort本轮未完成，该线索尚缺独立核对（非分歧），待补核后自动定级。",
                         "primary": None,
@@ -464,6 +487,7 @@ def adjudicate(
                 findings.append(
                     {
                         "subject_label": subject_label,
+                        "finding_id": _stable_finding_id(subject_label, "verifier", verifier_text),
                         "state": "escalated",
                         "reason_zh": "仅独立盲核提出该线索（主分析未覆盖），请医学监察员核对。",
                         "primary": None,
@@ -492,12 +516,33 @@ def adjudicate(
     }
     digest = content_hash(artifact)
     artifact["content_sha256"] = digest
-    artifacts_dir.mkdir(parents=True, exist_ok=True)
-    (artifacts_dir / f"aemh-findings-{facts_snapshot_ref}.json").write_text(
-        json.dumps(artifact, ensure_ascii=False, sort_keys=True),
-        encoding="utf-8",
-    )
+    if artifacts_dir is not None:
+        # dry-run/只读评估传None：不写正式工件，无落盘副作用。
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        (artifacts_dir / f"aemh-findings-{facts_snapshot_ref}.json").write_text(
+            json.dumps(artifact, ensure_ascii=False, sort_keys=True),
+            encoding="utf-8",
+        )
     return artifact
+
+
+class FocusedSubmission:
+    """Focused-verification submission ledger.
+
+    ``job_by_finding_id``把作业与稳定线索身份关联（无zip/位置索引）；每个
+    跳项都必须带可见原因，不得无声消失。
+    """
+
+    def __init__(
+        self,
+        job_by_finding_id: dict[str, str],
+        skipped: list[dict[str, str]],
+    ) -> None:
+        self.job_by_finding_id = job_by_finding_id
+        self.skipped = skipped
+
+
+FOCUSED_CONTRACT_VERSION = "aemh-focused-v1"
 
 
 def submit_focused_verifications(
@@ -509,7 +554,7 @@ def submit_focused_verifications(
     facts_snapshot_ref: str,
     max_attempts: int = 2,
     primary_service: Any = None,
-) -> tuple[str, ...]:
+) -> FocusedSubmission:
     """Focused second-round verification for one-sided findings.
 
     For each escalated clue (proposed by only one cohort), the OPPOSITE
@@ -520,6 +565,11 @@ def submit_focused_verifications(
     cohort go to the verifier service; clues proposed by the verifier cohort
     go to the primary service when one is supplied (真对侧盲核), otherwise
     they fall back to the verifier service.
+
+    Jobs are associated with the stable ``finding_id`` (never positional
+    index) and carry the versioned focused contract
+    (``FOCUSED_CONTRACT_VERSION``：恰好一个核实候选），使服务端校验与
+    提示词合同显式绑定，而不是靠隐式约定。
     """
 
     from services.api.app.monitoring_ai_contracts import (  # noqa: PLC0415
@@ -528,17 +578,42 @@ def submit_focused_verifications(
         MonitoringAiTaskType,
     )
 
-    job_ids: list[str] = []
-    for index, item in enumerate(escalated):
+    job_by_finding_id: dict[str, str] = {}
+    skipped: list[dict[str, str]] = []
+    for item in escalated:
         subject_label = str(item.get("subject_label", "")).strip()
+        finding_id = str(item.get("finding_id", "")).strip()
         clue = (item.get("primary") or item.get("verifier")) or {}
         title = str(clue.get("title", "")).strip()
         text = str(clue.get("text", "")).strip()
+        if not finding_id:
+            skipped.append(
+                {
+                    "subject_label": subject_label,
+                    "finding_id": "",
+                    "reason": "missing_finding_id",
+                }
+            )
+            continue
         if not subject_label or (not title and not text):
+            skipped.append(
+                {
+                    "subject_label": subject_label,
+                    "finding_id": finding_id,
+                    "reason": "empty_subject_or_clue",
+                }
+            )
             continue
         try:
             evidence, source_hashes = build_subject_evidence(domains, subject_label)
-        except ValueError:
+        except ValueError as exc:
+            skipped.append(
+                {
+                    "subject_label": subject_label,
+                    "finding_id": finding_id,
+                    "reason": f"evidence_unavailable: {exc}",
+                }
+            )
             continue
         input_revision = MonitoringAiInputRevision(
             project_id=project_id,
@@ -563,6 +638,10 @@ def submit_focused_verifications(
                 "rule_pack_id": "facts-baseline-rules-v1",
                 "rule_output_sha256": content_hash({"rules": "baseline"}),
                 "selection_reasons": ["aemh_focused_verification"],
+                "focused_contract": {
+                    "version": FOCUSED_CONTRACT_VERSION,
+                    "expected_candidates": 1,
+                },
                 "domains": sorted({item2["raw_fields"]["domain"] for item2 in evidence}),
                 "domain_semantics": dict(_DOMAIN_ROLE),
                 "medical_boundary": (
@@ -581,7 +660,7 @@ def submit_focused_verifications(
                     "使用evidence_packet中已有的evidence_id。"
                 ),
                 "focus_clue": {
-                    "finding_id": f"aemh-fv-{index:04d}",
+                    "finding_id": finding_id,
                     "title": title[:200],
                     "text": text[:2000],
                     "proposer": "primary" if item.get("primary") else "verifier",
@@ -599,20 +678,19 @@ def submit_focused_verifications(
             service = verifier_service
             prompt_version = VERIFIER_PROMPT_VERSION
             side_tag = "focus"
-        job_ids.append(
-            service.submit_task(
-                project_id=project_id,
-                task_type=MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS,
-                input_revision=input_revision,
-                input_payload=payload,
-                business_key=(
-                    f"aemh:{facts_snapshot_ref}:{side_tag}:{subject_label}:{index:04d}"
-                ),
-                prompt_version=prompt_version,
-                max_attempts=max_attempts,
-            ).job_id
+        job = service.submit_task(
+            project_id=project_id,
+            task_type=MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS,
+            input_revision=input_revision,
+            input_payload=payload,
+            business_key=(
+                f"aemh:{facts_snapshot_ref}:{side_tag}:{subject_label}:{finding_id}"
+            ),
+            prompt_version=prompt_version,
+            max_attempts=max_attempts,
         )
-    return tuple(job_ids)
+        job_by_finding_id[finding_id] = job.job_id
+    return FocusedSubmission(job_by_finding_id=job_by_finding_id, skipped=skipped)
 
 
 def merge_focused_verifications(
@@ -620,19 +698,25 @@ def merge_focused_verifications(
     ai_repository: Any,
     project_id: str,
     findings: Sequence[Mapping[str, Any]],
-    focused_job_by_index: Mapping[int, str],
+    focused_job_by_finding_id: Mapping[str, str],
+    wait_timed_out_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Merge focused verification results into the findings list.
 
-    An escalated clue whose focused-verification candidate agrees with it
-    (``_clues_agree`` against the ORIGINAL clue's fingerprint/entities) is
-    reclassified ``accepted`` with both wordings; a data_gap/other candidate
-    keeps it ``escalated`` (genuine refusal) with the verification text
-    attached.
+    四态区分（D-03）——核实结论与执行状态严格分开：
+    - ``confirmed``：对侧给出一致候选 → accepted；
+    - ``refuted``：对侧给出data_gap反证 → escalated（真分歧，请用户裁决）；
+    - ``insufficient_evidence``：有候选但既未确认也未反证 → escalated；
+    - 执行状态（作业缺失/失败/等待超时/零候选）→ escalated但标注
+      ``verification_execution``技术原因，明确"非医学反证"，不写
+      "请医学监察员裁决"式措辞把技术缺口伪装成医学分歧。
+
+    Jobs are looked up by stable ``finding_id``; positional/zip identity is
+    not used.  ``wait_timed_out_ids`` marks findings whose focused job was
+    still unfinished when the wait deadline expired.
     """
 
     merged: list[dict[str, Any]] = []
-    original_clue_fingerprints: dict[int, frozenset[str]] = {}
 
     class _ClueView:
         """Minimal duck-typed view over a stored finding for _clues_agree."""
@@ -645,13 +729,45 @@ def merge_focused_verifications(
             )
             self.structured_payload = {"domains": sorted(domains), "claims": [{"text": text}]}
 
-    for index, item in enumerate(findings):
+    for item in findings:
         if item.get("state") != "escalated":
             merged.append(dict(item))
             continue
-        job_id = focused_job_by_index.get(index)
-        if not job_id:
-            merged.append(dict(item))
+        finding_id = str(item.get("finding_id", "")).strip()
+        new_item = dict(item)
+        if not finding_id or finding_id not in focused_job_by_finding_id:
+            new_item["verification_execution"] = "verification_missing"
+            new_item["reason_zh"] = (
+                "该单侧线索未进入定向核实（作业缺失），非医学反证；结果以单侧线索呈现。"
+            )
+            merged.append(new_item)
+            continue
+        job_id = focused_job_by_finding_id[finding_id]
+        try:
+            job = ai_repository.get(project_id, job_id)
+            job_status = str(getattr(job, "status", "missing"))
+        except Exception:
+            job_status = "query_error"
+        if finding_id in (wait_timed_out_ids or set()) or job_status in (
+            "queued",
+            "running",
+        ):
+            new_item["verification_execution"] = "verification_timed_out"
+            new_item["verification_job_id"] = job_id
+            new_item["reason_zh"] = (
+                f"定向核实作业未在等待期限内完成（作业状态={job_status}），"
+                "非医学反证；结果以单侧线索呈现。"
+            )
+            merged.append(new_item)
+            continue
+        if job_status != "completed":
+            new_item["verification_execution"] = "verification_failed"
+            new_item["verification_job_id"] = job_id
+            new_item["reason_zh"] = (
+                f"定向核实作业未成功（作业状态={job_status}），"
+                "非医学反证；结果以单侧线索呈现。"
+            )
+            merged.append(new_item)
             continue
         candidates = ai_repository.candidates(project_id, job_id)
         clue = (item.get("primary") or item.get("verifier")) or {}
@@ -667,6 +783,7 @@ def merge_focused_verifications(
             domains=set(clue.get("domains", []) or []),
         )
         verification_texts: list[str] = []
+        has_gap = False
         confirmed = False
         for candidate in candidates:
             payload = getattr(candidate, "structured_payload", {}) or {}
@@ -676,21 +793,38 @@ def merge_focused_verifications(
                 if isinstance(claim, Mapping)
             )
             verification_texts.append(str(getattr(candidate, "title", "")))
-            if not is_gap and _clues_agree(original_view, candidate):
+            if is_gap:
+                has_gap = True
+                continue
+            if _clues_agree(original_view, candidate):
                 confirmed = True
                 break
-        new_item = dict(item)
+        new_item["verification_job_id"] = job_id
+        new_item["focused_verification"] = verification_texts[:2]
         if confirmed:
+            new_item["verification_execution"] = "confirmed"
             new_item["state"] = "accepted"
             new_item["reason_zh"] = (
                 "单侧线索经对侧模型定向核实确认（第二轮聚焦核对通过），待医学复核。"
             )
-            new_item["focused_verification"] = verification_texts[:2]
-        else:
+        elif has_gap:
+            new_item["verification_execution"] = "refuted"
             new_item["reason_zh"] = (
-                "定向核实未确认该线索（反证或证据不足），请医学监察员裁决。"
+                "定向核实给出反证（对侧模型认为该观察与原始记录不一致或证据不足），"
+                "请医学监察员裁决。"
             )
-            new_item["focused_verification"] = verification_texts[:2]
+        elif verification_texts:
+            new_item["verification_execution"] = "insufficient_evidence"
+            new_item["reason_zh"] = (
+                "定向核实返回的候选既未确认也未反驳该线索（证据不足），"
+                "请医学监察员裁决。"
+            )
+        else:
+            new_item["verification_execution"] = "verification_no_candidates"
+            new_item["reason_zh"] = (
+                "定向核实作业完成但未产出任何候选（执行状态异常），"
+                "非医学反证；结果以单侧线索呈现。"
+            )
         merged.append(new_item)
     return merged
 
