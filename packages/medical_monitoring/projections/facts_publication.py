@@ -550,6 +550,7 @@ class FactsPublicationAuthorityProvider:
             start_raw: Any,
             label: str,
             severity_hint: str = "low",
+            end_raw: Any = None,
         ) -> R5EventRecord | None:
             subj_ref = f"subject-{subj}"
             site_ref = subject_site.get(subj, "site-unknown")
@@ -557,6 +558,14 @@ class FactsPublicationAuthorityProvider:
             state = _date_state(start_raw)
             if state == "exact" and _parse_date(start_raw) is None:
                 state = "missing"
+            # 结束日期如实保留：精确日期才解析；留空/未填/部分精度=持续
+            # 状态不明，保持None不补造。
+            end_state = _date_state(end_raw)
+            end_date = (
+                _parse_date(end_raw)
+                if end_state == "exact" and _parse_date(end_raw) is not None
+                else None
+            )
             record = R5EventRecord(
                 event_ref=f"event-{table}-{index:06d}",
                 subject_ref=subj_ref,
@@ -566,20 +575,23 @@ class FactsPublicationAuthorityProvider:
                 subtype=subtype,
                 date_state=state,
                 start_date=_parse_date(start_raw) if state == "exact" else None,
-                end_date=None,
+                end_date=end_date,
                 visit_ref=None,
                 risk_anchor_refs=(),
                 source_locator_refs=(_locator(table, index).locator_ref,),
                 label_zh=label[:60] or _SUBTYPE_LABEL_ZH.get(subtype, subtype),
             )
             events.append(record)
-            # 初步风险：严重度可由表内字段推导（如 AESEV），此处保守 medium 起步
+            # 初步风险：AE严重度取自源记录（AESEV），缺失时标记unknown
+            # 而非伪装"中度"；非AE表为系统按域推定（inferred）。
             if domain == "ae":
                 sev_raw = _clean(domains.get("AE", [{}])[index].get("AESEV") if index < len(domains.get("AE", [])) else "")
                 sev_map = {"重度": "critical", "严重": "critical", "中度": "medium", "轻度": "low"}
                 severity = sev_map.get(sev_raw, "medium")
+                severity_source = "recorded" if sev_raw in sev_map else "unknown"
             else:
                 severity = severity_hint
+                severity_source = "inferred"
             risks.append(
                 R5RiskRecord(
                     risk_ref=f"risk-{table}-{index:06d}",
@@ -597,6 +609,7 @@ class FactsPublicationAuthorityProvider:
                     risk_anchor_ref=record.event_ref,
                     source_locator_refs=record.source_locator_refs,
                     change_kind="initial_current",
+                    severity_source=severity_source,
                 )
             )
             return record
@@ -639,12 +652,14 @@ class FactsPublicationAuthorityProvider:
             raw_date_keys = [k for k in rows[0].keys() if k.endswith("DAT") or k in ("SHDAT",)] if rows else []
             # 起始日期列优先（*STDAT/{表}DAT），结束列（*ENDAT）不充当起始
             date_keys = sorted(raw_date_keys, key=lambda k: (1 if "END" in k.upper() else 0, raw_date_keys.index(k)))
+            end_keys = [k for k in raw_date_keys if "END" in k.upper()]
             term_keys = _term_keys_for(table, list(rows[0].keys())) if rows else []
             for index, row in enumerate(rows):
                 subj = _clean(row.get("SUBJID"))
                 if not subj or subj in _UK_TOKENS:
                     continue
                 start_raw = next((row[k] for k in date_keys if _clean(row.get(k))), None)
+                end_raw = next((row[k] for k in end_keys if _clean(row.get(k))), None) if end_keys else None
                 term_value = next((row[k] for k in term_keys if _clean(row.get(k))), None)
                 if _clean(term_value):
                     label = _clean(term_value)
@@ -657,6 +672,7 @@ class FactsPublicationAuthorityProvider:
                 _add_event(
                     table=table, index=index, subj=subj, subtype=subtype,
                     domain=domain, start_raw=start_raw, label=label,
+                    end_raw=end_raw,
                 )
 
         # 受试者流向（SV/筛选表：ICF→筛选→治疗→研究状态）
