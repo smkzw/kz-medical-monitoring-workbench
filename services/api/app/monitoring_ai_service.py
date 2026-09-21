@@ -1668,7 +1668,7 @@ class MonitoringAiService:
             if role == "primary"
             else DOCUMENT_AUTHORITY_VERIFIER_PROMPT_VERSION
         )
-        from .admission.mapping_gate import (
+        from packages.medical_monitoring.admission.mapping_gate import (
             DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL,
             DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL,
         )
