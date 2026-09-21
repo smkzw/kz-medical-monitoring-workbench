@@ -1400,6 +1400,8 @@ def _omp_router_runtime(profile_id: str, *, model: str, thinking: str):
         "WORKBENCH_AI_REASONING_EFFORT": thinking,
         "WORKBENCH_AI_TIMEOUT_SECONDS": "600",
         "WORKBENCH_AI_OUTPUT_TOKEN_BUDGET": "32768",
+        # 可运行性门禁要求已批准的部署档（与角色绑定profile_env注入一致）。
+        "WORKBENCH_AI_DEPLOYMENT_PROFILE": "local_private_clinical",
     }
     if key:
         provider_env["WORKBENCH_AI_API_KEY"] = key
