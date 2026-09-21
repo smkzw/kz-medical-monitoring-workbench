@@ -442,26 +442,44 @@ class FactsModeOutputProvider:
         return rows
 
     def _finding_claims(self, item: Mapping[str, Any]) -> list[dict[str, Any]]:
-        """双cohort claims语义分点（文本+各自证据引用，供前端ul/li渲染）。"""
+        """真实工件payload的语义分点（观察/缺口/核实建议，供ul/li渲染）。
+
+        真实形态：observations=观察事实条目；data_gaps=资料缺口条目；
+        recommended_review=推荐核实（非医学终审）。每条目挂payload级
+        evidence_ids（观察所引原始记录）；兼容claims[]嵌套形态。
+        """
 
         claims_out: list[dict[str, Any]] = []
         seen_texts: set[str] = set()
+
+        def _add(text: str, kind: str, eids: list[str]) -> None:
+            text = text.strip()
+            if not text or text in seen_texts:
+                return
+            seen_texts.add(text)
+            claims_out.append(
+                {"text": text[:400], "kind": kind, "evidence_ids": eids}
+            )
+
         for side in ("primary", "verifier"):
             cohort = item.get(side) or {}
             payload = cohort.get("payload") or {}
+            if not isinstance(payload, dict):
+                continue
+            pooled = [str(e) for e in (payload.get("evidence_ids") or [])]
+            for observation in (payload.get("observations") or []):
+                _add(str(observation), "observation", pooled)
             for claim in (payload.get("claims") or []):
-                text = str(claim.get("text", "")).strip()
-                if not text or text in seen_texts:
-                    continue
-                seen_texts.add(text)
-                claims_out.append(
-                    {
-                        "text": text[:400],
-                        "kind": str(claim.get("kind", "")),
-                        "evidence_ids": [str(e) for e in (claim.get("evidence_ids") or [])],
-                        "side": side,
-                    }
+                _add(
+                    str(claim.get("text", "")),
+                    str(claim.get("kind", "")),
+                    [str(e) for e in (claim.get("evidence_ids") or [])],
                 )
+            for gap in (payload.get("data_gaps") or []):
+                _add(str(gap), "data_gap", [])
+            recommended = payload.get("recommended_review") or ""
+            if isinstance(recommended, str) and recommended.strip():
+                _add(recommended, "recommended_review", [])
         return claims_out
 
     def public_findings_meta(
@@ -538,12 +556,20 @@ class FactsModeOutputProvider:
         }
 
     def _finding_evidence_ids(self, item: Mapping[str, Any]) -> list[str]:
-        """双cohort claims的evidence_ids并集（保序去重）。"""
+        """双cohort payload/claims的evidence_ids并集（保序去重）。
+
+        真实工件形态：payload顶层evidence_ids（观察事实所引原始记录）；
+        兼容claims[].evidence_ids嵌套形态。
+        """
 
         ids: list[str] = []
         for side in ("primary", "verifier"):
             cohort = item.get(side) or {}
             payload = cohort.get("payload") or {}
+            for eid in (payload.get("evidence_ids") or []):
+                eid = str(eid)
+                if eid and eid not in ids:
+                    ids.append(eid)
             for claim in (payload.get("claims") or []):
                 for eid in (claim.get("evidence_ids") or []):
                     eid = str(eid)
