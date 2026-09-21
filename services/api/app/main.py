@@ -1363,6 +1363,10 @@ monitoring_ai_verifier_worker = MonitoringAiWorker(
 def _wake_monitoring_mapping_workers() -> None:
     monitoring_ai_worker.wake()
     monitoring_ai_verifier_worker.wake()
+    # 文档权威双cohort是wake-only worker：不wake永不drain，提交的作业
+    # 会滞留queued/running。主分析与盲核worker都必须随映射链路唤醒。
+    monitoring_doc_auth_worker.wake()
+    monitoring_doc_auth_verifier_worker.wake()
 
 
 def _omp_router_api_key(profile_id: str) -> str:
@@ -1379,9 +1383,9 @@ def _omp_router_api_key(profile_id: str) -> str:
 
 
 def _omp_router_runtime(profile_id: str, *, model: str, thinking: str):
-    from services.api.app.monitoring_ai_service import MonitoringAiRuntimeBinding
-    from services.api.app.monitoring_product_ai_transport import (
+    from services.api.app.monitoring_ai_service import (
         MONITORING_PRODUCT_AI_TRANSPORT,
+        MonitoringAiRuntimeBinding,
     )
     key = _omp_router_api_key(profile_id)
     provider_env = {
