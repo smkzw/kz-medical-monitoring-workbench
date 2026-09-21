@@ -1366,10 +1366,61 @@ def _wake_monitoring_mapping_workers() -> None:
 
 
 def _resolve_doc_auth_primary_runtime():
-    return _resolve_monitoring_role_runtime(DOCUMENT_AUTHORITY_PRIMARY_AI_ROLE)
+    # N5/M4：文档权威主分析——opencode-go/muse-spark-1.3-contributor
+    # 硬编码绑定（用户指定），不经过角色绑定系统（避免配置漂移）
+    from services.api.app.monitoring_ai_service import MonitoringAiRuntimeBinding
+    from services.api.app.monitoring_product_ai_transport import MONITORING_PRODUCT_AI_TRANSPORT
+    provider_env = {}
+    # OpenCode Go API key 从环境或 provider settings 获取
+    for key in ("OPENCODE_GO_API_KEY", "XAI_API_KEY"):
+        val = os.environ.get(key, "").strip()
+        if val:
+            provider_env["WORKBENCH_AI_API_KEY"] = val
+            break
+    provider_env.setdefault("WORKBENCH_AI_PROVIDER", "opencode-go")
+    provider_env.setdefault("WORKBENCH_AI_MODEL", "muse-spark-1.3-contributor")
+    provider_env.setdefault("WORKBENCH_AI_BASE_URL", "https://opencode.ai/zen/go/v1")
+    provider_env.setdefault("WORKBENCH_AI_EXPECTED_RESPONSE_MODEL", "muse-spark-1.3-contributor")
+    provider_env.setdefault("WORKBENCH_AI_THINKING", "high")
+    provider_env.setdefault("WORKBENCH_AI_REASONING_EFFORT", "high")
+    provider_env.setdefault("WORKBENCH_AI_TIMEOUT_SECONDS", "600")
+    provider_env.setdefault("WORKBENCH_AI_OUTPUT_TOKEN_BUDGET", "32768")
+    provider_env.setdefault("WORKBENCH_AI_EXTRA_HEADERS", json.dumps({"x-opencode-session": "doc-auth-primary"}))
+    return MonitoringAiRuntimeBinding(
+        profile_id="document_authority_primary_ai__opencode_go_muse",
+        provider="opencode-go",
+        model="muse-spark-1.3-contributor",
+        env=provider_env,
+        transport=MONITORING_PRODUCT_AI_TRANSPORT,
+        available=True,
+    )
 
 def _resolve_doc_auth_verifier_runtime():
-    return _resolve_monitoring_role_runtime(DOCUMENT_AUTHORITY_VERIFIER_AI_ROLE)
+    # N5/M4：文档权威盲核——ollama-cloud/deepseek-v4.1-flash
+    from services.api.app.monitoring_ai_service import MonitoringAiRuntimeBinding
+    from services.api.app.monitoring_product_ai_transport import MONITORING_PRODUCT_AI_TRANSPORT
+    provider_env = {}
+    for key in ("OLLAMA_CLOUD_API_KEY",):
+        val = os.environ.get(key, "").strip()
+        if val:
+            provider_env["WORKBENCH_AI_API_KEY"] = val
+            break
+    provider_env.setdefault("WORKBENCH_AI_PROVIDER", "ollama-cloud")
+    provider_env.setdefault("WORKBENCH_AI_MODEL", "deepseek-v4.1-flash")
+    provider_env.setdefault("WORKBENCH_AI_BASE_URL", "https://ollama.com/v1")
+    provider_env.setdefault("WORKBENCH_AI_EXPECTED_RESPONSE_MODEL", "deepseek-v4.1-flash")
+    provider_env.setdefault("WORKBENCH_AI_THINKING", "high")
+    provider_env.setdefault("WORKBENCH_AI_REASONING_EFFORT", "high")
+    provider_env.setdefault("WORKBENCH_AI_TIMEOUT_SECONDS", "600")
+    provider_env.setdefault("WORKBENCH_AI_OUTPUT_TOKEN_BUDGET", "32768")
+    return MonitoringAiRuntimeBinding(
+        profile_id="document_authority_verifier_ai__ollama_cloud_dsv41",
+        provider="ollama-cloud",
+        model="deepseek-v4.1-flash",
+        env=provider_env,
+        transport=MONITORING_PRODUCT_AI_TRANSPORT,
+        available=True,
+    )
 
 monitoring_doc_auth_primary_service = MonitoringAiService(
     monitoring_ai_repository,
