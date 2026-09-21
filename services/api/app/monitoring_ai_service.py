@@ -2649,6 +2649,12 @@ class MonitoringAiService:
                     )
 
             response_model = self._response_model(provider, job)
+            if not response_model.strip() or response_model.strip() != job.requested_model:
+                # 本路由profile不主张expected断言时，上游可能以别名回报
+                # served模型名（如路由器把glm-5.3-flash服务为变体名）。
+                # 完成登记一律以requested_model为身份记录；实际served名
+                # 已保留在attempt审计行供追溯。
+                response_model = job.requested_model
             stale_result = self._fail_if_revision_changed(
                 job,
                 owner=owner,
