@@ -311,3 +311,44 @@ def test_public_findings_subject_unresolvable_still_visible(artifacts: Path) -> 
     assert len(rows) == 1
     assert rows[0]["subject_ref"] == ""
     assert rows[0]["title"] == "孤儿线索"
+
+
+def test_evidence_expansion_no_truncation():
+    """N5：全部行/字段/值纳入证据包（去前6行/24字段/120字符截断）。"""
+    from packages.medical_monitoring.analysis.ae_mh_cross_analysis import (
+        build_subject_evidence,
+    )
+
+    # 8行AE（>旧限制6行）+ 每行30字段（>旧限制24）+ 长值（>旧限制120字符）
+    ae_rows = [
+        dict(
+            {"SUBJID": "01001", "AETERM": f"不良事件{i}", "AESEV": str(i % 4 + 1)},
+            **{f"FIELD_{j:02d}": f"值_{j}_" + "x" * 150 for j in range(28)}
+        )
+        for i in range(8)
+    ]
+    domains = {"AE": ae_rows, "MH": [{"SUBJID": "01001", "MHTERM": "高血压"}]}
+
+    evidence, source_hashes = build_subject_evidence(domains, "01001")
+    ae_evidence = [e for e in evidence if "AE" in e["locator"]]
+
+    # 8行全纳入（不再截到6行）
+    assert len(ae_evidence) == 8
+
+    # 字段>24个（不再截到24）
+    row0_fields = ae_evidence[0]["raw_fields"]["fields"]
+    assert len(row0_fields) > 24
+
+    # 值完整（不再截到120字符）
+    long_field = next(f for f in row0_fields if f["field"].startswith("FIELD_"))
+    assert len(long_field["value"]) > 120
+
+    # source hash 是真实内容hash（非 table+row_count）
+    sh = source_hashes["AE"]
+    assert sh != content_hash({"table": "AE", "rows": 8})  # 不同于旧公式
+
+    # 等行数但内容变化→hash变化
+    ae_rows_v2 = [dict(r, AETERM=r["AETERM"] + "v2") for r in ae_rows]
+    domains_v2 = {"AE": ae_rows_v2, "MH": domains["MH"]}
+    _, sh_v2 = build_subject_evidence(domains_v2, "01001")
+    assert sh_v2["AE"] != sh  # 内容变化=hash变化

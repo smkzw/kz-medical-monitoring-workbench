@@ -35,8 +35,11 @@ _DOMAIN_ROLE = {
 }
 _ANALYSIS_TABLES = ("AE", "MH", "CM", "EX2", "EX4", "EX5", "EX7")
 _TABLE_DOMAIN = {"AE": "AE", "MH": "MH", "CM": "CM", "EX2": "EX", "EX4": "EX", "EX5": "EX", "EX7": "EX"}
-_MAX_ROWS_PER_DOMAIN = 6
-_MAX_FIELDS_PER_ROW = 24
+# N5：去除截断限制——全部行/全部字段/完整值纳入证据包。
+# 管理列仍排除（不承载临床语义）。
+_ADMIN_COLUMNS = frozenset({"Block顺序号", "RECREP", "PAGELMDT", "FORMOID", "FORMNM", "FORMNM__2"})
+# 分析版本：N5证据扩容（完整行/字段/值+真实内容hash）
+ANALYSIS_GENERATION_V2 = "aemh-evidence-v2"
 
 
 @dataclass(frozen=True)
@@ -52,14 +55,17 @@ def _clean(value: Any) -> str:
 
 
 def _compact_fields(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """N5：全部非管理字段完整纳入（去24字段/120字符截断）。
+
+    管理列（Block顺序号等）仍排除——不承载临床语义。
+    值保留完整长度（不再截断到120字符）。
+    """
     fields = []
     for key, value in row.items():
         text = _clean(value)
-        if not text or key in {"Block顺序号", "RECREP", "PAGELMDT", "FORMOID", "FORMNM", "FORMNM__2"}:
+        if not text or key in _ADMIN_COLUMNS:
             continue
-        fields.append({"field": str(key), "value": text[:120]})
-        if len(fields) >= _MAX_FIELDS_PER_ROW:
-            break
+        fields.append({"field": str(key), "value": text})
     return fields
 
 
@@ -80,10 +86,15 @@ def build_subject_evidence(
         ]
         if not subject_rows:
             continue
-        table_hash = content_hash({"table": table, "rows": len(rows)})
+        # N5：真实内容hash（替代table+row_count），同表行数变化即变hash
+        table_hash = content_hash(
+            {"table": table,
+             "rows": [content_hash({k: str(v) for k, v in row.items()}) for _, row in subject_rows]}
+        )
         source_hashes[table] = table_hash
         domain = _TABLE_DOMAIN[table]
-        for index, row in subject_rows[:_MAX_ROWS_PER_DOMAIN]:
+        # N5：全部受试者行纳入证据包（不再截断到前6行）
+        for index, row in subject_rows:
             fields = _compact_fields(row)
             locator = f"{table}!row{index + 1}"
             evidence_id = "aemh_{}".format(
