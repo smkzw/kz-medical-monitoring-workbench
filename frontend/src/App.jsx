@@ -13107,7 +13107,11 @@ export function App() {
       project,
       ...current.filter((item) => item.project_id !== project.project_id),
     ]);
-    requestProjectChange(project.project_id, "writing");
+    // 监查意图项目直接落到医学监查工作区；写作项目维持原写作落点。
+    const monitoringIntent = (project.modules || []).some(
+      (item) => (typeof item === "string" ? item : item?.module) === "medical_monitoring",
+    );
+    requestProjectChange(project.project_id, monitoringIntent ? "monitoring" : "writing");
   };
 
   useEffect(() => {
