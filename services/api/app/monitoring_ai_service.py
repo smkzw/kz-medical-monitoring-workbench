@@ -1668,15 +1668,20 @@ class MonitoringAiService:
             if role == "primary"
             else DOCUMENT_AUTHORITY_VERIFIER_PROMPT_VERSION
         )
+        from .admission.mapping_gate import (
+            DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL,
+            DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL,
+        )
         expected_identity = (
-            (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL)
+            (DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL)
             if role == "primary"
-            else (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL)
+            else (DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL)
         )
         runtime = self.runtime_resolver()
         if (runtime.provider, runtime.model) != expected_identity:
             raise MonitoringAiRuntimeUnavailableError(
-                "document authority runtime identity does not match its role"
+                "document authority runtime identity does not match its role: "
+                f"expected {expected_identity}, got ({runtime.provider}, {runtime.model})"
             )
         input_payload = {
             "document_authority_batch": deepcopy(candidate_batch),

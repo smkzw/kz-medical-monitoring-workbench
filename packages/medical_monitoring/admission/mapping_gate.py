@@ -30,6 +30,11 @@ MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION = "mm-c3-dual-mapping-cohort-v1"
 # 完整批跑185+43作业在该路由成功）；zhipu-coding-plan保留为历史身份。
 MONITORING_C3_MAPPING_PROVIDER = "cms-router"
 MONITORING_C3_MAPPING_MODEL = "glm-5.3-flash"
+# N5：文档权威专用身份（用户指定 muse-spark + deepseek-v4.1）
+DOC_AUTH_PRIMARY_PROVIDER = "opencode-go"
+DOC_AUTH_PRIMARY_MODEL = "muse-spark-1.3-contributor"
+DOC_AUTH_VERIFIER_PROVIDER = "ollama-cloud"
+DOC_AUTH_VERIFIER_MODEL = "deepseek-v4.1-flash"
 MONITORING_C3_MAPPING_PROFILE_ID = (
     "medical_monitoring_ai__zhipu_glm_flash_high"
 )

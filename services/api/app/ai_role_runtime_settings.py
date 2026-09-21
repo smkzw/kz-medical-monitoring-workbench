@@ -38,6 +38,8 @@ LEGACY_ROLE_SETTINGS_SCHEMA_VERSION = "ai_role_bindings_v1"
 INDEPENDENT_AI_ROLE = "independent_ai"
 MEDICAL_MONITORING_AI_ROLE = "medical_monitoring_ai"
 MEDICAL_MONITORING_VERIFIER_AI_ROLE = "medical_monitoring_verifier_ai"
+DOCUMENT_AUTHORITY_PRIMARY_AI_ROLE = "document_authority_primary_ai"
+DOCUMENT_AUTHORITY_VERIFIER_AI_ROLE = "document_authority_verifier_ai"
 OCR_ROLE = "ocr"
 TRANSLATION_BODY_ROLE = "translation_body"
 TRANSLATION_SUPPORT_ROLE = "translation_support"
@@ -66,6 +68,8 @@ THINKING_CONFIGURABLE_ROLES: frozenset[str] = frozenset(
         INDEPENDENT_AI_ROLE,
         MEDICAL_MONITORING_AI_ROLE,
         MEDICAL_MONITORING_VERIFIER_AI_ROLE,
+        DOCUMENT_AUTHORITY_PRIMARY_AI_ROLE,
+        DOCUMENT_AUTHORITY_VERIFIER_AI_ROLE,
         TRANSLATION_SUPPORT_ROLE,
     }
 )
