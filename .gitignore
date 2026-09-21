@@ -53,3 +53,4 @@ obj/
 # Historical root-level visual review captures
 final-*.png
 k3*.png
+.trellis/
