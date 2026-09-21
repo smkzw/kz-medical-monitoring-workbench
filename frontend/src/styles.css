@@ -23228,3 +23228,36 @@ textarea {
     flex-wrap: wrap;
   }
 }
+
+/* N3/N4：语义分点与受试者真链接 */
+.monitoring-claim-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+.monitoring-claim-list li {
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.monitoring-claim-list li[data-claim-kind="fact"] {
+  color: #172033;
+}
+.monitoring-claim-evidence {
+  color: #64748b;
+  font-size: 12px;
+}
+.monitoring-subject-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #1d4ed8;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.monitoring-subject-link:hover {
+  color: #1e40af;
+}

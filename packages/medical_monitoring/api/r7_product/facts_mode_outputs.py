@@ -397,6 +397,15 @@ class FactsModeOutputProvider:
         read = self._read_ai_findings()
         if read["state"] not in ("completed_with_findings", "completed_no_findings"):
             return []
+        subjects_by_label: dict[str, Mapping[str, Any]] = {}
+        for subject in (projection or {}).get("subjects", []) or []:
+            label = str(
+                subject.get("subject_label")
+                or subject.get("label")
+                or ""
+            ).strip()
+            if label:
+                subjects_by_label.setdefault(label, subject)
         anchor_index_cache: dict[str, dict[str, tuple[str, int]]] = {}
         rows: list[dict[str, Any]] = []
         for index, item in enumerate(read["findings"]):
@@ -407,21 +416,53 @@ class FactsModeOutputProvider:
             if state == "unverifiable_gap" and not title:
                 kind = "coverage_gap"
                 title = "覆盖缺口（本轮未能完成该受试者的双cohort核实）"
+            subject_label = str(item.get("subject_label", ""))
+            # 服务端解析subject身份（不猜ID）：projection.subjects由包授权
+            # 投影给出subject_ref/site_ref/spine_ref。
+            subject_row = subjects_by_label.get(subject_label) or {}
             evidence_ids = self._finding_evidence_ids(item)
+            claims = self._finding_claims(item)
             rows.append(
                 {
                     "finding_id": str(item.get("finding_id", "")) or f"aemh-unid-{index:04d}",
                     "display_seq": index + 1,
                     "kind": kind,
-                    "subject_label": str(item.get("subject_label", "")),
+                    "subject_label": subject_label,
+                    "subject_ref": str(subject_row.get("subject_ref") or subject_row.get("subject_id") or ""),
+                    "site_ref": str(subject_row.get("site_ref") or subject_row.get("site_id") or ""),
+                    "spine_ref": str(subject_row.get("spine_ref") or ""),
                     "state": state,
                     "state_reason_zh": str(item.get("reason_zh", "")),
                     "title": title[:200],
                     "text": str(cohort.get("text", ""))[:2000],
                     "evidence_ids": evidence_ids,
+                    "claims": claims,
                 }
             )
         return rows
+
+    def _finding_claims(self, item: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """双cohort claims语义分点（文本+各自证据引用，供前端ul/li渲染）。"""
+
+        claims_out: list[dict[str, Any]] = []
+        seen_texts: set[str] = set()
+        for side in ("primary", "verifier"):
+            cohort = item.get(side) or {}
+            payload = cohort.get("payload") or {}
+            for claim in (payload.get("claims") or []):
+                text = str(claim.get("text", "")).strip()
+                if not text or text in seen_texts:
+                    continue
+                seen_texts.add(text)
+                claims_out.append(
+                    {
+                        "text": text[:400],
+                        "kind": str(claim.get("kind", "")),
+                        "evidence_ids": [str(e) for e in (claim.get("evidence_ids") or [])],
+                        "side": side,
+                    }
+                )
+        return claims_out
 
     def public_findings_meta(
         self,

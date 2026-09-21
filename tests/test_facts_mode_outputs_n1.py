@@ -264,3 +264,49 @@ def test_daily_findings_no_200_truncation_and_high_kept(artifacts: Path) -> None
     )
     assert len(findings) == 260  # 不再200截断
     assert all(f.get("anchor_state") in ("bound", "unbound") for f in findings)
+
+
+def test_public_findings_resolves_subject_ref_and_claims(artifacts: Path) -> None:
+    # N4/N3：服务端解析subject_ref/site_ref（不猜ID）；claims语义分点
+    # 携带文本+证据引用，供前端ul/li渲染。
+    _write_artifact(artifacts, {
+        "snapshot_ref": "s",
+        "findings": [
+            {"finding_id": "aemh-01001-primary-aaaabbbbcccc",
+             "subject_label": "01001", "state": "accepted",
+             "primary": {"title": "线索A", "text": "内容A",
+                         "payload": {"claims": [_claim([_eid("AE", 2, "01001")])]}},
+             "verifier": None},
+        ],
+    })
+    projection = {
+        "subjects": [
+            {"subject_ref": "subject-01001", "subject_label": "01001",
+             "site_ref": "site-01", "spine_ref": "spine-01001"},
+        ],
+    }
+    provider = FactsModeOutputProvider(artifacts)
+    rows = provider.public_findings(projection=projection, project_ref="proj-x")
+    row = rows[0]
+    assert row["subject_ref"] == "subject-01001"
+    assert row["site_ref"] == "site-01"
+    assert row["spine_ref"] == "spine-01001"
+    assert row["claims"][0]["text"] == "x"
+    assert row["claims"][0]["evidence_ids"] == [_eid("AE", 2, "01001")]
+
+
+def test_public_findings_subject_unresolvable_still_visible(artifacts: Path) -> None:
+    # projection中没有该受试者（分页外）→ 行保留、ref为空串，不消失。
+    _write_artifact(artifacts, {
+        "snapshot_ref": "s",
+        "findings": [
+            {"finding_id": "aemh-ghost-1", "subject_label": "99999",
+             "state": "escalated",
+             "verifier": {"title": "孤儿线索", "text": "x"}, "primary": None},
+        ],
+    })
+    provider = FactsModeOutputProvider(artifacts)
+    rows = provider.public_findings(projection={"subjects": []}, project_ref="proj-x")
+    assert len(rows) == 1
+    assert rows[0]["subject_ref"] == ""
+    assert rows[0]["title"] == "孤儿线索"
