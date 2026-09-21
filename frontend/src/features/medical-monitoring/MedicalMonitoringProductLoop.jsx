@@ -321,8 +321,11 @@ function normalizePublicProductPayload(resultContext) {
   const temporal = isRecord(raw.temporal_spine) ? raw.temporal_spine : isRecord(raw.spine) ? raw.spine : {};
   const events = (Array.isArray(raw.events) ? raw.events : Array.isArray(temporal.events) ? temporal.events : [])
     .map((value) => normalizeEvent(value, domainMap));
+  // N1/V4-04：无标题的覆盖缺口（kind=coverage_gap，后端已给回退标题）
+  // 不得因标题清洗被丢弃；仅剔除非记录/完全无身份的坏行。
   const aiQueryFindings = Array.isArray(raw.query_findings)
-    ? raw.query_findings.filter((value) => isRecord(value) && clean(value.title))
+    ? raw.query_findings.filter((value) => isRecord(value)
+      && (clean(value.title) || clean(value.finding_id) || clean(value.state)))
     : [];
   const visits = Array.isArray(raw.visits) ? raw.visits : Array.isArray(temporal.visits) ? temporal.visits : [];
   const pendingDates = raw.pending_dates ?? raw.date_pending_refs ?? temporal.pending_dates ?? [];
