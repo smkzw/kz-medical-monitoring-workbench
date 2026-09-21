@@ -275,7 +275,8 @@ def test_public_findings_resolves_subject_ref_and_claims(artifacts: Path) -> Non
             {"finding_id": "aemh-01001-primary-aaaabbbbcccc",
              "subject_label": "01001", "state": "accepted",
              "primary": {"title": "线索A", "text": "内容A",
-                         "payload": {"claims": [_claim([_eid("AE", 2, "01001")])]}},
+                         "payload": {"claims": [_claim([_eid("AE", 2, "01001")])],
+                                     "evidence_ids": [_eid("AE", 2, "01001")]}},
              "verifier": None},
         ],
     })
