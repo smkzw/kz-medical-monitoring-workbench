@@ -1423,7 +1423,7 @@ def _resolve_doc_auth_primary_runtime():
     # 的"强主分析+独立盲核"意图，密钥恢复后可在mapping_gate一键改回）。
     return _omp_router_runtime(
         "document_authority_primary_ai__omp_router_glm53",
-        model="glm-5.3",
+        model="glm-5.3-flash",
         thinking="high",
     )
 
