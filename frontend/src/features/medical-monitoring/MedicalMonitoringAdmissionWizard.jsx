@@ -56,7 +56,8 @@ function mappingTypeText(value) {
   })[value] || "类型待定";
 }
 
-function DocumentReadinessPanel({ state, onFiles, onRetry }) {
+function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate }) {
+  const [choices, setChoices] = useState({});
   if (!state || (state.phase === "loading" && !state.payload)) {
     return <p className="monitoring-admission-loading" role="status">正在核对研究文档…</p>;
   }
@@ -65,6 +66,10 @@ function DocumentReadinessPanel({ state, onFiles, onRetry }) {
     "uploading", "analyzing", "reviewing", "adjudicating", "cross_checking",
   ]
     .includes(state.phase);
+  const userChoices = Array.isArray(payload.user_choices) ? payload.user_choices : [];
+  const allAnswered = userChoices.every(
+    (choice) => typeof choices[choice.role] === "string",
+  );
   return (
     <section className="monitoring-admission-documents" aria-label="研究文档准备情况">
       <header>
@@ -78,12 +83,53 @@ function DocumentReadinessPanel({ state, onFiles, onRetry }) {
           </li>
         ))}
       </ul>
+      {userChoices.length ? (
+        <fieldset className="monitoring-admission-user-choices">
+          <legend>请确认每个文件角色对应的文件（医学判断以您为准）</legend>
+          {userChoices.map((choice) => (
+            <div key={choice.role} role="group" aria-label={`文件角色：${choice.role}`}>
+              <strong>角色：{choice.role}</strong>
+              {choice.options.map((option) => (
+                <label key={option.candidate_id || "__missing__"} style={{ display: "block" }}>
+                  <input
+                    type="radio"
+                    name={`doc-role-${choice.role}`}
+                    checked={(choices[choice.role] || "") === option.candidate_id}
+                    onChange={() => setChoices((current) => ({
+                      ...current,
+                      [choice.role]: option.candidate_id,
+                    }))}
+                  />
+                  {" "}
+                  {option.candidate_id
+                    ? `这是${choice.role}文件：${option.filename}`
+                    : `没有${choice.role}文件（该角色缺失）`}
+                </label>
+              ))}
+            </div>
+          ))}
+          <button
+            type="button"
+            className="monitoring-admission-secondary"
+            disabled={!allAnswered || processing}
+            onClick={() => onAdjudicate?.(
+              userChoices.map((choice) => ({
+                role: choice.role,
+                candidate_id: choices[choice.role] || "",
+              })),
+            )}
+            title={allAnswered ? "提交裁决并继续核对" : "请先为每个角色作出选择"}
+          >
+            提交裁决并继续
+          </button>
+        </fieldset>
+      ) : null}
       {payload.files?.length ? (
         <p className="monitoring-admission-warning">
           涉及文件：{payload.files.join("、")}
         </p>
       ) : null}
-      {!payload.ready ? (
+      {!payload.ready && !userChoices.length ? (
         <label className="monitoring-admission-document-picker">
           <input
             type="file"
@@ -100,7 +146,7 @@ function DocumentReadinessPanel({ state, onFiles, onRetry }) {
         </label>
       ) : null}
       {state.error ? <p className="monitoring-admission-warning" role="alert">{state.error}</p> : null}
-      {state.phase === "failed" ? (
+      {state.phase === "failed" && !userChoices.length ? (
         <button type="button" className="monitoring-admission-secondary" onClick={onRetry}>
           重新核对研究文件
         </button>
@@ -289,6 +335,7 @@ export function MedicalMonitoringAdmissionWizardView({
   onAnswerCard,
   onDocumentFiles,
   onDocumentRetry,
+  onDocumentAdjudicate,
 }) {
   const phase = state?.phase || "input";
   const stepIndex = state?.stepIndex || 0;
@@ -454,6 +501,7 @@ export function MedicalMonitoringAdmissionWizardView({
               state={documentState}
               onFiles={onDocumentFiles}
               onRetry={onDocumentRetry}
+              onAdjudicate={onDocumentAdjudicate}
             />
             {documentState?.payload?.ready ? (
               <MappingConfirmPanel
@@ -618,6 +666,36 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       }
     }
   }, [api, state.attemptId, state.projectId]);
+
+  const submitDocumentAdjudication = useCallback(async (selections) => {
+    if (!state.projectId || !state.attemptId) return;
+    const generation = documentRequestGeneration.current + 1;
+    documentRequestGeneration.current = generation;
+    setDocumentState((current) => ({ ...current, phase: "cross_checking", error: null }));
+    try {
+      const payload = await api.resolveStudyDocuments(
+        state.projectId,
+        state.attemptId,
+        documentState.payload?.analysis_token,
+        { userRoleSelections: selections },
+      );
+      if (documentRequestGeneration.current === generation) {
+        setDocumentState({
+          phase: payload.ready ? "ready" : (payload.state || "analyzing"),
+          payload,
+          error: null,
+        });
+      }
+    } catch (error) {
+      if (documentRequestGeneration.current === generation) {
+        setDocumentState((current) => ({
+          ...current,
+          phase: "failed",
+          error: error?.detail?.message || error?.message || "裁决提交失败，请重试。",
+        }));
+      }
+    }
+  }, [api, documentState.payload?.analysis_token, state.attemptId, state.projectId]);
 
   const analyzeDocuments = useCallback(async (files) => {
     if (
@@ -973,6 +1051,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onAnswerCard={onAnswerCard}
       onDocumentFiles={analyzeDocuments}
       onDocumentRetry={loadDocumentReadiness}
+      onDocumentAdjudicate={submitDocumentAdjudication}
     />
     </>
   );

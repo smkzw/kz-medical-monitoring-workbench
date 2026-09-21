@@ -474,13 +474,17 @@ export function createMedicalMonitoringProductApi({
       );
     },
 
-    resolveStudyDocuments(projectId, attemptId, analysisToken, { signal } = {}) {
+    resolveStudyDocuments(projectId, attemptId, analysisToken, { signal, userRoleSelections } = {}) {
+      const body = { batch_id: requireId(analysisToken, "analysisToken") };
+      if (Array.isArray(userRoleSelections) && userRoleSelections.length) {
+        body.user_role_selections = userRoleSelections;
+      }
       return post(
         MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStudyDocumentsResolve(
           requireId(projectId, "projectId"),
           requireId(attemptId, "attemptId"),
         ),
-        { batch_id: requireId(analysisToken, "analysisToken") },
+        body,
         { signal },
       );
     },

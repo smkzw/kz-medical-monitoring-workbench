@@ -4043,11 +4043,13 @@ def _promote_r7_monitoring_document_authority(
     project_id: str,
     workspace_dir: Path,
     batch_id: str,
+    user_role_selections: Any = (),
 ) -> dict[str, object]:
     return monitoring_document_authority_workflow.advance(
         project_id=project_id,
         workspace_dir=workspace_dir,
         batch_id=batch_id,
+        user_role_selections=user_role_selections,
     )
 
 

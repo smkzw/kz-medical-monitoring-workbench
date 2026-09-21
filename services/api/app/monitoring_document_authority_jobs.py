@@ -536,6 +536,88 @@ def load_document_authority_review_run(
     )
 
 
+def _apply_user_role_selections(
+    resolved: dict[str, Any],
+    user_role_selections: Any,
+    candidate_batch: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Apply human adjudication to roles the dual-review chain left unresolved.
+
+    The user is the medical authority of last resort: a selection either binds
+    a batch candidate to a role or declares the role missing. Selections are
+    validated against the frozen batch; anything else fails closed.
+    """
+
+    selections = list(user_role_selections or ())
+    if not selections:
+        return resolved
+    unresolved = list(resolved.get("unresolved_roles", ()))
+    resolved_roles = [{**item} for item in resolved.get("resolved_roles", ())]
+    candidate_ids = {
+        str(item.get("candidate_id"))
+        for item in candidate_batch.get("candidates", ())
+    }
+    adjudicated: list[str] = []
+    for selection in selections:
+        role = str(
+            selection.get("role") if isinstance(selection, Mapping) else ""
+        ).strip()
+        candidate_id = str(
+            selection.get("candidate_id")
+            if isinstance(selection, Mapping)
+            else ""
+        ).strip()
+        if role not in unresolved or (candidate_id and candidate_id not in candidate_ids):
+            raise DocumentAuthorityError(
+                "document_authority_user_selection_invalid"
+            )
+        resolved_roles.append({
+            "role": role,
+            "status": "selected" if candidate_id else "missing",
+            "candidate_id": candidate_id,
+            "supplementary_candidate_ids": [],
+            "user_adjudicated": True,
+        })
+        unresolved.remove(role)
+        adjudicated.append(role)
+    state = "resolved" if not unresolved else str(resolved.get("state"))
+    return {
+        **resolved,
+        "resolved_roles": resolved_roles,
+        "unresolved_roles": unresolved,
+        "state": state,
+        "user_adjudicated_roles": adjudicated,
+    }
+
+
+def _user_choices_for_unresolved(
+    resolved: Mapping[str, Any],
+    candidate_batch: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Structured per-role options so the UI can render a real question."""
+
+    unresolved = list(resolved.get("unresolved_roles", ()))
+    if not unresolved:
+        return []
+    candidates = [
+        {
+            "candidate_id": str(item.get("candidate_id")),
+            "filename": str(item.get("filename") or ""),
+        }
+        for item in candidate_batch.get("candidates", ())
+    ]
+    return [
+        {
+            "role": str(role),
+            "options": [
+                *candidates,
+                {"candidate_id": "", "filename": "（该角色缺失，无此文件）"},
+            ],
+        }
+        for role in unresolved
+    ]
+
+
 def resolve_document_authority_from_jobs(
     repository: MonitoringAiRepository,
     *,
@@ -550,6 +632,7 @@ def resolve_document_authority_from_jobs(
     verifier_adjudication_job_id: str = "",
     primary_critique_job_id: str = "",
     verifier_critique_job_id: str = "",
+    user_role_selections: Any = (),
 ) -> dict[str, Any]:
     primary_analysis = load_document_authority_analysis_run(
         repository,
@@ -738,6 +821,9 @@ def resolve_document_authority_from_jobs(
                 for decision in primary_critique.review.decisions
                 if decision.role in unresolved_before_critique
             })
+    resolved = _apply_user_role_selections(
+        resolved, user_role_selections, candidate_batch
+    )
     document_identities = _analysis_document_identities(
         primary_analysis, resolved["resolved_roles"]
     )
@@ -755,12 +841,17 @@ def resolve_document_authority_from_jobs(
         )
         for identity in document_identities
     ]
-    return {
+    payload = {
         **resolved,
         "input_sha256": reconciliation["input_sha256"],
         "analysis_run_ids": reconciliation["run_ids"],
         "document_identities": document_identities,
     }
+    if payload["state"] != "resolved":
+        payload["user_choices"] = _user_choices_for_unresolved(
+            payload, candidate_batch
+        )
+    return payload
 
 
 def promote_document_authority_from_jobs(
@@ -779,6 +870,7 @@ def promote_document_authority_from_jobs(
     verifier_adjudication_job_id: str = "",
     primary_critique_job_id: str = "",
     verifier_critique_job_id: str = "",
+    user_role_selections: Any = (),
 ) -> dict[str, Any]:
     candidate_root = Path(candidate_root)
     frozen_batch = _load_json(
@@ -800,6 +892,7 @@ def promote_document_authority_from_jobs(
         verifier_adjudication_job_id=verifier_adjudication_job_id,
         primary_critique_job_id=primary_critique_job_id,
         verifier_critique_job_id=verifier_critique_job_id,
+        user_role_selections=user_role_selections,
     )
     if resolution["state"] != "resolved":
         return {**resolution, "authority_status": "not_promoted"}
@@ -818,6 +911,7 @@ def promote_document_authority_from_jobs(
                 if binding_kind == "supplementary"
                 else "document_authority_candidate_not_promotable"
             )
+        user_adjudicated_roles = set(resolution.get("user_adjudicated_roles", ()))
         if (
             candidate.get("technical_status") != "ready"
             or candidate.get("extraction_status") != "parsed"
@@ -826,6 +920,9 @@ def promote_document_authority_from_jobs(
             or (
                 binding_kind == "primary"
                 and role not in candidate.get("role_hypotheses", ())
+                # 用户裁决不受模型阶段role_hypotheses假设限制：
+                # 人是文件角色的最终医学权威。
+                and role not in user_adjudicated_roles
             )
         ):
             raise DocumentAuthorityError("document_authority_candidate_not_promotable")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Protocol
+from typing import Any, Dict, List, Mapping, Optional, Protocol
 
 from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -224,6 +224,9 @@ class DocumentAuthorityPromotionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     batch_id: str = Field(pattern=r"^mmbatch_[a-f0-9]{24}$")
+    # 用户裁决：对双模型链无法收敛的角色，由医学经理绑定文件角色
+    # （candidate_id为空=该角色缺失）。校验在workflow层fail-closed。
+    user_role_selections: List[Dict[str, str]] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -670,15 +673,33 @@ def register_mapping_candidate_routes(
                 return _mapping_error("mapping_document_authority_incomplete")
             if result.get("authority_status") != "promoted":
                 state = str(result.get("state") or "analyzing")
+                user_choices = result.get("user_choices") or []
                 if state == "needs_user_input":
                     headline = "还差一项关键信息"
                     guidance = str(result.get("user_question") or "").strip() or (
                         "仅有少量文件关系仍无法唯一确定，请确认系统标出的"
                         "分歧文件。"
                     )
+                    if user_choices:
+                        guidance = (
+                            "请对下列每个文件角色作出裁决：选择它对应的"
+                            "文件，或标记该角色缺失。"
+                        )
                 elif state == "evidence_incomplete":
-                    headline = "系统正在补齐少量文件内容"
-                    guidance = "暂时无需重新选择全部文件，系统会先恢复所需证据。"
+                    if user_choices:
+                        # 未决角色两侧都没有绑定候选：不是"补齐内容"，
+                        # 是需要用户指认文件角色或补充上传。
+                        headline = "需要您确认文件角色"
+                        guidance = (
+                            "系统两次独立核对后仍有文件角色无法自动判定。"
+                            "请对下列每个角色选择对应文件，或标记缺失。"
+                        )
+                        state = "needs_user_input"
+                    else:
+                        headline = "系统正在补齐少量文件内容"
+                        guidance = (
+                            "暂时无需重新选择全部文件，系统会先恢复所需证据。"
+                        )
                 elif state == "cross_checking":
                     headline = "系统正在复核最后几个分歧"
                     guidance = "无需操作，系统会独立核对并自行处理差异。"
@@ -688,7 +709,7 @@ def register_mapping_candidate_routes(
                 else:
                     headline = "系统仍在独立核对研究文件"
                     guidance = "当前无需逐项确认，请稍后查看结果。"
-                return {
+                response_payload = {
                     "project_id": canonical,
                     "state": state,
                     "analysis_token": payload.batch_id,
@@ -700,6 +721,9 @@ def register_mapping_candidate_routes(
                         if str(value).strip()
                     ],
                 }
+                if user_choices:
+                    response_payload["user_choices"] = user_choices
+                return response_payload
             for registration in result.get("registrations", ()):
                 pipeline.select_document(
                     project_id=canonical,
