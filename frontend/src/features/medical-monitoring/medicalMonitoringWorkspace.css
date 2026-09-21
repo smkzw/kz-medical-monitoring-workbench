@@ -8,9 +8,10 @@
   --monitoring-red: #b83b3b;
   --monitoring-amber: #a56b00;
   color: var(--monitoring-ink);
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 26px 30px 48px;
+  /* N2: 解除1600px封顶——充分利用宽屏可用宽度，不留任务无关空白 */
+  max-width: none;
+  margin: 0;
+  padding: 16px 16px 32px;
 }
 
 .monitoring-page-header,
@@ -2058,15 +2059,6 @@ g[data-flow-node][data-flow-empty="true"] .monitoring-flow-node-box {
   }
 }
 
-/* At 1920x1080, keep the tertiary center-coverage module below the first-screen
-   boundary so its first data row cannot be painted as a partial fold fragment. */
-@media (min-width: 1800px) and (max-height: 1200px) {
-  .monitoring-page[data-monitoring-view="overview"] .monitoring-center-overview-panel,
-  .monitoring-page[data-monitoring-view="site_overview"] .monitoring-center-overview-panel,
-  .monitoring-page[data-monitoring-view="site_overview"] .monitoring-center-summary {
-    margin-top: 160px;
-  }
-}
 
 /* Journey density: keep 按缩放级别聚合 unbroken at 1280 (Round 6 P2). */
 @media (max-width: 1360px) {
@@ -2399,7 +2391,7 @@ g[data-flow-link]:focus-visible .monitoring-flow-ribbon {
   border: 1px solid #D6D2CD;
   border-left: 4px solid #FF9900;
   border-radius: 10px;
-  padding: 14px 16px;
+  padding: 10px 14px;
 }
 .monitoring-query-card-head {
   display: flex;
@@ -2415,25 +2407,22 @@ g[data-flow-link]:focus-visible .monitoring-flow-ribbon {
   color: #595959;
 }
 .monitoring-query-card-body {
+  /* N2: 纵向紧凑流替代三等分装饰框 */
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 .monitoring-query-card-body section {
-  background: #FDFBF7;
-  border: 1px solid #EEECE1;
-  border-radius: 8px;
-  padding: 10px 12px;
+  padding: 0;
 }
 .monitoring-query-card-body h3 {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   font-size: 13px;
   color: #A85F34;
 }
 .monitoring-query-card-body p {
   margin: 0;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.45;
 }
 .monitoring-query-card-actions {
   display: flex;
