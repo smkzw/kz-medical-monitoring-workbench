@@ -19,6 +19,8 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from openpyxl import Workbook
+from docx import Document
+from docx.shared import Pt
 
 random.seed(20260920)
 
@@ -234,12 +236,74 @@ def build(profile: Profile, out_dir: Path) -> Path:
     return out
 
 
+def generate_ecrf(profile: Profile, out_dir: Path) -> Path:
+    """生成合成eCRF docx——document authority readiness必需的ecrf角色文档。"""
+    doc = Document()
+    doc.add_heading(f"{profile.study_id} 病例报告表（eCRF）填写指南", level=1)
+    doc.add_paragraph(f"研究药物：{profile.drug}")
+    doc.add_paragraph(f"适应症：{profile.indication}")
+    doc.add_paragraph(f"版本：V1.0")
+
+    doc.add_heading("1. 受试者信息页（DM）", level=2)
+    doc.add_paragraph("SUBJID：受试者编号，格式为中心编号+序号（如21001）。")
+    doc.add_paragraph("SITEID：中心编号。SEX：性别（男/女）。AGE：签署知情同意时的实际年龄。")
+    doc.add_paragraph("ARM：试验分组（试验组/安慰剂组）。RANDDT：随机日期，格式YYYY-MM-DD。")
+
+    doc.add_heading("2. 不良事件页（AE）", level=2)
+    doc.add_paragraph("AETERM：不良事件名称，使用MedDRA首选术语。")
+    doc.add_paragraph(
+        f"AESEV：严重程度，按{profile.ctcae_version}分级标准记录（1级/2级/3级/4级）。"
+    )
+    doc.add_paragraph("AESTDAT/AEENDAT：开始/结束日期。AEOUT：转归（痊愈/好转/持续/死亡）。")
+    doc.add_paragraph("AEREL：与试验药物关系（肯定有关/可能有关/可能无关/肯定无关）。")
+
+    doc.add_heading("3. 既往病史页（MH）", level=2)
+    doc.add_paragraph("MHTERM：病史名称。MHSTDAT：开始日期。MHONGO：目前是否持续（是/否）。")
+
+    doc.add_heading("4. 合并用药页（CM）", level=2)
+    doc.add_paragraph("CMTRT：药物名称。CMINDC：用药目的（如本研究疾病/既往病史/伴随治疗）。")
+    doc.add_paragraph("CMSTDAT/CMENDAT：开始/结束日期。CMONGO：目前是否持续。")
+
+    doc.add_heading("5. 试验给药页（EX）", level=2)
+    doc.add_paragraph("EXDAT：给药日期。EXFRQ：给药频次。EXTRT：给药药物。EXSTATE：给药状态（完成/延迟给药/漏用）。")
+
+    doc.add_heading("6. 访视页（SV）", level=2)
+    doc.add_paragraph("VISIT：访视名称。" + "、".join(v[0] for v in profile.visits) + "。")
+    doc.add_paragraph("VISDAT：实际访视日期。SVSTATE：访视状态（已访视/失约）。")
+
+    doc.add_heading("7. 实验室检查页（LB_HEM）", level=2)
+    doc.add_paragraph("LBTEST：实验室指标名称。LBUNIT：单位。LBORRES：结果。LBREF：参考范围。LBSIGNI：临床意义（正常/偏低/偏高）。")
+
+    doc.add_heading("8. 生命体征页（VS）", level=2)
+    doc.add_paragraph("HRRATE：心率（次/分）。SBP/DBP：收缩压/舒张压（mmHg）。RESP：呼吸（次/分）。")
+
+    doc.add_heading("9. 量表评分页", level=2)
+    if isinstance(profile, CsuProfile):
+        doc.add_paragraph("UAS7：每周荨麻疹活动度评分，包含瘙痒评分和风团计数。W2/W4/W8/W12周各记录一次。")
+        scale_note = "UASW2/UASW4/UASW8/UASW12"
+    else:
+        doc.add_paragraph("PASI：银屑病面积与严重程度指数。W4/W8/W12/W16周各记录一次。")
+        scale_note = "PASIW4/PASIW8/PASIW12/PASIW16"
+    doc.add_paragraph(f"字段命名：{scale_note}。评分为数值，范围见各量表定义。")
+
+    doc.add_heading("10. 知情同意追踪页（ICF_TRACK）", level=2)
+    doc.add_paragraph("ICFSTATE：知情状态（已签署/待签署）。ICFVER：知情同意书版本。")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / f"{profile.study_id}_eCRF填写指南_V1.0.docx"
+    doc.save(str(out))
+    print(f"generated: {out}")
+    return out
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", choices=sorted(PROFILES), required=True)
     parser.add_argument("--out", type=Path, default=Path("/tmp/test_materials"))
     args = parser.parse_args()
-    build(PROFILES[args.profile](), args.out)
+    profile = PROFILES[args.profile]()
+    build(profile, args.out)
+    generate_ecrf(profile, args.out)
 
 
 if __name__ == "__main__":
