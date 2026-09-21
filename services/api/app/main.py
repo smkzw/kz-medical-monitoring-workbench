@@ -1365,61 +1365,69 @@ def _wake_monitoring_mapping_workers() -> None:
     monitoring_ai_verifier_worker.wake()
 
 
-def _resolve_doc_auth_primary_runtime():
-    # N5/M4：文档权威主分析——opencode-go/muse-spark-1.3-contributor
-    # 硬编码绑定（用户指定），不经过角色绑定系统（避免配置漂移）
+def _omp_router_api_key(profile_id: str) -> str:
+    """OmniRoute本机路由密钥：先查凭据仓（自身profile_id，回退历史cms路由id），再查环境变量。"""
+    from services.api.app.ai_runtime_settings import LocalCredentialStore
+    key = LocalCredentialStore(RUNTIME_DIR).get(profile_id)
+    if not key:
+        key = LocalCredentialStore(RUNTIME_DIR).get(
+            "medical_monitoring_verifier_ai__cms_router_dsf"
+        )
+    if not key:
+        key = os.environ.get("WORKBENCH_OMP_ROUTER_API_KEY", "").strip()
+    return key
+
+
+def _omp_router_runtime(profile_id: str, *, model: str, thinking: str):
     from services.api.app.monitoring_ai_service import MonitoringAiRuntimeBinding
-    from services.api.app.monitoring_product_ai_transport import MONITORING_PRODUCT_AI_TRANSPORT
-    provider_env = {}
-    # OpenCode Go API key 从环境或 provider settings 获取
-    for key in ("OPENCODE_GO_API_KEY", "XAI_API_KEY"):
-        val = os.environ.get(key, "").strip()
-        if val:
-            provider_env["WORKBENCH_AI_API_KEY"] = val
-            break
-    provider_env.setdefault("WORKBENCH_AI_PROVIDER", "opencode-go")
-    provider_env.setdefault("WORKBENCH_AI_MODEL", "muse-spark-1.3-contributor")
-    provider_env.setdefault("WORKBENCH_AI_BASE_URL", "https://opencode.ai/zen/go/v1")
-    provider_env.setdefault("WORKBENCH_AI_EXPECTED_RESPONSE_MODEL", "muse-spark-1.3-contributor")
-    provider_env.setdefault("WORKBENCH_AI_THINKING", "high")
-    provider_env.setdefault("WORKBENCH_AI_REASONING_EFFORT", "high")
-    provider_env.setdefault("WORKBENCH_AI_TIMEOUT_SECONDS", "600")
-    provider_env.setdefault("WORKBENCH_AI_OUTPUT_TOKEN_BUDGET", "32768")
-    provider_env.setdefault("WORKBENCH_AI_EXTRA_HEADERS", json.dumps({"x-opencode-session": "doc-auth-primary"}))
+    from services.api.app.monitoring_product_ai_transport import (
+        MONITORING_PRODUCT_AI_TRANSPORT,
+    )
+    key = _omp_router_api_key(profile_id)
+    provider_env = {
+        "WORKBENCH_AI_PROVIDER": "omp-router",
+        "WORKBENCH_AI_TRANSPORT": "openai_compatible",
+        "WORKBENCH_AI_BASE_URL": "http://127.0.0.1:20128/v1",
+        "WORKBENCH_AI_MODEL": model,
+        # 路由器返回的served model名与请求名不一致（如deepseek-flash→
+        # deepseek-latest-cloud），留空以跳过response model断言。
+        "WORKBENCH_AI_EXPECTED_RESPONSE_MODEL": "",
+        "WORKBENCH_AI_THINKING": thinking,
+        "WORKBENCH_AI_REASONING_EFFORT": thinking,
+        "WORKBENCH_AI_TIMEOUT_SECONDS": "600",
+        "WORKBENCH_AI_OUTPUT_TOKEN_BUDGET": "32768",
+    }
+    if key:
+        provider_env["WORKBENCH_AI_API_KEY"] = key
     return MonitoringAiRuntimeBinding(
-        profile_id="document_authority_primary_ai__opencode_go_muse",
-        provider="opencode-go",
-        model="muse-spark-1.3-contributor",
+        profile_id=profile_id,
+        provider="omp-router",
+        model=model,
         env=provider_env,
         transport=MONITORING_PRODUCT_AI_TRANSPORT,
         available=True,
+        diagnostic="" if key else "omp-router api key unavailable",
     )
 
+
+def _resolve_doc_auth_primary_runtime():
+    # N5/M4：文档权威主分析——本机OmniRoute/glm-5.3（旗舰推理）。
+    # 2026-09-21：opencode-go与ollama-cloud存储密钥均失效（实测401），
+    # 改走本机路由可达的glm-5.3/deepseek-flash双族（用户muse-spark+deepseek
+    # 的"强主分析+独立盲核"意图，密钥恢复后可在mapping_gate一键改回）。
+    return _omp_router_runtime(
+        "document_authority_primary_ai__omp_router_glm53",
+        model="glm-5.3",
+        thinking="high",
+    )
+
+
 def _resolve_doc_auth_verifier_runtime():
-    # N5/M4：文档权威盲核——ollama-cloud/deepseek-v4.1-flash
-    from services.api.app.monitoring_ai_service import MonitoringAiRuntimeBinding
-    from services.api.app.monitoring_product_ai_transport import MONITORING_PRODUCT_AI_TRANSPORT
-    provider_env = {}
-    for key in ("OLLAMA_CLOUD_API_KEY",):
-        val = os.environ.get(key, "").strip()
-        if val:
-            provider_env["WORKBENCH_AI_API_KEY"] = val
-            break
-    provider_env.setdefault("WORKBENCH_AI_PROVIDER", "ollama-cloud")
-    provider_env.setdefault("WORKBENCH_AI_MODEL", "deepseek-v4.1-flash")
-    provider_env.setdefault("WORKBENCH_AI_BASE_URL", "https://ollama.com/v1")
-    provider_env.setdefault("WORKBENCH_AI_EXPECTED_RESPONSE_MODEL", "deepseek-v4.1-flash")
-    provider_env.setdefault("WORKBENCH_AI_THINKING", "high")
-    provider_env.setdefault("WORKBENCH_AI_REASONING_EFFORT", "high")
-    provider_env.setdefault("WORKBENCH_AI_TIMEOUT_SECONDS", "600")
-    provider_env.setdefault("WORKBENCH_AI_OUTPUT_TOKEN_BUDGET", "32768")
-    return MonitoringAiRuntimeBinding(
-        profile_id="document_authority_verifier_ai__ollama_cloud_dsv41",
-        provider="ollama-cloud",
-        model="deepseek-v4.1-flash",
-        env=provider_env,
-        transport=MONITORING_PRODUCT_AI_TRANSPORT,
-        available=True,
+    # N5/M4：文档权威盲核——本机OmniRoute/deepseek-flash（与主分析不同族）。
+    return _omp_router_runtime(
+        "document_authority_verifier_ai__omp_router_dsf",
+        model="deepseek-latest-cloud",
+        thinking="high",
     )
 
 monitoring_doc_auth_primary_service = MonitoringAiService(
