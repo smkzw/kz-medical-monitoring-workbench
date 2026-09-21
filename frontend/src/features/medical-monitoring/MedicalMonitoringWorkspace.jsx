@@ -1841,22 +1841,52 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
       {aiFindings.length ? (
         <section className="monitoring-panel monitoring-panel-wide">
           <div className="monitoring-section-heading"><span className="monitoring-eyebrow">双模型分析</span><h2>AI 跨表线索（{aiFindings.length} 条 · 双cohort一致 {aiAccepted} · 分歧 {aiEscalated} · 待补核 {aiGaps}）</h2></div>
-          <p className="monitoring-query-intro">以下线索由主分析与独立盲核（双模型全量盲核对）产出：一致的线索成立但仍需您复核；分歧线索不作强判，由您裁决；覆盖不足如实标出。</p>
+          <p className="monitoring-query-intro">以下线索由主分析与独立盲核（双模型全量盲核对）产出；模型一致性是核验状态而非医学结论，最终判断由您对照原始记录作出。</p>
           <ul className="monitoring-query-card-list">
             {aiFindings.map((item) => {
-              const subject = subjectsByRef.get(`subject-${item.subject_label}`) || (projection.subjects || []).find((row) => row.subject_label === item.subject_label || row.label === item.subject_label);
+              // N4：subject身份由服务端投影解析（subject_ref），不再按
+              // subject-${label}猜ID；分页外受试者仍可按ref导航。
+              const subject = (item.subject_ref && subjectsByRef.get(item.subject_ref))
+                || (projection.subjects || []).find((row) => row.subject_label === item.subject_label)
+                || (item.subject_ref ? { subject_ref: item.subject_ref, site_ref: item.site_ref, spine_ref: item.spine_ref } : null);
               const stateBadge = item.state === "accepted" ? "双cohort一致" : item.state === "escalated" ? "分歧待裁决" : "待补核";
+              const claims = Array.isArray(item.claims) ? item.claims : [];
+              const anchorEvent = Array.isArray(item.anchor_event_refs) && item.anchor_event_refs.length
+                ? item.anchor_event_refs[0] : "";
               return (
-                <li key={item.finding_id} className="monitoring-query-card" data-query-finding={item.finding_id} data-finding-state={item.state}>
+                <li key={item.finding_id} className="monitoring-query-card" data-query-finding={item.finding_id} data-finding-state={item.state} data-finding-kind={item.kind || "finding"}>
                   <header className="monitoring-query-card-head">
                     <span className={`monitoring-query-state-chip monitoring-query-state-${item.state}`}>{stateBadge}</span>
                     <strong>{item.title}</strong>
-                    <span className="monitoring-query-card-target">受试者 {item.subject_label || "待确认"}</span>
+                    <span className="monitoring-query-card-target">
+                      受试者{" "}
+                      {subject ? (
+                        <button type="button" className="monitoring-subject-link" onClick={() => onSubjectSelect?.(subject)}>{item.subject_label || "查看"}</button>
+                      ) : (
+                        <span>{item.subject_label || "待确认"}</span>
+                      )}
+                    </span>
                   </header>
                   <div className="monitoring-query-card-body">
-                    <section aria-label="依据"><h3>依据</h3><p>{item.state_reason_zh || "双cohort独立分析同一冻结证据包。"}</p></section>
-                    <section aria-label="发现"><h3>发现</h3><p>{item.text || item.title}</p></section>
-                    <section aria-label="请核实事项"><h3>请核实事项</h3><p>请下钻受试者旅程与来源记录核对临床语境后确认处置。</p></section>
+                    {claims.length ? (
+                      <section aria-label="观察与依据"><h3>观察与依据</h3>
+                        <ul className="monitoring-claim-list">
+                          {claims.map((claim, claimIndex) => (
+                            <li key={claimIndex} data-claim-kind={claim.kind || ""}>
+                              {claim.text}
+                              {claim.evidence_ids?.length ? (
+                                <span className="monitoring-claim-evidence">（证据 {claim.evidence_ids.length} 条）</span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ) : (
+                      <section aria-label="发现"><h3>发现</h3><p>{item.text || item.title}</p></section>
+                    )}
+                    {item.kind === "coverage_gap" ? (
+                      <section aria-label="覆盖说明"><h3>覆盖说明</h3><p>{item.state_reason_zh || "本轮双cohort未能完成该受试者的核实，覆盖不足如实标出，待下轮补核。"}</p></section>
+                    ) : null}
                   </div>
                   <footer className="monitoring-query-card-actions">
                     <button type="button" disabled={!subject} onClick={() => subject && onSubjectSelect?.(subject)}>进入受试者医学旅程</button>
