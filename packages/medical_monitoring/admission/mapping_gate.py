@@ -34,7 +34,10 @@ MONITORING_C3_MAPPING_MODEL = "muse-spark-1.3-contributor"
 # 按用户"muse-spark主+deepseek盲核"的模型意图改为本机OmniRoute可达路由：
 # 主=glm-5.3（旗舰推理），盲核=deepseek-flash，两族独立，走本地路由统一密钥。
 DOC_AUTH_PRIMARY_PROVIDER = "omp-router"
-DOC_AUTH_PRIMARY_MODEL = "glm-5.3"
+# 请求名必须=回执名（回执校验response_model==requested_model）。
+# zai上游对glm-5.3请求会按负载漂移服务glm-5.3-flash变体（实测），
+# 故直接请求确定回名为glm-5.3-flash的变体。
+DOC_AUTH_PRIMARY_MODEL = "glm-5.3-flash"
 DOC_AUTH_VERIFIER_PROVIDER = "omp-router"
 # 请求名必须=回执名（promotion回执校验response_model==requested_model），
 # 本机路由对deepseek-flash的透传名是deepseek-latest-cloud，故直接用它请求。
@@ -141,6 +144,9 @@ MONITORING_C3_PRIMARY_RUNTIME_PAIRS = frozenset({
     (MONITORING_C3_ALTERNATE_PROVIDER, MONITORING_C3_ALTERNATE_MODEL),
     # 文档权威专用主分析身份（omp-router/glm-5.3旗舰）
     (DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL),
+    # 历史身份：2026-09-21晚eCRF primary以omp-router/glm-5.3提交完成
+    # （zai上游按负载漂移服务变体，该完成作业/回执必须保持可重验）
+    ("omp-router", "glm-5.3"),
 })
 
 
