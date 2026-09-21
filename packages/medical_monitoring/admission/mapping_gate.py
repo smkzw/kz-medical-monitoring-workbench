@@ -26,10 +26,9 @@ MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION = "mm-c3-dual-mapping-cohort-v1"
 # PRIMARY_RUNTIME_PAIRS set below admits every current and historical
 # primary identity so persisted jobs/receipts keep revalidating across
 # route changes.
-# 2026-09-20 现役主身份对齐用户最终指令（glm-5.3-flash@cms-router，
-# 完整批跑185+43作业在该路由成功）；zhipu-coding-plan保留为历史身份。
-MONITORING_C3_MAPPING_PROVIDER = "cms-router"
-MONITORING_C3_MAPPING_MODEL = "glm-5.3-flash"
+# 2026-09-21 用户指令：glm-5.3-flash全部改为opencode-go/muse-spark-1.3-contributor(high)
+MONITORING_C3_MAPPING_PROVIDER = "opencode-go"
+MONITORING_C3_MAPPING_MODEL = "muse-spark-1.3-contributor"
 # N5：文档权威专用身份（用户指定 muse-spark + deepseek-v4.1）
 DOC_AUTH_PRIMARY_PROVIDER = "opencode-go"
 DOC_AUTH_PRIMARY_MODEL = "muse-spark-1.3-contributor"
@@ -71,7 +70,7 @@ MONITORING_C3_MTPLX_VERIFIER_PROFILE_ID = (
     "medical_monitoring_verifier__mtplx_qwen38_flash_next"
 )
 MONITORING_C3_GLM_VERIFIER_PROVIDER = "zhipu-coding-plan"
-MONITORING_C3_GLM_VERIFIER_MODEL = "glm-5.3-flash"
+MONITORING_C3_GLM_VERIFIER_MODEL = "muse-spark-1.3-contributor"
 MONITORING_C3_GLM_VERIFIER_PROFILE_ID = (
     "independent_ai__zhipu_coding_plan_glm_flash"
 )
