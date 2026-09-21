@@ -116,15 +116,15 @@ from packages.medical_monitoring.admission.document_authority import (
     validate_document_authority_conflict_review,
 )
 from packages.medical_monitoring.admission.mapping_gate import (
+    DOC_AUTH_PRIMARY_MODEL,
+    DOC_AUTH_PRIMARY_PROVIDER,
+    DOC_AUTH_VERIFIER_MODEL,
+    DOC_AUTH_VERIFIER_PROVIDER,
     MONITORING_C3_GLM_VERIFIER_MODEL,
     MONITORING_C3_GLM_VERIFIER_PROVIDER,
     is_monitoring_primary_runtime,
     is_monitoring_verifier_runtime,
     MONITORING_C3_LOCAL_FALLBACK_MODEL,
-    MONITORING_C3_MAPPING_MODEL,
-    MONITORING_C3_MAPPING_PROVIDER,
-    MONITORING_C3_VERIFIER_MODEL,
-    MONITORING_C3_VERIFIER_PROVIDER,
 )
 from .monitoring_mapping_semantic_quality import (
     ROLE_CATALOG_VERSION,
@@ -1759,9 +1759,9 @@ class MonitoringAiService:
             else DOCUMENT_AUTHORITY_VERIFIER_REVIEW_PROMPT_VERSION
         )
         expected_identity = (
-            (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL)
+            (DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL)
             if role == "primary"
-            else (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL)
+            else (DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL)
         )
         runtime = self.runtime_resolver()
         if (runtime.provider, runtime.model) != expected_identity:
@@ -4696,13 +4696,9 @@ class MonitoringAiService:
                     changed = True
                 normalized.append(candidate)
             if changed:
-                parsed = parsed.__class__(
-                    schema_version=parsed.schema_version,
-                    task_id=parsed.task_id,
-                    task_type=parsed.task_type,
-                    input_revision_sha256=parsed.input_revision_sha256,
-                    candidates=tuple(normalized),
-                )
+                # 就地替换列表内容：方法内重建parsed不会传导到调用方，
+                # 归一结果必须体现在调用方随后zip的parsed.candidates里。
+                parsed.candidates[:] = normalized
         if (
             job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
             and len(parsed.candidates) != 1

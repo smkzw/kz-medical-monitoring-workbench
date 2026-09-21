@@ -29,11 +29,16 @@ MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION = "mm-c3-dual-mapping-cohort-v1"
 # 2026-09-21 用户指令：glm-5.3-flash全部改为opencode-go/muse-spark-1.3-contributor(high)
 MONITORING_C3_MAPPING_PROVIDER = "opencode-go"
 MONITORING_C3_MAPPING_MODEL = "muse-spark-1.3-contributor"
-# N5：文档权威专用身份（用户指定 muse-spark + deepseek-v4.1）
-DOC_AUTH_PRIMARY_PROVIDER = "opencode-go"
-DOC_AUTH_PRIMARY_MODEL = "muse-spark-1.3-contributor"
-DOC_AUTH_VERIFIER_PROVIDER = "ollama-cloud"
-DOC_AUTH_VERIFIER_MODEL = "deepseek-v4.1-flash"
+# N5：文档权威专用身份
+# 2026-09-21 晚：opencode-go与ollama-cloud的存储密钥均已失效（实测401），
+# 按用户"muse-spark主+deepseek盲核"的模型意图改为本机OmniRoute可达路由：
+# 主=glm-5.3（旗舰推理），盲核=deepseek-flash，两族独立，走本地路由统一密钥。
+DOC_AUTH_PRIMARY_PROVIDER = "omp-router"
+DOC_AUTH_PRIMARY_MODEL = "glm-5.3"
+DOC_AUTH_VERIFIER_PROVIDER = "omp-router"
+# 请求名必须=回执名（promotion回执校验response_model==requested_model），
+# 本机路由对deepseek-flash的透传名是deepseek-latest-cloud，故直接用它请求。
+DOC_AUTH_VERIFIER_MODEL = "deepseek-latest-cloud"
 MONITORING_C3_MAPPING_PROFILE_ID = (
     "medical_monitoring_ai__zhipu_glm_flash_high"
 )
@@ -122,6 +127,10 @@ MONITORING_C3_VERIFIER_RUNTIME_PAIRS = frozenset({
         MONITORING_C3_MTPLX_VERIFIER_PROVIDER,
         MONITORING_C3_MTPLX_VERIFIER_MODEL,
     ),
+    # 文档权威专用盲核身份（omp-router/deepseek-latest-cloud，请求名=回执名）
+    (DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL),
+    # 历史身份：opencode-go直连盲核（密钥失效前的完成作业/回执仍可重验）
+    ("opencode-go", "deepseek-flash"),
 })
 MONITORING_C3_PRIMARY_RUNTIME_PAIRS = frozenset({
     (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
@@ -130,6 +139,8 @@ MONITORING_C3_PRIMARY_RUNTIME_PAIRS = frozenset({
     (MONITORING_C3_DEEPSEEK_PRIMARY_PROVIDER, MONITORING_C3_DEEPSEEK_PRIMARY_MODEL),
     (MONITORING_C3_CMS_PRIMARY_PROVIDER, MONITORING_C3_CMS_PRIMARY_MODEL),
     (MONITORING_C3_ALTERNATE_PROVIDER, MONITORING_C3_ALTERNATE_MODEL),
+    # 文档权威专用主分析身份（omp-router/glm-5.3旗舰）
+    (DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL),
 })
 
 

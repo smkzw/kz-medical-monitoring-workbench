@@ -24,10 +24,10 @@ from packages.medical_monitoring.admission.document_authority import (
     document_authority_batch_sha256,
 )
 from packages.medical_monitoring.admission.mapping_gate import (
-    MONITORING_C3_MAPPING_MODEL,
-    MONITORING_C3_MAPPING_PROVIDER,
-    MONITORING_C3_VERIFIER_MODEL,
-    MONITORING_C3_VERIFIER_PROVIDER,
+    DOC_AUTH_PRIMARY_MODEL,
+    DOC_AUTH_PRIMARY_PROVIDER,
+    DOC_AUTH_VERIFIER_MODEL,
+    DOC_AUTH_VERIFIER_PROVIDER,
 )
 from services.api.app.monitoring_ai_contracts import (
     MONITORING_AI_SCHEMA_VERSION,
@@ -275,14 +275,14 @@ def _runtime(provider: str, model: str, profile: str) -> MonitoringAiRuntimeBind
     (
         (
             "primary",
-            MONITORING_C3_MAPPING_PROVIDER,
-            MONITORING_C3_MAPPING_MODEL,
+            DOC_AUTH_PRIMARY_PROVIDER,
+            DOC_AUTH_PRIMARY_MODEL,
             "monitoring-document-authority-primary",
         ),
         (
             "verifier",
-            MONITORING_C3_VERIFIER_PROVIDER,
-            MONITORING_C3_VERIFIER_MODEL,
+            DOC_AUTH_VERIFIER_PROVIDER,
+            DOC_AUTH_VERIFIER_MODEL,
             "monitoring-document-authority-verifier",
         ),
     ),
@@ -381,13 +381,13 @@ def test_document_authority_gets_one_schema_only_repair(tmp_path) -> None:
     analysis = _analysis(batch)
     repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite")
     runtime = _runtime(
-        MONITORING_C3_MAPPING_PROVIDER,
-        MONITORING_C3_MAPPING_MODEL,
+        DOC_AUTH_PRIMARY_PROVIDER,
+        DOC_AUTH_PRIMARY_MODEL,
         "monitoring-document-authority-primary",
     )
     provider = _RepairingProvider(
-        MONITORING_C3_MAPPING_PROVIDER,
-        MONITORING_C3_MAPPING_MODEL,
+        DOC_AUTH_PRIMARY_PROVIDER,
+        DOC_AUTH_PRIMARY_MODEL,
         analysis,
     )
     service = MonitoringAiService(
@@ -430,13 +430,13 @@ def test_document_authority_repair_uses_frozen_batch_identity(tmp_path) -> None:
     batch = _batch()
     repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite")
     runtime = _runtime(
-        MONITORING_C3_MAPPING_PROVIDER,
-        MONITORING_C3_MAPPING_MODEL,
+        DOC_AUTH_PRIMARY_PROVIDER,
+        DOC_AUTH_PRIMARY_MODEL,
         "monitoring-document-authority-primary",
     )
     provider = _StaleIdentityThenCorrectProvider(
-        MONITORING_C3_MAPPING_PROVIDER,
-        MONITORING_C3_MAPPING_MODEL,
+        DOC_AUTH_PRIMARY_PROVIDER,
+        DOC_AUTH_PRIMARY_MODEL,
         _analysis(batch),
     )
     service = MonitoringAiService(
@@ -476,16 +476,16 @@ def test_loader_rejects_role_swap(tmp_path) -> None:
     analysis = _analysis(batch)
     repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite")
     runtime = _runtime(
-        MONITORING_C3_MAPPING_PROVIDER,
-        MONITORING_C3_MAPPING_MODEL,
+        DOC_AUTH_PRIMARY_PROVIDER,
+        DOC_AUTH_PRIMARY_MODEL,
         "monitoring-document-authority-primary",
     )
     service = MonitoringAiService(
         repository,
         runtime_resolver=lambda: runtime,
         provider_factory=lambda _env: _Provider(
-            MONITORING_C3_MAPPING_PROVIDER,
-            MONITORING_C3_MAPPING_MODEL,
+            DOC_AUTH_PRIMARY_PROVIDER,
+            DOC_AUTH_PRIMARY_MODEL,
             analysis,
         ),
     )
@@ -535,8 +535,8 @@ def test_matching_analysis_jobs_resolve_without_conflict_reviews(tmp_path) -> No
     )
     jobs = []
     for role, provider, model in (
-        ("primary", MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
-        ("verifier", MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
+        ("primary", DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL),
+        ("verifier", DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL),
     ):
         service = MonitoringAiService(
             repository,
@@ -700,8 +700,8 @@ def test_product_workflow_starts_both_models_and_promotes_direct_agreement(
     repository = MonitoringAiRepository(tmp_path / "workflow.sqlite")
     services = []
     for role, provider, model in (
-        ("primary", MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
-        ("verifier", MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
+        ("primary", DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL),
+        ("verifier", DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL),
     ):
         services.append(MonitoringAiService(
             repository,
@@ -778,16 +778,16 @@ def test_worker_rejects_downstream_medical_conclusion_hidden_in_output(
     )
     repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite")
     runtime = _runtime(
-        MONITORING_C3_MAPPING_PROVIDER,
-        MONITORING_C3_MAPPING_MODEL,
+        DOC_AUTH_PRIMARY_PROVIDER,
+        DOC_AUTH_PRIMARY_MODEL,
         "monitoring-document-authority-primary",
     )
     service = MonitoringAiService(
         repository,
         runtime_resolver=lambda: runtime,
         provider_factory=lambda _env: _Provider(
-            MONITORING_C3_MAPPING_PROVIDER,
-            MONITORING_C3_MAPPING_MODEL,
+            DOC_AUTH_PRIMARY_PROVIDER,
+            DOC_AUTH_PRIMARY_MODEL,
             raw_analysis,
         ),
     )
@@ -845,14 +845,14 @@ def test_product_workflow_starts_blind_conflict_review_without_user_choice(
     for role, provider, model, analysis in (
         (
             "primary",
-            MONITORING_C3_MAPPING_PROVIDER,
-            MONITORING_C3_MAPPING_MODEL,
+            DOC_AUTH_PRIMARY_PROVIDER,
+            DOC_AUTH_PRIMARY_MODEL,
             _analysis(batch, select_ecrf=False),
         ),
         (
             "verifier",
-            MONITORING_C3_VERIFIER_PROVIDER,
-            MONITORING_C3_VERIFIER_MODEL,
+            DOC_AUTH_VERIFIER_PROVIDER,
+            DOC_AUTH_VERIFIER_MODEL,
             _analysis(batch),
         ),
     ):
@@ -935,8 +935,8 @@ def test_product_workflow_starts_blind_conflict_review_without_user_choice(
     assert result == {"state": "reviewing", "batch_id": batch["batch_id"]}
     assert len(reviews) == 2
     assert {job.provider for job in reviews} == {
-        MONITORING_C3_MAPPING_PROVIDER,
-        MONITORING_C3_VERIFIER_PROVIDER,
+        DOC_AUTH_PRIMARY_PROVIDER,
+        DOC_AUTH_VERIFIER_PROVIDER,
     }
     assert wake_calls == [True]
 
@@ -981,13 +981,13 @@ def test_worker_rejects_downstream_medical_conclusion_in_outer_copy(
     batch = _batch()
     repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite")
     runtime = _runtime(
-        MONITORING_C3_MAPPING_PROVIDER,
-        MONITORING_C3_MAPPING_MODEL,
+        DOC_AUTH_PRIMARY_PROVIDER,
+        DOC_AUTH_PRIMARY_MODEL,
         "monitoring-document-authority-primary",
     )
     provider = _Provider(
-        MONITORING_C3_MAPPING_PROVIDER,
-        MONITORING_C3_MAPPING_MODEL,
+        DOC_AUTH_PRIMARY_PROVIDER,
+        DOC_AUTH_PRIMARY_MODEL,
         _analysis(batch),
         text="该患者不良反应判定为3级，应向研究中心发出质疑。",
     )
@@ -1018,13 +1018,17 @@ def test_worker_rejects_downstream_medical_conclusion_in_outer_copy(
         "synthetic-worker", claim_identity=service.claim_identity()
     )
 
-    assert result.job is not None and result.job.status.value == "failed"
-    assert repository.candidates(revision.project_id, job.job_id) == ()
+    # N4合同：外层title/text是固定信封。越界文本不导致作业失败，而是
+    # 被确定性归一为受控值后完成——医学结论文本必须完全不可见。
+    assert result.job is not None and result.job.status.value == "completed"
+    stored = repository.candidates(revision.project_id, job.job_id)
+    assert len(stored) == 1
+    assert stored[0].title == "研究文件识别结果"
+    assert stored[0].text == "系统已基于冻结文件内容判断文件类别与版本。"
+    assert "该患者不良反应判定为3级" not in stored[0].text
     assert len(provider.envelopes) == 1
     attempts = repository.attempts(revision.project_id, job.job_id)
     assert len(attempts) == 1
-    assert attempts[0]["outcome"] == "invalid_output"
-    assert len(attempts[0]["response"]["provider_outputs"]) == 1
 
 
 def test_repository_jobs_drive_blind_review_and_internal_adjudication(
@@ -1044,21 +1048,21 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         ),
     )
     primary_runtime = _runtime(
-        MONITORING_C3_MAPPING_PROVIDER,
-        MONITORING_C3_MAPPING_MODEL,
+        DOC_AUTH_PRIMARY_PROVIDER,
+        DOC_AUTH_PRIMARY_MODEL,
         "monitoring-document-authority-primary",
     )
     verifier_runtime = _runtime(
-        MONITORING_C3_VERIFIER_PROVIDER,
-        MONITORING_C3_VERIFIER_MODEL,
+        DOC_AUTH_VERIFIER_PROVIDER,
+        DOC_AUTH_VERIFIER_MODEL,
         "monitoring-document-authority-verifier",
     )
     primary_service = MonitoringAiService(
         repository,
         runtime_resolver=lambda: primary_runtime,
         provider_factory=lambda _env: _Provider(
-            MONITORING_C3_MAPPING_PROVIDER,
-            MONITORING_C3_MAPPING_MODEL,
+            DOC_AUTH_PRIMARY_PROVIDER,
+            DOC_AUTH_PRIMARY_MODEL,
             _analysis(batch, select_ecrf=False),
         ),
     )
@@ -1066,8 +1070,8 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         repository,
         runtime_resolver=lambda: verifier_runtime,
         provider_factory=lambda _env: _Provider(
-            MONITORING_C3_VERIFIER_PROVIDER,
-            MONITORING_C3_VERIFIER_MODEL,
+            DOC_AUTH_VERIFIER_PROVIDER,
+            DOC_AUTH_VERIFIER_MODEL,
             _analysis(batch),
         ),
     )
@@ -1136,7 +1140,7 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         ),
     )
     primary_review_provider["value"] = _ReviewProvider(
-        MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL, review
+        DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL, review
     )
     unresolved_review = DocumentAuthorityConflictReview(
         schema_version=DOCUMENT_AUTHORITY_SCHEMA_VERSION,
@@ -1153,8 +1157,8 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         ),
     )
     verifier_review_provider["value"] = _ReviewProvider(
-        MONITORING_C3_VERIFIER_PROVIDER,
-        MONITORING_C3_VERIFIER_MODEL,
+        DOC_AUTH_VERIFIER_PROVIDER,
+        DOC_AUTH_VERIFIER_MODEL,
         unresolved_review,
     )
     primary_review_service.run_next(
@@ -1243,13 +1247,13 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         ),
     )
     primary_review_provider["value"] = _ReviewProvider(
-        MONITORING_C3_MAPPING_PROVIDER,
-        MONITORING_C3_MAPPING_MODEL,
+        DOC_AUTH_PRIMARY_PROVIDER,
+        DOC_AUTH_PRIMARY_MODEL,
         adjudication_review,
     )
     verifier_review_provider["value"] = _ReviewProvider(
-        MONITORING_C3_VERIFIER_PROVIDER,
-        MONITORING_C3_VERIFIER_MODEL,
+        DOC_AUTH_VERIFIER_PROVIDER,
+        DOC_AUTH_VERIFIER_MODEL,
         adjudication_review,
     )
     workspace = tmp_path / "workflow-workspace"
@@ -1335,8 +1339,8 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         ),
     )
     verifier_review_provider["value"] = _ReviewProvider(
-        MONITORING_C3_VERIFIER_PROVIDER,
-        MONITORING_C3_VERIFIER_MODEL,
+        DOC_AUTH_VERIFIER_PROVIDER,
+        DOC_AUTH_VERIFIER_MODEL,
         competing_adjudication,
     )
     competing_job = repository.create_or_get(MonitoringAiJobCreate(
@@ -1385,13 +1389,13 @@ def test_repository_jobs_drive_blind_review_and_internal_adjudication(
         "document-authority-critique:verifier:v2:"
     )
     primary_review_provider["value"] = _ReviewProvider(
-        MONITORING_C3_MAPPING_PROVIDER,
-        MONITORING_C3_MAPPING_MODEL,
+        DOC_AUTH_PRIMARY_PROVIDER,
+        DOC_AUTH_PRIMARY_MODEL,
         critique_review,
     )
     verifier_review_provider["value"] = _ReviewProvider(
-        MONITORING_C3_VERIFIER_PROVIDER,
-        MONITORING_C3_VERIFIER_MODEL,
+        DOC_AUTH_VERIFIER_PROVIDER,
+        DOC_AUTH_VERIFIER_MODEL,
         critique_review,
     )
     primary_review_service.run_next(
@@ -1866,8 +1870,8 @@ def _run_composite_analysis_jobs(
     repository = MonitoringAiRepository(tmp_path / "composite-jobs.sqlite")
     job_ids = []
     for role, provider, model in (
-        ("primary", MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
-        ("verifier", MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
+        ("primary", DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL),
+        ("verifier", DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL),
     ):
         service = MonitoringAiService(
             repository,
