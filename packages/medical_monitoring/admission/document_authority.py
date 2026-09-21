@@ -562,6 +562,21 @@ class RoleSelection(BaseModel):
         _validate_nonempty_unique(tuple(item.candidate_id for item in value))
         return value
 
+    @model_validator(mode="before")
+    @classmethod
+    def _strip_unbound_evidence(cls, value: Any) -> Any:
+        # 非selected角色的evidence_locators/supplementary_bindings按定义
+        # 无锚定意义（glm等模型常误带）。确定性归一丢弃这份噪声、保留
+        # 角色裁决本身；selected角色的锚定证据仍严格必需（见after校验）。
+        if isinstance(value, Mapping) and value.get("decision") != "selected":
+            if value.get("evidence_locators") or value.get("supplementary_bindings"):
+                value = {
+                    **value,
+                    "evidence_locators": [],
+                    "supplementary_bindings": [],
+                }
+        return value
+
     @model_validator(mode="after")
     def validate_selection(self) -> "RoleSelection":
         if (self.decision == "selected") != bool(self.selected_candidate_id.strip()):
