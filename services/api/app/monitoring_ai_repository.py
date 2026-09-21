@@ -717,7 +717,29 @@ class MonitoringAiRepository:
                 (row["job_id"],),
             ).fetchone()
             connection.commit()
-        return self._job(current, repository=self)
+        try:
+            return self._job(current, repository=self)
+        except MonitoringAiRepositoryError:
+            # 持久行身份损坏（如跨身份迁移后job_id未重推导）时不得反复
+            # 击穿worker线程：隔离为不可重试的终端失败，队列继续健康。
+            with self._connect() as connection:
+                connection.execute(
+                    """
+                    UPDATE monitoring_ai_jobs
+                    SET status = ?, retryable = 0,
+                        failure_code = 'monitoring_ai_job_identity_invalid',
+                        failure_message = 'persisted job identity validation failed; quarantined on claim',
+                        lease_owner = '', lease_expires_at = '', updated_at = ?
+                    WHERE job_id = ?
+                    """,
+                    (
+                        MonitoringAiJobStatus.FAILED.value,
+                        _iso(self.clock()),
+                        current["job_id"],
+                    ),
+                )
+                connection.commit()
+            return None
 
     def expire_exhausted_leases(self, *, project_id: str = "", retire_legacy_workflows: bool = True) -> int:
         """Move expired final-attempt leases to a retryable terminal state.
