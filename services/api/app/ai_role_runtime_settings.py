@@ -166,6 +166,20 @@ ROLE_DEFINITIONS: tuple[AiRoleDefinition, ...] = (
         default_model=MONITORING_C3_MAPPING_MODEL,
     ),
     AiRoleDefinition(
+        role_id=DOCUMENT_AUTHORITY_PRIMARY_AI_ROLE,
+        label="文档权威主分析",
+        description="研究方案/eCRF文件独立识别与交叉核对（主分析侧）。",
+        recommendation="默认使用 Muse Spark 1.3 Contributor（high推理）。",
+        default_model="muse-spark-1.3-contributor",
+    ),
+    AiRoleDefinition(
+        role_id=DOCUMENT_AUTHORITY_VERIFIER_AI_ROLE,
+        label="文档权威盲核",
+        description="研究方案/eCRF文件独立识别与交叉核对（盲核侧）。",
+        recommendation="默认使用 DeepSeek V4.1 Flash（high推理）。",
+        default_model="deepseek-v4.1-flash",
+    ),
+    AiRoleDefinition(
         role_id=MEDICAL_MONITORING_VERIFIER_AI_ROLE,
         label="医学监查独立核对AI",
         description="对主分析 cohort 的字段对应建议执行独立、盲态的全量核对。",
@@ -564,6 +578,22 @@ class AiRoleRuntimeSettingsStore:
                 thinking=THINKING_ENABLED,
                 reasoning_effort="max",
             ),
+            DOCUMENT_AUTHORITY_PRIMARY_AI_ROLE: AiRoleBinding(
+                role_id=DOCUMENT_AUTHORITY_PRIMARY_AI_ROLE,
+                profile_id="document_authority_primary_ai__opencode_go_muse",
+                model="muse-spark-1.3-contributor",
+                enabled=True,
+                thinking=THINKING_ENABLED,
+                reasoning_effort="high",
+            ),
+            DOCUMENT_AUTHORITY_VERIFIER_AI_ROLE: AiRoleBinding(
+                role_id=DOCUMENT_AUTHORITY_VERIFIER_AI_ROLE,
+                profile_id="medical_monitoring_verifier_ai__ollama_cloud_dsv41",
+                model="deepseek-v4.1-flash",
+                enabled=True,
+                thinking=THINKING_ENABLED,
+                reasoning_effort="high",
+            ),
         }
 
     def _empty(self) -> dict[str, Any]:
@@ -597,7 +627,10 @@ class AiRoleRuntimeSettingsStore:
                 binding = AiRoleBinding(**candidate)
                 binding = _normalize_binding(replace(binding, role_id=role_id))
             except (TypeError, ValueError):
-                binding = _normalize_binding(defaults[role_id])
+                try:
+                    binding = _normalize_binding(defaults[role_id])
+                except (KeyError, TypeError):
+                    continue  # skip roles without defaults
             normalized[role_id] = asdict(binding)
         return {
             "schema_version": ROLE_SETTINGS_SCHEMA_VERSION,
