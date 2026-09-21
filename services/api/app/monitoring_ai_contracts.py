@@ -281,8 +281,10 @@ class MonitoringAiCandidate(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     text: str = Field(default="", max_length=20_000)
     structured_payload: dict[str, Any] = Field(default_factory=dict)
-    claims: tuple[MonitoringAiClaim, ...] = Field(min_length=1, max_length=100)
-    evidence: tuple[MonitoringAiEvidence, ...] = Field(min_length=1, max_length=200)
+    # N5：claims/evidence允许空（document authority对eCRF等非临床数据
+    # 文档可能无临床结论）；各任务类型的最小要求在服务层校验。
+    claims: tuple[MonitoringAiClaim, ...] = Field(default_factory=tuple, max_length=100)
+    evidence: tuple[MonitoringAiEvidence, ...] = Field(default_factory=tuple, max_length=200)
     status: MonitoringAiCandidateStatus = MonitoringAiCandidateStatus.PROPOSED
     input_revision_sha256: str
     prompt_version: str = Field(min_length=2, max_length=160)
