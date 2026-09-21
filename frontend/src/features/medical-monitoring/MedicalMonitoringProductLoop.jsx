@@ -1346,9 +1346,11 @@ export function MedicalMonitoringProductLoop({
           ) : null}
         </div>
       ) : null}
-      {!loadingBody && !resultError && (!setupHistoryError || admissionOnly) && !resultLoaded && !publicRunToken ? (
+      {/* N4：接入向导——只要没有公开run和已加载结果就始终可见，
+          让用户随时可以上传Data Listing并启动首次监查。 */}
+      {!loadingBody && !resultLoaded && !publicRunToken ? (
         <>
-          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError.text : startSurfaceCopy}</span></section>
+          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError?.text : startSurfaceCopy}</span></section>
           <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />
           {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={retryPage} /> : null}
         </>
