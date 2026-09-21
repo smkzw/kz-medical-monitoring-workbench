@@ -157,6 +157,8 @@ from .ai_runtime_settings import (
     runtime_ai_settings_store,
 )
 from .ai_role_runtime_settings import (
+    DOCUMENT_AUTHORITY_PRIMARY_AI_ROLE,
+    DOCUMENT_AUTHORITY_VERIFIER_AI_ROLE,
     DEFAULT_OCR_MODEL,
     INDEPENDENT_AI_ROLE,
     LOCAL_OMLX_PROFILE_ID,
@@ -1363,10 +1365,39 @@ def _wake_monitoring_mapping_workers() -> None:
     monitoring_ai_verifier_worker.wake()
 
 
+def _resolve_doc_auth_primary_runtime():
+    return _resolve_monitoring_role_runtime(DOCUMENT_AUTHORITY_PRIMARY_AI_ROLE)
+
+def _resolve_doc_auth_verifier_runtime():
+    return _resolve_monitoring_role_runtime(DOCUMENT_AUTHORITY_VERIFIER_AI_ROLE)
+
+monitoring_doc_auth_primary_service = MonitoringAiService(
+    monitoring_ai_repository,
+    runtime_resolver=_resolve_doc_auth_primary_runtime,
+    current_revision_resolver=_current_monitoring_ai_revision,
+    evidence_tool_factory=_monitoring_evidence_tool_factory,
+)
+monitoring_doc_auth_verifier_service = MonitoringAiService(
+    monitoring_ai_repository,
+    runtime_resolver=_resolve_doc_auth_verifier_runtime,
+    current_revision_resolver=_current_monitoring_ai_revision,
+    evidence_tool_factory=_monitoring_evidence_tool_factory,
+)
+monitoring_doc_auth_worker = MonitoringAiWorker(
+    monitoring_doc_auth_primary_service,
+    parallelism=int(os.environ.get("WORKBENCH_MONITORING_AI_PARALLELISM", "4")),
+    identity_bound=True,
+)
+monitoring_doc_auth_verifier_worker = MonitoringAiWorker(
+    monitoring_doc_auth_verifier_service,
+    parallelism=1,
+    identity_bound=True,
+)
+
 monitoring_document_authority_workflow = MonitoringDocumentAuthorityWorkflow(
     monitoring_ai_repository,
-    monitoring_ai_service,
-    monitoring_ai_verifier_service,
+    monitoring_doc_auth_primary_service,
+    monitoring_doc_auth_verifier_service,
     source_registry,
     worker_wake=_wake_monitoring_mapping_workers,
 )
