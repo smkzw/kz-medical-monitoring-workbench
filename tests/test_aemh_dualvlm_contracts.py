@@ -327,3 +327,40 @@ def test_submit_focused_keys_by_finding_id_and_records_skips(
     assert contract["version"] == FOCUSED_CONTRACT_VERSION
     assert contract["expected_candidates"] == 1
     assert json.dumps(contract)  # JSON可序列化
+
+
+def test_clues_agree_rejects_opposite_direction_on_same_evidence():
+    """N5命题核验：同一证据+相反方向≠一致（审阅V4关键缺陷）。"""
+    from packages.medical_monitoring.analysis.ae_mh_cross_analysis import (
+        _clues_agree,
+    )
+
+    class E:
+        def __init__(self, eid):
+            self.evidence_id = eid
+
+    class Clue:
+        def __init__(self, title, text, eids, domains=("AE", "CM")):
+            self.title = title
+            self.text = text
+            self.evidence = tuple(E(eid) for eid in eids)
+            self.structured_payload = {
+                "domains": list(domains),
+                "claims": [{"text": text, "evidence_ids": list(eids)}],
+            }
+
+    shared = ["ev-001", "ev-002"]
+    # 正方向：主分析认为存在不一致
+    positive = Clue("CM指征与AE记录不一致", "合并用药指征为本研究疾病，但AE记录为否，提示可能存在AE漏报", shared)
+    # 负方向：盲核认为记录一致，无问题
+    negative = Clue("CM与AE记录一致", "合并用药与AE记录未见明显不一致，数据相符", shared)
+
+    assert not _clues_agree(positive, negative), "相反命题不应判一致"
+
+    # 同方向+同证据 = 一致
+    affirmative = Clue("CM指征与AE可能不匹配", "CM指征提示本研究疾病但AE未记录，存在漏报可能", shared)
+    assert _clues_agree(positive, affirmative), "同方向同证据应判一致"
+
+    # neutral方向不否决
+    neutral = Clue("两记录涉及同一受试者", "两条记录引用同一受试者编号", shared)
+    assert _clues_agree(positive, neutral), "neutral方向不做方向否决"

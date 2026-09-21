@@ -316,23 +316,82 @@ def _clue_domain_pair(candidate: Any) -> frozenset[str]:
     return frozenset(str(d).upper() for d in payload.get("domains", []) or [])
 
 
+# 命题方向标记（N5命题核验）：正/负方向词组用于检测"同一证据、
+# 相反结论"的危险误配——共享evidence_id不等于命题方向一致。
+_POSITIVE_DIRECTION_RE = re.compile(
+    r"存在|有|记录了|提示|不一致|矛盾|漏报|缺如|异常|升高|降低|超出|"
+    "超出正常|需核查|需关注|值得关注|风险信号"
+)
+_NEGATIVE_DIRECTION_RE = re.compile(
+    r"未见|未记录|未提及|无异常|正常|一致|相符|不存在|无明显|"
+    "未见明显|未见异常|无特殊|排除"
+)
+
+
+def _clue_direction_text(candidate: Any) -> str:
+    """Concatenate all directional text from a clue for direction analysis."""
+    payload = getattr(candidate, "structured_payload", {}) or {}
+    parts = [
+        str(getattr(candidate, "title", "") or ""),
+        str(getattr(candidate, "text", "") or ""),
+    ]
+    for claim in payload.get("claims", []) or []:
+        if isinstance(claim, Mapping):
+            parts.append(str(claim.get("text", "")))
+    return " ".join(parts)
+
+
+def _clue_stance(candidate: Any) -> str:
+    """Extract the dominant proposition stance of a clue.
+
+    Returns "positive" (存在问题/需关注), "negative" (未见异常/无问题),
+    or "neutral" (无法判定方向).
+    """
+    text = _clue_direction_text(candidate)
+    if not text:
+        return "neutral"
+    pos_hits = len(_POSITIVE_DIRECTION_RE.findall(text))
+    neg_hits = len(_NEGATIVE_DIRECTION_RE.findall(text))
+    if pos_hits > neg_hits:
+        return "positive"
+    if neg_hits > pos_hits:
+        return "negative"
+    return "neutral"
+
+
 def _clues_agree(primary: Any, verifier: Any) -> bool:
-    """Pairing: shared evidence rows, or same domain-pair with shared entities.
+    """Pairing: shared evidence rows AND compatible proposition direction.
 
     Two independent models often cite different rows of the same subject while
     describing the same finding (e.g. both discuss the hypertension history,
     one citing MH rows and the other CM rows). Evidence overlap alone would
     mis-file those as disagreements.
+
+    N5命题核验：evidence_id重叠是必要条件而非充分条件——两条线索引用
+    同一证据但命题方向相反（"存在AE"vs"未见AE"）不得判为一致。
+    方向通过正/负标记词频比较，neutral方向不做方向否决。
     """
-    if _clue_fingerprint(primary) & _clue_fingerprint(verifier):
-        return True
+    shared_evidence = _clue_fingerprint(primary) & _clue_fingerprint(verifier)
     domains = _clue_domain_pair(primary) & _clue_domain_pair(verifier)
-    if not domains:
+    shared_entities = _clue_entities(primary) & _clue_entities(verifier)
+
+    has_evidence_overlap = bool(shared_evidence)
+    has_entity_match = bool(domains) and len(shared_entities) >= 2
+
+    if not has_evidence_overlap and not has_entity_match:
         return False
-    shared = _clue_entities(primary) & _clue_entities(verifier)
-    # 共享≥2个医学实体词（如"高血压"+"剂量"）视为同一发现的不同表述；
-    # 单个常见词（"受试者""记录"等）不足以配对。
-    return len(shared) >= 2
+
+    # 命题方向核验：双方方向都明确且相反→不一致
+    primary_stance = _clue_stance(primary)
+    verifier_stance = _clue_stance(verifier)
+    if (
+        primary_stance != "neutral"
+        and verifier_stance != "neutral"
+        and primary_stance != verifier_stance
+    ):
+        return False
+
+    return True
 
 
 def _finding_text(candidate: Any) -> dict[str, Any]:
