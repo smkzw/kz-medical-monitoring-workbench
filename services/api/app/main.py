@@ -3816,8 +3816,16 @@ if _r7_facts_providers_by_project:
     _r7_facts_publication_adapter = _FactsProviderDispatcher(
         _r7_facts_adapters_by_project
     )
+    def _facts_domains_loader() -> dict:
+        # 单facts lane：取唯一注册的facts publication provider加载domains
+        # （供finding锚点解析：evidence_id→表/行→事件/来源）。
+        for provider in _r7_facts_providers_by_project.values():
+            return provider._load_domains()
+        return {}
+
     _r7_facts_mode_output_provider = _FactsModeOutputProvider(
-        _FACTS_WORKSPACE_DIR / "runtime" / "artifacts"
+        _FACTS_WORKSPACE_DIR / "runtime" / "artifacts",
+        domains_loader=_facts_domains_loader,
     )
 
 

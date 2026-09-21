@@ -8,13 +8,12 @@ their source locators for the affected-query draft. No invented findings.
 
 from __future__ import annotations
 
-import glob
 import json
-import os
 from collections import Counter
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
+from ...intelligence.primitives import content_hash
 from ...reports import mode_output as mo
 
 _SEVERITY_ZH = {"critical": "重度", "medium": "中度", "low": "轻度"}
@@ -28,14 +27,23 @@ _DOMAIN_ZH = {
     "symptom_efficacy": "症状/疗效",
     "protocol_compliance": "方案符合性",
 }
-_MAX_FINDINGS = 200
+_AI_FINDINGS_ARTIFACT = "aemh-findings-facts-snapshot-001.dualvlm-full1.json"
+# 分析层证据ID推导所用表清单与 ae_mh_cross_analysis._ANALYSIS_TABLES 一致
+_EVIDENCE_TABLES = ("AE", "MH", "CM", "EX2", "EX4", "EX5", "EX7")
 
 
 class FactsModeOutputProvider:
     """Build the four mode outputs from the real facts authority packet."""
 
-    def __init__(self, artifacts_dir: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        artifacts_dir: Optional[Path] = None,
+        domains_loader: Optional[Callable[[], Mapping[str, list]]] = None,
+    ) -> None:
         self._artifacts_dir = artifacts_dir
+        # 数据接入的domains快照读取器：用于把分析层evidence_id解析回
+        # （表，行）→事件/来源锚点。缺省None=锚点解析降级为unbound。
+        self._domains_loader = domains_loader
 
     @staticmethod
     def _binding(run_binding: Mapping[str, Any]) -> dict[str, Any]:
@@ -109,7 +117,7 @@ class FactsModeOutputProvider:
                 "domain": risk.domain,
             }
             for risk in r5_packet.risks
-            if risk.severity in ("medium", "critical")
+            if risk.severity in ("high", "medium", "critical")
         ]
         if mode == "daily":
             findings = self._daily_findings(binding, r5_packet)
@@ -373,86 +381,312 @@ class FactsModeOutputProvider:
             )
         return findings
 
-    def public_findings(self) -> list[dict[str, Any]]:
-        """Audience-facing projection of the dual-cohort AE/MH findings."""
+    def public_findings(
+        self,
+        projection: Optional[Mapping[str, Any]] = None,
+        project_ref: str = "",
+    ) -> list[dict[str, Any]]:
+        """Audience-facing projection of the dual-cohort findings.
 
-        ai_findings = self._load_ai_findings()
-        if not ai_findings:
+        N1阅读模型：稳定finding_id贯穿（不按index重编号，显示序号另存
+        display_seq）；保留claims真实证据引用与服务端可解析的事件/来源
+        锚点；无标题的覆盖缺口以kind=coverage_gap可见（不依赖标题存活）；
+        state与artifact身份经 public_findings_meta 暴露。
+        """
+
+        read = self._read_ai_findings()
+        if read["state"] not in ("completed_with_findings", "completed_no_findings"):
             return []
+        anchor_index_cache: dict[str, dict[str, tuple[str, int]]] = {}
         rows: list[dict[str, Any]] = []
-        for index, item in enumerate(ai_findings):
+        for index, item in enumerate(read["findings"]):
             cohort = (item.get("primary") or item.get("verifier")) or {}
+            state = str(item.get("state", "escalated"))
+            title = str(cohort.get("title", "")).strip()
+            kind = "finding"
+            if state == "unverifiable_gap" and not title:
+                kind = "coverage_gap"
+                title = "覆盖缺口（本轮未能完成该受试者的双cohort核实）"
+            evidence_ids = self._finding_evidence_ids(item)
             rows.append(
                 {
-                    "finding_id": f"aemh-{index:04d}",
+                    "finding_id": str(item.get("finding_id", "")) or f"aemh-unid-{index:04d}",
+                    "display_seq": index + 1,
+                    "kind": kind,
                     "subject_label": str(item.get("subject_label", "")),
-                    "state": str(item.get("state", "escalated")),
+                    "state": state,
                     "state_reason_zh": str(item.get("reason_zh", "")),
-                    "title": str(cohort.get("title", ""))[:200],
+                    "title": title[:200],
                     "text": str(cohort.get("text", ""))[:2000],
+                    "evidence_ids": evidence_ids,
                 }
             )
         return rows
 
-    def _load_ai_findings(self) -> list[dict[str, Any]] | None:
-        """Load the newest dual-cohort AE/MH findings artifact, if any."""
+    def public_findings_meta(
+        self,
+        projection: Optional[Mapping[str, Any]] = None,
+        project_ref: str = "",
+    ) -> dict[str, Any]:
+        """读取状态与工件身份（missing/read_failed/完成态分离，V4-05/06）。"""
+
+        read = self._read_ai_findings()
+        findings = read.get("findings") or []
+        gaps = sum(
+            1
+            for item in findings
+            if str(item.get("state", "")) == "unverifiable_gap"
+        )
+        return {
+            "state": read["state"],
+            "artifact": read.get("artifact"),
+            "content_sha256": read.get("content_sha256"),
+            "total": len(findings),
+            "gaps": gaps,
+            "error": read.get("error"),
+        }
+
+    def _read_ai_findings(self) -> dict[str, Any]:
+        """按冻结名读取AI findings工件，返回带状态与身份的读取结果。
+
+        - missing：工件不存在（项目无双cohort lane）
+        - read_failed：存在但JSON损坏或内容hash不符
+        - completed_no_findings / completed_with_findings：完成态分离
+          （有效空数组≠缺失，不得触发备用分析）
+        读取目标为固定冻结名（不glob+mtime取最新——旧run不得读到新工件）。
+        """
 
         if self._artifacts_dir is None:
-            return None
-        candidates = [
-            path
-            for path in glob.glob(
-                os.path.join(
-                    str(self._artifacts_dir),
-                    "aemh-findings-facts-snapshot-001*.json",
-                )
-            )
-        ]
-        if not candidates:
-            return None
-        # 最新裁决覆盖：按修改时间取最新工件（字典序会把 .r5 样例排在
-        # .full1 全量之后）。
-        latest = max(candidates, key=os.path.getmtime)
+            return {"state": "missing", "findings": None, "artifact": None,
+                    "error": "artifacts_dir未配置"}
+        artifact_path = Path(self._artifacts_dir) / _AI_FINDINGS_ARTIFACT
+        if not artifact_path.is_file():
+            return {"state": "missing", "findings": None,
+                    "artifact": _AI_FINDINGS_ARTIFACT, "error": None}
         try:
-            with open(latest, encoding="utf-8") as handle:
+            with open(artifact_path, encoding="utf-8") as handle:
                 artifact = json.load(handle)
-        except (OSError, ValueError):
-            return None
+        except (OSError, ValueError) as exc:
+            return {"state": "read_failed", "findings": None,
+                    "artifact": _AI_FINDINGS_ARTIFACT,
+                    "error": f"json_decode: {exc}"}
+        if not isinstance(artifact, dict):
+            return {"state": "read_failed", "findings": None,
+                    "artifact": _AI_FINDINGS_ARTIFACT, "error": "not_object"}
+        declared = str(artifact.get("content_sha256", "")).strip()
+        if declared:
+            verify = {k: v for k, v in artifact.items() if k != "content_sha256"}
+            if content_hash(verify) != declared:
+                return {"state": "read_failed", "findings": None,
+                        "artifact": _AI_FINDINGS_ARTIFACT,
+                        "error": "content_sha256_mismatch"}
         findings = artifact.get("findings")
-        if isinstance(findings, list) and findings:
-            return findings
-        return None
+        if not isinstance(findings, list):
+            return {"state": "read_failed", "findings": None,
+                    "artifact": _AI_FINDINGS_ARTIFACT,
+                    "error": "findings_not_list"}
+        state = (
+            "completed_with_findings" if findings else "completed_no_findings"
+        )
+        return {
+            "state": state,
+            "findings": findings,
+            "artifact": _AI_FINDINGS_ARTIFACT,
+            "content_sha256": declared,
+            "error": None,
+        }
+
+    def _finding_evidence_ids(self, item: Mapping[str, Any]) -> list[str]:
+        """双cohort claims的evidence_ids并集（保序去重）。"""
+
+        ids: list[str] = []
+        for side in ("primary", "verifier"):
+            cohort = item.get(side) or {}
+            payload = cohort.get("payload") or {}
+            for claim in (payload.get("claims") or []):
+                for eid in (claim.get("evidence_ids") or []):
+                    eid = str(eid)
+                    if eid and eid not in ids:
+                        ids.append(eid)
+        return ids
+
+    def _subject_evidence_index(
+        self, subject_label: str, cache: dict[str, dict[str, tuple[str, int]]]
+    ) -> dict[str, tuple[str, int]]:
+        """evidence_id → (表, 行) 索引（与build_subject_evidence同推导）。"""
+
+        cached = cache.get(subject_label)
+        if cached is not None:
+            return cached
+        index: dict[str, tuple[str, int]] = {}
+        if self._domains_loader is not None:
+            try:
+                domains = self._domains_loader()
+            except Exception:
+                domains = None
+            if domains:
+                for table in _EVIDENCE_TABLES:
+                    for idx, row in enumerate(domains.get(table, []) or []):
+                        if str(row.get("SUBJID", "")).strip() != subject_label:
+                            continue
+                        eid = "aemh_{}".format(
+                            content_hash(
+                                {"table": table, "row": idx,
+                                 "subject": subject_label}
+                            )[:28]
+                        )
+                        index.setdefault(eid, (table, idx))
+        cache[subject_label] = index
+        return index
+
+    def _claim_anchors(
+        self,
+        item: Mapping[str, Any],
+        r5_packet: Any,
+        evidence_index: dict[str, tuple[str, int]],
+        events_by_ref: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """claims真实证据→事件/来源锚点解析。
+
+        返回 anchor_event_refs / anchor_locator_refs（去重保序）与
+        anchor_state（bound=至少一锚点在包内可验证；unbound=全部不可解析，
+        显式标注，不借用其他事件）。
+        """
+
+        event_refs: list[str] = []
+        locator_refs: list[str] = []
+        for eid in self._finding_evidence_ids(item):
+            hit = evidence_index.get(eid)
+            if hit is None:
+                continue
+            table, idx = hit
+            event_ref = f"event-{table}-{idx:06d}"
+            loc_ref = f"loc-{table}-{idx:06d}"
+            if event_ref not in event_refs:
+                event_refs.append(event_ref)
+            if loc_ref not in locator_refs:
+                locator_refs.append(loc_ref)
+        verified: list[str] = [
+            ref for ref in event_refs
+            if not events_by_ref or ref in events_by_ref
+        ]
+        anchor_state = "bound" if verified else "unbound"
+        return {
+            "anchor_event_refs": event_refs,
+            "anchor_locator_refs": locator_refs,
+            "verified_event_refs": verified,
+            "anchor_state": anchor_state,
+        }
+
+    def _daily_findings(
+        self, binding: Mapping[str, Any], r5_packet: Any
+    ) -> list[dict[str, Any]]:
+        read = self._read_ai_findings()
+        if read["state"] == "completed_with_findings":
+            return self._findings_from_artifact(read["findings"], r5_packet)
+        if read["state"] == "completed_no_findings":
+            # 有效零发现：如实返回空，不触发备用通用提示（V4-05）。
+            return []
+        return self._deterministic_fallback_findings(binding, r5_packet)
+
+    def _deterministic_fallback_findings(
+        self, binding: Mapping[str, Any], r5_packet: Any
+    ) -> list[dict[str, Any]]:
+        """无AI工件lane的确定性事实提示（原daily兜底路径，明确来源）。"""
+
+        events_by_ref = {event.event_ref: event for event in r5_packet.events}
+        subjects_by_ref = {
+            subject.subject_ref: subject for subject in r5_packet.subjects
+        }
+        findings: list[dict[str, Any]] = []
+        for risk in r5_packet.risks:
+            if risk.severity not in ("medium", "critical"):
+                continue
+            event = events_by_ref.get(risk.risk_anchor_ref or "")
+            if event is None:
+                continue
+            subject = subjects_by_ref.get(event.subject_ref)
+            subject_label = subject.subject_label if subject else event.subject_ref
+            domain_zh = _DOMAIN_ZH.get(event.domain, event.domain)
+            severity_zh = _SEVERITY_ZH.get(risk.severity, risk.severity)
+            date_text = str(event.start_date or "日期缺失")
+            basis = (
+                f"已核验事实：受试者{subject_label}于{date_text}记录一条"
+                f"{domain_zh}（{event.label_zh}），严重程度{severity_zh}。"
+            )
+            finding_text = (
+                f"「{event.label_zh}」为{severity_zh}{domain_zh}信号，"
+                "需要医学监察员人工核对。"
+            )
+            action = "请下钻受试者旅程与来源记录核对临床语境后确认处置。"
+            findings.append(
+                {
+                    "finding_id": f"facts-finding-{event.event_ref}",
+                    "risk_id": risk.risk_ref,
+                    "issue_id": f"facts-issue-{event.domain}",
+                    "subject_id": event.subject_ref,
+                    "site_id": event.site_ref,
+                    "scope_kind": "subject",
+                    "basis": basis,
+                    "finding": finding_text,
+                    "action": action,
+                    "evidence_refs": list(risk.source_locator_refs)
+                    or list(event.source_locator_refs),
+                    "locator": {
+                        "path": f"facts.{event.domain}",
+                        "record_id": event.event_ref,
+                    },
+                }
+            )
+        return findings
 
     def _findings_from_artifact(
         self, ai_findings: list[dict[str, Any]], r5_packet: Any
     ) -> list[dict[str, Any]]:
         """Project dual-cohort findings into query-draft findings.
 
-        Accepted pairs carry both cohorts' wording; escalated items stay
-        visible with the disagreement marker; gaps stay visible as
-        unverifiable. Risk binding uses the subject's first AE risk anchor so
-        evidence drill-down keeps working.
+        N1：锚点来自claims真实证据引用（evidence_id→表/行→event/loc），
+        并经包内事件核验后绑定该事件真实关联的risk（risk_anchor_ref匹配）；
+        不可解析=unbound显式标注，不借用受试者第一条AE。无截断，total另记。
         """
 
         subjects_by_label = {
             subject.subject_label: subject for subject in r5_packet.subjects
         }
-        risk_by_subject: dict[str, Any] = {}
+        events_by_ref = {
+            event.event_ref: event for event in getattr(r5_packet, "events", ()) or ()
+        }
+        risk_by_anchor: dict[str, Any] = {}
         for risk in r5_packet.risks:
-            if risk.domain == "ae" and risk.subject_ref not in risk_by_subject:
-                risk_by_subject[risk.subject_ref] = risk
+            anchor = getattr(risk, "risk_anchor_ref", "") or ""
+            if anchor and anchor not in risk_by_anchor:
+                risk_by_anchor[anchor] = risk
+        evidence_cache: dict[str, dict[str, tuple[str, int]]] = {}
         findings: list[dict[str, Any]] = []
-        for index, item in enumerate(ai_findings):
-            if len(findings) >= _MAX_FINDINGS:
-                break
+        for item in ai_findings:
             subject_label = str(item.get("subject_label", "")).strip()
             subject = subjects_by_label.get(subject_label)
             if subject is None:
                 continue
-            risk = risk_by_subject.get(subject.subject_ref)
             cohort = (item.get("primary") or item.get("verifier")) or {}
-            title = str(cohort.get("title", "")).strip() or "跨表线索待复核"
             state = str(item.get("state", "escalated"))
+            title = str(cohort.get("title", "")).strip() or "跨表线索待复核"
+            kind = "finding"
+            if state == "unverifiable_gap" and not str(
+                (item.get("primary") or {}).get("title", "")
+            ) and not str((item.get("verifier") or {}).get("title", "")):
+                kind = "coverage_gap"
+            anchors = self._claim_anchors(
+                item, r5_packet,
+                self._subject_evidence_index(subject_label, evidence_cache),
+                events_by_ref,
+            )
+            verified_event = (
+                anchors["verified_event_refs"][0]
+                if anchors["verified_event_refs"]
+                else ""
+            )
+            bound_risk = risk_by_anchor.get(verified_event)
             state_note = {
                 "accepted": "主分析与独立盲核（双模型）均引用相同原始记录，线索成立，待医学复核。",
                 "escalated": str(item.get("reason_zh", "双cohort存在分歧，不得强行接受，请医学监察员裁决。")),
@@ -462,23 +696,26 @@ class FactsModeOutputProvider:
                 f"双cohort分析（{state_note}）受试者{subject_label}的"
                 "AE/MH/合并用药/试验用药原始记录。"
             )
-            finding_text = f"「{title}」"
-            action = "请下钻受试者旅程与来源记录核对临床语境后确认处置。"
             findings.append(
                 {
-                    "finding_id": f"aemh-finding-{index:04d}",
-                    "risk_id": risk.risk_ref if risk else f"aemh-subject-{subject.subject_ref}",
+                    "finding_id": str(item.get("finding_id", "")),
+                    "kind": kind,
+                    "display_seq": len(findings) + 1,
+                    "risk_id": bound_risk.risk_ref if bound_risk is not None else None,
                     "issue_id": f"aemh-issue-{state}",
                     "subject_id": subject.subject_ref,
                     "site_id": subject.site_ref,
                     "scope_kind": "subject",
+                    "anchor_event_refs": anchors["anchor_event_refs"],
+                    "anchor_locator_refs": anchors["anchor_locator_refs"],
+                    "anchor_state": anchors["anchor_state"],
+                    "evidence_ids": self._finding_evidence_ids(item),
                     "basis": basis,
-                    "finding": finding_text,
-                    "action": action,
-                    "evidence_refs": list(risk.source_locator_refs) if risk else [],
+                    "finding": f"「{title}」",
+                    "action": "请下钻受试者旅程与来源记录核对临床语境后确认处置。",
                     "locator": {
                         "path": "facts.aemh_cross_analysis",
-                        "record_id": f"aemh-{subject_label}",
+                        "record_id": str(item.get("finding_id", "")),
                     },
                 }
             )
