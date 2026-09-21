@@ -2371,3 +2371,50 @@ def test_composite_authority_rolls_back_main_when_supplement_registration_fails(
             verifier_analysis_job_id="analysis-verifier",
         )
     assert registry.list_entries("project-document-authority") == []
+
+
+def test_user_role_selection_overrides_unresolved_role() -> None:
+    from packages.medical_monitoring.admission.document_authority import (
+        DocumentAuthorityError,
+    )
+    from services.api.app.monitoring_document_authority_jobs import (
+        _apply_user_role_selections,
+    )
+
+    batch = {"batch_id": "mmbatch_" + "a" * 24, "candidates": [
+        {"candidate_id": "mmcandidate_a"},
+        {"candidate_id": "mmcandidate_b"},
+    ]}
+    resolved = {
+        "state": "needs_user_input",
+        "resolved_roles": [{"role": "ecrf", "status": "selected", "candidate_id": "mmcandidate_a", "supplementary_candidate_ids": []}],
+        "unresolved_roles": ["protocol", "sap"],
+    }
+
+    merged = _apply_user_role_selections(
+        resolved,
+        [
+            {"role": "protocol", "candidate_id": "mmcandidate_b"},
+            {"role": "sap", "candidate_id": ""},
+        ],
+        batch,
+    )
+    assert merged["state"] == "resolved"
+    assert merged["unresolved_roles"] == []
+    assert merged["user_adjudicated_roles"] == ["protocol", "sap"]
+    by_role = {item["role"]: item for item in merged["resolved_roles"]}
+    assert by_role["protocol"]["candidate_id"] == "mmcandidate_b"
+    assert by_role["protocol"]["user_adjudicated"] is True
+    assert by_role["sap"]["status"] == "missing"
+
+    # 未知角色或未知候选：fail-closed
+    for bad in (
+        [{"role": "protocol", "candidate_id": "mmcandidate_zzz"}],
+        [{"role": "ecrf", "candidate_id": "mmcandidate_a"}],
+    ):
+        try:
+            _apply_user_role_selections(resolved, bad, batch)
+        except DocumentAuthorityError:
+            pass
+        else:
+            raise AssertionError("invalid selection must fail closed")

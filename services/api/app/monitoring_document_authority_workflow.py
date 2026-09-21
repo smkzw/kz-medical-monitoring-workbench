@@ -104,6 +104,7 @@ class MonitoringDocumentAuthorityWorkflow:
         project_id: str,
         workspace_dir: Path,
         batch_id: str,
+        user_role_selections: Any = (),
     ) -> dict[str, Any]:
         candidate_root = self._candidate_root(workspace_dir)
         batch = self._load_batch(candidate_root, batch_id)
@@ -201,6 +202,7 @@ class MonitoringDocumentAuthorityWorkflow:
             verifier_analysis_job_id=verifier_job.job_id,
             primary_review_job_id=primary_review.job_id,
             verifier_review_job_id=verifier_review.job_id,
+            user_role_selections=user_role_selections,
         )
         if review_resolution["state"] == "resolved":
             return promote_document_authority_from_jobs(
@@ -213,6 +215,7 @@ class MonitoringDocumentAuthorityWorkflow:
                 verifier_analysis_job_id=verifier_job.job_id,
                 primary_review_job_id=primary_review.job_id,
                 verifier_review_job_id=verifier_review.job_id,
+                user_role_selections=user_role_selections,
             )
 
         primary_adjudication = self._optional_job(
@@ -263,6 +266,7 @@ class MonitoringDocumentAuthorityWorkflow:
             verifier_review_job_id=verifier_review.job_id,
             primary_adjudication_job_id=primary_adjudication.job_id,
             verifier_adjudication_job_id=verifier_adjudication.job_id,
+            user_role_selections=user_role_selections,
         )
         if adjudication_resolution["state"] == "resolved":
             return promote_document_authority_from_jobs(
@@ -277,6 +281,7 @@ class MonitoringDocumentAuthorityWorkflow:
                 verifier_review_job_id=verifier_review.job_id,
                 primary_adjudication_job_id=primary_adjudication.job_id,
                 verifier_adjudication_job_id=verifier_adjudication.job_id,
+                user_role_selections=user_role_selections,
             )
 
         primary_critique = self._optional_job(
@@ -332,6 +337,7 @@ class MonitoringDocumentAuthorityWorkflow:
             verifier_adjudication_job_id=verifier_adjudication.job_id,
             primary_critique_job_id=primary_critique.job_id,
             verifier_critique_job_id=verifier_critique.job_id,
+            user_role_selections=user_role_selections,
         )
 
     @staticmethod
