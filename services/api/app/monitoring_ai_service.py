@@ -8306,7 +8306,11 @@ class MonitoringAiService:
     def _response_model(provider: AiProvider, job: MonitoringAiJob) -> str:
         expected = str(getattr(provider, "expected_response_model", "")).strip()
         actual = str(getattr(provider, "response_model", "")).strip()
-        if not expected or expected != job.requested_model:
+        # 空expected=该profile不主张响应模型身份断言（与角色绑定层
+        # _resolve_monitoring_role_runtime的放宽原则一致）。
+        if not expected:
+            return actual
+        if expected != job.requested_model:
             raise MonitoringAiResponseIdentityError(
                 "provider expected response model identity is missing or "
                 "does not match the job"
