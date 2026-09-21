@@ -1825,7 +1825,7 @@ function EvidenceView({ payload, route, onBack }) {
   );
 }
 
-export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, onBack }) {
+export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, onFindingSelect, onBack }) {
   const projection = payload.projection;
   const subjectsByRef = new Map((projection.subjects || []).map((subject) => [subject.subject_ref || subject.subject_id, subject]));
   const risks = (projection.currentRisks || [])
@@ -1890,6 +1890,9 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
                   </div>
                   <footer className="monitoring-query-card-actions">
                     <button type="button" disabled={!subject} onClick={() => subject && onSubjectSelect?.(subject)}>进入受试者医学旅程</button>
+                    {item.anchor_event_refs?.length && onFindingSelect ? (
+                      <button type="button" className="monitoring-back-button" onClick={() => onFindingSelect?.(item)}>定位关联事件</button>
+                    ) : null}
                   </footer>
                 </li>
               );
