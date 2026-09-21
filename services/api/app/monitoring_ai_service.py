@@ -4677,13 +4677,27 @@ class MonitoringAiService:
                 "基于匿名冻结证据完成复核。",
             ),
         }.get(job.task_type)
-        if authority_copy is not None and any(
-            (candidate.title, candidate.text) != authority_copy
-            for candidate in parsed.candidates
-        ):
-            raise MonitoringAiOutputValidationError(
-                "document authority outer copy must match the controlled task copy"
-            )
+        if authority_copy is not None:
+            # N4：外层title/text是固定信封（不承载分析内容——真实分析
+            # 在structured_payload）。模型偶发输出不同值时确定性归一为
+            # 受控值，丢弃越界文本但保留全部结构化分析。
+            normalized: list = []
+            changed = False
+            for candidate in parsed.candidates:
+                if (candidate.title, candidate.text) != authority_copy:
+                    candidate = candidate.model_copy(
+                        update={"title": authority_copy[0], "text": authority_copy[1]}
+                    )
+                    changed = True
+                normalized.append(candidate)
+            if changed:
+                parsed = parsed.__class__(
+                    schema_version=parsed.schema_version,
+                    task_id=parsed.task_id,
+                    task_type=parsed.task_type,
+                    input_revision_sha256=parsed.input_revision_sha256,
+                    candidates=tuple(normalized),
+                )
         if (
             job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
             and len(parsed.candidates) != 1
