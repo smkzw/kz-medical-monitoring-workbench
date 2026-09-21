@@ -1145,6 +1145,7 @@ function AppShell({
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectDraft, setNewProjectDraft] = useState(EMPTY_NEW_PROJECT);
   const [newProjectBusy, setNewProjectBusy] = useState(false);
+  const [newProjectMonitoring, setNewProjectMonitoring] = useState(false);
   const [newProjectMessage, setNewProjectMessage] = useState("");
   const [newProjectErrors, setNewProjectErrors] = useState({});
   const hasActiveProject = Boolean(
@@ -1208,6 +1209,7 @@ function AppShell({
         body: JSON.stringify({
           ...newProjectDraft,
           product_name: newProjectDraft.product_name.trim(),
+          modules: newProjectMonitoring ? ["medical_writing", "medical_monitoring"] : ["medical_writing"],
           actor: "medical_manager",
           idempotency_key: `create-project-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         }),
@@ -1378,10 +1380,14 @@ function AppShell({
                   <label>适应症<input required aria-required="true" aria-invalid={Boolean(newProjectErrors.indication)} aria-describedby={newProjectErrors.indication ? "new-project-indication-error" : undefined} maxLength={120} value={newProjectDraft.indication} onChange={(event) => updateNewProjectField("indication", event.target.value)} placeholder="例如 类风湿关节炎" />{newProjectErrors.indication && <small id="new-project-indication-error" className="new-project-field-error">{newProjectErrors.indication}</small>}</label>
                   <label>研究分期<select required aria-required="true" aria-invalid={Boolean(newProjectErrors.study_phase)} aria-describedby={newProjectErrors.study_phase ? "new-project-phase-error" : undefined} value={newProjectDraft.study_phase} onChange={(event) => updateNewProjectField("study_phase", event.target.value)}><option value="">请选择</option><option value="I期">I期</option><option value="I/II期">I/II期</option><option value="II期">II期</option><option value="II/III期">II/III期</option><option value="III期">III期</option></select>{newProjectErrors.study_phase && <small id="new-project-phase-error" className="new-project-field-error">{newProjectErrors.study_phase}</small>}</label>
                 </div>
+                <label className="new-project-monitoring-toggle" style={{display:"flex",alignItems:"center",gap:"8px",margin:"8px 0"}}>
+                  <input type="checkbox" checked={newProjectMonitoring} onChange={(e) => setNewProjectMonitoring(e.target.checked)} />
+                  <span>启用医学监查模块（上传 Data Listing 并进行跨表线索分析）</span>
+                </label>
                 {newProjectMessage && <p className="new-project-message">{newProjectMessage}</p>}
                 <footer>
                   <button type="button" onClick={() => setNewProjectOpen(false)} disabled={newProjectBusy} title={newProjectBusy ? "项目正在创建，请稍候" : "取消新建项目"}>取消</button>
-                  <button type="submit" className="primary-button" disabled={newProjectBusy} title={newProjectBusy ? "项目正在创建，请稍候" : "创建项目并进入写作工作台"}>{newProjectBusy ? "创建中" : "创建并进入写作"}</button>
+                  <button type="submit" className="primary-button" disabled={newProjectBusy} title={newProjectBusy ? "项目正在创建，请稍候" : "创建项目"}>{newProjectBusy ? "创建中" : "创建项目"}</button>
                 </footer>
               </>
             )}
