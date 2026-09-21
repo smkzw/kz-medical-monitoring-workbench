@@ -1153,6 +1153,30 @@ export function MedicalMonitoringProductLoop({
       visit_ref: risk.visitRef || risk.visit_ref,
     });
   }, [navigate, resultPayload, route]);
+  // N4：finding锚点事件精确定位——从AI线索卡片进入受试者旅程并聚焦
+  // 该线索真实关联的事件（不默认选第一条AE）。
+  const selectResultFinding = useCallback((finding) => {
+    if (!resultPayload || !finding) return;
+    const subject = (resultPayload.projection.subjects || []).find((row) => clean(row.subject_ref || row.subject_id) === clean(finding.subject_ref)) || {
+      subject_ref: finding.subject_ref,
+      site_ref: finding.site_ref,
+      spine_ref: finding.spine_ref,
+    };
+    const window = selectedSubjectWindow(resultPayload, subject, route);
+    const eventRef = Array.isArray(finding.anchor_event_refs) && finding.anchor_event_refs.length
+      ? finding.anchor_event_refs[0]
+      : "";
+    navigate("journey", {
+      site_ref: finding.site_ref || subject.site_ref || subject.site_id,
+      subject_ref: finding.subject_ref || subject.subject_ref || subject.subject_id,
+      spine_ref: finding.spine_ref || subject.spine_ref || subject.spineRef,
+      window_start: window.start,
+      window_end: window.end,
+      event_ref: eventRef,
+      risk_instance_ref: "",
+      risk_anchor_ref: "",
+    });
+  }, [navigate, resultPayload, route]);
   const selectResultCenter = useCallback((center) => navigate("site_overview", { site_ref: center.siteRef || center.site_ref }), [navigate]);
   const selectResultEvent = useCallback((event) => navigate(routeView, {
     event_ref: event.eventRef || event.event_ref,
@@ -1228,7 +1252,7 @@ export function MedicalMonitoringProductLoop({
     routeView === "overview" || routeView === "site_overview"
       ? OverviewView ? <OverviewView payload={resultPayload} route={route} selectedRiskInstanceRef={route.risk_instance_ref} onRiskSelect={selectResultRisk} onCenterSelect={selectResultCenter} onSubjectSelect={selectResultSubject} onSource={openResultSource} onFlowStageSelect={selectResultFlowStage} onFlowLinkSelect={selectResultFlowLink} onFlowMetricSelect={selectResultFlowMetric} onFlowRiskToggle={toggleResultFlowRisk} onFlowClear={clearResultFlow} onFlowSubjectJump={jumpResultFlowSubject} onOpenQueries={onOpenQueries} suppressVersionClaim={suppressVersionClaim} flowTableOpen continuityCounts={continuityCounts} continuityComparisonText={continuityResult?.ok ? continuityResult.value?.comparison?.comparison_text : ""} continuityLoading={continuityLoading} /> : null
       : routeView === "queries"
-        ? QueryWorkspaceView ? <QueryWorkspaceView payload={resultPayload} route={route} onSubjectSelect={selectResultSubject} onSource={openResultSource} onBack={() => navigate("overview")} /> : null
+        ? QueryWorkspaceView ? <QueryWorkspaceView payload={resultPayload} route={route} onSubjectSelect={selectResultSubject} onSource={openResultSource} onFindingSelect={selectResultFinding} onBack={() => navigate("overview")} /> : null
       : PRODUCT_RESULT_SUBJECT_VIEWS.has(routeView)
         ? SubjectWorkspaceView ? <SubjectWorkspaceView payload={resultPayload} route={route} view={routeView} zoomLevel={0} onRiskSelect={selectResultRisk} onEventSelect={selectResultEvent} onSource={openResultSource} onDrawerClose={() => onRouteChange?.(monitoringJourneyDrawerClosePatch(route))} onJourneyRowSelect={selectResultContinuityRow} continuityResult={continuityResult} continuityUnavailable={continuityUnavailableText} continuityLoading={continuityLoading} /> : null
         : routeView === "evidence"
