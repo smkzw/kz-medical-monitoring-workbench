@@ -62,7 +62,10 @@ GATE_TRANSLATION_BODY_MODEL = "dawncr0w--Hy-MT2-30B-A3B-oQ8-MLX"
 DEFAULT_TRANSLATION_SUPPORT_MODEL = "deepseek-v4-flash"
 THINKING_ENABLED = "enabled"
 THINKING_DISABLED = "disabled"
-THINKING_MODES: frozenset[str] = frozenset({THINKING_ENABLED, THINKING_DISABLED})
+THINKING_AUTO = "auto"
+THINKING_MODES: frozenset[str] = frozenset(
+    {THINKING_AUTO, THINKING_ENABLED, THINKING_DISABLED}
+)
 REASONING_EFFORTS: frozenset[str] = frozenset(
     {"low", "medium", "high", "xhigh", "max"}
 )
@@ -136,7 +139,7 @@ class AiRoleBindingUpsertRequest(BaseModel):
     def validate_thinking(cls, value: str) -> str:
         cleaned = value.strip().lower()
         if cleaned not in THINKING_MODES:
-            raise ValueError("thinking must be enabled or disabled")
+            raise ValueError("thinking must be auto, enabled or disabled")
         return cleaned
 
     @field_validator("reasoning_effort")

@@ -1988,6 +1988,7 @@ function AiGatewayPanel({ status, runs = [], onStatusChange, compact = false }) 
                                 value={form.thinking || "disabled"}
                                 onChange={(event) => setForm({ ...form, thinking: event.target.value })}
                               >
+                                <option value="auto">由接口按推理强度决定</option>
                                 <option value="disabled">关闭思考</option>
                                 <option value="enabled">开启思考</option>
                               </select>

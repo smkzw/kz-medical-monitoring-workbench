@@ -800,6 +800,36 @@ class AiGatewayTests(unittest.TestCase):
         self.assertEqual({"type": "enabled"}, body["thinking"])
         self.assertEqual("xhigh", body["reasoning_effort"])
 
+    def test_auto_thinking_omits_provider_specific_control_but_keeps_effort(self):
+        envelope = AiPromptEnvelope(
+            task_id="task_auto_thinking",
+            task_type=AiTaskType.PICOS_DESIGN_COACH,
+            prompt_version="picos_design_coach_v0_1",
+            system_prompt="Return JSON.",
+            payload={"value": "x"},
+            reasoning_effort="high",
+        )
+        provider = OpenAICompatibleAiProvider(
+            base_url="https://ollama.example.test/v1",
+            api_key="test-key",
+            model_name="deepseek-v4.1-flash",
+            timeout_seconds=1,
+            default_thinking="auto",
+            default_reasoning_effort="high",
+        )
+        with patch("services.api.app.ai_gateway.urllib.request.urlopen") as urlopen:
+            urlopen.return_value = _FakeResponse(
+                {
+                    "model": "deepseek-v4.1-flash",
+                    "choices": [{"message": {"content": '{"ok":true}'}}],
+                }
+            )
+            self.assertEqual({"ok": True}, provider.run(envelope))
+
+        body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
+        self.assertNotIn("thinking", body)
+        self.assertEqual("high", body["reasoning_effort"])
+
     def test_openai_compatible_provider_retries_incomplete_response(self):
         spec = AiTaskSpec(
             task_id="task_protocol_rules_retry",
