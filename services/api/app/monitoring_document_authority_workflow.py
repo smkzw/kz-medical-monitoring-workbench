@@ -5,7 +5,7 @@ import fcntl
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Iterator, Mapping
 
 from packages.medical_monitoring.admission.document_authority import (
     DOCUMENT_ROLES,
@@ -13,8 +13,10 @@ from packages.medical_monitoring.admission.document_authority import (
     PRIMARY_ADJUDICATION_PROMPT_VERSION,
     PRIMARY_CRITIQUE_PROMPT_VERSION,
     PRIMARY_PROMPT_VERSION,
+    build_document_authority_project_context,
     build_anonymous_conflict_packet,
     reconcile_document_authority,
+    resolve_document_authority_project_identity,
 )
 
 from .monitoring_ai_contracts import (
@@ -67,17 +69,26 @@ class MonitoringDocumentAuthorityWorkflow:
         project_id: str,
         workspace_dir: Path,
         files: list[tuple[str, bytes]],
+        project_context: Mapping[str, Any] | None = None,
         ocr_runner: Callable[[int, int, str, bytes], Any] | None = None,
         ocr_model: str = "GLM-OCR-bf16",
         ocr_dpi: int = 200,
     ) -> dict[str, Any]:
         candidate_root = self._candidate_root(workspace_dir)
+        frozen_project_context = (
+            build_document_authority_project_context(project_context)
+            if project_context is not None
+            else None
+        )
         batch = MonitoringDocumentCandidateDecomposer(
             candidate_root,
             ocr_runner=ocr_runner,
             ocr_model=ocr_model,
             ocr_dpi=ocr_dpi,
-        ).decompose_many(files).to_dict()
+        ).decompose_many(
+            files,
+            project_context=frozen_project_context,
+        ).to_dict()
         if any(
             candidate.get("role_hypotheses")
             and (
@@ -115,16 +126,6 @@ class MonitoringDocumentAuthorityWorkflow:
     ) -> dict[str, Any]:
         candidate_root = self._candidate_root(workspace_dir)
         batch = self._load_batch(candidate_root, batch_id)
-        # V5-09：合并持久化裁决（文件中已有）与本次显式提交（落盘），
-        # 之后所有阶段统一消费有效集——刷新/重启/无参数resolve不丢裁决。
-        user_role_selections, decision_record = self._effective_user_decision(
-            project_id=project_id,
-            workspace_dir=workspace_dir,
-            batch=batch,
-            user_role_selections=user_role_selections,
-            actor=actor,
-            expected_decision_version=expected_decision_version,
-        )
         primary_job = self._job(
             project_id,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
@@ -158,6 +159,44 @@ class MonitoringDocumentAuthorityWorkflow:
             job_id=verifier_job.job_id,
             candidate_batch=batch,
             role="verifier",
+        )
+        identity = resolve_document_authority_project_identity(
+            batch,
+            primary_run,
+            verifier_run,
+        )
+        if identity["status"] != "aligned" and identity["status"] != "not_assessed":
+            filenames = {
+                str(item.get("candidate_id") or ""): str(
+                    item.get("filename") or ""
+                )
+                for item in batch["candidates"]
+            }
+            return {
+                "state": (
+                    "project_mismatch"
+                    if identity["status"] == "mismatch"
+                    else "project_identity_incomplete"
+                ),
+                "authority_status": "not_promoted",
+                "batch_id": batch_id,
+                "identity_status": identity["status"],
+                "attention_files": [
+                    filenames[candidate_id]
+                    for candidate_id in identity["attention_candidate_ids"]
+                    if filenames.get(candidate_id)
+                ],
+            }
+        # 只有资料已通过研究身份门，才合并持久化裁决（文件中已有）与
+        # 本次显式提交（落盘）。错研究或归属不明的资料不得留下角色选择。
+        # 之后所有阶段统一消费有效集——刷新/重启/无参数resolve不丢裁决。
+        user_role_selections, decision_record = self._effective_user_decision(
+            project_id=project_id,
+            workspace_dir=workspace_dir,
+            batch=batch,
+            user_role_selections=user_role_selections,
+            actor=actor,
+            expected_decision_version=expected_decision_version,
         )
         reconciliation = reconcile_document_authority(
             batch,

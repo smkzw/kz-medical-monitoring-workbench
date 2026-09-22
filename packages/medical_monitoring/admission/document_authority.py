@@ -21,8 +21,8 @@ REQUIRED_DOCUMENT_ROLES = frozenset({"protocol", "ecrf"})
 AUTO_RESOLVE_CONFIDENCE = 0.9
 REVIEW_CONSENSUS_CONFIDENCE = 0.75
 MAX_DOCUMENT_AUTHORITY_CANDIDATES = 100
-PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v8"
-VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v8"
+PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v9"
+VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v9"
 LEGACY_ANALYSIS_PROMPT_PAIRS = frozenset({
     (
         "monitoring-document-authority-primary-v6",
@@ -31,6 +31,10 @@ LEGACY_ANALYSIS_PROMPT_PAIRS = frozenset({
     (
         "monitoring-document-authority-primary-v7",
         "monitoring-document-authority-verifier-v7",
+    ),
+    (
+        "monitoring-document-authority-primary-v8",
+        "monitoring-document-authority-verifier-v8",
     ),
 })
 PRIMARY_REVIEW_PROMPT_VERSION = "monitoring-document-authority-review-primary-v7"
@@ -124,7 +128,15 @@ LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK = {
     )
 }
 
-_BATCH_KEYS = frozenset({"manifest_version", "batch_id", "candidates", "authority_status"})
+_BATCH_KEYS = frozenset({
+    "manifest_version", "batch_id", "candidates", "authority_status",
+    "project_context",
+})
+_PROJECT_CONTEXT_KEYS = frozenset({
+    "project_id", "project_code", "project_name", "indication", "product_name",
+    "study_phase", "protocol_id", "protocol_version", "protocol_date",
+    "context_sha256",
+})
 _CANDIDATE_KEYS = frozenset({
     "manifest_version", "candidate_id", "file_id", "filename", "content_sha256",
     "size_bytes", "media_type", "role_hypotheses", "parser_name", "parser_version",
@@ -207,6 +219,39 @@ def document_authority_batch_sha256(batch: Mapping[str, Any]) -> str:
     return _digest(batch)
 
 
+def build_document_authority_project_context(
+    value: Mapping[str, Any],
+) -> dict[str, str]:
+    """Freeze the user-visible study identity supplied to both blind readers."""
+
+    body = {
+        key: str(value.get(key) or "").strip()
+        for key in (
+            "project_id",
+            "project_code",
+            "project_name",
+            "indication",
+            "product_name",
+            "study_phase",
+            "protocol_id",
+            "protocol_version",
+            "protocol_date",
+        )
+    }
+    if not body["project_id"] or not any(
+        body[key]
+        for key in (
+            "project_code",
+            "project_name",
+            "indication",
+            "product_name",
+            "protocol_id",
+        )
+    ):
+        raise DocumentAuthorityError("document_authority_project_context_invalid")
+    return {**body, "context_sha256": _digest(body)}
+
+
 def validate_document_authority_analysis(
     batch: Mapping[str, Any], analysis: "DocumentAuthorityAnalysis"
 ) -> None:
@@ -219,6 +264,35 @@ def validate_document_authority_analysis(
         locators=locators,
         eligible_candidate_ids=eligible_candidate_ids,
     )
+    _validate_study_identity(batch, analysis, locators)
+
+
+def _validate_study_identity(
+    batch: Mapping[str, Any],
+    analysis: "DocumentAuthorityAnalysis",
+    locators: Mapping[str, set[str]],
+) -> None:
+    context = batch.get("project_context")
+    identity = analysis.study_identity
+    if context is None:
+        if identity.status != "not_assessed":
+            raise DocumentAuthorityError(
+                "document_authority_project_identity_unbound"
+            )
+        return
+    if (
+        identity.status == "not_assessed"
+        or identity.project_context_sha256 != context["context_sha256"]
+    ):
+        raise DocumentAuthorityError(
+            "document_authority_project_identity_incomplete"
+        )
+    for reference in identity.evidence_references:
+        if (
+            reference.candidate_id not in locators
+            or reference.locator not in locators[reference.candidate_id]
+        ):
+            raise DocumentAuthorityError("document_authority_evidence_not_closed")
 
 
 def validate_document_authority_conflict_packet(
@@ -565,15 +639,14 @@ class RoleSelection(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _strip_unbound_evidence(cls, value: Any) -> Any:
-        # 非selected角色的evidence_locators/supplementary_bindings按定义
-        # 无锚定意义（glm等模型常误带）。确定性归一丢弃这份噪声、保留
-        # 角色裁决本身；selected角色的锚定证据仍严格必需（见after校验）。
+        # 非selected角色的evidence_locators没有锚定意义，可以确定性
+        # 丢弃这份噪声。supplementary_bindings则是实质文件选择，
+        # 不得在missing/unresolved决定下静默删除，由after校验拒绝。
         if isinstance(value, Mapping) and value.get("decision") != "selected":
-            if value.get("evidence_locators") or value.get("supplementary_bindings"):
+            if value.get("evidence_locators"):
                 value = {
                     **value,
                     "evidence_locators": [],
-                    "supplementary_bindings": [],
                 }
         return value
 
@@ -595,6 +668,40 @@ class RoleSelection(BaseModel):
         return self
 
 
+class StudyIdentityEvidenceReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    candidate_id: str = Field(min_length=2, max_length=160)
+    locator: str = Field(min_length=1, max_length=500)
+
+
+class StudyIdentityAssessment(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    status: Literal["not_assessed", "aligned", "mismatch", "unresolved"] = (
+        "not_assessed"
+    )
+    project_context_sha256: str = ""
+    evidence_references: tuple[StudyIdentityEvidenceReference, ...] = Field(
+        default=(), max_length=40
+    )
+    rationale: str = Field(default="", max_length=2_000)
+
+    @model_validator(mode="after")
+    def validate_assessment(self) -> "StudyIdentityAssessment":
+        if self.status == "not_assessed":
+            if self.project_context_sha256 or self.evidence_references or self.rationale:
+                raise ValueError("unassessed study identity cannot carry conclusions")
+            return self
+        if not re.fullmatch(r"[0-9a-f]{64}", self.project_context_sha256):
+            raise ValueError("study identity must bind the frozen project context")
+        if self.status in {"aligned", "mismatch"} and not self.evidence_references:
+            raise ValueError("study identity conclusion requires document evidence")
+        if not self.rationale.strip():
+            raise ValueError("study identity assessment requires a rationale")
+        return self
+
+
 class DocumentAuthorityAnalysis(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -603,6 +710,9 @@ class DocumentAuthorityAnalysis(BaseModel):
     input_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     candidate_assessments: tuple[CandidateAssessment, ...]
     role_selections: tuple[RoleSelection, ...]
+    study_identity: StudyIdentityAssessment = Field(
+        default_factory=StudyIdentityAssessment
+    )
 
 
 class DocumentAuthorityRunEnvelope(BaseModel):
@@ -824,6 +934,7 @@ def reconcile_document_authority(
             locators=locators,
             eligible_candidate_ids=eligible_candidate_ids,
         )
+        _validate_study_identity(batch, run.analysis, locators)
 
     left_roles = {item.role: item for item in primary.analysis.role_selections}
     right_roles = {item.role: item for item in verifier.analysis.role_selections}
@@ -876,6 +987,45 @@ def reconcile_document_authority(
     output = {**result, "reconciliation_sha256": _digest(result)}
     DocumentAuthorityReconciliation.model_validate(output)
     return output
+
+
+def resolve_document_authority_project_identity(
+    batch: Mapping[str, Any],
+    primary: DocumentAuthorityRunEnvelope,
+    verifier: DocumentAuthorityRunEnvelope,
+) -> dict[str, Any]:
+    """Fail closed before role adjudication when uploaded studies do not align."""
+
+    if batch.get("project_context") is None:
+        return {"status": "not_assessed", "attention_candidate_ids": []}
+    candidate_ids, locators, eligible_candidate_ids = _validate_batch(batch)
+    input_sha256 = _digest(batch)
+    _validate_run_pair(primary, verifier, input_sha256, stage="analysis")
+    for run in (primary, verifier):
+        _validate_analysis(
+            run.analysis,
+            batch_id=str(batch["batch_id"]),
+            input_sha256=input_sha256,
+            candidate_ids=candidate_ids,
+            locators=locators,
+            eligible_candidate_ids=eligible_candidate_ids,
+        )
+        _validate_study_identity(batch, run.analysis, locators)
+    assessments = (primary.analysis.study_identity, verifier.analysis.study_identity)
+    statuses = tuple(item.status for item in assessments)
+    attention = sorted({
+        reference.candidate_id
+        for item in assessments
+        for reference in item.evidence_references
+    })
+    if "mismatch" in statuses:
+        return {
+            "status": "mismatch",
+            "attention_candidate_ids": attention,
+        }
+    if statuses == ("aligned", "aligned"):
+        return {"status": "aligned", "attention_candidate_ids": attention}
+    return {"status": "unresolved", "attention_candidate_ids": attention}
 
 
 def build_anonymous_conflict_packet(
@@ -1383,6 +1533,19 @@ def _validate_batch(
         or batch.get("authority_status") != "not_adjudicated"
     ):
         raise DocumentAuthorityError("document_authority_batch_invalid")
+    project_context = batch.get("project_context")
+    if project_context is not None:
+        if not isinstance(project_context, Mapping) or set(project_context) != (
+            _PROJECT_CONTEXT_KEYS
+        ):
+            raise DocumentAuthorityError(
+                "document_authority_project_context_invalid"
+            )
+        expected_context = build_document_authority_project_context(project_context)
+        if dict(project_context) != expected_context:
+            raise DocumentAuthorityError(
+                "document_authority_project_context_invalid"
+            )
     raw_candidates = tuple(batch.get("candidates", ()))
     if not 1 <= len(raw_candidates) <= MAX_DOCUMENT_AUTHORITY_CANDIDATES:
         raise DocumentAuthorityError("document_authority_candidate_coverage_invalid")

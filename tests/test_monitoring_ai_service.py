@@ -700,6 +700,38 @@ def test_first_pass_never_silently_demotes_a_malformed_question(
     assert len(provider.envelopes) == 2
 
 
+def test_mapping_repair_keeps_field_and_rechecks_supplied_evidence(
+    tmp_path: Path,
+) -> None:
+    def delegated_question(envelope: AiPromptEnvelope) -> Dict[str, Any]:
+        output = _valid_output(envelope)
+        mapping = output["candidates"][0]["structured_payload"][
+            "field_mappings"
+        ][0]
+        mapping["user_decision_required"] = True
+        mapping["user_action"] = "这是计划剂量还是实际剂量？请依据CRF确认。"
+        return output
+
+    provider = FakeProvider([delegated_question, delegated_question])
+    service = _service(tmp_path, provider)
+    service.submit_listing_field_mapping(
+        project_id="project-alpha",
+        input_revision=_revision(),
+        field_profile=_field_profile(field_count=1),
+    )
+
+    result = service.run_next("worker-a")
+
+    assert result.job is not None
+    assert result.job.status == MonitoringAiJobStatus.FAILED
+    instruction = provider.envelopes[1].payload["repair_contract"][
+        "instruction"
+    ]
+    assert "重新读取本次已授权的字段画像和证据工具回执" in instruction
+    assert "不得删除违规字段" in instruction
+    assert "未解决映射写成已确认" in instruction
+
+
 def test_adjudication_never_silently_demotes_a_malformed_question(
     tmp_path: Path,
 ) -> None:

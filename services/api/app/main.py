@@ -157,8 +157,6 @@ from .ai_runtime_settings import (
     runtime_ai_settings_store,
 )
 from .ai_role_runtime_settings import (
-    DOCUMENT_AUTHORITY_PRIMARY_AI_ROLE,
-    DOCUMENT_AUTHORITY_VERIFIER_AI_ROLE,
     DEFAULT_OCR_MODEL,
     INDEPENDENT_AI_ROLE,
     LOCAL_OMLX_PROFILE_ID,
@@ -1384,122 +1382,15 @@ def _wake_monitoring_mapping_workers() -> None:
     monitoring_doc_auth_verifier_worker.wake()
 
 
-def _omp_router_api_key(profile_id: str) -> str:
-    """OmniRoute本机路由密钥：先查凭据仓（自身profile_id，回退历史cms路由id），再查环境变量。"""
-    from services.api.app.ai_runtime_settings import LocalCredentialStore
-    key = LocalCredentialStore(RUNTIME_DIR).get(profile_id)
-    if not key:
-        key = LocalCredentialStore(RUNTIME_DIR).get(
-            "medical_monitoring_verifier_ai__cms_router_dsf"
-        )
-    if not key:
-        key = os.environ.get("WORKBENCH_OMP_ROUTER_API_KEY", "").strip()
-    return key
-
-
-def _omp_router_runtime(profile_id: str, *, model: str, thinking: str):
-    from services.api.app.monitoring_ai_service import (
-        MONITORING_PRODUCT_AI_TRANSPORT,
-        MonitoringAiRuntimeBinding,
-    )
-    key = _omp_router_api_key(profile_id)
-    provider_env = {
-        "WORKBENCH_AI_PROVIDER": "omp-router",
-        "WORKBENCH_AI_TRANSPORT": "openai_compatible",
-        "WORKBENCH_AI_BASE_URL": "http://127.0.0.1:20128/v1",
-        "WORKBENCH_AI_MODEL": model,
-        # 路由器返回的served model名与请求名不一致（如deepseek-flash→
-        # deepseek-latest-cloud），留空以跳过response model断言。
-        "WORKBENCH_AI_EXPECTED_RESPONSE_MODEL": "",
-        "WORKBENCH_AI_THINKING": thinking,
-        "WORKBENCH_AI_REASONING_EFFORT": thinking,
-        "WORKBENCH_AI_TIMEOUT_SECONDS": "600",
-        "WORKBENCH_AI_OUTPUT_TOKEN_BUDGET": "32768",
-        # 可运行性门禁要求已批准的部署档（与角色绑定profile_env注入一致）。
-        "WORKBENCH_AI_DEPLOYMENT_PROFILE": "local_private_clinical",
-    }
-    if key:
-        provider_env["WORKBENCH_AI_API_KEY"] = key
-    return MonitoringAiRuntimeBinding(
-        profile_id=profile_id,
-        provider="omp-router",
-        model=model,
-        env=provider_env,
-        transport=MONITORING_PRODUCT_AI_TRANSPORT,
-        available=True,
-        diagnostic="" if key else "omp-router api key unavailable",
-    )
-
-
-def _opencode_go_runtime(profile_id: str, *, model: str, thinking: str):
-    """opencode zen直连：密钥从凭据仓profile条目解析，env变量可覆盖。"""
-    from services.api.app.ai_runtime_settings import LocalCredentialStore
-    from services.api.app.monitoring_ai_service import (
-        MONITORING_PRODUCT_AI_TRANSPORT,
-        MonitoringAiRuntimeBinding,
-    )
-    key = LocalCredentialStore(RUNTIME_DIR).get(profile_id)
-    if not key:
-        key = os.environ.get("OPENCODE_API_KEY", "").strip()
-    provider_env = {
-        "WORKBENCH_AI_PROVIDER": "opencode-go",
-        "WORKBENCH_AI_TRANSPORT": "openai_compatible",
-        "WORKBENCH_AI_BASE_URL": "https://opencode.ai/zen/go/v1",
-        "WORKBENCH_AI_MODEL": model,
-        # zen回名=请求名，断言收紧到requested身份。
-        "WORKBENCH_AI_EXPECTED_RESPONSE_MODEL": model,
-        "WORKBENCH_AI_THINKING": thinking,
-        "WORKBENCH_AI_REASONING_EFFORT": thinking,
-        "WORKBENCH_AI_TIMEOUT_SECONDS": "600",
-        "WORKBENCH_AI_OUTPUT_TOKEN_BUDGET": "32768",
-        "WORKBENCH_AI_DEPLOYMENT_PROFILE": "local_private_clinical",
-        "WORKBENCH_AI_EXTRA_HEADERS": json.dumps(
-            {"x-opencode-session": "doc-auth-primary"}
-        ),
-    }
-    if key:
-        provider_env["WORKBENCH_AI_API_KEY"] = key
-    return MonitoringAiRuntimeBinding(
-        profile_id=profile_id,
-        provider="opencode-go",
-        model=model,
-        env=provider_env,
-        transport=MONITORING_PRODUCT_AI_TRANSPORT,
-        available=True,
-        diagnostic="" if key else "opencode api key unavailable",
-    )
-
-
-def _resolve_doc_auth_primary_runtime():
-    # N5/M4：文档权威主分析——opencode zen直连。
-    # 2026-09-22：用户提供新密钥（~/Downloads/opencode.env，已入凭据仓）；
-    # muse-spark上游实测"Endpoint is unavailable"，按用户指示改用
-    # mimo-v2.6-flash（回名=请求名，探针通过）。
-    return _opencode_go_runtime(
-        "document_authority_primary_ai__opencode_go_mimo",
-        model="mimo-v2.6-flash",
-        thinking="high",
-    )
-
-
-def _resolve_doc_auth_verifier_runtime():
-    # N5/M4：文档权威盲核——本机OmniRoute/deepseek（与主分析不同族）。
-    # ollama-cloud密钥未提供，deepseek-v4.1暂不可达；恢复后在mapping_gate回切。
-    return _omp_router_runtime(
-        "document_authority_verifier_ai__omp_router_dsf",
-        model="deepseek-latest-cloud",
-        thinking="high",
-    )
-
 monitoring_doc_auth_primary_service = MonitoringAiService(
     monitoring_ai_repository,
-    runtime_resolver=_resolve_doc_auth_primary_runtime,
+    runtime_resolver=resolve_monitoring_ai_runtime,
     current_revision_resolver=_current_monitoring_ai_revision,
     evidence_tool_factory=_monitoring_evidence_tool_factory,
 )
 monitoring_doc_auth_verifier_service = MonitoringAiService(
     monitoring_ai_repository,
-    runtime_resolver=_resolve_doc_auth_verifier_runtime,
+    runtime_resolver=resolve_monitoring_verifier_ai_runtime,
     current_revision_resolver=_current_monitoring_ai_revision,
     evidence_tool_factory=_monitoring_evidence_tool_factory,
 )
@@ -4139,10 +4030,14 @@ def _start_r7_monitoring_document_authority(
     workspace_dir: Path,
     files: list[tuple[str, bytes]],
 ) -> dict[str, object]:
+    project_context = project_source_manifest_service.build_manifest(
+        project_id
+    ).header_project.public_dict()
     return monitoring_document_authority_workflow.start(
         project_id=project_id,
         workspace_dir=workspace_dir,
         files=files,
+        project_context=project_context,
         ocr_runner=_monitoring_candidate_ocr_runner,
         ocr_model=WRITING_REFERENCE_OCR_MODEL,
         ocr_dpi=WRITING_REFERENCE_OCR_MIN_DPI,
