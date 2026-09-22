@@ -18,14 +18,9 @@ MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION = "mm-c3-dual-mapping-cohort-v1"
 # The primary route is the direct CMS endpoint.  ``cms-router`` remains a
 # supported transport identity for installations that expose the same route
 # through the local CMS router, but it is not an OMP invocation.
-# 2026-09-13 user redesignation: the primary analysis is a ROUTE POOL of
-# cloud models — zhipu-coding-plan GLM-5.3-Flash (high) first, DeepSeek
-# deepseek-flash (high) second — with the local MTPLX VLM as the blind
-# verifier. The harness treats routes as data (capability-tagged profiles);
-# these constants name the pool's ACTIVE route for new submissions, and the
-# PRIMARY_RUNTIME_PAIRS set below admits every current and historical
-# primary identity so persisted jobs/receipts keep revalidating across
-# route changes.
+# The harness treats routes as persisted role data.  These constants seed the
+# current default pair for a new installation; PRIMARY_RUNTIME_PAIRS below is
+# only the historical classifier needed to replay already persisted jobs.
 # These values seed a new installation only. Runtime admission for product
 # work is bound to the selected role profiles, so changing an approved model
 # pair does not require another source edit.
@@ -49,18 +44,9 @@ MONITORING_C3_CMS_PRIMARY_MODEL = "MiniMax-M3"
 MONITORING_C3_CMS_PRIMARY_PROFILE_ID = "medical_monitoring_ai__cms_smk_minimax_m3"
 MONITORING_C3_ALTERNATE_PROVIDER = "cms-router"
 MONITORING_C3_ALTERNATE_MODEL = "minimax-m3"
-# 2026-09-12 user redesignation: the verifier cohort is the LOCAL MTPLX VLM
-# (Youssofal--Qwen3.8-Flash-Next-MTPLX-Optimized-Speed served as
-# ``mtplx-flash-next-optimized-speed``, thinking xhigh, ~200k effective
-# context, native VLM). The previous cloud GLM pair remains a supported
-# verifier transport for historical receipts and as the remote substitute;
-# new submissions bind to mtplx.
-# 2026-09-13 user correction: the dual-model contract is GLM-5.3-Flash
-# (high) as primary + deepseek-flash (high) as the blind verifier. The
-# local MTPLX verifier from the interim directive exits the active
-# configuration and remains a historical identity only.
-# 2026-09-20 现役盲核身份对齐用户最终指令（deepseek-flash@opencode-go，
-# r3盲核252/278+fv波在该路由完成）；deepseek直连保留为历史身份。
+# The current verifier default is Ollama Cloud DeepSeek V4.1 Flash.  Earlier
+# MTPLX, GLM and opencode-go identities remain below strictly so their frozen
+# receipts can be replayed; none is an automatic fallback for a new run.
 MONITORING_C3_VERIFIER_PROVIDER = "ollama-cloud"
 MONITORING_C3_VERIFIER_MODEL = "deepseek-v4.1-flash"
 MONITORING_C3_VERIFIER_PROFILE_ID = (
@@ -114,9 +100,8 @@ MONITORING_C3_SUPPORTED_RUNTIMES = frozenset({
         MONITORING_C3_LOCAL_FALLBACK_MODEL,
     ),
 })
-# Every verifier identity that persisted jobs may legally carry: the current
-# local MTPLX verifier plus the historical cloud GLM verifier whose completed
-# jobs/receipts must keep revalidating after the redesignation.
+# Every verifier identity that persisted jobs may legally carry.  Membership
+# here never authorizes a new call; new calls freeze the selected role profile.
 MONITORING_C3_VERIFIER_RUNTIME_PAIRS = frozenset({
     (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
     (MONITORING_C3_GLM_VERIFIER_PROVIDER, MONITORING_C3_GLM_VERIFIER_MODEL),

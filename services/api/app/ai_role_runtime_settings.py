@@ -334,7 +334,7 @@ def _builtin_profiles() -> tuple[AiProviderProfile, ...]:
         AiProviderProfile(
             profile_id="medical_monitoring_ai__deepseek_flash",
             provider="deepseek",
-            label="DeepSeek Flash 医学监查主分析（池次选，high思考）",
+            label="DeepSeek Flash 医学监查主分析（历史可选连接）",
             base_url="https://api.deepseek.com/v1",
             model="deepseek-flash",
             expected_response_model="deepseek-flash",
