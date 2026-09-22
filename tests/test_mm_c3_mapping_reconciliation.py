@@ -371,6 +371,34 @@ def test_field_description_of_ctcae_column_is_not_a_conclusion() -> None:
     assert mapping_conclusion_violations(item) == []
 
 
+def test_negated_query_status_boundary_is_not_a_query_conclusion() -> None:
+    item = _item(
+        "ALR",
+        "ALRCO",
+        "record_remark",
+        uncertainty=(
+            "备注是自由文本；无受控术语，不能据此判定因果关系、"
+            "相关性结论或Query状态。"
+        ),
+        user_action="系统保留原记录，不形成Query结论。",
+    )
+
+    assert mapping_conclusion_violations(item) == []
+
+
+def test_asserted_query_status_remains_a_contract_violation() -> None:
+    item = _item(
+        "AE",
+        "AECO",
+        "record_remark",
+        uncertainty="Query状态：已关闭。",
+    )
+
+    violations = mapping_conclusion_violations(item)
+
+    assert any(item["code"] == "query_conclusion" for item in violations)
+
+
 def test_invalid_profile_is_rejected() -> None:
     with pytest.raises(MappingReconciliationError) as exc:
         reconcile_mapping_cohorts(profile_fields=[])

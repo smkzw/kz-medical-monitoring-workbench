@@ -127,7 +127,11 @@ _CONCLUSION_TEXT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "query_conclusion",
         re.compile(
-            r"Query\s*(?:状态|status)\s*[:：=]?\s*\S+",
+            r"Query\s*(?:状态|status)\s*(?:"
+            r"(?:[:：=]|为)\s*(?![。；;,.，])\S+|"
+            r"(?:is\s+)?(?:open|opened|closed|resolved|pending|"
+            r"已发起|已开立|已关闭|已解决|待处理)"
+            r")",
             re.IGNORECASE,
         ),
     ),
