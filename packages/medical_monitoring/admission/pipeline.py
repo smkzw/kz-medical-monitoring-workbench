@@ -40,6 +40,7 @@ from .workbook_manifest import (
 
 ADMISSION_RECORD_KIND = "data_admission"
 LOCATOR_INDEX_KIND = "source_cell_locator_index"
+PROJECT_IDENTITY_BINDING_KIND = "admission_project_identity_binding"
 DEFAULT_LISTING_SUFFIXES = frozenset({".csv", ".xls", ".xlsx", ".xlsm"})
 _UPLOAD_CHUNK_SIZE = 1024 * 1024
 _PROJECT_ID_HEADERS = frozenset(
@@ -227,11 +228,66 @@ class DataAdmissionPipeline:
         expected_project_identifiers: Optional[
             Callable[[str], Sequence[str]]
         ] = None,
+        allow_initial_identity_adoption: Optional[Callable[[str], bool]] = None,
     ) -> None:
         self._parser = parser
         self._suffixes = frozenset(str(value).lower() for value in supported_suffixes)
         self._manifest_provider = manifest_provider
         self._expected_project_identifiers = expected_project_identifiers
+        self._allow_initial_identity_adoption = allow_initial_identity_adoption
+
+    @staticmethod
+    def _bound_project_identifiers(store: Store, project_id: str) -> tuple[str, ...]:
+        persisted = store.get_domain_object(PROJECT_IDENTITY_BINDING_KIND, project_id)
+        if persisted is None:
+            return ()
+        payload = persisted[1]
+        if (
+            not isinstance(payload, Mapping)
+            or payload.get("schema_version")
+            != "mm-admission-project-identity-binding-v1"
+            or payload.get("project_id") != project_id
+            or not isinstance(payload.get("identifiers"), list)
+        ):
+            raise AdmissionPipelineError("admission_project_identity_conflict")
+        identifiers = tuple(
+            normalized
+            for value in payload["identifiers"]
+            if (normalized := _normalized_identifier(value))
+        )
+        if not identifiers:
+            raise AdmissionPipelineError("admission_project_identity_conflict")
+        return tuple(dict.fromkeys(identifiers))
+
+    def _assess_project_identity(
+        self,
+        *,
+        store: Store,
+        project_id: str,
+        observed: set[str],
+        allow_adoption: bool = True,
+    ) -> tuple[dict[str, Any], tuple[str, ...] | None]:
+        bound = self._bound_project_identifiers(store, project_id)
+        expected = bound or (
+            tuple(self._expected_project_identifiers(project_id))
+            if self._expected_project_identifiers is not None
+            else ()
+        )
+        assessment = _project_identity_assessment(expected, observed)
+        adopt = (
+            allow_adoption
+            and not bound
+            and len(observed) == 1
+            and assessment["status"] in {"matched", "conflict", "not_configured"}
+            and self._allow_initial_identity_adoption is not None
+            and bool(self._allow_initial_identity_adoption(project_id))
+        )
+        if not adopt:
+            return assessment, None
+        adopted = tuple(sorted(observed))
+        assessment = _project_identity_assessment(adopted, observed)
+        assessment["status"] = "adopted"
+        return assessment, adopted
 
     @staticmethod
     def _admission_workspace(workspace_dir: Path) -> Path:
@@ -290,6 +346,8 @@ class DataAdmissionPipeline:
         manifest_files: list[dict[str, Any]] = []
         staged_file_payloads: list[dict[str, Any]] = []
         observed_project_identifiers: set[str] = set()
+        prepared_revisions: list[Any] = []
+        prepared_snapshots: list[tuple[Any, Any, dict[str, Any]]] = []
         store = _store(workspace_dir)
         try:
             try:
@@ -322,7 +380,7 @@ class DataAdmissionPipeline:
                     source_bytes,
                     scope=(("source_file", staged_file.path),),
                 )
-                store.add_source_revision(execution_source_revision(revision))
+                prepared_revisions.append(execution_source_revision(revision))
                 try:
                     sheets = list(self._parser(file_path.name, source_bytes))
                 except Exception as exc:
@@ -369,7 +427,6 @@ class DataAdmissionPipeline:
                         rows,
                         is_synthetic=project.is_synthetic,
                     )
-                    store.add_listing_snapshot(snapshot, canonical_listing_content([sheet]))
                     locators = build_table_locators(
                         project_id,
                         revision_id,
@@ -392,8 +449,12 @@ class DataAdmissionPipeline:
                         "columns": list(headers),
                         "locator_ids": [locator.locator_id for locator in locators],
                     }
-                    store.put_domain_object(
-                        LOCATOR_INDEX_KIND, snapshot.snapshot_id, locator_index
+                    prepared_snapshots.append(
+                        (
+                            snapshot,
+                            canonical_listing_content([sheet]),
+                            locator_index,
+                        )
                     )
                     snapshot_ids.append(snapshot.snapshot_id)
                     locator_index_ids.append(snapshot.snapshot_id)
@@ -419,18 +480,32 @@ class DataAdmissionPipeline:
             else:
                 manifest_bundle = None
                 reconciliation = manifest_unavailable_summary()
-            expected_project_identifiers = (
-                tuple(self._expected_project_identifiers(project_id))
-                if self._expected_project_identifiers is not None
-                else ()
-            )
-            project_identity = _project_identity_assessment(
-                expected_project_identifiers,
-                observed_project_identifiers,
+            project_identity, adopted_identifiers = self._assess_project_identity(
+                store=store,
+                project_id=project_id,
+                observed=observed_project_identifiers,
             )
             if project_identity["status"] == "conflict":
                 raise AdmissionPipelineError(
                     "admission_project_identity_conflict"
+                )
+            if adopted_identifiers is not None:
+                store.put_domain_object(
+                    PROJECT_IDENTITY_BINDING_KIND,
+                    project_id,
+                    {
+                        "schema_version": "mm-admission-project-identity-binding-v1",
+                        "project_id": project_id,
+                        "identifiers": list(adopted_identifiers),
+                        "basis": "first_complete_listing_observation",
+                    },
+                )
+            for revision in prepared_revisions:
+                store.add_source_revision(revision)
+            for snapshot, content, locator_index in prepared_snapshots:
+                store.add_listing_snapshot(snapshot, content)
+                store.put_domain_object(
+                    LOCATOR_INDEX_KIND, snapshot.snapshot_id, locator_index
                 )
             summary = {
                 "files": len(attempt.files),
@@ -499,9 +574,11 @@ class DataAdmissionPipeline:
                         continue
                     headers = tuple(rows[0])
                     observed.update(_project_identifiers(headers, rows))
-            assessment = _project_identity_assessment(
-                tuple(self._expected_project_identifiers(project_id)),
-                observed,
+            assessment, _adopted = self._assess_project_identity(
+                store=store,
+                project_id=project_id,
+                observed=observed,
+                allow_adoption=False,
             )
             technical["project_identity"] = assessment
             record["technical_details"] = technical
@@ -653,6 +730,7 @@ __all__ = [
     "ADMISSION_RECORD_KIND",
     "DEFAULT_LISTING_SUFFIXES",
     "LOCATOR_INDEX_KIND",
+    "PROJECT_IDENTITY_BINDING_KIND",
     "AdmissionPipelineError",
     "DataAdmissionPipeline",
 ]

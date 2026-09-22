@@ -245,11 +245,11 @@ class StoreArtifactMixin:
         if not kind or not object_id:
             raise StoreError("kind and object_id are required")
         obj_hash = content_hash(to_jsonable(obj))
-        immutable_label = (
-            "adapter raw output"
-            if kind == "adapter_raw_output"
-            else "capability work assignment"
-        )
+        immutable_label = {
+            "adapter_raw_output": "adapter raw output",
+            "admission_project_identity_binding": "admission project identity binding",
+            "capability_work_assignment": "capability work assignment",
+        }.get(kind, kind)
         latest = self._conn.execute(
             "SELECT version, content_hash FROM domain_objects WHERE kind=? AND object_id=?"
             " ORDER BY version DESC LIMIT 1", (kind, object_id),
