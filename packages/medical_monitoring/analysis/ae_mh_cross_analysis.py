@@ -40,6 +40,25 @@ _TABLE_DOMAIN = {"AE": "AE", "MH": "MH", "CM": "CM", "EX2": "EX", "EX4": "EX", "
 _ADMIN_COLUMNS = frozenset({"Block顺序号", "RECREP", "PAGELMDT", "FORMOID", "FORMNM", "FORMNM__2"})
 # 分析版本：N5证据扩容（完整行/字段/值+真实内容hash）
 ANALYSIS_GENERATION_V2 = "aemh-evidence-v2"
+# V5-01统一源摘要合同：facts:<table>源摘要=全表冻结内容的版本化摘要。
+# build_subject_evidence（盖章）与main._current_facts_analysis_revision
+# （fresh校验）必须共用本函数，禁止各自再实现行数式或子集式摘要。
+FACTS_SOURCE_DIGEST_VERSION = "facts-source-digest-v2"
+
+
+def facts_table_source_digest(table: str, rows: Sequence[Mapping[str, Any]]) -> str:
+    """`facts:<table>`源的统一版本化内容摘要（V5-01合同）。
+
+    覆盖范围=该表全部冻结行（不是受试者切片，也不是行数）；行值保留
+    原始类型（不做str化——0/False/数值与字符串可区分）。历史作业使用
+    旧算法（行数式）盖章，fresh校验按新算法重算不等即判stale：策略
+    变化不伪造数据变化，旧代际作业已全部终态不再重查。
+    """
+    return content_hash({
+        "digest_version": FACTS_SOURCE_DIGEST_VERSION,
+        "table": table,
+        "rows": [content_hash(dict(row)) for row in rows],
+    })
 
 
 @dataclass(frozen=True)
@@ -86,11 +105,10 @@ def build_subject_evidence(
         ]
         if not subject_rows:
             continue
-        # N5：真实内容hash（替代table+row_count），同表行数变化即变hash
-        table_hash = content_hash(
-            {"table": table,
-             "rows": [content_hash({k: str(v) for k, v in row.items()}) for _, row in subject_rows]}
-        )
+        # V5-01：源摘要=全表冻结内容的统一版本化摘要（与fresh校验共用
+        # facts_table_source_digest）；受试者切片归属由行级locator/fingerprint
+        # 表达，不再混入源身份。
+        table_hash = facts_table_source_digest(table, rows)
         source_hashes[table] = table_hash
         domain = _TABLE_DOMAIN[table]
         # N5：全部受试者行纳入证据包（不再截断到前6行）

@@ -1150,13 +1150,15 @@ _FACTS_DOMAINS_CACHE: dict[str, Any] = {"signature": None, "domains": None}
 def _current_facts_analysis_revision(job):
     """Freshness for facts-lane analysis jobs.
 
-    The frozen fact artifacts are the source of truth: a claimed job stays
-    fresh while every declared ``facts:<table>`` source still hashes to the
-    same row count/content in the artifact directory. The domains load is
-    cached per process keyed by the directory's mtime signature.
+    V5-01统一合同：`facts:<table>`源摘要由
+    ``packages.medical_monitoring.analysis.ae_mh_cross_analysis.facts_table_source_digest``
+    唯一计算（全表冻结行内容、类型保留、版本化）——与
+    ``build_subject_evidence`` 盖章共用同一函数，禁止行数式摘要回潮。
+    历史作业以旧算法盖章，按新算法重算不等即判stale：策略变化不伪造
+    数据变化。domains加载缓存按V5-02含project与manifest身份（见下）。
     """
-    from packages.medical_monitoring.intelligence.primitives import (  # noqa: PLC0415
-        content_hash as _facts_content_hash,
+    from packages.medical_monitoring.analysis.ae_mh_cross_analysis import (  # noqa: PLC0415
+        facts_table_source_digest,
     )
 
     workspace = (
@@ -1172,14 +1174,19 @@ def _current_facts_analysis_revision(job):
         )
     except (OSError, ValueError):
         return ""
-    if _FACTS_DOMAINS_CACHE["signature"] != signature:
+    cache_key = (str(job.project_id), signature)
+    if _FACTS_DOMAINS_CACHE["signature"] != cache_key:
+        provider_for_project = globals().get("_r7_facts_provider_for")
+        provider = (
+            provider_for_project(str(job.project_id))
+            if callable(provider_for_project)
+            else None
+        )
         try:
             _FACTS_DOMAINS_CACHE["domains"] = (
-                _r7_facts_publication_provider._load_domains()
-                if _r7_facts_publication_provider is not None
-                else None
+                provider._load_domains() if provider is not None else None
             )
-            _FACTS_DOMAINS_CACHE["signature"] = signature
+            _FACTS_DOMAINS_CACHE["signature"] = cache_key
         except Exception:
             return ""
     domains = _FACTS_DOMAINS_CACHE["domains"]
@@ -1192,7 +1199,7 @@ def _current_facts_analysis_revision(job):
         table = entry[len("facts:") :]
         rows = domains.get(table, [])
         expected = str(getattr(binding, "source_content_sha256", "")).strip()
-        actual = _facts_content_hash({"table": table, "rows": len(rows)})
+        actual = facts_table_source_digest(table, rows)
         if expected != actual:
             return ""
     return job.input_revision_sha256
@@ -3821,6 +3828,24 @@ if _r7_facts_root.is_dir():
                 _facts_workspace, project_label=_project_dir_name
             )
         )
+
+
+def _r7_facts_provider_for(project_id: str):
+    """V5-02：按项目解析facts provider；物化晚于进程启动的项目惰性注册。
+
+    缓存键=project目录名；provider绑定该项目的workspace（frozen
+    snapshot目录），不再回落到指定研究的全局单例。
+    """
+    key = str(project_id)
+    provider = _r7_facts_providers_by_project.get(key)
+    if provider is not None:
+        return provider
+    workspace = _r7_facts_root / key
+    if (workspace / "runtime" / "artifacts").is_dir():
+        provider = _FactsPublicationProvider(workspace, project_label=key)
+        _r7_facts_providers_by_project[key] = provider
+    return provider
+
 _FACTS_WORKSPACE_DIR = (
     RUNTIME_DIR / "medical_monitoring_r7" / "proj_mgk10_sar_real"
 )
