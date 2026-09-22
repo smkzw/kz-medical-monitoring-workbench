@@ -2539,6 +2539,180 @@ def _wait_product_launch_completed(
     raise AssertionError("synthetic launch did not reach completed")
 
 
+def test_late_project_dispatchers_keep_two_actual_api_results_isolated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import hashlib
+
+    from packages.medical_monitoring.api.r7_product.facts_mode_outputs import (
+        FactsModeOutputDispatcher,
+    )
+    from packages.medical_monitoring.api.r7_product.facts_publication_adapter import (
+        FactsPublicationAdapter,
+        FactsProviderDispatcher,
+    )
+    from packages.medical_monitoring.api.r7_product.synthetic_publication import (
+        SyntheticModeOutputProvider,
+    )
+    from packages.medical_monitoring.projections.facts_publication import (
+        FactsPublicationAuthorityProvider,
+        _atomic_write_json,
+        _build_facts_manifest,
+    )
+    import services.api.app.medical_monitoring_r7_product_router as product_mod
+
+    authority_created: list[str] = []
+    mode_created: list[str] = []
+
+    provider_root = tmp_path / "late-providers"
+    for ordinal, project in enumerate((PROJECT_A, PROJECT_B), start=1):
+        artifacts = provider_root / project / "runtime" / "artifacts"
+        artifacts.mkdir(parents=True)
+        table = {
+            "AE": [
+                {
+                    "SUBJID": "SAME-001",
+                    "SITEID": f"0{ordinal}",
+                    "SITENM": f"中心{ordinal}",
+                    "AETERM": f"项目{ordinal}事件",
+                    "AESEV": "中度",
+                    "AESTDAT": f"2026-0{ordinal}-01",
+                }
+            ]
+        }
+        encoded = json.dumps(table, ensure_ascii=False, sort_keys=True).encode()
+        artifact_name = hashlib.sha256(encoded).hexdigest() + ".json"
+        (artifacts / artifact_name).write_bytes(encoded)
+        _atomic_write_json(
+            artifacts / "facts-manifest.json",
+            _build_facts_manifest(
+                artifacts,
+                allowed_files=[artifact_name],
+                project_id=project,
+                attempt_id=f"attempt-{ordinal}",
+                mapping_version="map-test",
+                snapshot_ref="s7-snapshot-current-001",
+            ),
+        )
+
+    project_ordinals = {PROJECT_A: 1, PROJECT_B: 2}
+
+    def setup_inputs(project: str) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+        ordinal = project_ordinals[project]
+        current = product_mod.rs.DataSnapshot(
+            snapshot_ref="s7-snapshot-current-001",
+            project_id=project,
+            data_cutoff="2026-03-31",
+            rows=(
+                {
+                    "canonical_key": f"site-0{ordinal}/SAME-001",
+                    "site_ref": f"site-0{ordinal}",
+                    "subject_ref": "subject-SAME-001",
+                },
+            ),
+            key_fields=("canonical_key",),
+            source_revision_id=f"source-{ordinal}",
+        )
+        return (current,), ()
+
+    monkeypatch.setattr(product_mod, "_synthetic_setup_inputs", setup_inputs)
+
+    def authority_factory(project: str) -> Any:
+        authority_created.append(project)
+        return FactsPublicationAdapter(
+            FactsPublicationAuthorityProvider(
+                provider_root / project,
+                project_ref=project,
+                project_label=project,
+            )
+        )
+
+    def mode_factory(project: str) -> Any:
+        mode_created.append(project)
+        return SyntheticModeOutputProvider()
+
+    client = _client(
+        tmp_path,
+        principal=_principal(PROJECT_A, PROJECT_B),
+        authority_provider=FactsProviderDispatcher(
+            {}, provider_factory=authority_factory
+        ),
+        r6_output_provider=FactsModeOutputDispatcher(
+            {}, provider_factory=mode_factory
+        ),
+    )
+
+    result_tokens: dict[str, str] = {}
+    overviews: dict[str, dict[str, Any]] = {}
+    for ordinal, project in enumerate((PROJECT_A, PROJECT_B), start=1):
+        assert client.post(f"{_base(project)}/workspace/bootstrap").status_code == 200
+        options = client.get(f"{_base(project)}/run-setup/options")
+        assert options.status_code == 200, options.text
+        launched = client.post(
+            f"{_base(project)}/runs/prepare-and-start",
+            json={
+                "current_snapshot_token": options.json()["current_data"][
+                    "snapshot_token"
+                ],
+                "mode": "daily",
+                "execution_basis": "full",
+                "risk_rule_tokens": [],
+                "idempotency_key": f"late-project-launch-{ordinal}",
+            },
+        )
+        assert launched.status_code == 200, launched.text
+        public_token = launched.json()["public_run_token"]
+        _wait_product_launch_completed(client, project, public_token)
+        published = client.post(
+            f"{_base(project)}/runs/{public_token}/publication",
+            json={"idempotency_key": f"late-project-publication-{ordinal}"},
+        )
+        assert published.status_code == 200, published.text
+        entry = client.get(f"{_base(project)}/runs/{public_token}/result-entry")
+        assert entry.status_code == 200, entry.text
+        result_token = entry.json()["result_context_token"]
+        result_tokens[project] = result_token
+        overview = client.get(
+            f"{_base(project)}/results/{result_token}/overview"
+        )
+        assert overview.status_code == 200, overview.text
+        overviews[project] = overview.json()
+
+    assert authority_created == [PROJECT_A, PROJECT_B]
+    assert mode_created == [PROJECT_A, PROJECT_B]
+    assert result_tokens[PROJECT_A] != result_tokens[PROJECT_B]
+    assert overviews[PROJECT_A]["identity"]["project_ref"] == PROJECT_A
+    assert overviews[PROJECT_B]["identity"]["project_ref"] == PROJECT_B
+    assert {
+        item["site_id"]
+        for item in overviews[PROJECT_A]["projection"]["query_findings"]
+    } == {"site-01"}
+    assert {
+        item["site_id"]
+        for item in overviews[PROJECT_B]["projection"]["query_findings"]
+    } == {"site-02"}
+    assert {
+        item["subject_id"]
+        for item in overviews[PROJECT_A]["projection"]["query_findings"]
+    } == {"subject-SAME-001"}
+    assert {
+        item["subject_id"]
+        for item in overviews[PROJECT_B]["projection"]["query_findings"]
+    } == {"subject-SAME-001"}
+
+    reopened_a = client.get(
+        f"{_base(PROJECT_A)}/results/{result_tokens[PROJECT_A]}/overview"
+    )
+    assert reopened_a.status_code == 200, reopened_a.text
+    assert reopened_a.json() == overviews[PROJECT_A]
+    cross_project = client.get(
+        f"{_base(PROJECT_B)}/results/{result_tokens[PROJECT_A]}/overview"
+    )
+    assert cross_project.status_code == 409
+    assert cross_project.json()["code"] == "result_context_unavailable"
+
+
 def _route_fake_r5_packet() -> SimpleNamespace:
     return SimpleNamespace(
         packet_identity="r5-publication-authority:" + "a" * 64,

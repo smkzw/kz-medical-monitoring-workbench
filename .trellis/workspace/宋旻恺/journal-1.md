@@ -1567,3 +1567,9 @@ W00证据位于`../../tasks/09-22-mm-delivery-replan/evidence/{route-lock,projec
 集中验证：受影响模块`py_compile`及`git diff --check`通过；facts materialization/manifest/event-time/mode-output/source-digest/R7 router共134项通过（99条既有deprecation warning）。真实MG只读重建仍与已发布R5 digest逐字一致（365受试者、145,616事件、148,193来源），且manifest读前后SHA不变。W01仍为in_progress：冷启动双项目实际API、同SUBJID隔离、旧token在active切换后的公开API、并发pointer压力、共享摘要正式worker及浏览器来源字节验收尚未完成，不能标包完成。
 
 同进程新增研究组合根复核发现：初始dispatcher虽严格按项目，但只捕获进程启动时已有workspace，后物化项目仅进入裸provider缓存，adapter与mode-output映射不会同步更新。现改为惰性factory注册并缓存，未知项目仍拒绝且绝不回落到唯一项目；真实facts dispatcher即使启动时为空也保持可接入，合成fixture显式走合成provider。新增两项晚注册反例后本组集中回归为136项通过。
+
+### 2026-09-22 W01双项目实际API与历史结果隔离
+
+新增从空dispatcher启动、进程内晚注册两个facts研究的完整API回归：两个研究使用相同受试者编号但不同中心与AE内容，依次完成bootstrap→setup→launch→publication→result-entry→overview。实际响应严格返回各自项目、中心和finding；第二项目完成后重开第一项目旧token，响应逐对象一致；把第一项目token用于第二项目时409 fail closed。该路径同时揭示正式daily ModeOutput把公开finding归一为`payload.query_drafts`，结果上下文现直接读取该冻结字段，不再回开活动分析绑定。
+
+集中回归增至137项通过（100条既有deprecation warning）。W01仍不关闭：冷启动浏览器、并发active-pointer压力、正式`build_subject_evidence` worker失效及浏览器来源字节验收仍需完成。
