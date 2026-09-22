@@ -789,7 +789,10 @@ def register_mapping_candidate_routes(
                 content={
                     "code": "mapping_document_authority_error",
                     "message": "研究文件核对发生未预期错误，请重试或反馈。",
-                    "detail": {"error_type": type(exc).__name__},
+                    "detail": {
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc)[:300],
+                    },
                     "project_id": canonical,
                 },
             )

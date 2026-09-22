@@ -161,6 +161,9 @@ _ROLE_ACTIONS: dict[MonitoringRole, frozenset[MonitoringAction]] = {
             MonitoringAction.REVIEW_AI_CANDIDATE,
             MonitoringAction.CHANGE_RISK_DISPOSITION,
             MonitoringAction.DRAFT_QUERY,
+            # V5轮6：来源台账"确认沿用"是医学经理本职（产品UI将该按钮
+            # 呈给该角色）；单用户部署中其同时承担数据管理职责。
+            MonitoringAction.VALIDATE_SOURCE_REVISION,
             MonitoringAction.CREATE_ASSURANCE_TASK,
             MonitoringAction.RECORD_ASSURANCE_EVIDENCE,
             MonitoringAction.REVIEW_ASSURANCE,
