@@ -1,0 +1,260 @@
+{
+  "review_round": "0922V2",
+  "head": "07b6a09c1644c9261e6e3637f4e497bf775c33a1",
+  "status": "specification_not_executed",
+  "note": "以下是开发Agent需实现/执行的产品验收，不是本轮已通过测试。",
+  "cases": [
+    {
+      "id": "0922V2-A01",
+      "title": "冷启动无历史研究",
+      "work_package": "N0-R/N1-R",
+      "scenario": "空隔离runtime启动，导入第一个完整研究，不预置SAR工程。",
+      "expected": "同进程完成setup/facts/publication/result读；不依赖旧目录、不要求重启。",
+      "required_evidence_level": "actual_api_and_browser",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A02",
+      "title": "进程内新增第二研究",
+      "work_package": "N0-R/N1-R",
+      "scenario": "启动后创建第二项目并物化，原项目保持存在。",
+      "expected": "setup/adapter/mode/evidence都解析第二项目，惰性注册不只更新一个字典。",
+      "required_evidence_level": "actual_api",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A03",
+      "title": "同患者号跨研究隔离",
+      "work_package": "N0-R/N1-R",
+      "scenario": "A/B项目同SUBJID、AE/LB值及日期不同，交错调用结果和证据。",
+      "expected": "每个响应及来源只属于授权项目/结果；无first-provider或固定SAR借用。",
+      "required_evidence_level": "actual_api_and_browser",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A04",
+      "title": "旧结果不跟随active",
+      "work_package": "N1-R",
+      "scenario": "先发布A结果，再发布B并更新active；用A token重开。",
+      "expected": "A的finding/事实/来源/计数完全不变；B独立可用。",
+      "required_evidence_level": "actual_api",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A05",
+      "title": "固定binding替换内容",
+      "work_package": "N1-R",
+      "scenario": "保持binding不变替换引用工件内容。",
+      "expected": "read_failed且原因具体；不重算expected以放行。",
+      "required_evidence_level": "actual_module_and_api",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A06",
+      "title": "损坏binding不走legacy",
+      "work_package": "N1-R",
+      "scenario": "存在合法legacy工件，同时将既有binding写成坏JSON/错误形态。",
+      "expected": "明确binding_read_failed，不读legacy、不生成备用发现。",
+      "required_evidence_level": "actual_module_and_api",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A07",
+      "title": "binding目标丢失",
+      "work_package": "N1-R",
+      "scenario": "binding声明工件存在过但现在缺失。",
+      "expected": "read_failed/artifact_missing，不能当作从未有AI分析。",
+      "required_evidence_level": "actual_module_and_api",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A08",
+      "title": "列表与meta同一版本",
+      "work_package": "N1-R",
+      "scenario": "并发更新当前指针，在读取列表与统计间施压。",
+      "expected": "一次响应来自同一冻结对象，hash/IDs/总数/缺口可对账。",
+      "required_evidence_level": "actual_api_concurrency",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A09",
+      "title": "人工决策晋升后可重放",
+      "work_package": "N0-D",
+      "scenario": "机器角色未收敛，合法用户选择→晋升→receipt核验→document resolver→mapping读文档。",
+      "expected": "完整链通过；无需临时SQL/外部POST替代用户流程；决策随receipt冻结。",
+      "required_evidence_level": "actual_module_api_browser",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A10",
+      "title": "历史决策不读latest",
+      "work_package": "N0-D",
+      "scenario": "晋升R1后修改当前选择为R2，再核验R1回执。",
+      "expected": "R1按R1决策验证；篡改R1决策会失败，不读取R2冒充。",
+      "required_evidence_level": "actual_module_and_api",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A11",
+      "title": "非法选择零持久副作用",
+      "work_package": "N0-D",
+      "scenario": "提交unknown candidate/错batch/错project，再无参数resolve。",
+      "expected": "首次受控拒绝且持久状态未变；后续poll不被该坏输入污染。",
+      "required_evidence_level": "actual_api_and_store",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A12",
+      "title": "选择冲突可解释",
+      "work_package": "N0-D",
+      "scenario": "机器已收敛A，用户提交不同合法B；相同选择重复提交。",
+      "expected": "不同选择明确冲突/过期/修订；相同选择幂等；无静默忽略。",
+      "required_evidence_level": "actual_api_and_browser",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A13",
+      "title": "选择身份与并发",
+      "work_package": "N0-D",
+      "scenario": "两个授权请求修改同角色，校验project/attempt/decision version；刷新重启。",
+      "expected": "真实principal审计与CAS成立；无fixed-temp竞态/丢更新；有效状态恢复。",
+      "required_evidence_level": "actual_store_concurrency",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A14",
+      "title": "主文档警告与补充文档",
+      "work_package": "N0-D",
+      "scenario": "primary需内容澄清、supplementary技术/内容可用。",
+      "expected": "返回主项及依赖项状态，不KeyError、不单独晋升补充件；确认后可重放。",
+      "required_evidence_level": "actual_module_and_api",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A15",
+      "title": "内容警告具体可读",
+      "work_package": "N0-D",
+      "scenario": "可覆盖元数据告警与不可覆盖哈希/越权/错研究错误分别输入。",
+      "expected": "前端展示差异、原证据、影响及合法动作；硬错误不被泛化确认；确认绑定检查revision。",
+      "required_evidence_level": "actual_api_and_browser",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A16",
+      "title": "相反趋势与相反时序",
+      "work_package": "N5-M",
+      "scenario": "同来源下ALT升高/降低、给药前/后、不同单位/条件命题。",
+      "expected": "不误标supported/accepted；same_topic与同一判断分开，未决状态有依据。",
+      "required_evidence_level": "actual_analysis_module",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A17",
+      "title": "等级归属与零发现",
+      "work_package": "N5-M",
+      "scenario": "本次3级既往1级与本次1级既往3级；普通分析返回0/1项。",
+      "expected": "不因等级集合重叠而同意；合法零发现不转医学分歧或硬凑候选。",
+      "required_evidence_level": "actual_analysis_and_contract",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A18",
+      "title": "真实公开Finding含导航",
+      "work_package": "N1-R/N4",
+      "scenario": "由实际overview API而非手构DTO读取一人两AE的AE2问题。",
+      "expected": "含稳定finding/事件/来源及验证状态；UI一次定位AE2，不借AE1。",
+      "required_evidence_level": "actual_api_and_browser",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A19",
+      "title": "无AE的实验室来源",
+      "work_package": "N1-R/N4",
+      "scenario": "无AE病例有LB异常和对应原始证据。",
+      "expected": "可访问LB与其时间窗；不构造AE/risk身份作为路由通行证。",
+      "required_evidence_level": "actual_api_and_browser",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A20",
+      "title": "部分锚点和缺口",
+      "work_package": "N1-R/N4",
+      "scenario": "空事件目录、部分evidence_id无法解析、其他项目/旧版本引用。",
+      "expected": "不把缺项忽略后标全bound；每条未绑定理由可见；缺口不因无标题而消失。",
+      "required_evidence_level": "actual_module_and_api",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A21",
+      "title": "观测模型身份保持",
+      "work_package": "N0-R",
+      "scenario": "请求A，观测别名B/缺失/mismatch分别返回；回放及独立核验读取。",
+      "expected": "observed不改写；alias/unknown/mismatch分开；内容hash不充当模型身份验证。",
+      "required_evidence_level": "actual_gateway_repository_replay",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A22",
+      "title": "风险列表与内容完整",
+      "work_package": "N2/N3",
+      "scenario": "含长末尾否定、同文不同side/kind/evidence、800+条合成发现。",
+      "expected": "列表/详情结构清楚且来源可点；完整限定保留；无一屏全展开长claim、无后端截断。",
+      "required_evidence_level": "actual_browser",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A23",
+      "title": "精确导航与返回",
+      "work_package": "N4",
+      "scenario": "过滤/排序/翻页后进入问题→病例→多条来源→后退/刷新/复制链接。",
+      "expected": "同对象定位且返回上下文恢复；跨人快速点击无旧响应混入。",
+      "required_evidence_level": "actual_browser",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A24",
+      "title": "纯查看0模型调用",
+      "work_package": "N2/N3/N4",
+      "scenario": "刷新结果、切人、调整密度、过滤、展开来源、前后退。",
+      "expected": "模型调用计数增量0；Query生成是显式独立动作。",
+      "required_evidence_level": "actual_api_browser_telemetry",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A25",
+      "title": "共享摘要真实执行",
+      "work_package": "N0-R",
+      "scenario": "使用真实build_subject_evidence创建job，走正式current resolver/worker完成。",
+      "expected": "未变源通过；改值/类型/依赖正确失效，禁止仅测试两次辅助函数相等。",
+      "required_evidence_level": "actual_service_repository",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A26",
+      "title": "增量范围与hash成本",
+      "work_package": "N0-R/N5-M/N6",
+      "scenario": "只改一人的一条记录；比较无变更/单病例/全研究。",
+      "expected": "记录实际依赖与执行范围、hash/provider耗时；旧结果不变；不无理由重跑所有人。",
+      "required_evidence_level": "actual_runtime_performance",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A27",
+      "title": "全域与单域覆盖",
+      "work_package": "N5-M",
+      "scenario": "不同EDC语义映射，真实EX/背景EX2/LB/VS；含单域/无AE和筛败病例。",
+      "expected": "按语义而非表名硬编码；每个适用主题可解释covered/not_applicable/unavailable；完整数据仍可查。",
+      "required_evidence_level": "actual_ingestion_analysis",
+      "execution_status": "not_executed_in_this_review"
+    },
+    {
+      "id": "0922V2-A28",
+      "title": "完整用户链与分母对账",
+      "work_package": "N6",
+      "scenario": "合法完整资料从GUI导入到结果，保留旧项目再启动/更新并测第二研究。",
+      "expected": "无需开发者救场；执行/语义/覆盖/独立核验分母分列；历史96失败有差分归因、未验证项明确。",
+      "required_evidence_level": "actual_browser_and_regression",
+      "execution_status": "not_executed_in_this_review"
+    }
+  ]
+}

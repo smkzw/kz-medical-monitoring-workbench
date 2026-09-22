@@ -1,0 +1,73 @@
+{
+  "schema": "mm-route-lock-v1",
+  "captured_at": "2026-09-22T15:20:00+08:00",
+  "source_head": "a7217af080b96896bdc4cbc9317cb139e4386569",
+  "runtime_root": "runs/phase_c_mgk10_authority_v2_20260905/runtime",
+  "configuration": {
+    "provider_registry_revision": 43,
+    "provider_settings_sha256": "c7b0eeaefed0730dd6c8c18a0a6cb6cf56256edba21c964fe97b3801fe0bb4eb",
+    "role_bindings_revision": 25,
+    "role_bindings_sha256": "d04ef78746d6818c8f9a97df519fc126cf99700954fecf8affd79d77ad28cee8"
+  },
+  "active_monitoring_roles": [
+    {
+      "role_id": "medical_monitoring_ai",
+      "profile_id": "medical_monitoring_ai__opencode_go_mimo",
+      "provider": "opencode-go",
+      "requested_model": "mimo-v2.6-flash",
+      "reasoning_effort": "high",
+      "thinking": "enabled",
+      "capability_status": "unverified",
+      "completed_with_matching_observed_model": 9,
+      "failed_without_observed_model": 1
+    },
+    {
+      "role_id": "medical_monitoring_verifier_ai",
+      "profile_id": "medical_monitoring_verifier_ai__opencode_go_dsf",
+      "provider": "opencode-go",
+      "requested_model": "deepseek-flash",
+      "reasoning_effort": "max",
+      "thinking": "disabled",
+      "capability_status": "unverified",
+      "completed_with_matching_observed_model": 10,
+      "historical_completed_without_observed_model": 420,
+      "historical_failed_without_observed_model": 684
+    }
+  ],
+  "supporting_roles": [
+    {
+      "role_id": "independent_ai",
+      "profile_id": "independent_ai__zhipu_coding_plan_glm_flash",
+      "provider": "zhipu-coding-plan",
+      "requested_model": "glm-5.3-flash",
+      "reasoning_effort": "max",
+      "capability_status": "unverified"
+    },
+    {
+      "role_id": "ocr",
+      "profile_id": "ocr_paddle_official",
+      "requested_model": "PaddleOCR-VL-1.6",
+      "capability_status": "specialized_whitelisted"
+    }
+  ],
+  "runtime_observations": {
+    "api_8910": "ready",
+    "api_build_id": "api-bc22eb0c4096b565",
+    "frontend_5177": "listener_present_but_http_502",
+    "port_8911": "stopped",
+    "local_omlx_process": "preexisting_not_invoked_by_W00",
+    "nonterminal_monitoring_jobs": 0,
+    "paused_projects": ["proj_user_caecb8d34865"],
+    "queue_mutations_by_W00": 0
+  },
+  "fallback_policy": {
+    "automatic_local_qwen_allowed": false,
+    "local_fallback_used_by_W00": false,
+    "notes": "Profile presence or a pre-existing local server is not evidence that a fallback was selected. W00 made no model calls."
+  },
+  "limits": [
+    "Configured and runnable do not prove capability or identity.",
+    "Historical rows without observed_response_model remain unknown and are not re-labelled.",
+    "The current live monitoring pair differs from the earlier MiniMax plus GLM product aspiration; this lock records current truth and does not approve a route change."
+  ]
+}

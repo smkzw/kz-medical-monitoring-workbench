@@ -1,0 +1,9 @@
+{
+  "repo_root": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench",
+  "local_head_before_review": "a7217af080b96896bdc4cbc9317cb139e4386569",
+  "expert_zip": "/Users/smkzw/Downloads/kz_medical_monitoring_review_0922V2_agent_pack_07b6a09.zip",
+  "expert_zip_sha256": "07c69b4cdf3ac98166951a17d2e0b5ec5853cc27d11350dd413c31092cf2ef2b",
+  "expert_integrity_checks_passed": true,
+  "status": "review_and_planning_complete_product_not_implemented",
+  "github_main_verified": "a7217af080b96896bdc4cbc9317cb139e4386569"
+}

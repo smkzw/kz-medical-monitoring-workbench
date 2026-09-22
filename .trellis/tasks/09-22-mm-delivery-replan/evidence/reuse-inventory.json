@@ -1,0 +1,40 @@
+{
+  "schema": "mm-reuse-inventory-v1",
+  "captured_at": "2026-09-22T15:20:00+08:00",
+  "source_head": "a7217af080b96896bdc4cbc9317cb139e4386569",
+  "reusable_components": [
+    {"component":"project source manifests","path":"services/api/app/project_source_manifest.py","scope":"five canonical source inventories and aliases","status":"reuse_with_identity_fix"},
+    {"component":"durable monitoring jobs","path":"services/api/app/ai_task_runner.py","scope":"requested and observed model identity, attempts, pause state","status":"reuse_with_versioned_receipts"},
+    {"component":"batch repository","path":"services/api/app/monitoring_batch_repository.py","scope":"sources, frozen rows, mappings and locators","status":"reuse"},
+    {"component":"facts publication provider","path":"packages/medical_monitoring/projections/facts_publication.py","scope":"facts-backed domains and source locators","status":"repair_in_W01"},
+    {"component":"facts mode output provider","path":"packages/medical_monitoring/api/r7_product/facts_mode_outputs.py","scope":"findings binding and public rows/meta","status":"repair_in_W01"},
+    {"component":"publication registry and routes","path":"packages/medical_monitoring/api/r7_product/publication_routes.py","scope":"result publication and token reads","status":"repair_in_W01"},
+    {"component":"document authority and mapping pipeline","path":"services/api/app/monitoring_document_authority.py","scope":"role decisions and mapping admission","status":"reuse_then_repair_in_W02"},
+    {"component":"finite evidence tool loop","path":"services/api/app/monitoring_ai_evidence_tools.py","scope":"frozen Excel and document reads","status":"reuse_then_expand_in_W03"},
+    {"component":"existing UI workspaces","path":"frontend/src/features","scope":"import, monitoring workspace and evidence surfaces","status":"reuse_then_unify_in_W05"}
+  ],
+  "historical_evidence": [
+    {"item":"V5 fixes and Round 6 handoff","path":"scripts/test_round6/HANDOFF_ROUND6.md","use":"engineering history only; not current acceptance"},
+    {"item":"v3 implementation history","path":".trellis/tasks/09-06-mm-product-rebaseline/implement.md","use":"completed defect evidence and unresolved objectives"},
+    {"item":"facts digest contract tests","path":"tests/test_facts_source_digest_contract.py","use":"adjacent W01 regression"},
+    {"item":"facts mode tests","path":"tests/test_facts_mode_outputs_n1.py","use":"adjacent W01 regression"},
+    {"item":"response shape tests","path":"tests/test_monitoring_response_shape.py","use":"public contract regression"}
+  ],
+  "non_reusable_as_truth": [
+    "The 804-row historical publication is not a new clinical truth set.",
+    "Synthetic publications and demo providers cannot fill missing real facts.",
+    "Jobs lacking observed_response_model cannot be re-labelled from requested_model.",
+    "Old successful jobs are reusable only when project, source, mapping, knowledge, prompt, strategy and model identities all match."
+  ],
+  "temporary_evidence": {
+    "required_tmp_files_found": [],
+    "note": "No uniquely necessary W00 evidence was found under /tmp. Historical handoffs mention temporary conference reports; absence is retained as an evidence limitation rather than reconstructed."
+  },
+  "open_failure_clusters": [
+    "Result context can re-read active state and cross project/version boundaries.",
+    "Malformed findings bindings may fall back instead of failing closed.",
+    "GET paths may materialize or rebuild manifests.",
+    "Frontend 5177 currently returns HTTP 502 despite a listening Vite process.",
+    "Five canonical projects have source manifests but no canonical frozen runtime batches or compatible double snapshots."
+  ]
+}

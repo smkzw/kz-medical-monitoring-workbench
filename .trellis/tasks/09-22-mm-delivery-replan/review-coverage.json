@@ -1,0 +1,1035 @@
+{
+  "head": "a7217af080b96896bdc4cbc9317cb139e4386569",
+  "comparison_base": "db5543e",
+  "changed_paths": [
+    {
+      "path": ".gitignore",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": ".trellis/spec/medical-monitoring-system-design-v2.md",
+      "git_change": "M",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": ".trellis/tasks/09-06-mm-product-rebaseline/goal-prompt.md",
+      "git_change": "M",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": ".trellis/tasks/09-06-mm-product-rebaseline/implement.md",
+      "git_change": "M",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": ".trellis/tasks/09-06-mm-product-rebaseline/task.json",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "\".trellis/workspace/\\345\\256\\213\\346\\227\\273\\346\\201\\272/MM_TAKEOVER_REVIEW_20260911.md\"",
+      "git_change": "A",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "\".trellis/workspace/\\345\\256\\213\\346\\227\\273\\346\\201\\272/journal-1.md\"",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "HANDOFF.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/index.html",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/public/kz/assets/kz-charts.js",
+      "git_change": "A",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/public/kz/assets/kz-interact.css",
+      "git_change": "A",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/public/kz/assets/kz-interact.js",
+      "git_change": "A",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/public/kz/assets/logo_bot.svg",
+      "git_change": "A",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/public/kz/vendor/echarts.min.js",
+      "git_change": "A",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/App.jsx",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringAdmissionWizard.jsx",
+      "git_change": "M",
+      "review_method": "critical_definitions_and_cross_layer_consumers",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringAssurancePanel.css",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringAssurancePanel.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringAssuranceRemediation.css",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringAssuranceRemediation.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringBatchPanel.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringDailyAiCandidates.css",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringDailyAiCandidates.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringDailyAiEvidence.css",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringDailyAiEvidence.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringDailyDiffSummary.css",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringDailyDiffSummary.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringDailyRunEvidence.css",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringDailyRunEvidence.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringDailyRunPanel.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringFieldMappingPanel.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringProductLoop.jsx",
+      "git_change": "M",
+      "review_method": "critical_definitions_and_cross_layer_consumers",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringProtocolPreparationPanel.css",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringProtocolPreparationPanel.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringRiskEvidenceContext.css",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringRiskEvidenceContext.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringRiskHistoryTrend.css",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringRiskHistoryTrend.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringRuleReleasePanel.css",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringRuleReleasePanel.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringScopeSummary.css",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringScopeSummary.jsx",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringWorkspace.jsx",
+      "git_change": "M",
+      "review_method": "critical_definitions_and_cross_layer_consumers",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/domainIconCatalog.mjs",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringAdmissionWizardRender.test.mjs",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringAssurance.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringAssuranceApi.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringAssuranceRemediation.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringAssuranceRemediation.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringAssuranceRollup.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringAssuranceView.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringDailyAiCandidates.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringDailyAiCandidates.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringDailyAiEvidence.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringDailyAiEvidence.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringDailyDiffView.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringDailyRunEvidence.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringDailyRunEvidence.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringDailyRunStartGate.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringDailyRunView.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringJourneyDrawerRender.test.mjs",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringKzChart.jsx",
+      "git_change": "A",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringKzTokens.css",
+      "git_change": "A",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringProductApi.mjs",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringProjectSwitchIsolation.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringProtocolPreparation.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringRiskEvidenceContext.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringRiskEvidenceContext.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringRiskHistoryTrend.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringRiskHistoryTrend.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringRuleRelease.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringRuleReleaseView.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringScopeSummary.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringScopeSummary.test.mjs",
+      "git_change": "D",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringSubjectFlowRender.test.mjs",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringWorkspace.css",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringWorkspaceApi.mjs",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/features/medical-monitoring/medicalMonitoringWorkspaceRouteState.mjs",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "frontend/src/styles.css",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/contracts/workbench_contracts/models.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/admission/document_authority.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/admission/evidence_tool_contract.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/admission/mapping_confirmation.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/admission/mapping_gate.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/admission/mapping_pipeline.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/analysis/__init__.py",
+      "git_change": "A",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/analysis/ae_mh_cross_analysis.py",
+      "git_change": "A",
+      "review_method": "critical_definitions_and_cross_layer_consumers",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/analysis/listing_layout.py",
+      "git_change": "A",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/analysis/protocol_profile.py",
+      "git_change": "A",
+      "review_method": "critical_definitions_and_cross_layer_consumers",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/api/r7_product/facts_mode_outputs.py",
+      "git_change": "A",
+      "review_method": "critical_definitions_and_cross_layer_consumers",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/api/r7_product/facts_publication_adapter.py",
+      "git_change": "A",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/api/r7_product/mapping_candidate_routes.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/api/r7_product/publication_providers.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/api/r7_product/publication_routes.py",
+      "git_change": "M",
+      "review_method": "critical_definitions_and_cross_layer_consumers",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/intelligence/structure_profile.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/projections/facts_publication.py",
+      "git_change": "A",
+      "review_method": "critical_definitions_and_cross_layer_consumers",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/projections/product_adapter.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/projections/product_fixtures_density.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/projections/product_projection_helpers.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/projections/product_types.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/projections/publication/r5_publication_authority.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/runtime/background_recovery_support.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "packages/medical_monitoring/runtime/runtime_progress.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/dualvlm_finalize.py",
+      "git_change": "A",
+      "review_method": "entrypoints_and_persistence_structure",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/dualvlm_retry_failed.py",
+      "git_change": "A",
+      "review_method": "entrypoints_and_persistence_structure",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/dualvlm_watchdog.py",
+      "git_change": "A",
+      "review_method": "entrypoints_and_persistence_structure",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/fv_alias_sweep.py",
+      "git_change": "A",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/generate_test_listing.py",
+      "git_change": "A",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round1/HANDOFF.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round1/round1R_fix_plan.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round1/tester_A_muse_RUX_prelock.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round1/tester_B_grok_CSU_daily.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round1/tester_C_glm_PSO_postlock.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round4/HANDOFF_ROUND4.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round4/report_A_grok_RUX.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round4/report_B_cursor_CSU.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round4/report_C_glm_PSO.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round4/round4_fix_plan.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round4/tester_A_grok_RUX_prelock.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round4/tester_B_cursor_CSU_daily.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round4/tester_C_glm_PSO_postlock.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round5/tester_A_grok_CSU_prelock.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round5/tester_B_cursor_PSO_daily.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round5/tester_C_glm_RUX_postlock.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round6/HANDOFF_ROUND6.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round6/consultation_prompt.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round6/report_A_grok_CSU_F7.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round6/report_B_cursor_RUX_daily.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round6/report_C_glm_PSO_adversarial.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round6/tester_A_grok_CSU_F7.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round6/tester_B_cursor_RUX_daily.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "scripts/test_round6/tester_C_glm_PSO_adversarial.md",
+      "git_change": "A",
+      "review_method": "document_inventory; key handoff and authority texts read",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/ai_gateway.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/ai_role_runtime_settings.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/ai_runtime_settings.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/main.py",
+      "git_change": "M",
+      "review_method": "critical_definitions_and_cross_layer_consumers",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/medical_monitoring_r7_product_router.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/monitoring_ai_contracts.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/monitoring_ai_repository.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/monitoring_ai_service.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/monitoring_document_authority_jobs.py",
+      "git_change": "M",
+      "review_method": "critical_definitions_and_cross_layer_consumers",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/monitoring_document_authority_workflow.py",
+      "git_change": "M",
+      "review_method": "critical_definitions_and_cross_layer_consumers",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/monitoring_identity_authorization.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/monitoring_mapping_draft_repository.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/monitoring_mapping_semantic_quality.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/monitoring_visual_tool_bridge.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/monitoring_visual_transport.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/project_source_manifest.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "services/api/app/user_project_store.py",
+      "git_change": "M",
+      "review_method": "change_inventory_only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_aemh_dualvlm_contracts.py",
+      "git_change": "A",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_ai_gateway.py",
+      "git_change": "M",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_ai_route_freeze.py",
+      "git_change": "M",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_facts_mode_outputs_n1.py",
+      "git_change": "A",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_facts_publication_event_time.py",
+      "git_change": "A",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_facts_publication_manifest.py",
+      "git_change": "A",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_facts_source_digest_contract.py",
+      "git_change": "A",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_mm_c3_dual_mapping_cohort.py",
+      "git_change": "M",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_mm_c3_mapping_bridge.py",
+      "git_change": "M",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_monitoring_ai_patch_repair.py",
+      "git_change": "A",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_monitoring_ai_repository.py",
+      "git_change": "M",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_monitoring_ai_service.py",
+      "git_change": "M",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_monitoring_ai_startup_recovery.py",
+      "git_change": "M",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_monitoring_document_authority_jobs.py",
+      "git_change": "M",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_monitoring_response_shape.py",
+      "git_change": "M",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_monitoring_visual_transport.py",
+      "git_change": "M",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_omlx_transport_gate_boundary.py",
+      "git_change": "M",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    },
+    {
+      "path": "tests/test_user_project_archive.py",
+      "git_change": "A",
+      "review_method": "test_change_inventory; selected nine-file regression only",
+      "not_claimed": "whole-file line-by-line or live product acceptance"
+    }
+  ],
+  "additional_deep_files": [
+    "frontend/src/features/medical-monitoring/MedicalMonitoringAdmissionWizard.jsx",
+    "frontend/src/features/medical-monitoring/MedicalMonitoringProductLoop.jsx",
+    "frontend/src/features/medical-monitoring/MedicalMonitoringWorkspace.jsx",
+    "packages/medical_monitoring/analysis/ae_mh_cross_analysis.py",
+    "packages/medical_monitoring/analysis/protocol_profile.py",
+    "packages/medical_monitoring/api/r7_product/facts_mode_outputs.py",
+    "packages/medical_monitoring/api/r7_product/publication_routes.py",
+    "packages/medical_monitoring/projections/facts_publication.py",
+    "services/api/app/main.py",
+    "services/api/app/monitoring_document_authority_jobs.py",
+    "services/api/app/monitoring_document_authority_workflow.py",
+    "services/api/app/monitoring_document_evidence.py",
+    "services/api/app/source_intake.py"
+  ],
+  "structural_review": [
+    "packages/medical_monitoring/reports/mode_output_orchestration.py",
+    "packages/medical_monitoring/reports/report_review.py",
+    "packages/medical_monitoring/api/r7_product/continuity_service.py",
+    "services/api/app/monitoring_ai_worker.py"
+  ],
+  "limitations": [
+    "No complete repository-wide line-by-line audit",
+    "No current browser E2E or real model clinical run",
+    "Legacy failure count not rerun",
+    "Runtime configuration route not live-revalidated"
+  ]
+}

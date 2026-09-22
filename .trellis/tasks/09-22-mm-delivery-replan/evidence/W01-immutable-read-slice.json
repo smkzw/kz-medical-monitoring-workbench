@@ -1,0 +1,44 @@
+{
+  "schema": "mm-w01-evidence-v1",
+  "recorded_at": "2026-09-22T15:47:18+08:00",
+  "state": "partial_verified",
+  "source_head": "a7217af080b96896bdc4cbc9317cb139e4386569",
+  "scope": [
+    "materialization writes active and immutable versioned facts manifests",
+    "facts reads bind project and requested snapshot without GET writes",
+    "result context reads the publication-bound R6 artifact set",
+    "public findings rows and meta come from one immutable output artifact",
+    "main composition uses strict per-project providers"
+  ],
+  "verification": {
+    "py_compile": "passed",
+    "git_diff_check": "passed",
+    "pytest": {
+      "result": "134 passed",
+      "warnings": 99,
+      "command_scope": [
+        "test_mm_c3_fact_materialization.py",
+        "test_facts_publication_manifest.py",
+        "test_facts_publication_event_time.py",
+        "test_facts_mode_outputs_n1.py",
+        "test_facts_source_digest_contract.py",
+        "test_medical_monitoring_r7_product_router.py"
+      ]
+    },
+    "real_mg_read_only_rebuild": {
+      "subjects": 365,
+      "events": 145616,
+      "sources": 148193,
+      "stored_and_rebuilt_r5_digest": "ce91b07575316c1c9800819423336ec1fdebd527acefda7a6cc22f2996d4e265",
+      "manifest_sha256_before_after": "3d905b57c42ad3dad1c4850391b488b6ef898e907d98c4bab45b8203258c9f3b"
+    }
+  },
+  "not_yet_accepted": [
+    "isolated cold-start actual API and browser",
+    "same subject id across two projects through actual application factory",
+    "historical token after active snapshot switch through public API",
+    "concurrent active-pointer pressure",
+    "formal build_subject_evidence worker invalidation",
+    "browser source-byte acceptance"
+  ]
+}

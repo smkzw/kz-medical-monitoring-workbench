@@ -1,0 +1,13 @@
+{
+  "id": "mm-delivery-replan",
+  "name": "mm-delivery-replan",
+  "title": "0922医学监查全面复审与连续交付规划",
+  "status": "completed",
+  "priority": "P0",
+  "creator": "宋旻恺",
+  "assignee": "宋旻恺",
+  "createdAt": "2026-09-22",
+  "completedAt": "2026-09-22",
+  "children": [],
+  "notes": "Review and multi-file execution pack only; current goal remains paused. Product W00-W07 ledger is status.json. .trellis ignored by Git; distribute portable zip. No product source or runtime mutation."
+}

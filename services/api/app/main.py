@@ -3825,7 +3825,9 @@ if _r7_facts_root.is_dir():
         _project_dir_name = _facts_workspace.name
         _r7_facts_providers_by_project[_project_dir_name] = (
             _FactsPublicationProvider(
-                _facts_workspace, project_label=_project_dir_name
+                _facts_workspace,
+                project_ref=_project_dir_name,
+                project_label=_project_dir_name,
             )
         )
 
@@ -3842,7 +3844,9 @@ def _r7_facts_provider_for(project_id: str):
         return provider
     workspace = _r7_facts_root / key
     if (workspace / "runtime" / "artifacts").is_dir():
-        provider = _FactsPublicationProvider(workspace, project_label=key)
+        provider = _FactsPublicationProvider(
+            workspace, project_ref=key, project_label=key
+        )
         _r7_facts_providers_by_project[key] = provider
     return provider
 
@@ -3963,6 +3967,7 @@ _r7_facts_mode_output_provider = None
 _r7_facts_publication_adapter = None
 if _r7_facts_providers_by_project:
     from packages.medical_monitoring.api.r7_product.facts_mode_outputs import (  # noqa: E402
+        FactsModeOutputDispatcher as _FactsModeOutputDispatcher,
         FactsModeOutputProvider as _FactsModeOutputProvider,
     )
     from packages.medical_monitoring.api.r7_product.facts_publication_adapter import (  # noqa: E402
@@ -3977,16 +3982,16 @@ if _r7_facts_providers_by_project:
     _r7_facts_publication_adapter = _FactsProviderDispatcher(
         _r7_facts_adapters_by_project
     )
-    def _facts_domains_loader() -> dict:
-        # 单facts lane：取唯一注册的facts publication provider加载domains
-        # （供finding锚点解析：evidence_id→表/行→事件/来源）。
-        for provider in _r7_facts_providers_by_project.values():
-            return provider._load_domains()
-        return {}
-
-    _r7_facts_mode_output_provider = _FactsModeOutputProvider(
-        _FACTS_WORKSPACE_DIR / "runtime" / "artifacts",
-        domains_loader=_facts_domains_loader,
+    _r7_facts_mode_outputs_by_project = {
+        project: _FactsModeOutputProvider(
+            _r7_facts_root / project / "runtime" / "artifacts",
+            domains_loader=provider._load_domains,
+            project_ref=project,
+        )
+        for project, provider in _r7_facts_providers_by_project.items()
+    }
+    _r7_facts_mode_output_provider = _FactsModeOutputDispatcher(
+        _r7_facts_mode_outputs_by_project
     )
 
 
@@ -4131,7 +4136,7 @@ app.include_router(
         ),
         r6_output_provider=(
             _r7_facts_mode_output_provider
-            if _r7_facts_publication_provider is not None
+            if _r7_facts_mode_output_provider is not None
             else _r7_synthetic_mode_output_provider
         ),
         admission_pipeline=DataAdmissionPipeline(

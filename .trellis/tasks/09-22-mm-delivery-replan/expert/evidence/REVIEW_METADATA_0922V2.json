@@ -1,0 +1,30 @@
+{
+  "review_round": "0922V2",
+  "repository": "smkzw/kz-medical-monitoring-workbench",
+  "previous_baseline": "9b0e199f05dcb9cd9ee3bfbd32b06808c181136b",
+  "reviewed_head": "07b6a09c1644c9261e6e3637f4e497bf775c33a1",
+  "head_commit_utc": "2026-09-22T05:35:04Z",
+  "commits_ahead": 16,
+  "head_rechecked_unchanged": true,
+  "pack_created_at_utc": "2026-09-22T05:55:18.466519+00:00",
+  "review_type": "incremental diff and selected cross-layer code review",
+  "latest_handoff": "scripts/test_round6/HANDOFF_ROUND6.md",
+  "root_handoff_current": false,
+  "isolated_probes": {
+    "total": 18,
+    "local_fix_controls": 8,
+    "remaining_problem_demonstrations": 10
+  },
+  "product_acceptance_cases": 28,
+  "product_acceptance_executed": false,
+  "not_executed": [
+    "full repository test suite",
+    "actual imported product module tests",
+    "HTTP endpoints",
+    "browser E2E",
+    "live model jobs",
+    "production runtime mutations"
+  ],
+  "runtime_limitations": "GitHub read connector used. Container could not download/clone repository because DNS/network unavailable. Probes use explicitly transcribed selected logic, not an imported checkout.",
+  "safety": "No clinical source data, credentials, full repository or font files included."
+}
