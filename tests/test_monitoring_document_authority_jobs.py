@@ -2418,3 +2418,64 @@ def test_user_role_selection_overrides_unresolved_role() -> None:
             pass
         else:
             raise AssertionError("invalid selection must fail closed")
+
+
+def test_user_selections_persist_and_reload(tmp_path) -> None:
+    """V5-09：裁决落盘后，刷新/重启/无参数resolve仍读取同一裁决。"""
+
+    import json as _json
+    from services.api.app.monitoring_document_authority_workflow import (
+        MonitoringDocumentAuthorityWorkflow,
+    )
+
+    workflow = object.__new__(MonitoringDocumentAuthorityWorkflow)
+    workspace = tmp_path / "ws"
+    batch_id = "mmbatch_" + "b" * 24
+    def _core(items):
+        return sorted(
+            (item["role"], item["candidate_id"]) for item in items
+        )
+
+    first = workflow._effective_user_selections(
+        project_id="p1",
+        workspace_dir=workspace,
+        batch_id=batch_id,
+        user_role_selections=[{"role": "protocol", "candidate_id": "mmcandidate_a"}],
+    )
+    # 落盘会补actor/decided_at审计字段；核心语义按(role, candidate_id)比较
+    assert _core(first) == [("protocol", "mmcandidate_a")]
+    # 幂等重发同值：落盘文件不变语义，读取一致
+    again = workflow._effective_user_selections(
+        project_id="p1",
+        workspace_dir=workspace,
+        batch_id=batch_id,
+        user_role_selections=[{"role": "protocol", "candidate_id": "mmcandidate_a"}],
+    )
+    assert _core(again) == _core(first)
+    # 无参数resolve（刷新/重启场景）：仍读到已保存裁决
+    reloaded = workflow._effective_user_selections(
+        project_id="p1",
+        workspace_dir=workspace,
+        batch_id=batch_id,
+        user_role_selections=(),
+    )
+    assert _core(reloaded) == _core(first)
+    # 同角色修订覆盖，另一角色新增
+    revised = workflow._effective_user_selections(
+        project_id="p1",
+        workspace_dir=workspace,
+        batch_id=batch_id,
+        user_role_selections=[
+            {"role": "protocol", "candidate_id": "mmcandidate_b"},
+            {"role": "sap", "candidate_id": ""},
+        ],
+    )
+    by_role = {item["role"]: item for item in revised}
+    assert by_role["protocol"]["candidate_id"] == "mmcandidate_b"
+    assert by_role["sap"]["candidate_id"] == ""
+    on_disk = _json.loads(
+        (workflow._selections_path(workspace, batch_id)).read_text(encoding="utf-8")
+    )
+    assert on_disk["schema_version"] == "monitoring-document-authority-user-selections-v1"
+    assert on_disk["project_id"] == "p1"
+    assert len(on_disk["selections"]) == 2

@@ -108,6 +108,14 @@ class MonitoringDocumentAuthorityWorkflow:
     ) -> dict[str, Any]:
         candidate_root = self._candidate_root(workspace_dir)
         batch = self._load_batch(candidate_root, batch_id)
+        # V5-09：合并持久化裁决（文件中已有）与本次显式提交（落盘），
+        # 之后所有阶段统一消费有效集——刷新/重启/无参数resolve不丢裁决。
+        user_role_selections = self._effective_user_selections(
+            project_id=project_id,
+            workspace_dir=workspace_dir,
+            batch_id=batch_id,
+            user_role_selections=user_role_selections,
+        )
         primary_job = self._job(
             project_id,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
@@ -343,6 +351,108 @@ class MonitoringDocumentAuthorityWorkflow:
     @staticmethod
     def _candidate_root(workspace_dir: Path) -> Path:
         return Path(workspace_dir) / "document_authority_candidates"
+
+    _USER_SELECTIONS_SCHEMA = "monitoring-document-authority-user-selections-v1"
+
+    @classmethod
+    def _selections_path(cls, workspace_dir: Path, batch_id: str) -> Path:
+        return (
+            cls._candidate_root(workspace_dir)
+            / "user_selections"
+            / f"{batch_id}.json"
+        )
+
+    @classmethod
+    def _load_user_selections(
+        cls, workspace_dir: Path, batch_id: str
+    ) -> list[dict[str, Any]]:
+        """V5-09：读取已持久化的用户裁决（刷新/重启/无参数resolve均生效）。"""
+
+        try:
+            value = json.loads(
+                cls._selections_path(workspace_dir, batch_id).read_text(
+                    encoding="utf-8"
+                )
+            )
+        except (OSError, ValueError):
+            return []
+        if (
+            not isinstance(value, dict)
+            or value.get("schema_version") != cls._USER_SELECTIONS_SCHEMA
+            or value.get("batch_id") != batch_id
+        ):
+            return []
+        return [
+            dict(item)
+            for item in value.get("selections", ())
+            if isinstance(item, dict) and str(item.get("role", "")).strip()
+        ]
+
+    @classmethod
+    def _save_user_selections(
+        cls,
+        workspace_dir: Path,
+        batch_id: str,
+        project_id: str,
+        selections: list[dict[str, Any]],
+    ) -> None:
+        """V5-09：按角色合并持久化（同角色新裁决覆盖旧值，幂等可重发）。"""
+
+        if not selections:
+            return
+        path = cls._selections_path(workspace_dir, batch_id)
+        merged = {
+            str(item["role"]): dict(item)
+            for item in cls._load_user_selections(workspace_dir, batch_id)
+        }
+        from datetime import datetime as _datetime  # noqa: PLC0415
+
+        now = _datetime.now().isoformat()
+        for item in selections:
+            record = dict(item)
+            record.setdefault("actor", "medical_manager")
+            record["decided_at"] = now
+            merged[str(item["role"])] = record
+        payload = {
+            "schema_version": cls._USER_SELECTIONS_SCHEMA,
+            "batch_id": batch_id,
+            "project_id": project_id,
+            "selections": sorted(
+                merged.values(), key=lambda item: str(item["role"])
+            ),
+            "updated_at": now,
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8"
+        )
+        temporary.replace(path)
+
+    def _effective_user_selections(
+        self,
+        *,
+        project_id: str,
+        workspace_dir: Path,
+        batch_id: str,
+        user_role_selections: Any,
+    ) -> list[dict[str, Any]]:
+        persisted = self._load_user_selections(workspace_dir, batch_id)
+        merged: dict[str, dict[str, Any]] = {
+            str(item["role"]): dict(item) for item in persisted
+        }
+        incoming = [
+            dict(item)
+            for item in (user_role_selections or ())
+            if isinstance(item, dict) and str(item.get("role", "")).strip()
+        ]
+        if incoming:
+            for item in incoming:
+                merged[str(item["role"])] = item
+            self._save_user_selections(
+                workspace_dir, batch_id, project_id, incoming
+            )
+        return list(merged.values())
 
     @staticmethod
     def _input_revision(
