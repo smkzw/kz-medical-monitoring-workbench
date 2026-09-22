@@ -1,11 +1,11 @@
 {
   "schema": "mm-delivery-status-v1",
-  "updated_at": "2026-09-22T16:43:14+08:00",
+  "updated_at": "2026-09-22T17:25:35+08:00",
   "planning_status": "complete",
   "product_status": "not_delivered",
-  "goal_status": "active",
-  "source_head": "02aecf956c98961f89d751249bb0b8586572cd2f",
-  "next_work_package": "W01",
+  "goal_status": "paused",
+  "source_head": "4857ce3",
+  "next_work_package": "W02",
   "work_packages": [
     {
       "id": "W00",
@@ -35,8 +35,10 @@
       "dependencies": [
         "W01"
       ],
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        "evidence/W02-decision-and-intake-slice.json"
+      ]
     },
     {
       "id": "W03",
@@ -163,45 +165,57 @@
     },
     {
       "id": "0922V2-A10",
-      "status": "not_executed",
-      "head": null,
-      "evidence": [],
-      "reason": "Current review probes are not the specified complete product acceptance."
+      "status": "partial_verified",
+      "head": "4857ce3",
+      "evidence": [
+        "evidence/W02-decision-and-intake-slice.json"
+      ],
+      "reason": "Frozen-decision module replay and tamper rejection pass; the complete actual API evidence level is still pending."
     },
     {
       "id": "0922V2-A11",
-      "status": "not_executed",
-      "head": null,
-      "evidence": [],
-      "reason": "Current review probes are not the specified complete product acceptance."
+      "status": "partial_verified",
+      "head": "4857ce3",
+      "evidence": [
+        "evidence/W02-decision-and-intake-slice.json"
+      ],
+      "reason": "Selection scope validation occurs before persistence and focused tests pass; the complete wrong-project/wrong-batch actual-store matrix is still pending."
     },
     {
       "id": "0922V2-A12",
-      "status": "not_executed",
-      "head": null,
-      "evidence": [],
-      "reason": "Current review probes are not the specified complete product acceptance."
+      "status": "partial_verified",
+      "head": "4857ce3",
+      "evidence": [
+        "evidence/W02-decision-and-intake-slice.json"
+      ],
+      "reason": "Same-choice idempotency and stale divergent CAS conflict pass; actual browser conflict presentation is still pending."
     },
     {
       "id": "0922V2-A13",
-      "status": "not_executed",
-      "head": null,
-      "evidence": [],
-      "reason": "Current review probes are not the specified complete product acceptance."
+      "status": "partial_verified",
+      "head": "4857ce3",
+      "evidence": [
+        "evidence/W02-decision-and-intake-slice.json"
+      ],
+      "reason": "Authorized principal propagation, decision versioning, concurrent writer serialization and restart reload pass; full actual API concurrency evidence remains."
     },
     {
       "id": "0922V2-A14",
-      "status": "not_executed",
-      "head": null,
-      "evidence": [],
-      "reason": "Current review probes are not the specified complete product acceptance."
+      "status": "partial_verified",
+      "head": "4857ce3",
+      "evidence": [
+        "evidence/W02-decision-and-intake-slice.json"
+      ],
+      "reason": "Composite main/supplementary module tests and actionable content checks pass; actual API replay remains."
     },
     {
       "id": "0922V2-A15",
-      "status": "not_executed",
-      "head": null,
-      "evidence": [],
-      "reason": "Current review probes are not the specified complete product acceptance."
+      "status": "partial_verified",
+      "head": "4857ce3",
+      "evidence": [
+        "evidence/W02-decision-and-intake-slice.json"
+      ],
+      "reason": "Frontend and backend contracts distinguish actionable overridable differences from hard replacement cases; a real browser warning fixture remains."
     },
     {
       "id": "0922V2-A16",
@@ -316,10 +330,12 @@
     },
     {
       "id": "D03",
-      "status": "not_executed",
-      "head": null,
-      "evidence": [],
-      "reason": "Current review probes are not the specified complete product acceptance."
+      "status": "partial_verified",
+      "head": "4857ce3",
+      "evidence": [
+        "evidence/W02-decision-and-intake-slice.json"
+      ],
+      "reason": "The real MG 62-table import resumes after backend restart and defaults to a compact collapsed summary; the full document-to-mapping-to-facts GUI flow remains."
     },
     {
       "id": "D04",
@@ -539,5 +555,5 @@
       "reason": "Current review probes are not the specified complete product acceptance."
     }
   ],
-  "next_action": "Continue W01 with an isolated immutable published-result browser fixture: complete A01 result read, A03 same-SUBJID cross-project isolation, and D05 exact source-byte/version drilldown without invoking or substituting any model; then close W01 only if all remaining module/API negative cases are evidenced."
+  "next_action": "After resume, verify the approved remote MiniMax primary and GLM blind-review routes without enabling MTPLX; then execute one isolated real document-to-mapping cycle, finish A09/A12/A15/D02/D03, and only then proceed to facts. Keep 8911 stopped."
 }

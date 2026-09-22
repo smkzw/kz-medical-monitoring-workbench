@@ -1,0 +1,74 @@
+{
+  "schema": "mm-w02-evidence-v1",
+  "recorded_at": "2026-09-22T17:25:35+08:00",
+  "state": "partial_verified",
+  "source_head": "4857ce3",
+  "scope": [
+    "immutable versioned user document decisions with real principal and batch binding",
+    "promotion receipts replay the exact frozen decision instead of latest state",
+    "content differences expose expected value, observed value, evidence location and legal action",
+    "request generations prevent stale import, document, mapping and facts responses from overwriting current state",
+    "the real 62-table MG import renders a compact Chinese review surface after backend restart"
+  ],
+  "verification": {
+    "backend_grouped_pytest": {
+      "result": "120 passed",
+      "warnings": 49,
+      "command_scope": [
+        "test_monitoring_document_authority_jobs.py",
+        "test_mm_c3_document_evidence.py",
+        "test_medical_monitoring_r7_data_admission.py",
+        "test_source_content_validation.py"
+      ]
+    },
+    "frontend_grouped_tests": {
+      "result": "411 passed",
+      "suites": {
+        "wizard_state": 73,
+        "wizard_render": 163,
+        "admission_integration": 48,
+        "product_api": 127
+      }
+    },
+    "frontend_build": "passed; existing chunk-size warning remains",
+    "py_compile": "passed",
+    "git_diff_check": "passed",
+    "browser_restart_review": {
+      "runtime": "/tmp/mm-w01-browser-runtime-20260922-v2",
+      "project_id": "proj_user_b6f785a59868",
+      "attempt_id": "stg-a45f1a60278a4752b28eabde4f5b4676",
+      "files": 1,
+      "tables": 62,
+      "rows": 148788,
+      "latest_api_after_restart": "200 profile_ready",
+      "default_table_structure": "collapsed",
+      "expanded_table_rows": "each table remains individually collapsed",
+      "local_qwen_used": false,
+      "model_backed_next_step_triggered": false
+    }
+  },
+  "verified_acceptance_slices": {
+    "0922V2-A10": "module replay and tamper rejection verified; full actual API chain remains",
+    "0922V2-A11": "invalid selections validate before persistence in workflow tests; complete actual-store negative matrix remains",
+    "0922V2-A12": "same decision is idempotent and stale divergent decision conflicts; browser conflict rendering remains",
+    "0922V2-A13": "real principal propagation, version CAS, cross-thread serialization and restart reload verified; full request concurrency API remains",
+    "0922V2-A14": "composite main/supplementary path and actionable content checks pass at module level; actual API replay remains",
+    "0922V2-A15": "UI contract distinguishes overridable and hard differences; actual browser warning fixture remains",
+    "D03": "real MG profile is compact and recovers after restart; document upload through facts and return/retransmit paths remain"
+  },
+  "not_yet_accepted": [
+    "A09 complete GUI promotion through resolver, mapping and facts",
+    "A10/A11/A12/A13/A14/A15 full evidence levels listed in acceptance/cases.json",
+    "D02 real EX invalid_ai_output recovery with approved remote models",
+    "D03 complete document-led field mapping and facts flow",
+    "remote MiniMax and GLM route availability was not reverified, so the model-backed next step was intentionally not invoked",
+    "W01 remains partial and W02 cannot be marked completed"
+  ],
+  "pause": {
+    "goal_status": "paused_by_user",
+    "port_8911": "stopped",
+    "isolated_backend_8920": "stop before handoff",
+    "frontend_5178": "stop before handoff",
+    "next_safe_action": "Re-anchor from this evidence and status.json; verify approved remote MiniMax and GLM routes without enabling MTPLX, then run one isolated document-to-mapping cycle and capture A09/A12/A15/D02/D03 evidence."
+  }
+}
