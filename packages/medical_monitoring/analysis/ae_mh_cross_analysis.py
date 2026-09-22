@@ -70,7 +70,18 @@ class AeMhSubmission:
 
 
 def _clean(value: Any) -> str:
-    return " ".join(str(value or "").split())
+    """V5-08 R5-02：0/False不再被`value or ""`吞掉。
+
+    None→空串；字符串规范化空白；bool→true/false；其余数值str化。
+    展示仍是字符串，但0与空、False与0可区分。
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return " ".join(value.split())
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return " ".join(str(value).split())
 
 
 def _compact_fields(row: Mapping[str, Any]) -> list[dict[str, Any]]:
