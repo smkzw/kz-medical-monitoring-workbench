@@ -161,6 +161,7 @@ def _seed_chunk(
     candidate_count: int = 1,
     evidence_raw_overrides: dict[str, dict[str, object]] | None = None,
     mapping_overrides: dict[str, dict[str, object]] | None = None,
+    profile_padding: str = "",
 ):
     revision = _revision(project_id, suffix=revision_suffix)
     profile_fields = [
@@ -198,6 +199,8 @@ def _seed_chunk(
             "fields": profile_fields,
         },
     }
+    if profile_padding:
+        payload["field_profile"]["source_context_padding"] = profile_padding
     request = MonitoringAiJobCreate(
         project_id=project_id,
         task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
@@ -447,6 +450,71 @@ def test_assemble_requires_all_accepted_chunks_and_preserves_lineage(
     assert mapping_repository.find_draft_for_batch(
         "project-alpha",
         "missing-batch",
+    ) is None
+
+
+def test_assemble_materializes_deduplicated_field_profile_blob(repositories) -> None:
+    _, ai_repository, mapping_repository = repositories
+    job, candidates = _seed_chunk(
+        ai_repository,
+        domain="AE",
+        chunk_index=1,
+        chunk_total=1,
+        fields=("AETERM",),
+        domain_field_count=1,
+        full_field_count=1,
+        expected_domains=("AE",),
+        profile_padding="x" * 20_000,
+    )
+
+    draft = mapping_repository.assemble(
+        "project-alpha",
+        "batch-001",
+        PROFILE_HASH,
+        expected_job_ids=(job.job_id,),
+    )
+
+    assert tuple(draft.expected_job_ids) == (job.job_id,)
+    assert draft.fields[0].source_field == "AETERM"
+    assert candidates[0].candidate_id == draft.field_sources[0].candidate_id
+
+
+def test_candidate_acceptance_rolls_back_when_assembly_fails(repositories) -> None:
+    _, ai_repository, mapping_repository = repositories
+    job, candidates = _seed_chunk(
+        ai_repository,
+        domain="AE",
+        chunk_index=1,
+        chunk_total=1,
+        fields=("AETERM",),
+        domain_field_count=1,
+        full_field_count=2,
+        expected_domains=("AE",),
+        accept=False,
+    )
+    candidate = candidates[0]
+
+    with pytest.raises(MonitoringMappingSourceStateError):
+        mapping_repository.assemble(
+            "project-alpha",
+            "batch-001",
+            PROFILE_HASH,
+            expected_job_ids=(job.job_id,),
+            candidate_acceptances=(
+                {
+                    "candidate_id": candidate.candidate_id,
+                    "job_id": job.job_id,
+                    "input_revision_sha256": job.input_revision_sha256,
+                },
+            ),
+            decision_actor="medical-manager",
+            decision_reason="整体采纳后建立草稿",
+        )
+
+    persisted = ai_repository.candidates("project-alpha", job.job_id)
+    assert persisted[0].status == MonitoringAiCandidateStatus.PROPOSED
+    assert mapping_repository.find_draft_for_batch(
+        "project-alpha", "batch-001"
     ) is None
 
 

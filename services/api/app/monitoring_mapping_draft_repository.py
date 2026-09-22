@@ -19,6 +19,7 @@ from .monitoring_ai_contracts import (
     canonical_json,
     content_sha256,
 )
+from .monitoring_ai_repository import _materialize_payload
 from .monitoring_mapping_contract import (
     MonitoringFieldKind,
     validate_monitoring_mapping_semantics,
@@ -1045,11 +1046,9 @@ class MonitoringMappingDraftRepository:
                     SELECT RAISE(ABORT, 'mapping adjudication receipt deletion is forbidden');
                 END;
 
-                CREATE TRIGGER IF NOT EXISTS trg_mapping_revision_no_update
+                DROP TRIGGER IF EXISTS trg_mapping_revision_no_update;
+                CREATE TRIGGER trg_mapping_revision_no_update
                 BEFORE UPDATE ON monitoring_mapping_revisions
-                WHEN NEW.field_sources_json IS NOT OLD.field_sources_json
-                    OR NEW.fields_json IS NOT OLD.fields_json
-                    OR NEW.input_revision_sha256 IS NOT OLD.input_revision_sha256
                 BEGIN
                     SELECT RAISE(ABORT, 'mapping revision is immutable');
                 END;
@@ -1107,6 +1106,10 @@ class MonitoringMappingDraftRepository:
         full_profile_sha256: str,
         *,
         prompt_version: str = "",
+        expected_job_ids: tuple[str, ...] = (),
+        candidate_acceptances: tuple[Mapping[str, str], ...] = (),
+        decision_actor: str = "",
+        decision_reason: str = "",
     ) -> MonitoringMappingDraft:
         project_id = _require_safe_identifier(project_id, "project_id")
         batch_id = _require_safe_identifier(batch_id, "batch_id")
@@ -1117,12 +1120,22 @@ class MonitoringMappingDraftRepository:
         now = self.clock()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            if candidate_acceptances:
+                self._accept_candidates_for_assembly(
+                    connection,
+                    project_id=project_id,
+                    acceptances=candidate_acceptances,
+                    actor=decision_actor,
+                    reason=decision_reason,
+                    now=now,
+                )
             source = self._validated_source(
                 connection,
                 project_id=project_id,
                 batch_id=batch_id,
                 full_profile_sha256=full_profile_sha256,
                 prompt_version=prompt_version,
+                expected_job_ids=expected_job_ids,
             )
             existing = connection.execute(
                 """
@@ -1229,6 +1242,100 @@ class MonitoringMappingDraftRepository:
             )
             connection.commit()
         return self._draft_from_row(row, field_sources=field_sources)
+
+    def _accept_candidates_for_assembly(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        project_id: str,
+        acceptances: tuple[Mapping[str, str], ...],
+        actor: str,
+        reason: str,
+        now: datetime,
+    ) -> None:
+        """Accept one frozen primary candidate per job in the draft transaction.
+
+        Candidate adoption and draft assembly are one SQLite commit.  A source,
+        coverage, or semantic-quality failure therefore cannot leave a partly
+        accepted cohort behind.  Already accepted rows are valid idempotent
+        recovery inputs after an older interrupted/non-atomic attempt.
+        """
+
+        actor = actor.strip()
+        reason = reason.strip()
+        if not actor or not reason:
+            raise ValueError("candidate acceptance actor and reason are required")
+        seen_candidates: set[str] = set()
+        seen_jobs: set[str] = set()
+        for acceptance in acceptances:
+            candidate_id = _require_safe_identifier(
+                str(acceptance.get("candidate_id", "")), "candidate_id"
+            )
+            job_id = _require_safe_identifier(
+                str(acceptance.get("job_id", "")), "job_id"
+            )
+            revision_sha256 = _require_sha256(
+                str(acceptance.get("input_revision_sha256", "")),
+                "input_revision_sha256",
+            )
+            if candidate_id in seen_candidates or job_id in seen_jobs:
+                raise MonitoringMappingSourceStateError(
+                    "candidate acceptance set contains duplicate candidates or jobs"
+                )
+            seen_candidates.add(candidate_id)
+            seen_jobs.add(job_id)
+            row = connection.execute(
+                """
+                SELECT candidate_id, job_id, task_type, status,
+                       input_revision_sha256
+                FROM monitoring_ai_candidates
+                WHERE project_id = ? AND candidate_id = ?
+                """,
+                (project_id, candidate_id),
+            ).fetchone()
+            if row is None:
+                raise MonitoringMappingSourceStateError(
+                    "candidate acceptance source is missing"
+                )
+            if (
+                row["job_id"] != job_id
+                or row["task_type"]
+                != MonitoringAiTaskType.LISTING_FIELD_MAPPING.value
+                or row["input_revision_sha256"] != revision_sha256
+            ):
+                raise MonitoringMappingSourceStateError(
+                    "candidate acceptance does not match its frozen job"
+                )
+            if row["status"] == MonitoringAiCandidateStatus.ACCEPTED.value:
+                continue
+            if row["status"] != MonitoringAiCandidateStatus.PROPOSED.value:
+                raise MonitoringMappingSourceStateError(
+                    "candidate is no longer adoptable"
+                )
+            updated = connection.execute(
+                """
+                UPDATE monitoring_ai_candidates
+                SET status = ?, decided_at = ?, decided_by = ?,
+                    decision_reason = ?
+                WHERE project_id = ? AND candidate_id = ? AND job_id = ?
+                  AND status = ? AND input_revision_sha256 = ?
+                """,
+                (
+                    MonitoringAiCandidateStatus.ACCEPTED.value,
+                    _iso(now),
+                    actor[:160],
+                    reason[:2_000],
+                    project_id,
+                    candidate_id,
+                    job_id,
+                    MonitoringAiCandidateStatus.PROPOSED.value,
+                    revision_sha256,
+                ),
+            )
+            if updated.rowcount != 1:
+                raise MonitoringMappingStateConflictError(
+                    "candidate acceptance lost its compare-and-swap"
+                )
 
     def get_draft(
         self,
@@ -1771,6 +1878,16 @@ class MonitoringMappingDraftRepository:
                     + (f": {titles}" if titles else "")
                 )
             canonical_fields_json = _model_sequence_json(validated_fields)
+            def _revision_seed_source(
+                item: MonitoringMappingFieldSource,
+            ) -> dict[str, Any]:
+                payload = item.model_dump(mode="json")
+                # This provenance marker was introduced after persisted
+                # revision identities.  It is serialized for lineage checks
+                # but must not change the stable revision hash.
+                payload.pop("source_origin", None)
+                return payload
+
             revision_seed = {
                 "project_id": project_id,
                 "draft_id": draft_id,
@@ -1779,7 +1896,7 @@ class MonitoringMappingDraftRepository:
                     item.model_dump(mode="json") for item in validated_fields
                 ],
                 "field_sources": [
-                    item.model_dump(mode="json") for item in field_sources
+                    _revision_seed_source(item) for item in field_sources
                 ],
                 "input_revision_sha256": row["input_revision_sha256"],
                 "source_set_sha256": row["source_set_sha256"],
@@ -2328,7 +2445,14 @@ class MonitoringMappingDraftRepository:
         for row in rows:
             if expected_job_ids and row["job_id"] not in expected_job_ids:
                 continue
-            payload = json.loads(row["input_payload_json"])
+            try:
+                payload = _materialize_payload(
+                    connection, row["input_payload_json"]
+                )
+            except Exception as exc:
+                raise MonitoringMappingSourceStateError(
+                    "field-mapping chunk payload cannot be materialized"
+                ) from exc
             profile = payload.get("field_profile")
             if not isinstance(profile, dict):
                 continue
@@ -2384,7 +2508,14 @@ class MonitoringMappingDraftRepository:
                 )
             revision_hashes.add(revision_hash)
             revisions[revision_hash] = revision
-            payload = json.loads(row["input_payload_json"])
+            try:
+                payload = _materialize_payload(
+                    connection, row["input_payload_json"]
+                )
+            except Exception as exc:
+                raise MonitoringMappingSourceStateError(
+                    "field-mapping chunk payload cannot be materialized"
+                ) from exc
             if content_sha256(payload) != row["input_payload_sha256"]:
                 raise MonitoringMappingSourceStateError(
                     "chunk input payload hash is inconsistent"
@@ -2750,7 +2881,10 @@ class MonitoringMappingDraftRepository:
             "prompt_version",
             "evidence_ids",
         }
-        if set(payload) != expected_keys:
+        payload_keys = set(payload)
+        if payload_keys != expected_keys and payload_keys != expected_keys | {
+            "source_origin"
+        }:
             raise ValueError("mapping source payload shape is invalid")
 
         def required_text(value: object, label: str) -> str:
@@ -2780,6 +2914,9 @@ class MonitoringMappingDraftRepository:
         evidence_ids = tuple(item.strip() for item in evidence_payload)
         if len(evidence_ids) != len(set(evidence_ids)):
             raise ValueError("mapping source evidence IDs are invalid")
+        source_origin = str(payload.get("source_origin") or "").strip()
+        if source_origin not in {"", "adjudication_receipt"}:
+            raise ValueError("mapping source origin is invalid")
         return MonitoringMappingFieldSource(
             domain=required_text(payload.get("domain"), "domain"),
             source_field=required_text(
@@ -2804,6 +2941,7 @@ class MonitoringMappingDraftRepository:
                 "prompt_version",
             ),
             evidence_ids=evidence_ids,
+            source_origin=source_origin,
         )
 
     def _draft_from_row(
