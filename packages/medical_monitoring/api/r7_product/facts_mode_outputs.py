@@ -668,11 +668,23 @@ class FactsModeOutputProvider:
                 event_refs.append(event_ref)
             if loc_ref not in locator_refs:
                 locator_refs.append(loc_ref)
-        verified: list[str] = [
-            ref for ref in event_refs
-            if not events_by_ref or ref in events_by_ref
-        ]
-        anchor_state = "bound" if verified else "unbound"
+        # V5-05 R5-07：空事件目录必须fail-closed——目录缺失时不能把
+        # 全部锚点当作"已验证"放行；verified空+state标注catalog缺失。
+        if not events_by_ref:
+            return {
+                "anchor_event_refs": event_refs,
+                "anchor_locator_refs": locator_refs,
+                "verified_event_refs": [],
+                "anchor_state": "unbound" if not event_refs else "partial",
+                "anchor_reason": "event_catalog_missing",
+            }
+        verified: list[str] = [ref for ref in event_refs if ref in events_by_ref]
+        if verified and len(verified) < len(event_refs):
+            anchor_state = "partial"
+        elif verified:
+            anchor_state = "bound"
+        else:
+            anchor_state = "unbound"
         return {
             "anchor_event_refs": event_refs,
             "anchor_locator_refs": locator_refs,
@@ -815,7 +827,13 @@ class FactsModeOutputProvider:
                     "scope_kind": "subject",
                     "anchor_event_refs": anchors["anchor_event_refs"],
                     "anchor_locator_refs": anchors["anchor_locator_refs"],
+                    "verified_event_refs": anchors["verified_event_refs"],
                     "anchor_state": anchors["anchor_state"],
+                    **(
+                        {"anchor_reason": anchors["anchor_reason"]}
+                        if anchors.get("anchor_reason")
+                        else {}
+                    ),
                     "evidence_ids": self._finding_evidence_ids(item),
                     "basis": basis,
                     "finding": f"「{title}」",
