@@ -1,8 +1,8 @@
 {
   "schema": "mm-w02-evidence-v1",
-  "recorded_at": "2026-09-22T21:11:43+08:00",
+  "recorded_at": "2026-09-22T23:06:12+08:00",
   "state": "partial_verified",
-  "source_head": "5dc01f987293c09aa64a088a32b969bb71326096",
+  "source_head": "6dfe6e34f4e7670901b33f4d8ffab5e5f429d6e0",
   "scope": [
     "immutable versioned user document decisions with real principal and batch binding",
     "promotion receipts replay the exact frozen decision instead of latest state",
@@ -133,6 +133,72 @@
       "requested_model": "mimo-v2.6-flash",
       "observed_response_model": "mimo-v2.6-flash",
       "result": "all fields retained; supplied-document review was not delegated to the user"
+    },
+    "correct_mg_document_to_mapping_run": {
+      "level": "actual isolated API and real MG source documents/models; browser upload remains unavailable because the test Chrome extension cannot access file URLs",
+      "runtime": "/tmp/mm-w02-correct-mg-runtime-20260922-v2",
+      "project_id": "proj_mgk10_sar_real",
+      "attempt_id": "stg-86b77f06eb5746fbb1f50edec7839096",
+      "listing": {
+        "sha256": "81f47614ca6ab96c3d0a3e45d72ec49c98690fb49e8b574b1dc6b06f7e8259e3",
+        "files": 1,
+        "tables": 62,
+        "rows": 148788
+      },
+      "protocol": {
+        "version": "V2.1",
+        "sha256": "075c93b45414dcb4bb33ef1cf623d295a9d8f029d7560ca484a0c0267c4fdabd"
+      },
+      "ecrf": {
+        "version": "V1.1",
+        "sha256": "bc93ca20212a3c93a363520fa52565d4cc02b299c5981ba8f5240343e3d03229"
+      },
+      "document_authority": {
+        "batch_id": "mmbatch_f3450d634af94e6c00ab8852",
+        "ready": true,
+        "headline": "研究方案和电子病例报告表已准备好",
+        "user_role_confirmation_required": false
+      },
+      "mapping_first_pass": {
+        "jobs": 302,
+        "completed": 251,
+        "contract_rejected": 51,
+        "new_jobs_created_on_recovery": 0
+      },
+      "recovery_observation": {
+        "requeued_in_place": 51,
+        "successful_siblings_unchanged": 251,
+        "post_cooldown_state": {
+          "completed": 251,
+          "failed": 16,
+          "queued": 30,
+          "leased_running_without_live_process": 5
+        },
+        "transport_limit": "HTTP 429 from shared opencode-go route after bounded retries; workers stopped before remaining queued recovery budget was consumed"
+      },
+      "runtime_routes": [
+        {
+          "provider": "opencode-go",
+          "requested_model": "mimo-v2.6-flash"
+        },
+        {
+          "provider": "opencode-go",
+          "requested_model": "deepseek-flash"
+        }
+      ],
+      "local_model_used": false,
+      "source_fixes": [
+        "6dfe6e34f4e7670901b33f4d8ffab5e5f429d6e0",
+        "5982c31",
+        "6baa05e",
+        "4e4129d",
+        "a11ca87"
+      ],
+      "limits": [
+        "mapping is not ready; facts were not materialized",
+        "429 recovery remains unresolved",
+        "no browser acceptance for this slice"
+      ]
     }
   },
   "verified_acceptance_slices": {
@@ -142,8 +208,8 @@
     "0922V2-A13": "real principal propagation, version CAS, cross-thread serialization and restart reload verified; full request concurrency API remains",
     "0922V2-A14": "composite main/supplementary path and actionable content checks pass at module level; actual API replay remains",
     "0922V2-A15": "actual API returns a concise Chinese hard-error state for CSU documents uploaded to an SAR project; browser-visible upload and warning rendering remain blocked by the test browser extension setting.",
-    "D03": "real MG profile remains compact and recoverable; actual API now blocks wrong-study documents before role questions. Complete GUI upload through mapping/facts remains.",
-    "D02": "real product-model module recovery retained all 60 fields including five EX fields and did not delegate supplied-document review to the user; actual API/browser mapping flow remains."
+    "D03": "Correct MG listing, protocol V2.1 and eCRF V1.1 completed actual API upload and document authority without user role confirmation; 302 mapping jobs were created. Mapping/facts and browser acceptance remain incomplete.",
+    "D02": "Actual isolated MG API ran both real W00 model routes across 302 mapping shards. Fail-closed validation rejected 51 malformed outputs; 51 were requeued in place without rerunning 251 successful siblings. New repair contracts cover supplied-document delegation, malformed questions, mapping-stage CTCAE/Query conclusions and unsupported approval language. HTTP 429 interrupted the bounded recovery, so D02 remains partial."
   },
   "not_yet_accepted": [
     "A09 complete GUI promotion through resolver, mapping and facts",
@@ -156,8 +222,8 @@
   "continuation": {
     "goal_status": "active",
     "port_8911": "must remain stopped",
-    "isolated_backend_8920": "used only for this W02 evidence slice; stop after evidence capture",
+    "isolated_backend_8920": "stopped after HTTP 429 protected the remaining queued recovery budget",
     "frontend_5178": "used only for this W02 evidence slice; stop after evidence capture",
-    "next_safe_action": "Use a correctly identified isolated MG project and the W00-frozen opencode-go pair to run document authority through mapping/facts; do not enable a local model or reuse the intentionally mismatched SAR project."
+    "next_safe_action": "Keep 8911 stopped. After the opencode-go rate-limit window clears, restart the same isolated runtime with one worker per role; do not POST a new generation. Let the existing 30 queued and 5 leased verifier jobs settle, then use the bounded candidate-generation recovery only for same-revision terminal failures. Complete mapping, automatic low-burden confirmation and facts before moving to W03."
   }
 }
