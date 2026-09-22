@@ -11382,3 +11382,141 @@ def test_strict_mapping_retains_invalid_response_and_repairs_once(tmp_path, repa
     assert response['provider_response_diagnostics'][0]['strict_raw_preview'] == broken
     if not repair_succeeds:
         assert result.job.failure_code == 'invalid_ai_output'
+
+
+@pytest.mark.parametrize(
+    "changed_value",
+    ["3级", 3],
+    ids=["value-change", "type-change"],
+)
+def test_facts_subject_job_uses_frozen_manifest_and_worker_invalidates_changed_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    changed_value: Any,
+) -> None:
+    """A25: real evidence stamp -> repository job -> formal resolver/worker."""
+    import hashlib
+    import json
+
+    import services.api.app.main as app_main
+    from packages.medical_monitoring.analysis.ae_mh_cross_analysis import (
+        build_subject_evidence,
+    )
+    from packages.medical_monitoring.projections.facts_publication import (
+        _atomic_write_json,
+        _build_facts_manifest,
+        _versioned_manifest_name,
+    )
+
+    project_id = "project-facts-worker"
+    snapshot_ref = "facts-snapshot-worker-001"
+    domains = {
+        "AE": [
+            {"SUBJID": "01001", "AETERM": "头痛", "AESEV": "1级"},
+        ],
+        "CM": [
+            {"SUBJID": "01001", "CMTRT": "对乙酰氨基酚", "CMDOSE": 500},
+        ],
+    }
+    evidence, source_hashes = build_subject_evidence(domains, "01001")
+    runtime_root = tmp_path / "runtime-root"
+    workspace = runtime_root / "medical_monitoring_r7" / project_id
+    artifacts = workspace / "runtime" / "artifacts"
+    artifacts.mkdir(parents=True)
+    artifact_names: list[str] = []
+    for table, rows in domains.items():
+        encoded = json.dumps(
+            {table: rows}, ensure_ascii=False, sort_keys=True
+        ).encode("utf-8")
+        artifact_name = hashlib.sha256(encoded).hexdigest() + ".json"
+        (artifacts / artifact_name).write_bytes(encoded)
+        artifact_names.append(artifact_name)
+    manifest = _build_facts_manifest(
+        artifacts,
+        allowed_files=artifact_names,
+        project_id=project_id,
+        attempt_id="attempt-worker-001",
+        mapping_version="facts-materialized",
+        snapshot_ref=snapshot_ref,
+    )
+    _atomic_write_json(artifacts / "facts-manifest.json", manifest)
+    versions = artifacts / "facts-manifests"
+    versions.mkdir()
+    _atomic_write_json(
+        versions / _versioned_manifest_name(snapshot_ref), manifest
+    )
+
+    monkeypatch.setattr(app_main, "_r7_facts_root", runtime_root / "medical_monitoring_r7")
+    monkeypatch.setattr(app_main, "_r7_facts_providers_by_project", {})
+    real_evidence_ids = [item["evidence_id"] for item in evidence]
+
+    def valid_facts_output(envelope: AiPromptEnvelope) -> Dict[str, Any]:
+        result = _valid_output(envelope, candidate_count=2)
+        for candidate in result["candidates"]:
+            candidate["structured_payload"]["evidence_ids"] = real_evidence_ids[:2]
+            candidate["claims"][0]["evidence_ids"] = real_evidence_ids[:2]
+        return result
+
+    provider = FakeProvider([valid_facts_output])
+    service = _service(
+        tmp_path / "service",
+        provider,
+        current_revision_resolver=app_main._current_monitoring_ai_revision,
+    )
+    monkeypatch.setattr(app_main, "monitoring_ai_repository", service.repository)
+    input_revision = MonitoringAiInputRevision(
+        project_id=project_id,
+        batch_revision=f"facts:{snapshot_ref}",
+        mapping_revision="facts-materialized",
+        rule_pack_revision="facts-baseline-rules-v1",
+        sources=tuple(
+            MonitoringAiSourceBinding(
+                source_entry_id=f"facts:{table}",
+                source_content_sha256=digest,
+            )
+            for table, digest in sorted(source_hashes.items())
+        ),
+    )
+    payload = {
+        "subject_context": {
+            "subject_id": "01001",
+            "batch_id": snapshot_ref,
+            "mapping_revision": "facts-materialized",
+        },
+        "evidence_packet": evidence,
+    }
+    completed_job = service.submit_task(
+        project_id=project_id,
+        task_type=MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS,
+        input_revision=input_revision,
+        input_payload=payload,
+        business_key=f"aemh:{snapshot_ref}:primary:01001:unchanged",
+    )
+    completed = service.run_next("facts-worker-unchanged")
+    assert completed.job is not None
+    assert completed.job.job_id == completed_job.job_id
+    assert completed.job.status == MonitoringAiJobStatus.COMPLETED, (
+        completed.job.failure_code,
+        completed.job.failure_message,
+    )
+    assert len(provider.envelopes) == 1
+
+    stale_job = service.submit_task(
+        project_id=project_id,
+        task_type=MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS,
+        input_revision=input_revision,
+        input_payload=payload,
+        business_key=f"aemh:{snapshot_ref}:primary:01001:changed",
+    )
+    ae_entry = next(item for item in manifest["tables"] if item["table"] == "AE")
+    changed = {"AE": [{"SUBJID": "01001", "AETERM": "头痛", "AESEV": changed_value}]}
+    (artifacts / ae_entry["file"]).write_text(
+        json.dumps(changed, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+    stale = service.run_next("facts-worker-changed")
+    assert stale.job is not None
+    assert stale.job.job_id == stale_job.job_id
+    assert stale.job.status == MonitoringAiJobStatus.STALE_INPUT
+    assert stale.job.failure_code == "stale_input_revision"
+    assert len(provider.envelopes) == 1

@@ -2706,6 +2706,57 @@ def test_late_project_dispatchers_keep_two_actual_api_results_isolated(
     )
     assert reopened_a.status_code == 200, reopened_a.text
     assert reopened_a.json() == overviews[PROJECT_A]
+
+    # A08: an active AI-findings pointer may move while the public result is
+    # read.  Every response must still come from the publication-bound ModeOutput
+    # object, with rows and meta reconciling to that same content identity.
+    from concurrent.futures import ThreadPoolExecutor
+
+    stop_pointer_churn = threading.Event()
+    active_pointer = (
+        provider_root
+        / PROJECT_A
+        / "runtime"
+        / "artifacts"
+        / "aemh-findings.active.json"
+    )
+
+    def churn_active_pointer() -> int:
+        writes = 0
+        while not stop_pointer_churn.is_set():
+            active_pointer.write_text(
+                json.dumps(
+                    {
+                        "artifact": f"moving-{writes}.json",
+                        "content_sha256": f"{writes % 10}" * 64,
+                        "project_id": PROJECT_A,
+                        "snapshot_digest": f"moving-{writes}",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            writes += 1
+        return writes
+
+    def read_frozen_overview(_: int) -> dict[str, Any]:
+        response = client.get(
+            f"{_base(PROJECT_A)}/results/{result_tokens[PROJECT_A]}/overview"
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        meta = payload["projection"]["query_findings_meta"]
+        rows = payload["projection"]["query_findings"]
+        assert meta["total"] == len(rows)
+        assert meta["artifact"] == meta["content_sha256"]
+        return payload
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        writer = executor.submit(churn_active_pointer)
+        concurrent_overviews = list(executor.map(read_frozen_overview, range(24)))
+        stop_pointer_churn.set()
+        assert writer.result(timeout=5) > 0
+    assert concurrent_overviews == [overviews[PROJECT_A]] * 24
+
     cross_project = client.get(
         f"{_base(PROJECT_B)}/results/{result_tokens[PROJECT_A]}/overview"
     )
