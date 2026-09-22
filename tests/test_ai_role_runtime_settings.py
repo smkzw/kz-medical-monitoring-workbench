@@ -24,6 +24,7 @@ from services.api.app.ai_role_runtime_settings import (
     TRANSLATION_SUPPORT_ROLE,
     THINKING_ENABLED,
     THINKING_DISABLED,
+    THINKING_AUTO,
     AiRoleBinding,
     AiRoleRuntimeSettingsStore,
 )
@@ -259,6 +260,19 @@ class AiRoleRuntimeSettingsTests(unittest.TestCase):
         ocr = self.store.binding(OCR_ROLE)
         self.assertEqual(THINKING_DISABLED, ocr.thinking)
         self.assertEqual("low", ocr.reasoning_effort)
+
+        self.store.upsert(
+            AiRoleBinding(
+                role_id=MEDICAL_MONITORING_AI_ROLE,
+                profile_id="existing_ai",
+                model="qwen3.8-max-preview",
+                thinking=THINKING_AUTO,
+                reasoning_effort="high",
+            )
+        )
+        monitoring_env = self.store.role_env(MEDICAL_MONITORING_AI_ROLE, {})
+        self.assertEqual(THINKING_AUTO, monitoring_env["WORKBENCH_AI_THINKING"])
+        self.assertEqual("high", monitoring_env["WORKBENCH_AI_REASONING_EFFORT"])
 
     @patch(
         "services.api.app.ai_role_runtime_settings.discover_models",
