@@ -167,6 +167,58 @@ def test_patch_repair_localizes_splices_and_completes(
     assert stored[0]["user_action"]
 
 
+def test_patch_repair_rebuilds_mapping_conclusions_and_false_questions(
+    tmp_path: Path,
+) -> None:
+    def invalid_mapping_conclusions(envelope: Any) -> Dict[str, Any]:
+        result = _dependency_compliant(_valid_output(envelope))
+        mappings = result["candidates"][0]["structured_payload"][
+            "field_mappings"
+        ]
+        mappings[0]["uncertainty"] = "该异常达到CTCAE 3级，应发起Query。"
+        mappings[1]["user_decision_required"] = True
+        mappings[1]["user_action"] = "建议继续核对当前证据。"
+        return result
+
+    def repaired_fields(envelope: Any) -> Dict[str, Any]:
+        result = _dependency_compliant(_valid_output(envelope))
+        mappings = result["candidates"][0]["structured_payload"][
+            "field_mappings"
+        ]
+        for mapping in mappings:
+            mapping["uncertainty"] = "当前字段画像尚不足以确定更具体角色。"
+            mapping["user_action"] = "系统将继续读取已授权证据。"
+            mapping["user_decision_required"] = False
+        result["candidates"][0]["title"] = "字段修复补丁"
+        result["candidates"][0]["text"] = ""
+        return result
+
+    provider = FakeProvider([invalid_mapping_conclusions, repaired_fields])
+    service = _service(tmp_path, provider)
+    service.evidence_tool_factory = _patch_factory()
+    profile = _field_profile(2)
+    profile["adjudication_contract"] = {"first_pass_mappings": []}
+    service.submit_listing_field_mapping(
+        project_id="project-alpha",
+        input_revision=_revision(),
+        field_profile=profile,
+        prompt_version=V71_PRIMARY,
+    )
+
+    result = service.run_next("worker-scientific-boundary")
+
+    assert result.job is not None
+    assert result.job.status == MonitoringAiJobStatus.COMPLETED, (
+        result.job.failure_message
+    )
+    repair_payload = provider.envelopes[1].payload
+    instruction = repair_payload["patch_contract"]["instruction"]
+    assert "不得写入CTCAE分级、风险等级、医学结论或Query结论" in instruction
+    assert "必须是一个以中文问号结尾的具体问题" in instruction
+    assert "现有授权证据之外" in instruction
+    assert len(repair_payload["patch_contract"]["violating_fields"]) == 2
+
+
 def test_patch_repair_rejects_unknown_target(tmp_path: Path) -> None:
     def patch_with_unknown_field(envelope: Any) -> Dict[str, Any]:
         patch = _patch_fixing_field_zero(envelope)

@@ -4422,6 +4422,34 @@ class MonitoringAiService:
                 repair_payload["patch_contract"]["instruction"] += (
                     evidence_recheck_instruction
                 )
+        if job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING and any(
+            marker in validation_errors
+            for marker in (
+                "mapping-stage output must not contain CTCAE grade, risk "
+                "or Query conclusions",
+                "user_decision_required mappings must phrase user_action as "
+                "a concrete question for the user",
+            )
+        ):
+            scientific_boundary_instruction = (
+                " 对违规字段必须基于本次授权证据重新生成完整条目。字段映射阶段"
+                "只解释字段含义、采集属性和字段关系；uncertainty、"
+                "evidence_basis、user_action及其他字段都不得写入CTCAE分级、"
+                "风险等级、医学结论或Query结论。若"
+                "user_decision_required为true，user_action必须是一个以中文"
+                "问号结尾的具体问题，而且只能询问现有授权证据之外、确实会改变"
+                "医学分析的外部事实。若现有证据可解决，或只是证据不足，则"
+                "user_decision_required设为false；必要时将recommended_role设为"
+                "unmapped并如实说明证据缺口，系统后续补读或重试。不得删除字段、"
+                "抬高置信度，也不得把未解决映射写成已确认。"
+            )
+            repair_payload["repair_contract"]["instruction"] += (
+                scientific_boundary_instruction
+            )
+            if "patch_contract" in repair_payload:
+                repair_payload["patch_contract"]["instruction"] += (
+                    scientific_boundary_instruction
+                )
         if job.task_type in {
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
