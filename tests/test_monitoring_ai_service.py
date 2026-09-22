@@ -2078,6 +2078,45 @@ def test_field_mapping_allows_non_assertive_sdtm_reference_wording(
     assert result.job.status == MonitoringAiJobStatus.COMPLETED
 
 
+def test_field_mapping_allows_sdtm_reference_inside_role_equivalence_proof(
+    tmp_path: Path,
+) -> None:
+    del tmp_path
+    payload = {
+        "field_mappings": [
+            {
+                "domain": "AE",
+                "source_field": "AESER",
+                "recommended_role": "adverse_event_serious_flag",
+                "uncertainty": "仅作命名参照，不代表来源字段符合SDTM。",
+                "role_equivalence": {
+            "judgment": "equivalent",
+            "option_ids": ["option-a", "option-b"],
+            "dimensions": {
+                "standard_granularity": {
+                    "relation": "equivalent",
+                    "evidence_ids": ["ev-1"],
+                    "rationale": (
+                        "两选项参考标准均为SDTM变量命名参照；"
+                        "不构成来源listing符合SDTM的声明。"
+                    ),
+                }
+            },
+            "counterevidence_summary": "未发现粒度反证。",
+                },
+            }
+        ]
+    }
+
+    assertion_text = monitoring_ai_service_module._field_mapping_assertion_text(
+        payload
+    )
+    assert "均为SDTM" not in assertion_text
+    assert not monitoring_ai_service_module._contains_forbidden_sdtm_assertion(
+        assertion_text
+    )
+
+
 @pytest.mark.parametrize(
     "wording",
     (

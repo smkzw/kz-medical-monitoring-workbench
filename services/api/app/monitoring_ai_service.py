@@ -775,6 +775,11 @@ def _field_mapping_assertion_text(
     mappings = []
     for item in structured_payload.get("field_mappings", []):
         mapping = dict(item)
+        # The anonymous second-pass proof compares two candidate meanings.
+        # Its rationale may correctly say that a *reference standard* is
+        # SDTM; that is not a claim that the source EDC listing is SDTM.
+        # Final mapping assertions remain fully checked below.
+        mapping.pop("role_equivalence", None)
         reference = mapping.get("standards_reference")
         if isinstance(reference, dict):
             mapping["standards_reference"] = {
