@@ -2,6 +2,8 @@
 版本：2026-09-22 · delivery-replan-1。状态：供 fork 实施的完整规划；不是产品交付通过声明。
 
 ## 先读这五份
+当前从无损暂停恢复时，先读 [HANDOFF_20260923.md](HANDOFF_20260923.md)，再按以下权威文档核对仍有效的合同与状态。
+
 1. [PRD.md](PRD.md)：当前产品合同、范围、医学与用户体验要求。
 2. [Plan.md](Plan.md)：W00–W07连续实施顺序及依赖。
 3. [EXECUTION_RULES.md](EXECUTION_RULES.md)：执行、复用、测试批次与停止条件。

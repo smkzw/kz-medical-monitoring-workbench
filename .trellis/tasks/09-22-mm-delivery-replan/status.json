@@ -1,10 +1,10 @@
 {
   "schema": "mm-delivery-status-v1",
-  "updated_at": "2026-09-23T04:40:55+08:00",
+  "updated_at": "2026-09-23T06:32:00+08:00",
   "planning_status": "complete",
   "product_status": "not_delivered",
-  "goal_status": "active",
-  "source_head": "7d0c4c147dcbf81b31eb7222929c115e8ebaee36",
+  "goal_status": "paused",
+  "source_head": "c00ee33c56a5ae32dba29a2db8b9a7dce787e996",
   "next_work_package": "W02",
   "work_packages": [
     {

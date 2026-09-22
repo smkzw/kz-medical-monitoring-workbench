@@ -1633,3 +1633,11 @@ W00证据位于`../../tasks/09-22-mm-delivery-replan/evidence/{route-lock,projec
 修复两类真实工程缺陷：其一，字段画像落入payload blob后草稿组装读取了引用壳，现统一物化并将候选接受与草稿创建纳入同一事务；其二，SDTM仅作reference-only说明时，内部等价证书措辞不再被误判为“输入就是SDTM”。随后二轮实跑暴露多模型运行参数仍不完整：固定每批12字段且盲核错误读取主分析预算，DeepSeek高思考会在`finish_reason=length`时只返回reasoning、无最终正文。现将输出预算与字段分片作为profile数据，由精确绑定runtime解析；配置API保存时不再丢失预算、输出纪律及额外请求头，界面在“通常无需修改”的折叠区允许按角色调整。当前DeepSeek profile使用131072预算、每批4字段；真实回执已证明可完成完整四字段结论，也证明个别分片仍可能耗尽思考，因此继续fail closed并形成可见覆盖缺口，绝不采纳思考通道或主模型答案代替盲核。
 
 提交并推送：`1edb9cb`、`2c55fb8`、`7d0c4c1`。集中验证包括644项映射/配置/仓库回归、精确runtime预算修复后的538项回归、前端正式构建、py_compile与diff检查。二轮队列仍在8920运行，当前不能声称mapping、facts或W02完成；下一步等待现有命名空间终态，按产品路由落地裁决回执与可见gap，再进入确认和facts物化。
+
+### 2026-09-23 06:32 指定双路线兼容模式落地并无损暂停
+
+用户要求将现行医学监查双模型固定为 `cms-router/glm-5.3-flash:high` 与 `ollama-cloud/deepseek-v4.1-flash:high`，同时保留多模型任意配置能力。本轮未增加模型名分支：输出预算、字段分片、推理强度和请求头仍由角色/profile数据决定；新增供应商中立的 `thinking=auto`，在保留标准 `reasoning_effort=high` 的同时不发送供应商私有thinking对象。提交`c00ee33`已推GitHub；角色/网关84项通过、前端正式构建、py_compile和diff检查通过。
+
+真实第二轮证明auto/high可由DeepSeek返回完整四字段结果，但仍有部分分片只返回reasoning或输出形状不合合同，系统全部fail closed，不采纳思考内容。用户随后要求完成手头工作后无损暂停：先调用产品queue pause，再等待8个在途请求自然归零，最后停止8920；8911全程停止。暂停时当前digest状态：GLM 47完/26败/14排队，DeepSeek 33完/22败/142排队，running均0；SQLite integrity_check=ok。本地Qwen/MTPLX未选择或加载。
+
+完整接管说明写入`../../tasks/09-22-mm-delivery-replan/HANDOFF_20260923.md`。恢复时只启动8920并resume现有队列，不POST新代际；两个digest终态后调用产品adjudication端点，让现有机制仅对失败分片做一次有界原位恢复，再把完成映射和可见coverage gap落草稿。不得由开发Agent替代盲核或按主模型/多数票接受分歧。W01/W02仍in_progress，facts、真实AE/MH、看板/旅程/来源/Query、W03-W07和最终验收均未完成。
