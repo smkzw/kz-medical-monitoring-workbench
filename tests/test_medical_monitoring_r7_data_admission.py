@@ -15,6 +15,7 @@ proves the integration never writes into the source directory.
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -42,6 +43,7 @@ from packages.medical_monitoring.api.r7_product.admission_routes import (
 )
 from packages.medical_monitoring.admission import (
     LOCATOR_INDEX_KIND,
+    PROJECT_IDENTITY_BINDING_KIND,
     DataAdmissionPipeline,
 )
 from packages.medical_monitoring.admission.document_authority import (
@@ -985,6 +987,99 @@ def test_real_pipeline_rejects_listing_from_another_study(tmp_path: Path) -> Non
         )
 
     assert _snapshot_tree(source) == before
+    runtime_db = (
+        tmp_path / "workspace" / RUNTIME_DIR_NAME / RUNTIME_DB_NAME
+    )
+    with sqlite3.connect(runtime_db) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM source_revisions").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM listing_snapshots").fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM domain_objects WHERE kind = ?",
+            (LOCATOR_INDEX_KIND,),
+        ).fetchone()[0] == 0
+
+
+def test_real_pipeline_adopts_one_identity_once_for_provisional_project(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    listing = source / "listing.csv"
+    listing.write_text(
+        "STUDYID,SUBJID\nMG-K10-SAR-001[PROD],S001\n",
+        encoding="utf-8",
+    )
+    workspace = tmp_path / "workspace"
+    pipeline = DataAdmissionPipeline(
+        parse_listing_file,
+        expected_project_identifiers=lambda _project_id: (
+            "MW-III-0750F513",
+            "MW-III-0750F513-DRAFT",
+        ),
+        allow_initial_identity_adoption=lambda _project_id: True,
+    )
+
+    first = pipeline.create_attempt(
+        project_id=PROJECT_A,
+        source_dir=source,
+        workspace_dir=workspace,
+    )
+
+    identity = first["technical_details"]["project_identity"]
+    assert identity["status"] == "adopted"
+    assert "MG-K10-SAR-001" not in json.dumps(identity, ensure_ascii=False)
+    store = Store(
+        workspace / RUNTIME_DIR_NAME / RUNTIME_DB_NAME,
+        workspace / RUNTIME_DIR_NAME / ARTIFACT_DIR_NAME,
+    )
+    try:
+        binding = store.get_domain_object(
+            PROJECT_IDENTITY_BINDING_KIND, PROJECT_A
+        )
+    finally:
+        store.close()
+    assert binding is not None
+    assert binding[1]["identifiers"] == ["MGK10SAR001"]
+
+    listing.write_text(
+        "STUDYID,SUBJID\nRUX-03-002,S001\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        AdmissionPipelineError,
+        match="admission_project_identity_conflict",
+    ):
+        pipeline.create_attempt(
+            project_id=PROJECT_A,
+            source_dir=source,
+            workspace_dir=workspace,
+        )
+
+
+def test_real_pipeline_refuses_multiple_identities_during_initial_adoption(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "listing.csv").write_text(
+        "STUDYID,SUBJID\nMG-K10-SAR-001,S001\nRUX-03-002,S002\n",
+        encoding="utf-8",
+    )
+    pipeline = DataAdmissionPipeline(
+        parse_listing_file,
+        expected_project_identifiers=lambda _project_id: ("MW-III-TEMP",),
+        allow_initial_identity_adoption=lambda _project_id: True,
+    )
+
+    with pytest.raises(
+        AdmissionPipelineError,
+        match="admission_project_identity_conflict",
+    ):
+        pipeline.create_attempt(
+            project_id=PROJECT_A,
+            source_dir=source,
+            workspace_dir=tmp_path / "workspace",
+        )
 
 
 def test_real_pipeline_persists_hash_only_matching_study_identity(
@@ -1041,6 +1136,7 @@ def test_revalidation_quarantines_a_legacy_cross_study_attempt(
     pipeline = DataAdmissionPipeline(
         parse_listing_file,
         expected_project_identifiers=lambda _project_id: ("RUX-03-002",),
+        allow_initial_identity_adoption=lambda _project_id: True,
     )
 
     result = pipeline.revalidate_project_identity(

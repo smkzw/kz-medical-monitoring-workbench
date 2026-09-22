@@ -23,6 +23,7 @@ from .pipeline import (
     ADMISSION_RECORD_KIND,
     DEFAULT_LISTING_SUFFIXES,
     LOCATOR_INDEX_KIND,
+    PROJECT_IDENTITY_BINDING_KIND,
     AdmissionPipelineError,
     DataAdmissionPipeline,
 )
@@ -132,6 +133,7 @@ __all__ = [
     "ADMISSION_RECORD_KIND",
     "DEFAULT_LISTING_SUFFIXES",
     "LOCATOR_INDEX_KIND",
+    "PROJECT_IDENTITY_BINDING_KIND",
     "AdmissionPipelineError",
     "DataAdmissionPipeline",
     "DOCUMENT_EVIDENCE_SCHEMA_VERSION",

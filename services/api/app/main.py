@@ -990,6 +990,21 @@ def _expected_source_context(
     )
 
 
+def _allow_initial_monitoring_identity_adoption(project_id: str) -> bool:
+    """Allow one listing identity to bind only a generated greenfield shell."""
+
+    if not project_source_manifest_service.is_user_created_project(project_id):
+        return False
+    manifest = project_source_manifest_service.build_manifest(project_id)
+    header = manifest.header_project
+    return (
+        manifest.source_mode == "user_created_from_zero"
+        and header.project_code.startswith("MW-")
+        and header.protocol_id == f"{header.project_code}-DRAFT"
+        and header.protocol_version == "草案"
+    )
+
+
 source_registry = SourceRegistryService(
     SourceRegistryStore(RUNTIME_DIR / "source_registry.jsonl"),
     allowed_roots=[
@@ -4173,6 +4188,9 @@ app.include_router(
                     "medical_monitoring",
                     "listing_file",
                 ).project_identifiers
+            ),
+            allow_initial_identity_adoption=(
+                _allow_initial_monitoring_identity_adoption
             ),
         ),
         admission_mapping_pipeline=_r7_admission_mapping_pipeline,

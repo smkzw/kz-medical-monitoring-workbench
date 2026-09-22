@@ -132,6 +132,7 @@ _WORK_UNIT_IDENTITY_KEYS = frozenset({
 })
 _IMMUTABLE_DOMAIN_OBJECT_KINDS = frozenset({
     "adapter_raw_output",
+    "admission_project_identity_binding",
     "capability_work_assignment",
 })
 _CAPABILITY_ASSIGNMENT_KIND = "capability_work_assignment"
