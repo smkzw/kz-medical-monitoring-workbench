@@ -1,6 +1,6 @@
 {
   "schema": "mm-w01-evidence-v1",
-  "recorded_at": "2026-09-22T16:06:42+08:00",
+  "recorded_at": "2026-09-22T16:31:00+08:00",
   "state": "partial_verified",
   "source_head": "a7217af080b96896bdc4cbc9317cb139e4386569",
   "scope": [
@@ -15,7 +15,7 @@
     "git_diff_check": "passed",
     "pytest": {
       "result": "137 passed",
-      "warnings": 99,
+      "warnings": 100,
       "command_scope": [
         "test_mm_c3_fact_materialization.py",
         "test_facts_publication_manifest.py",
@@ -23,6 +23,14 @@
         "test_facts_mode_outputs_n1.py",
         "test_facts_source_digest_contract.py",
         "test_medical_monitoring_r7_product_router.py"
+      ]
+    },
+    "formal_worker_pytest": {
+      "result": "4 passed",
+      "warnings": 18,
+      "command_scope": [
+        "facts subject worker unchanged/value/type invalidation",
+        "existing stale-input resolver guards"
       ]
     },
     "real_mg_read_only_rebuild": {
@@ -35,8 +43,6 @@
   },
   "not_yet_accepted": [
     "isolated cold-start actual API and browser",
-    "concurrent active-pointer pressure",
-    "formal build_subject_evidence worker invalidation",
     "browser source-byte acceptance"
   ],
   "newly_verified_actual_api": [
@@ -44,6 +50,9 @@
     "the same subject id resolves to each project's own site and finding",
     "reopening the first project's historical result after the second project runs is byte-for-byte stable",
     "using the first project's result token under the second project fails closed",
-    "daily committed query_drafts are read from the publication-bound mode output"
+    "daily committed query_drafts are read from the publication-bound mode output",
+    "24 concurrent public API reads remain identical while the active findings pointer is rewritten",
+    "real build_subject_evidence stamps complete through repository and worker when unchanged",
+    "value and type changes invalidate the claimed job before any provider call"
   ]
 }
