@@ -430,6 +430,8 @@ class MonitoringAiJob(BaseModel):
     provider: str
     requested_model: str
     response_model: str = ""
+    # V5-03：上游实际回报的served模型名（可能与requested为别名关系或缺失）。
+    observed_response_model: str = ""
     attempt_count: StrictInt = 0
     max_attempts: StrictInt = 2
     lease_owner: str = ""

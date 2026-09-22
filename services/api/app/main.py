@@ -1416,20 +1416,60 @@ def _omp_router_runtime(profile_id: str, *, model: str, thinking: str):
     )
 
 
+def _opencode_go_runtime(profile_id: str, *, model: str, thinking: str):
+    """opencode zen直连：密钥从凭据仓profile条目解析，env变量可覆盖。"""
+    from services.api.app.ai_runtime_settings import LocalCredentialStore
+    from services.api.app.monitoring_ai_service import (
+        MONITORING_PRODUCT_AI_TRANSPORT,
+        MonitoringAiRuntimeBinding,
+    )
+    key = LocalCredentialStore(RUNTIME_DIR).get(profile_id)
+    if not key:
+        key = os.environ.get("OPENCODE_API_KEY", "").strip()
+    provider_env = {
+        "WORKBENCH_AI_PROVIDER": "opencode-go",
+        "WORKBENCH_AI_TRANSPORT": "openai_compatible",
+        "WORKBENCH_AI_BASE_URL": "https://opencode.ai/zen/go/v1",
+        "WORKBENCH_AI_MODEL": model,
+        # zen回名=请求名，断言收紧到requested身份。
+        "WORKBENCH_AI_EXPECTED_RESPONSE_MODEL": model,
+        "WORKBENCH_AI_THINKING": thinking,
+        "WORKBENCH_AI_REASONING_EFFORT": thinking,
+        "WORKBENCH_AI_TIMEOUT_SECONDS": "600",
+        "WORKBENCH_AI_OUTPUT_TOKEN_BUDGET": "32768",
+        "WORKBENCH_AI_DEPLOYMENT_PROFILE": "local_private_clinical",
+        "WORKBENCH_AI_EXTRA_HEADERS": json.dumps(
+            {"x-opencode-session": "doc-auth-primary"}
+        ),
+    }
+    if key:
+        provider_env["WORKBENCH_AI_API_KEY"] = key
+    return MonitoringAiRuntimeBinding(
+        profile_id=profile_id,
+        provider="opencode-go",
+        model=model,
+        env=provider_env,
+        transport=MONITORING_PRODUCT_AI_TRANSPORT,
+        available=True,
+        diagnostic="" if key else "opencode api key unavailable",
+    )
+
+
 def _resolve_doc_auth_primary_runtime():
-    # N5/M4：文档权威主分析——本机OmniRoute/glm-5.3（旗舰推理）。
-    # 2026-09-21：opencode-go与ollama-cloud存储密钥均失效（实测401），
-    # 改走本机路由可达的glm-5.3/deepseek-flash双族（用户muse-spark+deepseek
-    # 的"强主分析+独立盲核"意图，密钥恢复后可在mapping_gate一键改回）。
-    return _omp_router_runtime(
-        "document_authority_primary_ai__omp_router_glm53",
-        model="glm-5.3-flash",
+    # N5/M4：文档权威主分析——opencode zen直连。
+    # 2026-09-22：用户提供新密钥（~/Downloads/opencode.env，已入凭据仓）；
+    # muse-spark上游实测"Endpoint is unavailable"，按用户指示改用
+    # mimo-v2.6-flash（回名=请求名，探针通过）。
+    return _opencode_go_runtime(
+        "document_authority_primary_ai__opencode_go_mimo",
+        model="mimo-v2.6-flash",
         thinking="high",
     )
 
 
 def _resolve_doc_auth_verifier_runtime():
-    # N5/M4：文档权威盲核——本机OmniRoute/deepseek-flash（与主分析不同族）。
+    # N5/M4：文档权威盲核——本机OmniRoute/deepseek（与主分析不同族）。
+    # ollama-cloud密钥未提供，deepseek-v4.1暂不可达；恢复后在mapping_gate回切。
     return _omp_router_runtime(
         "document_authority_verifier_ai__omp_router_dsf",
         model="deepseek-latest-cloud",

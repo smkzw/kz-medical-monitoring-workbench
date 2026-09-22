@@ -417,6 +417,13 @@ class MonitoringAiRepository:
                     "ALTER TABLE monitoring_ai_jobs "
                     "ADD COLUMN contract_retired_at TEXT NOT NULL DEFAULT ''"
                 )
+            if "observed_response_model" not in job_columns:
+                # V5-03：requested（作业身份记录）与observed（上游实际回报）
+                # 分列保存；别名/缺失不再被改写覆盖。
+                connection.execute(
+                    "ALTER TABLE monitoring_ai_jobs "
+                    "ADD COLUMN observed_response_model TEXT NOT NULL DEFAULT ''"
+                )
             legacy_retirement_codes = ",".join(
                 "?" for _ in _LEGACY_CONTRACT_RETIREMENT_FAILURE_CODES
             )
@@ -1338,6 +1345,7 @@ class MonitoringAiRepository:
         response_model: str,
         raw_output: Any,
         candidates: Iterable[MonitoringAiCandidate],
+        observed_response_model: str = "",
     ) -> MonitoringAiJob:
         candidate_tuple = tuple(candidates)
         validate_candidates_for_job(job, candidate_tuple)
@@ -1385,7 +1393,8 @@ class MonitoringAiRepository:
             updated = connection.execute(
                 """
                 UPDATE monitoring_ai_jobs
-                SET status = ?, response_model = ?, output_sha256 = ?,
+                SET status = ?, response_model = ?, observed_response_model = ?,
+                    output_sha256 = ?,
                     lease_owner = '', lease_expires_at = '', updated_at = ?,
                     failure_code = '', failure_message = '', retryable = 0
                 WHERE job_id = ? AND status = ? AND lease_owner = ?
@@ -1394,6 +1403,7 @@ class MonitoringAiRepository:
                 (
                     MonitoringAiJobStatus.COMPLETED.value,
                     response_model,
+                    observed_response_model.strip(),
                     content_sha256(raw_output),
                     _iso(now),
                     job.job_id,
@@ -2721,6 +2731,11 @@ class MonitoringAiRepository:
                 provider=provider,
                 requested_model=requested_model,
                 response_model=row["response_model"],
+                observed_response_model=(
+                    row["observed_response_model"]
+                    if "observed_response_model" in row.keys()
+                    else ""
+                ),
                 attempt_count=attempt_count,
                 max_attempts=max_attempts,
                 lease_owner=row["lease_owner"],
