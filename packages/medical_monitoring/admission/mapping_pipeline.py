@@ -81,6 +81,8 @@ MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS = frozenset({
 MAPPING_ADJUDICATION_BUSINESS_PREFIX = (
     "listing-field-mapping-adjudication"
 )
+DEFAULT_LISTING_MAPPING_CHUNK_SIZE = 12
+MAX_LISTING_MAPPING_CHUNK_SIZE = 50
 _ADJUDICATION_GENERATION_RE = re.compile(r":g(\d{2}):")
 _ADJUDICATION_AUTO_RECOVERY_LIMIT = 1
 
@@ -1221,10 +1223,40 @@ class AdmissionMappingPipeline:
             project_id=project_id,
             input_revision=revision,
             field_profile=harness_input.field_profile,
-            chunk_size=12,
+            chunk_size=self._listing_mapping_chunk_size(service),
             prompt_version=contract.prompt_version,
             business_key_prefix=contract.business_key_prefix,
         )
+
+    @staticmethod
+    def _listing_mapping_chunk_size(service: Any) -> int:
+        """Resolve a model-agnostic work-unit limit from the bound profile.
+
+        The field count affects reasoning/output pressure but carries no
+        clinical meaning.  Keeping it on each provider profile lets routes be
+        changed without source edits or model-name special cases.
+        """
+
+        try:
+            runtime = service.runtime_resolver()
+            raw = str(
+                (getattr(runtime, "env", {}) or {}).get(
+                    "WORKBENCH_AI_LISTING_MAPPING_CHUNK_SIZE", ""
+                )
+            ).strip()
+        except Exception:
+            raw = ""
+        if not raw:
+            return DEFAULT_LISTING_MAPPING_CHUNK_SIZE
+        try:
+            value = int(raw)
+        except (TypeError, ValueError) as exc:
+            raise AdmissionMappingPipelineError(
+                "mapping_chunk_size_invalid"
+            ) from exc
+        if value < 1 or value > MAX_LISTING_MAPPING_CHUNK_SIZE:
+            raise AdmissionMappingPipelineError("mapping_chunk_size_invalid")
+        return value
 
     def _recover_failed_submission_jobs(
         self,
@@ -1347,6 +1379,7 @@ class AdmissionMappingPipeline:
                 include_option_ids=self._role_equivalence,
                 exclude_prior_proofs=self._role_equivalence,
             )
+        chunk_size = self._listing_mapping_chunk_size(service)
         digest = hashlib.sha256(
             json.dumps(
                 {
@@ -1361,6 +1394,15 @@ class AdmissionMappingPipeline:
                     # namespace instead of colliding with prior-route rows.
                     "runtime": self._expected_runtime_identity(
                         service, contract.cohort
+                    ),
+                    **(
+                        {
+                            "listing_mapping_chunk_size": (
+                                chunk_size
+                            )
+                        }
+                        if chunk_size != DEFAULT_LISTING_MAPPING_CHUNK_SIZE
+                        else {}
                     ),
                 },
                 ensure_ascii=False,
@@ -1694,7 +1736,7 @@ class AdmissionMappingPipeline:
                     harness_input.input_revision
                 ),
                 field_profile=profile,
-                chunk_size=12,
+                chunk_size=chunk_size,
                 prompt_version=self._adjudication_prompt_version(contract.cohort),
                 business_key_prefix=(
                     f"{query_prefix}g{generation:02d}"

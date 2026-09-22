@@ -363,6 +363,40 @@ class AiRuntimeSettingsApiTests(unittest.TestCase):
 
         self.assertEqual(422, response.status_code)
 
+    def test_profile_update_preserves_route_capabilities_when_omitted(self):
+        store = AiRuntimeSettingsStore(self.settings_path)
+        store.upsert(
+            AiProviderProfile(
+                profile_id="monitoring-route",
+                provider="ollama-cloud",
+                label="Monitoring verifier",
+                base_url="https://ollama.com/v1",
+                model="deepseek-v4.1-flash",
+                output_token_budget=65_536,
+                output_discipline="strict_single_json",
+                listing_mapping_chunk_size=4,
+                extra_headers_json='{"x-route":"verifier"}',
+            )
+        )
+
+        response = self.client.put(
+            "/api/ai-gateway/profiles/monitoring-route",
+            json={
+                "profile_id": "monitoring-route",
+                "provider": "ollama-cloud",
+                "label": "Monitoring verifier updated",
+                "base_url": "https://ollama.com/v1",
+                "model": "deepseek-v4.1-flash",
+            },
+        )
+
+        self.assertEqual(200, response.status_code, response.text)
+        saved = store.profile("monitoring-route")
+        self.assertEqual(65_536, saved.output_token_budget)
+        self.assertEqual("strict_single_json", saved.output_discipline)
+        self.assertEqual(4, saved.listing_mapping_chunk_size)
+        self.assertEqual('{"x-route":"verifier"}', saved.extra_headers_json)
+
 
 if __name__ == "__main__":
     unittest.main()

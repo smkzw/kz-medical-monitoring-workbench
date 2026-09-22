@@ -4311,6 +4311,7 @@ def upsert_ai_gateway_profile(
         current = store.profile(profile_id)
         revision = current.revision + 1
     except KeyError:
+        current = None
         revision = 1
     profile = AiProviderProfile(
         profile_id=request.profile_id,
@@ -4327,6 +4328,26 @@ def upsert_ai_gateway_profile(
         discovery_mode=request.discovery_mode,
         enabled=request.enabled,
         revision=revision,
+        output_token_budget=(
+            request.output_token_budget
+            if request.output_token_budget is not None
+            else current.output_token_budget if current is not None else 0
+        ),
+        output_discipline=(
+            request.output_discipline
+            if request.output_discipline is not None
+            else current.output_discipline if current is not None else ""
+        ),
+        listing_mapping_chunk_size=(
+            request.listing_mapping_chunk_size
+            if request.listing_mapping_chunk_size is not None
+            else current.listing_mapping_chunk_size if current is not None else 0
+        ),
+        extra_headers_json=(
+            request.extra_headers_json
+            if request.extra_headers_json is not None
+            else current.extra_headers_json if current is not None else ""
+        ),
     )
     store.upsert(profile, api_key=request.api_key, activate=request.activate)
     if request.activate:

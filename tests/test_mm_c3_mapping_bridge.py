@@ -270,6 +270,30 @@ def _runtime(
     )
 
 
+def test_mapping_chunk_size_is_profile_data_and_invalid_values_fail_closed() -> None:
+    service = SimpleNamespace(
+        runtime_resolver=lambda: _runtime(
+            env={"WORKBENCH_AI_LISTING_MAPPING_CHUNK_SIZE": "4"}
+        )
+    )
+    assert AdmissionMappingPipeline._listing_mapping_chunk_size(service) == 4
+    assert AdmissionMappingPipeline._listing_mapping_chunk_size(
+        SimpleNamespace(runtime_resolver=lambda: _runtime())
+    ) == 12
+
+    for invalid in ("0", "51", "not-an-integer"):
+        invalid_service = SimpleNamespace(
+            runtime_resolver=lambda invalid=invalid: _runtime(
+                env={"WORKBENCH_AI_LISTING_MAPPING_CHUNK_SIZE": invalid}
+            )
+        )
+        with pytest.raises(
+            AdmissionMappingPipelineError,
+            match="mapping_chunk_size_invalid",
+        ):
+            AdmissionMappingPipeline._listing_mapping_chunk_size(invalid_service)
+
+
 def test_completed_equivalent_adjudication_cohort_survives_digest_drift() -> None:
     def job(group: str, index: int, status: str, updated_at: str):
         # Real keys carry an attempt segment between cohort and digest; the
