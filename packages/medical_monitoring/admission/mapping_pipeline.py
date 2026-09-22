@@ -1018,6 +1018,7 @@ class AdmissionMappingPipeline:
                 harness_input,
                 project_id=project_id,
             )
+            jobs = self._recover_failed_submission_jobs(service, jobs)
         except MappingBridgeError as exc:
             code = str(getattr(exc, "code", ""))
             raise AdmissionMappingPipelineError(
@@ -1074,11 +1075,14 @@ class AdmissionMappingPipeline:
                     allow_local_fallback=False,
                 )
             submitted = tuple(
-                self._submit_harness(
+                self._recover_failed_submission_jobs(
                     service,
-                    contract,
-                    harness_input,
-                    project_id=project_id,
+                    self._submit_harness(
+                        service,
+                        contract,
+                        harness_input,
+                        project_id=project_id,
+                    ),
                 )
                 for service, contract in zip(services, contracts)
             )
@@ -1168,6 +1172,54 @@ class AdmissionMappingPipeline:
             prompt_version=contract.prompt_version,
             business_key_prefix=contract.business_key_prefix,
         )
+
+    def _recover_failed_submission_jobs(
+        self,
+        service: Any,
+        jobs: Sequence[Any],
+    ) -> tuple[Any, ...]:
+        """Boundedly resume failed first-pass shards for the same evidence.
+
+        Re-entering candidate generation is idempotent: successful siblings
+        keep their candidate identity, while a failed shard may be requeued
+        once only when its frozen input revision is still current.  This is a
+        technical recovery path, never a new model vote or evidence refresh.
+        """
+
+        resolver = getattr(service, "current_revision_resolver", None)
+        retry = getattr(self._repository, "retry_terminal", None)
+        if not callable(resolver) or not callable(retry):
+            return tuple(jobs)
+        recovered = []
+        from services.api.app.monitoring_ai_repository import (
+            MonitoringAiStateConflictError,
+        )
+
+        for job in jobs:
+            if (
+                str(_value(job.status)) != "failed"
+                or getattr(job, "contract_retirement_code", "")
+            ):
+                recovered.append(job)
+                continue
+            current_revision = resolver(job)
+            if current_revision != job.input_revision_sha256:
+                recovered.append(job)
+                continue
+            try:
+                recovered.append(
+                    retry(
+                        job.project_id,
+                        job.job_id,
+                        current_input_revision_sha256=current_revision,
+                        automatic_recovery_limit=(
+                            _ADJUDICATION_AUTO_RECOVERY_LIMIT
+                        ),
+                    )
+                )
+            except MonitoringAiStateConflictError:
+                recovered.append(job)
+        return tuple(recovered)
 
     def list_candidates(
         self,
