@@ -352,3 +352,59 @@ def test_evidence_expansion_no_truncation():
     domains_v2 = {"AE": ae_rows_v2, "MH": domains["MH"]}
     _, sh_v2 = build_subject_evidence(domains_v2, "01001")
     assert sh_v2["AE"] != sh  # 内容变化=hash变化
+
+
+def test_binding_freezes_artifact_against_same_name_swap(artifacts: Path) -> None:
+    """V5-04 R5-11：binding存在时，同名文件内容被替换→read_failed不读B。"""
+
+    _write_artifact(artifacts, {
+        "snapshot_ref": "facts-snapshot-001.dualvlm-full1",
+        "findings": [
+            {"finding_id": "aemh-A", "subject_label": "01001", "state": "accepted",
+             "primary": {"title": "A", "text": "x"}, "verifier": None},
+        ],
+    })
+    art = artifacts / "aemh-findings-facts-snapshot-001.dualvlm-full1.json"
+    payload = json.loads(art.read_text(encoding="utf-8"))
+    recomputed = content_hash({k: v for k, v in payload.items() if k != "content_sha256"})
+    (artifacts / "aemh-findings.active.json").write_text(json.dumps({
+        "schema_version": "monitoring-findings-binding-v1",
+        "artifact": art.name,
+        "content_sha256": recomputed,
+        "project_id": "proj-x",
+        "snapshot_digest": "d" * 64,
+    }), encoding="utf-8")
+    provider = FactsModeOutputProvider(artifacts, project_ref="proj-x")
+    rows = provider.public_findings(projection={}, project_ref="proj-x")
+    assert [r["finding_id"] for r in rows] == ["aemh-A"]
+
+    # 同名替换为不同内容的工件 → 与binding不符 → read_failed
+    swapped = dict(payload)
+    swapped["findings"] = [
+        {"finding_id": "aemh-B", "subject_label": "01001", "state": "escalated",
+         "verifier": {"title": "B", "text": "y"}, "primary": None},
+    ]
+    swapped.pop("content_sha256", None)
+    swapped["content_sha256"] = content_hash(swapped)
+    art.write_text(json.dumps(swapped), encoding="utf-8")
+    provider = FactsModeOutputProvider(artifacts, project_ref="proj-x")
+    assert provider.public_findings(projection={}, project_ref="proj-x") == []
+    meta = provider.public_findings_meta(projection={}, project_ref="proj-x")
+    assert meta["state"] == "read_failed"
+    assert meta["error"] == "binding_digest_mismatch"
+
+
+def test_read_failed_does_not_fall_back_to_deterministic(
+    artifacts: Path,
+) -> None:
+    """V5-04 R5-12：read_failed不触发确定性备用提示。"""
+
+    artifacts.mkdir(parents=True, exist_ok=True)
+    (artifacts / "aemh-findings-facts-snapshot-001.dualvlm-full1.json").write_text(
+        "{broken json", encoding="utf-8"
+    )
+    provider = FactsModeOutputProvider(artifacts)
+    meta = provider.public_findings_meta(projection={}, project_ref="proj-x")
+    assert meta["state"] == "read_failed"
+    # daily路径经_daily_findings同样不得产出备用提示列表
+    assert provider.public_findings(projection={}, project_ref="proj-x") == []

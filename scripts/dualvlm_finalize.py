@@ -375,7 +375,29 @@ def main() -> None:
         json.dumps(art, ensure_ascii=False, sort_keys=True), encoding="utf-8"
     )
     os.replace(tmp_path, artifact)
+    # V5-04冻结结果binding：发布指针指向本工件并锁定内容摘要——
+    # 读取端校验同名文件内容与binding一致，同名替换判read_failed。
+    binding = {
+        "schema_version": "monitoring-findings-binding-v1",
+        "artifact": artifact.name,
+        "content_sha256": artifact_sha,
+        "project_id": PROJECT_ID,
+        "snapshot_digest": content_hash(
+            {"snapshot_ref": SNAPSHOT_REF, "artifact_sha256": artifact_sha}
+        ),
+        "published_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    binding_path = (
+        WORKSPACE / "runtime" / "artifacts" / "aemh-findings.active.json"
+    )
+    binding_tmp = binding_path.with_suffix(".json.tmp")
+    binding_tmp.write_text(
+        json.dumps(binding, ensure_ascii=False, sort_keys=True, indent=1),
+        encoding="utf-8",
+    )
+    os.replace(binding_tmp, binding_path)
     print("MERGED", dict(counts), "executions:", dict(executions))
+    print("BINDING", binding_path.name, "->", artifact.name)
 
     # ---- scoped原子哨兵（D-08）：project+入选作业身份+分析内容 ----
     policy8 = hashlib.sha256(
