@@ -28,7 +28,9 @@ MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION = "mm-c3-dual-mapping-cohort-v1"
 # route changes.
 # 2026-09-21 用户指令：glm-5.3-flash全部改为opencode-go/muse-spark-1.3-contributor(high)
 MONITORING_C3_MAPPING_PROVIDER = "opencode-go"
-MONITORING_C3_MAPPING_MODEL = "muse-spark-1.3-contributor"
+# 2026-09-22：muse-spark上游不可用，映射主分析同切mimo-v2.6-flash
+# （与文档权威主分析同profile/凭据；请求名=回执名）。
+MONITORING_C3_MAPPING_MODEL = "mimo-v2.6-flash"
 # N5：文档权威专用身份
 # 2026-09-21 晚：opencode-go与ollama-cloud的存储密钥均已失效（实测401），
 # 按用户"muse-spark主+deepseek盲核"的模型意图改为本机OmniRoute可达路由：
@@ -43,7 +45,7 @@ DOC_AUTH_VERIFIER_PROVIDER = "omp-router"
 # 本机路由对deepseek-flash的透传名是deepseek-latest-cloud，故直接用它请求。
 DOC_AUTH_VERIFIER_MODEL = "deepseek-latest-cloud"
 MONITORING_C3_MAPPING_PROFILE_ID = (
-    "medical_monitoring_ai__zhipu_glm_flash_high"
+    "medical_monitoring_ai__opencode_go_mimo"
 )
 MONITORING_C3_DEEPSEEK_PRIMARY_PROVIDER = "deepseek"
 MONITORING_C3_DEEPSEEK_PRIMARY_MODEL = "deepseek-flash"
