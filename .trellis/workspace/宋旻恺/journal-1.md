@@ -1617,3 +1617,11 @@ W00证据位于`../../tasks/09-22-mm-delivery-replan/evidence/{route-lock,projec
 验证：受影响Python文件编译通过；文档权威、作业/回放、补丁修复、R7接入、启动恢复及EX修复定向测试共146项通过（49条既有deprecation warning）；`git diff --check`通过。合成CSU listing的实际产品模型EX模块恢复另保留573行、10域、60字段（含5个EX字段），全字段保留且未把已上传资料复核交用户，但它不是API/浏览器验收，因此D02仅partial。
 
 限制：Chrome扩展未启用file URL access，ego浏览器无法操作文件选择器；本次真实multipart上传走同一隔离localhost API，随后单独检查浏览器界面。不能声称浏览器已显示错研究提示。W01/W02均仍进行中；完整GUI晋升→resolver→mapping→facts、浏览器警告、实际API EX修复和其余决策矩阵仍待完成。下一步必须换用身份正确的隔离MG项目继续，不能复用故意错配的SAR项目，也不能自动加载本地Qwen/MTPLX。8911继续保持停止。
+
+### 2026-09-22 W02 正确MG资料接入与映射恢复实证
+
+正确MG-K10-SAR-001隔离项目已通过实际API完成锁库后listing（1文件、62表、148,788行）、方案V2.1和eCRF V1.1接入；双模型文档权威链自动确认方案/eCRF可用，无需用户逐项分配角色。字段映射首轮严格使用W00冻结的opencode-go/mimo-v2.6-flash主分析与opencode-go/deepseek-flash盲核，创建302个分片；251个完成，51个因把已有资料复核交给用户、伪用户问题、映射阶段CTCAE/Query结论或无依据批准措辞被fail-closed拒收。
+
+本轮按真实失败补了三层系统修复：模型修订必须整条重建违规字段且不得删字段/抬置信度；候选生成再次进入时只原地恢复同revision失败分片；文档权威与映射共用每个角色的一套worker池，消除同profile重复消费者。相关48项集中回归通过，提交a11ca87、4e4129d、6baa05e、5982c31、6dfe6e3已推GitHub。
+
+实际恢复证明251个成功分片未重跑，51个失败分片原地重队；随后共享opencode-go路线持续HTTP 429。短冷却仍未解除，已停止8920以保护剩余30 queued和5个无活进程lease的核对分片；8911保持停止，未启用本地模型，未改临床原件或SQLite。该状态不是W02完成：mapping尚未ready、facts未物化、浏览器上传仍受Chrome扩展file URL权限限制。下一安全动作是等待限流窗口解除后以每角色单worker重启同一runtime，不再POST新代次，完成现有恢复队列后继续mapping→自动低负担确认→facts。

@@ -1,10 +1,10 @@
 {
   "schema": "mm-delivery-status-v1",
-  "updated_at": "2026-09-22T21:11:43+08:00",
+  "updated_at": "2026-09-22T23:06:12+08:00",
   "planning_status": "complete",
   "product_status": "not_delivered",
   "goal_status": "active",
-  "source_head": "5dc01f987293c09aa64a088a32b969bb71326096",
+  "source_head": "6dfe6e34f4e7670901b33f4d8ffab5e5f429d6e0",
   "next_work_package": "W02",
   "work_packages": [
     {
@@ -324,20 +324,20 @@
     {
       "id": "D02",
       "status": "partial_verified",
-      "head": "5dc01f987293c09aa64a088a32b969bb71326096",
+      "head": "6dfe6e34f4e7670901b33f4d8ffab5e5f429d6e0",
       "evidence": [
         "evidence/W02-decision-and-intake-slice.json"
       ],
-      "reason": "A real product-model module recovery retained all 60 fields including five EX fields and kept supplied-document review inside the system. The required actual API and browser flow remains."
+      "reason": "Actual isolated MG API ran both real W00 model routes across 302 mapping shards. Fail-closed validation rejected 51 malformed outputs; 51 were requeued in place without rerunning 251 successful siblings. New repair contracts cover supplied-document delegation, malformed questions, mapping-stage CTCAE/Query conclusions and unsupported approval language. HTTP 429 interrupted the bounded recovery, so D02 remains partial."
     },
     {
       "id": "D03",
       "status": "partial_verified",
-      "head": "5dc01f987293c09aa64a088a32b969bb71326096",
+      "head": "6dfe6e34f4e7670901b33f4d8ffab5e5f429d6e0",
       "evidence": [
         "evidence/W02-decision-and-intake-slice.json"
       ],
-      "reason": "The compact real MG intake remains verified, and actual API now blocks wrong-study documents before low-value role questions. The complete GUI document-to-mapping-to-facts flow remains."
+      "reason": "Correct MG listing, protocol V2.1 and eCRF V1.1 completed actual API upload and document authority without user role confirmation; 302 mapping jobs were created. Mapping/facts and browser acceptance remain incomplete."
     },
     {
       "id": "D04",
@@ -557,5 +557,5 @@
       "reason": "Current review probes are not the specified complete product acceptance."
     }
   ],
-  "next_action": "Keep 8911 stopped. In a correctly identified isolated MG project, run the W00-frozen opencode-go mimo-v2.6-flash primary and deepseek-flash verifier through document authority, mapping and facts; capture the remaining A09/A10-A15/D02/D03 API/browser evidence without enabling local Qwen/MTPLX."
+  "next_action": "Keep 8911 stopped. After the opencode-go rate-limit window clears, restart the same isolated runtime with one worker per role; do not POST a new generation. Let the existing 30 queued and 5 leased verifier jobs settle, then use the bounded candidate-generation recovery only for same-revision terminal failures. Complete mapping, automatic low-burden confirmation and facts before moving to W03."
 }
