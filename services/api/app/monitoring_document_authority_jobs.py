@@ -567,10 +567,15 @@ def _apply_user_role_selections(
             if isinstance(selection, Mapping)
             else ""
         ).strip()
-        if role not in unresolved or (candidate_id and candidate_id not in candidate_ids):
+        if candidate_id and candidate_id not in candidate_ids:
+            # 数据完整性fail-closed：指向不存在的候选绝不容忍
             raise DocumentAuthorityError(
                 "document_authority_user_selection_invalid"
             )
+        if role not in unresolved:
+            # 过期裁决（该角色此后已自动收敛或本轮本就无争议）：
+            # 静默忽略——持久化裁决可能早于模型链的自行收敛，属正常演化
+            continue
         resolved_roles.append({
             "role": role,
             "status": "selected" if candidate_id else "missing",
