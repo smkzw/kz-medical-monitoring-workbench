@@ -410,17 +410,37 @@ def _clues_agree(primary: Any, verifier: Any) -> bool:
     if not has_evidence_overlap and not has_entity_match:
         return False
 
-    # 命题方向核验：双方方向都明确且相反→不一致
+    # V5-06命题核验降级：词频方向仅是候选配对信号，不是确认依据。
+    # 确认（accepted）只允许双方立场都明确为positive且无数值/分级冲突；
+    # 任一方neutral（无法判定方向）、同负向词频、或有分级差异，一律
+    # 不判一致（保守升级为可见分歧，交人工/定向核实裁决）。
     primary_stance = _clue_stance(primary)
     verifier_stance = _clue_stance(verifier)
-    if (
-        primary_stance != "neutral"
-        and verifier_stance != "neutral"
-        and primary_stance != verifier_stance
-    ):
+    if primary_stance != "positive" or verifier_stance != "positive":
         return False
-
+    primary_grades = _grade_terms(primary)
+    verifier_grades = _grade_terms(verifier)
+    if primary_grades and verifier_grades and not (
+        primary_grades & verifier_grades
+    ):
+        # "3级"vs"1级"类分级矛盾：词频同向也不能判一致
+        return False
     return True
+
+
+_GRADE_RE = re.compile(r"(?:^|[^0-9])([1-5])\s*级|grade\s*([1-5])", re.IGNORECASE)
+
+
+def _grade_terms(candidate: Any) -> set[str]:
+    """Extract explicit severity-grade mentions ("3级"/"grade 2") from a clue."""
+
+    text = _clue_direction_text(candidate)
+    if not text:
+        return set()
+    grades = set()
+    for first, second in _GRADE_RE.findall(text):
+        grades.add(first or second)
+    return grades
 
 
 def _finding_text(candidate: Any) -> dict[str, Any]:
