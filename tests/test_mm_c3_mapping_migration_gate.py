@@ -172,8 +172,12 @@ def _assembling_repository(deterministic_allowed: bool):
             "fields": [],
         }
     )
+    def _assemble(*_args, **kwargs):
+        decided.extend(kwargs.get("candidate_acceptances") or ())
+        return draft
+
     mapping_repository = SimpleNamespace(
-        assemble=lambda *_args, **_kwargs: draft,
+        assemble=_assemble,
         semantic_quality=lambda *_args: SimpleNamespace(
             as_payload=lambda: {"confirmable": True}
         ),
@@ -372,8 +376,12 @@ def test_fallback_cohort_is_adoptable_but_labeled_and_ineligible() -> None:
             "fields": [],
         }
     )
+    def _assemble(*_args, **kwargs):
+        decided.extend(kwargs.get("candidate_acceptances") or ())
+        return draft
+
     mapping_repository = SimpleNamespace(
-        assemble=lambda *_args, **_kwargs: draft,
+        assemble=_assemble,
         semantic_quality=lambda *_args: SimpleNamespace(
             as_payload=lambda: {"confirmable": True}
         ),

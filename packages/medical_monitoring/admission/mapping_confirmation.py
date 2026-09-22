@@ -504,6 +504,7 @@ class AdmissionMappingConfirmationService:
         profile_sha = ""
         profile_shas: dict[str, str] = {}
         current_revisions: dict[str, str] = {}
+        candidate_acceptances: list[dict[str, str]] = []
         for job in jobs:
             revision_key = str(job.input_revision_sha256)
             digest = profile_shas.get(revision_key, "")
@@ -538,21 +539,32 @@ class AdmissionMappingConfirmationService:
                         workspace_dir=workspace_dir,
                     )
                     current_revisions[revision_key] = revision
-                self.ai_repository.decide_candidate(
-                    project_id,
-                    candidate.candidate_id,
-                    decision=self.accepted_status,
-                    actor=actor,
-                    reason=reason,
-                    current_input_revision_sha256=revision,
+                candidate_acceptances.append(
+                    {
+                        "candidate_id": str(candidate.candidate_id),
+                        "job_id": str(job.job_id),
+                        "input_revision_sha256": revision,
+                    }
                 )
             elif status != _value(self.accepted_status):
                 raise AdmissionMappingPipelineError("mapping_candidate_not_adoptable")
+            else:
+                candidate_acceptances.append(
+                    {
+                        "candidate_id": str(candidate.candidate_id),
+                        "job_id": str(job.job_id),
+                        "input_revision_sha256": revision_key,
+                    }
+                )
         draft = self.mapping_repository.assemble(
             project_id,
             attempt_id,
             profile_sha,
             prompt_version=self.prompt_version,
+            expected_job_ids=tuple(str(job.job_id) for job in jobs),
+            candidate_acceptances=tuple(candidate_acceptances),
+            decision_actor=actor,
+            decision_reason=reason,
         )
         payload = self._draft_payload(draft)
         # Durable record of how the first pass actually ran: downstream
