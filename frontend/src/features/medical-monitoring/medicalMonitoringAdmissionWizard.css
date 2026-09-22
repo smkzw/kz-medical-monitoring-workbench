@@ -474,6 +474,22 @@
   margin-left: auto;
 }
 
+.monitoring-admission-review > .monitoring-admission-table-details {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.monitoring-admission-review > .monitoring-admission-table-details > .monitoring-admission-table {
+  margin-top: 8px;
+}
+
+.monitoring-admission-table > summary {
+  cursor: pointer;
+}
+
 .monitoring-admission-table-summary li {
   display: grid;
   gap: 1px;
@@ -675,6 +691,21 @@
   border: 1px solid var(--monitoring-line, #dce3e9);
   border-radius: 8px;
   background: #fff;
+}
+
+.monitoring-admission-content-differences {
+  margin: 10px 0;
+}
+
+.monitoring-admission-content-differences li {
+  align-items: flex-start;
+  display: grid;
+  justify-content: stretch;
+  gap: 3px;
+}
+
+.monitoring-admission-content-differences li > span {
+  color: var(--monitoring-muted, #64727d);
 }
 
 .monitoring-admission-document-picker {

@@ -131,7 +131,7 @@ const stubApi = {
 const wizardMountHtml = render(element(wizardBundle, "MedicalMonitoringAdmissionWizard", { projectId: "proj-c2", api: stubApi }));
 check(wizardMountHtml.includes('aria-label="数据接入向导"'), "mounted wizard renders its accessible region");
 check(wizardMountHtml.includes('id="monitoring-admission-files"'), "mounted wizard starts with the browser-native folder picker");
-check(wizardMountHtml.includes("选择数据") && wizardMountHtml.includes("查看系统识别结果") && wizardMountHtml.includes("核对系统识别"), "mounted wizard renders the three native Chinese steps");
+check(wizardMountHtml.includes("选择数据") && wizardMountHtml.includes("查看导入概况") && wizardMountHtml.includes("处理少量疑点"), "mounted wizard renders the three native Chinese steps");
 check(wizardMountHtml.includes("disabled"), "wizard entry primary action waits for selected files or a fallback location");
 
 const mappingFlowCalls = [];
@@ -169,7 +169,8 @@ const summaryIndex = readyHtml.indexOf("2 个文件 · 2 张数据表 · 25 行�
 check(summaryIndex !== -1, "ready wizard renders the generated structure summary");
 check(!readyHtml.includes("技术详情"), "ready wizard hides engineering details");
 check(!readyHtml.includes("manifest-att-c2-0001"), "ready wizard hides manifest identities");
-check(readyHtml.includes("受试者标识"), "generated suggested roles reach the review step");
+check(readyHtml.includes("查看 2 张表的结构"), "table details remain available in one collapsed disclosure");
+check(!readyHtml.includes("受试者标识"), "unverified role guesses stay out of the overview");
 
 // --- wiring pins: whitespace-normalized source sequences of the loop ---
 const source = fs.readFileSync(path.join(here, "MedicalMonitoringProductLoop.jsx"), "utf8");
@@ -189,7 +190,7 @@ const needle = (text) => compact(text);
     "admission open state is declared beside the wizard state",
   );
   check(
-    src.includes(needle(`{!loadingBody && !resultError && (!setupHistoryError || admissionOnly) && !resultLoaded && !publicRunToken ? (\n        <>\n          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError.text : startSurfaceCopy}</span></section>\n          <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />\n          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={retryPage} /> : null}\n        </>\n      ) : null}`)),
+    src.includes(needle(`{!loadingBody && !resultLoaded && !publicRunToken ? (\n        <>\n          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError?.text : startSurfaceCopy}</span></section>\n          <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />\n          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={retryPage} /> : null}\n        </>\n      ) : null}`)),
     "card and wizard mount only on the project start-surface gate",
   );
   check(

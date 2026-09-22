@@ -57,8 +57,8 @@ for (const [name, html] of Object.entries(renders)) {
 check(renders.input.includes("数据接入"), "wizard heading rendered");
 check(renders.input.includes('aria-label="数据接入向导"'), "wizard aria label");
 check(renders.input.includes("第 一 步") && renders.input.includes("选择数据"), "step one rendered");
-check(renders.input.includes("第 二 步") && renders.input.includes("查看系统识别结果"), "step two rendered");
-check(renders.input.includes("第 三 步") && renders.input.includes("核对系统识别"), "step three rendered");
+check(renders.input.includes("第 二 步") && renders.input.includes("查看导入概况"), "step two rendered");
+check(renders.input.includes("第 三 步") && renders.input.includes("处理少量疑点"), "step three rendered");
 check(renders.input.includes('aria-current="step"'), "current step exposed to assistive tech");
 check(
   renders.input.split('aria-current="step"').length - 1 === 1,
@@ -98,17 +98,17 @@ check(
   renders.review.indexOf("2 个文件") < renders.review.indexOf("访视列表"),
   "summary precedes table blocks",
 );
-check(renders.review.includes('aria-label="数据表 访视列表"'), "table region labelled");
-check(renders.review.includes("128 行 · 4 列 · 来源 visit_listings.csv"), "table meta rendered");
+check(renders.review.includes("查看 2 张表的结构"), "table structures stay in one optional disclosure");
+check(renders.review.includes("128 行 · 4 列"), "table meta rendered");
 check(renders.review.includes("缺失 2"), "missing count rendered");
 check(renders.review.includes("2026-01-12 ~ 2026-08-30"), "date range rendered");
-check(renders.review.includes("受试者标识") && renders.review.includes("访视"), "role chips rendered");
+check(!renders.review.includes("受试者标识"), "deterministic role guesses stay out of the overview");
 const manifestValue = generatedAdmissionFixture().technical_details.manifest_hash;
 check(!renders.review.includes(manifestValue), "manifest hash stays out of the product UI");
 check(!renders.review.includes("校验值"), "file hashes stay out of the product UI");
 check(!renders.review.includes("来源版本标识"), "source revision ids stay out of the product UI");
 check(!renders.review.includes("单元格定位索引标识"), "locator ids stay out of the product UI");
-check(renders.review.includes(">下一步：核对系统识别</button>"), "review primary advances");
+check(renders.review.includes(">下一步：让系统核对字段</button>"), "review primary advances");
 check(!renders.review.includes('role="alert"'), "clean review raises no alert");
 
 // Before mapping, the system explains missing study evidence in plain Chinese
@@ -160,6 +160,19 @@ check(
     && renders.documentsCrossChecking.includes('disabled=""'),
   "critique keeps the named file visible and upload disabled",
 );
+check(
+  renders.documentsContentDifference.includes("研究方案：研究方案V2.0.docx")
+    && renders.documentsContentDifference.includes("当前项目：MG-K10-SAR-001")
+    && renders.documentsContentDifference.includes("文件内容：MG-K10-SAR-01"),
+  "content differences show the medical-facing expected and observed values",
+);
+check(
+  renders.documentsContentDifference.includes("差异不影响本次监查，继续使用"),
+  "an overridable difference has one consequence-based action",
+);
+for (const internal of ["project_identity", "requires_confirmation", "mismatch", "角色 protocol"]) {
+  check(!renders.documentsContentDifference.includes(internal), `content decision hides internal value: ${internal}`);
+}
 
 // Confirm step: plain summary leads, engineering field list stays collapsed.
 check(

@@ -364,6 +364,8 @@ await documentApi.analyzeStudyDocuments("proj/01", "attempt:0002", [protocolFile
 });
 await documentApi.resolveStudyDocuments("proj/01", "attempt:0002", "mmbatch_aaaaaaaaaaaaaaaaaaaaaaaa", {
   signal: admissionSignal,
+  userRoleSelections: [{ role: "protocol", candidate_id: "candidate-1" }],
+  expectedDecisionVersion: 2,
 });
 await documentApi.startDataAdmissionMappingCandidates("proj/01", "attempt:0002", {
   signal: admissionSignal,
@@ -387,10 +389,13 @@ check(
   "study document resolution stays server adjudicated",
 );
 check(documentCalls[2].options.method === "POST", "study document resolution is a POST");
-check(
-  JSON.parse(documentCalls[2].options.body).batch_id === "mmbatch_aaaaaaaaaaaaaaaaaaaaaaaa",
-  "resolution sends only the opaque analysis token",
-);
+const documentResolutionBody = JSON.parse(documentCalls[2].options.body);
+check(documentResolutionBody.batch_id === "mmbatch_aaaaaaaaaaaaaaaaaaaaaaaa",
+  "resolution sends the opaque analysis token");
+check(documentResolutionBody.expected_decision_version === 2,
+  "resolution binds a changed decision to the version the user reviewed");
+check(documentResolutionBody.user_role_selections[0].candidate_id === "candidate-1",
+  "resolution sends the selected file relationship");
 check(
   documentCalls[3].url.endsWith("/data-admissions/attempt%3A0002/mapping-candidates"),
   "mapping start uses the dual-generation attempt route",

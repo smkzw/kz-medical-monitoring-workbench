@@ -293,6 +293,36 @@ export const renders = {
       },
     },
   ),
+  documentsContentDifference: render(
+    readyWizardState(),
+    createAdmissionMappingConfirmState(),
+    null,
+    {
+      phase: "needs_user_input",
+      error: null,
+      payload: {
+        ready: false,
+        headline: "需要核对一处文件差异",
+        guidance: "系统已列出当前项目信息与文件内容，请判断是否影响本次监查。",
+        content_confirmations: [{
+          role: "protocol",
+          source_entry_id: "source-1",
+          filename: "研究方案V2.0.docx",
+          summary: "文件中的研究编号与当前项目不一致。",
+          can_confirm: true,
+          acknowledged_check_codes: ["project_identity"],
+          checks: [{
+            label: "研究编号",
+            expected_value: "MG-K10-SAR-001",
+            observed_value: "MG-K10-SAR-01",
+            outcome: "mismatch",
+            overridable: true,
+            evidence_locators: ["封面"],
+          }],
+        }],
+      },
+    },
+  ),
   confirmDrafting: render(readyWizardState(), mappingFrom([
     { type: "load-ready", payload: candidatesPayload() },
     { type: "adopt-ready", payload: draftPayload },

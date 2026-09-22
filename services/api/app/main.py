@@ -4155,12 +4155,16 @@ def _promote_r7_monitoring_document_authority(
     workspace_dir: Path,
     batch_id: str,
     user_role_selections: Any = (),
+    actor: str = "medical_manager",
+    expected_decision_version: int | None = None,
 ) -> dict[str, object]:
     return monitoring_document_authority_workflow.advance(
         project_id=project_id,
         workspace_dir=workspace_dir,
         batch_id=batch_id,
         user_role_selections=user_role_selections,
+        actor=actor,
+        expected_decision_version=expected_decision_version,
     )
 
 
