@@ -1,24 +1,30 @@
 {
   "schema": "mm-w02-evidence-v1",
-  "recorded_at": "2026-09-22T17:25:35+08:00",
+  "recorded_at": "2026-09-22T21:11:43+08:00",
   "state": "partial_verified",
-  "source_head": "4857ce3",
+  "source_head": "5dc01f987293c09aa64a088a32b969bb71326096",
   "scope": [
     "immutable versioned user document decisions with real principal and batch binding",
     "promotion receipts replay the exact frozen decision instead of latest state",
     "content differences expose expected value, observed value, evidence location and legal action",
     "request generations prevent stale import, document, mapping and facts responses from overwriting current state",
-    "the real 62-table MG import renders a compact Chinese review surface after backend restart"
+    "the real 62-table MG import renders a compact Chinese review surface after backend restart",
+    "document authority batches freeze the current project identity and bind it into batch identity",
+    "both independent first-pass readers must cite candidate evidence against the same project-context hash",
+    "an evidence-bound mismatch from either side blocks role adjudication and all user-decision persistence",
+    "new document-authority jobs use the W00 live pair opencode-go/mimo-v2.6-flash and opencode-go/deepseek-flash"
   ],
   "verification": {
     "backend_grouped_pytest": {
-      "result": "120 passed",
+      "result": "146 passed",
       "warnings": 49,
       "command_scope": [
+        "test_monitoring_document_authority.py",
         "test_monitoring_document_authority_jobs.py",
-        "test_mm_c3_document_evidence.py",
+        "test_monitoring_ai_patch_repair.py",
         "test_medical_monitoring_r7_data_admission.py",
-        "test_source_content_validation.py"
+        "test_monitoring_ai_startup_recovery.py",
+        "test_monitoring_ai_service.py::test_mapping_repair_keeps_field_and_rechecks_supplied_evidence"
       ]
     },
     "frontend_grouped_tests": {
@@ -45,30 +51,113 @@
       "expanded_table_rows": "each table remains individually collapsed",
       "local_qwen_used": false,
       "model_backed_next_step_triggered": false
+    },
+    "real_project_identity_block": {
+      "schema_version": "w02-real-project-identity-block-v1",
+      "project_id": "proj_user_b6f785a59868",
+      "batch_id": "mmbatch_a60f702dd136adfd1ef5c648",
+      "expected_project": {
+        "project_code": "MW-II-8E0F683A",
+        "indication": "季节性过敏性鼻炎",
+        "product_name": "MG-K10人源化单抗注射液",
+        "study_phase": "II期",
+        "protocol_id": "MW-II-8E0F683A-DRAFT"
+      },
+      "project_context_sha256": "39b9db70c8080387265e629d5816aecbb12b30e42af60165eeb6fc3508fa5f00",
+      "candidate_files": [
+        {
+          "candidate_id": "mmcandidate_5759df765792d1243d29715a",
+          "filename": "MG-K10-CSU-001_eCRF_V1.0.docx",
+          "content_sha256": "8109d25aef67771c84aae42e78cb0613af9b5f032290675d21d92e6bede15289"
+        },
+        {
+          "candidate_id": "mmcandidate_6a121b6565b2fa9bae432be8",
+          "filename": "MG-K10-CSU-001_protocol_V1.3.docx",
+          "content_sha256": "73024713c28382ca8fca7c9338d7151256b2765d78d512876731156a9a504199"
+        }
+      ],
+      "models": [
+        {
+          "prompt_version": "monitoring-document-authority-primary-v9",
+          "profile_id": "medical_monitoring_ai__opencode_go_mimo",
+          "provider": "opencode-go",
+          "requested_model": "mimo-v2.6-flash",
+          "response_model": "mimo-v2.6-flash",
+          "observed_response_model": "mimo-v2.6-flash",
+          "status": "completed",
+          "attempt_count": 1,
+          "failure_code": "",
+          "study_identity_status": "mismatch",
+          "project_context_sha256": "39b9db70c8080387265e629d5816aecbb12b30e42af60165eeb6fc3508fa5f00",
+          "evidence_candidate_ids": [
+            "mmcandidate_5759df765792d1243d29715a",
+            "mmcandidate_6a121b6565b2fa9bae432be8"
+          ],
+          "updated_at": "2026-09-22T12:59:28.353757+00:00"
+        },
+        {
+          "prompt_version": "monitoring-document-authority-verifier-v9",
+          "profile_id": "medical_monitoring_verifier_ai__opencode_go_dsf",
+          "provider": "opencode-go",
+          "requested_model": "deepseek-flash",
+          "response_model": "deepseek-flash",
+          "observed_response_model": "deepseek-flash",
+          "status": "completed",
+          "attempt_count": 1,
+          "failure_code": "",
+          "study_identity_status": "mismatch",
+          "project_context_sha256": "39b9db70c8080387265e629d5816aecbb12b30e42af60165eeb6fc3508fa5f00",
+          "evidence_candidate_ids": [
+            "mmcandidate_5759df765792d1243d29715a",
+            "mmcandidate_6a121b6565b2fa9bae432be8"
+          ],
+          "updated_at": "2026-09-22T12:59:13.469937+00:00"
+        }
+      ],
+      "public_result": {
+        "state": "project_mismatch",
+        "headline": "研究资料与当前项目不一致",
+        "guidance": "系统已识别这组资料属于另一项研究，本次不会用于当前项目。请重新选择当前项目的研究方案和病例报告表。"
+      },
+      "browser_upload_limitation": "Chrome extension file URL access disabled; multipart upload used against the same isolated localhost API, then browser UI was inspected separately."
+    },
+    "real_ex_mapping_recovery": {
+      "level": "isolated module with a synthetic CSU listing and the actual product model; not API/browser or real-project acceptance",
+      "source_sha256": "71595d3b6296e38984e6123b607c7efdf117e5b22c87656edf2f5665bef908bd",
+      "rows": 573,
+      "domains": 10,
+      "fields": 60,
+      "ex_fields": 5,
+      "elapsed_seconds": 45.748,
+      "provider": "opencode-go",
+      "requested_model": "mimo-v2.6-flash",
+      "observed_response_model": "mimo-v2.6-flash",
+      "result": "all fields retained; supplied-document review was not delegated to the user"
     }
   },
   "verified_acceptance_slices": {
     "0922V2-A10": "module replay and tamper rejection verified; full actual API chain remains",
-    "0922V2-A11": "invalid selections validate before persistence in workflow tests; complete actual-store negative matrix remains",
+    "0922V2-A11": "wrong-study material is blocked by actual API before promotion; a focused regression proves user role selections are not persisted before the identity gate. The full unknown-candidate/wrong-batch/wrong-project actual-store matrix remains.",
     "0922V2-A12": "same decision is idempotent and stale divergent decision conflicts; browser conflict rendering remains",
     "0922V2-A13": "real principal propagation, version CAS, cross-thread serialization and restart reload verified; full request concurrency API remains",
     "0922V2-A14": "composite main/supplementary path and actionable content checks pass at module level; actual API replay remains",
-    "0922V2-A15": "UI contract distinguishes overridable and hard differences; actual browser warning fixture remains",
-    "D03": "real MG profile is compact and recovers after restart; document upload through facts and return/retransmit paths remain"
+    "0922V2-A15": "actual API returns a concise Chinese hard-error state for CSU documents uploaded to an SAR project; browser-visible upload and warning rendering remain blocked by the test browser extension setting.",
+    "D03": "real MG profile remains compact and recoverable; actual API now blocks wrong-study documents before role questions. Complete GUI upload through mapping/facts remains.",
+    "D02": "real product-model module recovery retained all 60 fields including five EX fields and did not delegate supplied-document review to the user; actual API/browser mapping flow remains."
   },
   "not_yet_accepted": [
     "A09 complete GUI promotion through resolver, mapping and facts",
-    "A10/A11/A12/A13/A14/A15 full evidence levels listed in acceptance/cases.json",
-    "D02 real EX invalid_ai_output recovery with approved remote models",
+    "A10/A11/A12/A13/A14/A15 remaining full evidence levels listed in acceptance/cases.json",
+    "D02 actual API and browser recovery for EX invalid output",
     "D03 complete document-led field mapping and facts flow",
-    "remote MiniMax and GLM route availability was not reverified, so the model-backed next step was intentionally not invoked",
+    "browser-visible file upload and project-mismatch rendering were not exercised because the Chrome extension lacks file URL access; the same isolated localhost API handled the actual multipart upload",
     "W01 remains partial and W02 cannot be marked completed"
   ],
-  "pause": {
-    "goal_status": "paused_by_user",
-    "port_8911": "stopped",
-    "isolated_backend_8920": "stop before handoff",
-    "frontend_5178": "stop before handoff",
-    "next_safe_action": "Re-anchor from this evidence and status.json; verify approved remote MiniMax and GLM routes without enabling MTPLX, then run one isolated document-to-mapping cycle and capture A09/A12/A15/D02/D03 evidence."
+  "continuation": {
+    "goal_status": "active",
+    "port_8911": "must remain stopped",
+    "isolated_backend_8920": "used only for this W02 evidence slice; stop after evidence capture",
+    "frontend_5178": "used only for this W02 evidence slice; stop after evidence capture",
+    "next_safe_action": "Use a correctly identified isolated MG project and the W00-frozen opencode-go pair to run document authority through mapping/facts; do not enable a local model or reuse the intentionally mismatched SAR project."
   }
 }

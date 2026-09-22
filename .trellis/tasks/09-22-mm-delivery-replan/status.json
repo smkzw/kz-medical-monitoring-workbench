@@ -1,10 +1,10 @@
 {
   "schema": "mm-delivery-status-v1",
-  "updated_at": "2026-09-22T17:25:35+08:00",
+  "updated_at": "2026-09-22T21:11:43+08:00",
   "planning_status": "complete",
   "product_status": "not_delivered",
-  "goal_status": "paused",
-  "source_head": "4857ce3",
+  "goal_status": "active",
+  "source_head": "5dc01f987293c09aa64a088a32b969bb71326096",
   "next_work_package": "W02",
   "work_packages": [
     {
@@ -175,11 +175,11 @@
     {
       "id": "0922V2-A11",
       "status": "partial_verified",
-      "head": "4857ce3",
+      "head": "5dc01f987293c09aa64a088a32b969bb71326096",
       "evidence": [
         "evidence/W02-decision-and-intake-slice.json"
       ],
-      "reason": "Selection scope validation occurs before persistence and focused tests pass; the complete wrong-project/wrong-batch actual-store matrix is still pending."
+      "reason": "Actual isolated API blocks wrong-study documents before promotion, and a regression proves role choices are not persisted before that gate. The full unknown-candidate/wrong-batch/wrong-project actual-store matrix remains."
     },
     {
       "id": "0922V2-A12",
@@ -211,11 +211,11 @@
     {
       "id": "0922V2-A15",
       "status": "partial_verified",
-      "head": "4857ce3",
+      "head": "5dc01f987293c09aa64a088a32b969bb71326096",
       "evidence": [
         "evidence/W02-decision-and-intake-slice.json"
       ],
-      "reason": "Frontend and backend contracts distinguish actionable overridable differences from hard replacement cases; a real browser warning fixture remains."
+      "reason": "Actual isolated API returns a concise Chinese hard-error for CSU documents supplied to an SAR project. Browser upload/rendering remains unverified because the test Chrome extension cannot access file URLs."
     },
     {
       "id": "0922V2-A16",
@@ -323,19 +323,21 @@
     },
     {
       "id": "D02",
-      "status": "not_executed",
-      "head": null,
-      "evidence": [],
-      "reason": "Current review probes are not the specified complete product acceptance."
+      "status": "partial_verified",
+      "head": "5dc01f987293c09aa64a088a32b969bb71326096",
+      "evidence": [
+        "evidence/W02-decision-and-intake-slice.json"
+      ],
+      "reason": "A real product-model module recovery retained all 60 fields including five EX fields and kept supplied-document review inside the system. The required actual API and browser flow remains."
     },
     {
       "id": "D03",
       "status": "partial_verified",
-      "head": "4857ce3",
+      "head": "5dc01f987293c09aa64a088a32b969bb71326096",
       "evidence": [
         "evidence/W02-decision-and-intake-slice.json"
       ],
-      "reason": "The real MG 62-table import resumes after backend restart and defaults to a compact collapsed summary; the full document-to-mapping-to-facts GUI flow remains."
+      "reason": "The compact real MG intake remains verified, and actual API now blocks wrong-study documents before low-value role questions. The complete GUI document-to-mapping-to-facts flow remains."
     },
     {
       "id": "D04",
@@ -555,5 +557,5 @@
       "reason": "Current review probes are not the specified complete product acceptance."
     }
   ],
-  "next_action": "After resume, verify the approved remote MiniMax primary and GLM blind-review routes without enabling MTPLX; then execute one isolated real document-to-mapping cycle, finish A09/A12/A15/D02/D03, and only then proceed to facts. Keep 8911 stopped."
+  "next_action": "Keep 8911 stopped. In a correctly identified isolated MG project, run the W00-frozen opencode-go mimo-v2.6-flash primary and deepseek-flash verifier through document authority, mapping and facts; capture the remaining A09/A10-A15/D02/D03 API/browser evidence without enabling local Qwen/MTPLX."
 }
