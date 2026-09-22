@@ -406,8 +406,16 @@ def build_listing_profile(
             is_date = date_range is not None and date_range["parsed_count"] * 5 >= non_missing * 3 and date_range["parsed_count"] >= 2
             # A subject-key candidate is a generic-token header, or a fully
             # distinct non-numeric text column (typical subject identifier).
+            # V5轮5会商快赢：记录号类列名（*NUM/*NO/*ID序号后缀，如
+            # AENUM/MHNO）全不同也不作受试者键候选——记录号≠受试者键，
+            # 三轮测试者交叉确认同一误标。
+            _header_lower = header.strip().lower()
+            _is_record_number_column = _header_lower.endswith(
+                ("num", "no", "seq", "id")
+            ) and not is_subject
             is_subject_candidate = is_subject or (
-                distinct_count == non_missing and distinct_count >= 3 and counts["text"] == non_missing
+                not _is_record_number_column
+                and distinct_count == non_missing and distinct_count >= 3 and counts["text"] == non_missing
             )
             reasons: List[str] = []
             if is_subject:

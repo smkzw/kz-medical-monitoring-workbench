@@ -140,9 +140,11 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate }) {
           />
           {processing
             ? "系统正在识别并交叉核对…"
-            : state.phase === "needs_user_input"
-              ? "重新选择完整研究文件"
-              : "一次选择研究文件"}
+            : state.phase === "failed"
+              ? "重新上传研究文件并再次核对"
+              : state.phase === "needs_user_input"
+                ? "如仍有文件遗漏，可继续补充上传"
+                : "一次选择研究文件"}
         </label>
       ) : null}
       {state.error ? <p className="monitoring-admission-warning" role="alert">{state.error}</p> : null}

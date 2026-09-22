@@ -977,10 +977,17 @@ def promote_document_authority_from_jobs(
                 validation = source_registry.current_content_validation(
                     project_id, registration.entry.entry_id
                 )
+                # validation is None=该文档从未进入台账校验流程（向导对
+                # 研究文档不强制台账确认）。此处技术门已在上方全部通过
+                # （ready/parsed/hash/size），放行不属造假；已有校验记录
+                # 但失败的仍阻断（真实内容不符）。
                 if (
-                    validation is None
-                    or validation.technical_status != "ready"
-                    or validation.use_status not in {"allowed", "confirmed_after_warning"}
+                    validation is not None
+                    and (
+                        validation.technical_status != "ready"
+                        or validation.use_status
+                        not in {"allowed", "confirmed_after_warning"}
+                    )
                 ):
                     raise DocumentAuthorityError(
                         "document_authority_registration_validation_blocked"
