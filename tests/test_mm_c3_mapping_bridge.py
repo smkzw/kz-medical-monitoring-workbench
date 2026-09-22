@@ -141,6 +141,54 @@ def test_adjudication_retry_conflict_remains_a_visible_failed_shard(retired):
     assert result["state"] == "failed"
 
 
+def test_candidate_generation_recovery_requeues_only_current_failed_shards() -> None:
+    jobs = [
+        SimpleNamespace(
+            job_id=f"job-{index}",
+            project_id=PROJECT_ID,
+            status=status,
+            input_revision_sha256=revision,
+            contract_retirement_code=retirement,
+        )
+        for index, status, revision, retirement in (
+            (0, "completed", "a" * 64, ""),
+            (1, "failed", "a" * 64, ""),
+            (2, "failed", "b" * 64, ""),
+            (3, "failed", "a" * 64, "superseded_job_contract"),
+        )
+    ]
+    retried = []
+
+    def retry(project_id, job_id, **kwargs):
+        retried.append((project_id, job_id, kwargs))
+        job = next(item for item in jobs if item.job_id == job_id)
+        job.status = "queued"
+        return job
+
+    pipeline = AdmissionMappingPipeline(
+        ai_service=SimpleNamespace(),
+        ai_repository=SimpleNamespace(retry_terminal=retry),
+        input_revision_factory=lambda value: value,
+        task_type="mapping",
+    )
+    service = SimpleNamespace(
+        current_revision_resolver=lambda _job: "a" * 64
+    )
+
+    recovered = pipeline._recover_failed_submission_jobs(service, jobs)
+
+    assert [item.status for item in recovered] == [
+        "completed",
+        "queued",
+        "failed",
+        "failed",
+    ]
+    assert [(item[0], item[1]) for item in retried] == [
+        (PROJECT_ID, "job-1")
+    ]
+    assert retried[0][2]["automatic_recovery_limit"] == 1
+
+
 def _xlsx_bytes() -> bytes:
     openpyxl = pytest.importorskip("openpyxl")
     workbook = openpyxl.Workbook()
