@@ -1459,9 +1459,10 @@ def _successful_attempt_output(
     if not isinstance(outputs, list) or not outputs:
         raise DocumentAuthorityError("document_authority_job_attempt_invalid")
     final_output = outputs[-1]
-    if (
-        attempt["response_model"] != job.requested_model
-        or content_sha256(final_output) != job.output_sha256
-    ):
+    # V5-03后续：attempt行记录的是observed（上游实际回报，可能是别名），
+    # 不再要求等于requested——回放完整性由content hash==job.output_sha256
+    # （恰好是完成该作业的那次输出）保证；作业级身份由job.response_model
+    # ==requested在complete/回执层校验。observed别名保留在attempt审计中。
+    if content_sha256(final_output) != job.output_sha256:
         raise DocumentAuthorityError("document_authority_job_attempt_invalid")
     return attempt, final_output
