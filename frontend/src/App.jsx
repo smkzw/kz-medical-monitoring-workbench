@@ -1710,6 +1710,8 @@ function AiGatewayPanel({ status, runs = [], onStatusChange, compact = false }) 
       deployment_scope: "cloud",
       discovery_mode: "models_endpoint",
       enabled: true,
+      output_token_budget: 0,
+      listing_mapping_chunk_size: 0,
       api_key: "",
     });
   };
@@ -1786,6 +1788,8 @@ function AiGatewayPanel({ status, runs = [], onStatusChange, compact = false }) 
         deployment_scope: form.deployment_scope || "cloud",
         discovery_mode: form.discovery_mode || "models_endpoint",
         enabled: form.enabled !== false,
+        output_token_budget: Number(form.output_token_budget || 0),
+        listing_mapping_chunk_size: Number(form.listing_mapping_chunk_size || 0) || null,
         api_key: form.api_key || null,
         activate: activeRoleId === "independent_ai",
       };
@@ -2029,6 +2033,36 @@ function AiGatewayPanel({ status, runs = [], onStatusChange, compact = false }) 
                             autoComplete="new-password"
                           />
                         </label>
+                        {(activeRoleId === "medical_monitoring_ai" || activeRoleId === "medical_monitoring_verifier_ai") && (
+                          <details className="wide ai-runtime-advanced">
+                            <summary>运行参数（通常无需修改）</summary>
+                            <div className="ai-settings-grid">
+                              <label>
+                                <span>最大输出量</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="262144"
+                                  value={form.output_token_budget || 0}
+                                  onChange={(event) => setForm({ ...form, output_token_budget: Number(event.target.value) })}
+                                />
+                                <small>系统预设会为高思考模型保留足够空间；0 表示使用任务默认值。</small>
+                              </label>
+                              <label>
+                                <span>每次分析字段数</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="50"
+                                  value={form.listing_mapping_chunk_size || ""}
+                                  placeholder="系统默认 12"
+                                  onChange={(event) => setForm({ ...form, listing_mapping_chunk_size: event.target.value === "" ? 0 : Number(event.target.value) })}
+                                />
+                                <small>复杂高思考模型可使用较小批次，避免只完成思考而没有最终结论。</small>
+                              </label>
+                            </div>
+                          </details>
+                        )}
                       </div>
                     </>
                   );

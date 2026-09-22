@@ -3914,9 +3914,7 @@ class MonitoringAiService:
             reasoning_effort="high",
             max_output_tokens=(
                 int(
-                    self._monitoring_provider_env(
-                        resolve_monitoring_ai_runtime().env
-                    ).get("WORKBENCH_AI_OUTPUT_TOKEN_BUDGET", "0")
+                    runtime_env.get("WORKBENCH_AI_OUTPUT_TOKEN_BUDGET", "0")
                     or 0
                 )
                 or 12_000
@@ -3933,17 +3931,11 @@ class MonitoringAiService:
                     # 会被推理耗尽导致正文为空；预算按角色profile的
                     # OUTPUT_TOKEN_BUDGET（65_536）给出。
                     else int(
-                        self._monitoring_provider_env(
-                            # 跨表线索的盲核角色跑在独立verifier runtime上
-                            # （deepseek-v4.1-flash等思考模型在max档推理即耗
-                            # 数万token），预算按其profile的
-                            # OUTPUT_TOKEN_BUDGET（65_536）取。
-                            resolve_monitoring_verifier_ai_runtime().env
-                            if job.profile_id.startswith(
-                                "medical_monitoring_verifier_ai__"
-                            )
-                            else resolve_monitoring_ai_runtime().env
-                        ).get("WORKBENCH_AI_OUTPUT_TOKEN_BUDGET", "0")
+                        # Use the exact runtime bound to this service.  Output
+                        # budget is route data, so arbitrary primary/verifier
+                        # profiles work without profile-id or model-name
+                        # branches here.
+                        runtime_env.get("WORKBENCH_AI_OUTPUT_TOKEN_BUDGET", "0")
                         or 48_000
                     )                )
             ),

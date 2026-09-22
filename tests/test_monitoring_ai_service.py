@@ -103,6 +103,7 @@ def _runtime() -> MonitoringAiRuntimeBinding:
             "WORKBENCH_AI_MODEL": "test-model",
             "WORKBENCH_AI_EXPECTED_RESPONSE_MODEL": "test-model",
             "WORKBENCH_AI_DEPLOYMENT_PROFILE": "local_private_clinical",
+            "WORKBENCH_AI_OUTPUT_TOKEN_BUDGET": "65536",
         },
     )
 
@@ -587,6 +588,39 @@ def test_normal_output_preserves_all_field_profiles_and_response_identity(
     # 语义映射按角色profile的输出预算取（本runtime profile=65_536；
     # 生产278个映射作业在该预算下完成），不再用旧的12_000任务默认。
     assert prompt.max_output_tokens == 65_536
+
+
+def test_listing_budget_comes_from_the_exact_bound_runtime(tmp_path: Path) -> None:
+    provider = FakeProvider([_valid_output])
+
+    def verifier_runtime() -> MonitoringAiRuntimeBinding:
+        binding = _runtime()
+        return MonitoringAiRuntimeBinding(
+            profile_id="medical_monitoring_verifier_ai__custom",
+            provider=binding.provider,
+            model=binding.model,
+            env={
+                **binding.env,
+                "WORKBENCH_AI_OUTPUT_TOKEN_BUDGET": "131072",
+            },
+        )
+
+    service = _service(
+        tmp_path,
+        provider,
+        runtime_resolver=verifier_runtime,
+    )
+    service.submit_listing_field_mapping(
+        project_id="project-alpha",
+        input_revision=_revision(),
+        field_profile=_field_profile(field_count=1),
+    )
+
+    result = service.run_next("worker-verifier-budget")
+
+    assert result.job is not None
+    assert result.job.status == MonitoringAiJobStatus.COMPLETED
+    assert provider.envelopes[0].max_output_tokens == 131_072
 
 
 def test_provider_confidences_reject_boolean_values() -> None:

@@ -66,6 +66,10 @@ class AiProviderProfile:
     # are DATA on the profile, never if-model-name branches in code.
     output_token_budget: int = 0          # 0 = task default
     output_discipline: str = ""           # e.g. "strict_single_json"
+    # Task work-unit limits are route capability data.  A reasoning-heavy
+    # model can use smaller evidence batches without model-name branches in
+    # the medical pipeline.  Zero keeps the task default.
+    listing_mapping_chunk_size: int = 0
     # Provider-specific request headers (JSON object string), e.g.
     # {"x-opencode-session": "..."} — transport-level data, not model branching.
     extra_headers_json: str = ""
@@ -89,6 +93,12 @@ class AiProviderProfileUpsertRequest(BaseModel):
     enabled: bool = True
     api_key: Optional[str] = Field(default=None, max_length=4096)
     activate: bool = False
+    output_token_budget: Optional[int] = Field(default=None, ge=0, le=262_144)
+    output_discipline: Optional[str] = Field(default=None, max_length=80)
+    listing_mapping_chunk_size: Optional[int] = Field(
+        default=None, ge=1, le=50
+    )
+    extra_headers_json: Optional[str] = Field(default=None, max_length=8_000)
 
     @field_validator("profile_id", "provider", "transport")
     @classmethod
@@ -636,6 +646,15 @@ class AiRuntimeSettingsStore:
                 **(
                     {"WORKBENCH_AI_OUTPUT_DISCIPLINE": profile.output_discipline}
                     if profile.output_discipline else {}
+                ),
+                **(
+                    {
+                        "WORKBENCH_AI_LISTING_MAPPING_CHUNK_SIZE": str(
+                            profile.listing_mapping_chunk_size
+                        )
+                    }
+                    if profile.listing_mapping_chunk_size
+                    else {}
                 ),
                 **(
                     {"WORKBENCH_AI_EXTRA_HEADERS": profile.extra_headers_json}
