@@ -58,12 +58,18 @@ class _Risk:
         self.source_locator_refs = list(locs)
 
 
-class _Packet:
-    """最小包：subjects/risks按N1解析需要提供。"""
+class _Event:
+    def __init__(self, event_ref):
+        self.event_ref = event_ref
 
-    def __init__(self, subjects, risks):
+
+class _Packet:
+    """最小包：subjects/risks按N1解析需要提供；events供锚点校验目录。"""
+
+    def __init__(self, subjects, risks, events=()):
         self.subjects = subjects
         self.risks = risks
+        self.events = list(events)
 
 
 @pytest.fixture()
@@ -225,6 +231,8 @@ def test_daily_findings_uses_real_claim_anchor_not_first_ae(
             _Risk("risk-ae1", "subject-01001", "ae"),
             _Risk("risk-ae2", "subject-01001", "ae"),
         ],
+        # V5-05：目录含被引事件（AE row5），bound才是"真验证"而非目录缺失放行
+        events=[_Event("event-AE-000005")],
     )
     findings = provider._daily_findings(
         {"mode": "daily", "project_id": "proj-x"}, packet
@@ -263,7 +271,11 @@ def test_daily_findings_no_200_truncation_and_high_kept(artifacts: Path) -> None
         {"mode": "daily", "project_id": "proj-x"}, packet
     )
     assert len(findings) == 260  # 不再200截断
-    assert all(f.get("anchor_state") in ("bound", "unbound") for f in findings)
+    # V5-05：目录缺失时锚点honest标partial/unbound（不再全部放行为bound）
+    assert all(
+        f.get("anchor_state") in ("bound", "partial", "unbound")
+        for f in findings
+    )
 
 
 def test_public_findings_resolves_subject_ref_and_claims(artifacts: Path) -> None:
@@ -408,3 +420,35 @@ def test_read_failed_does_not_fall_back_to_deterministic(
     assert meta["state"] == "read_failed"
     # daily路径经_daily_findings同样不得产出备用提示列表
     assert provider.public_findings(projection={}, project_ref="proj-x") == []
+
+
+def test_claim_anchors_fail_closed_on_empty_catalog(artifacts: Path) -> None:
+    """V5-05 R5-07：空事件目录不得把全部锚点当作已验证放行。"""
+
+    from packages.medical_monitoring.api.r7_product.facts_mode_outputs import (
+        FactsModeOutputProvider,
+    )
+
+    _write_artifact(artifacts, {
+        "snapshot_ref": "facts-snapshot-001.dualvlm-full1",
+        "findings": [
+            {"finding_id": "aemh-anchors", "subject_label": "01001",
+             "state": "accepted",
+             "primary": {"title": "线索", "text": "存在异常需关注",
+                         "payload": {"evidence_ids": ["aemh_000000000000000000000000000"]}},
+             "verifier": None},
+        ],
+    })
+    provider = FactsModeOutputProvider(artifacts)
+    # 直接验证_claim_anchors对空目录的行为（有候选锚点但目录缺失→partial+原因）
+    class _Item(dict):
+        pass
+    item = _Item({"primary": {"payload": {"evidence_ids": ["x-1"]}}, "verifier": None})
+    result = provider._claim_anchors(
+        item, r5_packet=None,
+        evidence_index={"x-1": ("AE", 0)},
+        events_by_ref={},
+    )
+    assert result["verified_event_refs"] == []
+    assert result["anchor_state"] == "partial"
+    assert result["anchor_reason"] == "event_catalog_missing"
