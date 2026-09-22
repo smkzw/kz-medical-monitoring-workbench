@@ -87,6 +87,11 @@ class ResolvedResultContext:
         if not isinstance(output_payload, Mapping):
             raise ProductPublicationError("result_context_unavailable")
         findings = output_payload.get("findings")
+        if findings is None:
+            # The committed daily ModeOutput contract normalizes findings to
+            # query_drafts.  Read that frozen list directly rather than
+            # reopening the mutable analysis binding.
+            findings = output_payload.get("query_drafts")
         if not isinstance(findings, list):
             raise ProductPublicationError("result_context_unavailable")
         rows = [dict(item) for item in findings if isinstance(item, Mapping)]

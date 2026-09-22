@@ -1,6 +1,6 @@
 {
   "schema": "mm-w01-evidence-v1",
-  "recorded_at": "2026-09-22T15:47:18+08:00",
+  "recorded_at": "2026-09-22T16:06:42+08:00",
   "state": "partial_verified",
   "source_head": "a7217af080b96896bdc4cbc9317cb139e4386569",
   "scope": [
@@ -14,7 +14,7 @@
     "py_compile": "passed",
     "git_diff_check": "passed",
     "pytest": {
-      "result": "136 passed",
+      "result": "137 passed",
       "warnings": 99,
       "command_scope": [
         "test_mm_c3_fact_materialization.py",
@@ -35,10 +35,15 @@
   },
   "not_yet_accepted": [
     "isolated cold-start actual API and browser",
-    "same subject id across two projects through actual application factory",
-    "historical token after active snapshot switch through public API",
     "concurrent active-pointer pressure",
     "formal build_subject_evidence worker invalidation",
     "browser source-byte acceptance"
+  ],
+  "newly_verified_actual_api": [
+    "two projects registered after process composition remain isolated",
+    "the same subject id resolves to each project's own site and finding",
+    "reopening the first project's historical result after the second project runs is byte-for-byte stable",
+    "using the first project's result token under the second project fails closed",
+    "daily committed query_drafts are read from the publication-bound mode output"
   ]
 }

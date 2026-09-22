@@ -1,6 +1,6 @@
 {
   "schema": "mm-delivery-status-v1",
-  "updated_at": "2026-09-22T15:47:18+08:00",
+  "updated_at": "2026-09-22T16:06:42+08:00",
   "planning_status": "complete",
   "product_status": "not_delivered",
   "goal_status": "active",
@@ -529,5 +529,5 @@
       "reason": "Current review probes are not the specified complete product acceptance."
     }
   ],
-  "next_action": "Continue W01 with isolated actual-API dual-project and historical-token scenarios, then shared-summary worker and browser source acceptance; do not mark W01 complete from module tests alone."
+  "next_action": "Continue W01 with concurrent active-pointer pressure and formal build_subject_evidence worker invalidation, then repair the frontend runtime for browser source acceptance; do not mark W01 complete from API tests alone."
 }
