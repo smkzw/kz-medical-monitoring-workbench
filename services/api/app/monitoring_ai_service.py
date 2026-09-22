@@ -2648,13 +2648,10 @@ class MonitoringAiService:
                         response_model=self._response_model(provider, job),
                     )
 
-            response_model = self._response_model(provider, job)
-            if not response_model.strip() or response_model.strip() != job.requested_model:
-                # 本路由profile不主张expected断言时，上游可能以别名回报
-                # served模型名（如路由器把glm-5.3-flash服务为变体名）。
-                # 完成登记一律以requested_model为身份记录；实际served名
-                # 已保留在attempt审计行供追溯。
-                response_model = job.requested_model
+            observed_response_model = self._response_model(provider, job)
+            # V5-03：requested（作业身份记录）与observed（上游实际回报）
+            # 分离，不再改写。strict profile的mismatch在_response_model内
+            # 已受控失败；宽松profile允许别名/缺失完成，但审计双记。
             stale_result = self._fail_if_revision_changed(
                 job,
                 owner=owner,
@@ -2664,7 +2661,7 @@ class MonitoringAiService:
                 },
                 response_payload={"provider_outputs": outputs, **({"provider_response_diagnostics": evidence_state.get("response_diagnostics", [])} if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS else {})},
                 stage="before_attempt_and_completion",
-                response_model=response_model,
+                response_model=observed_response_model,
             )
             if stale_result is not None:
                 return stale_result
@@ -2677,15 +2674,16 @@ class MonitoringAiService:
                     "repair_used": repaired,
                 },
                 response_payload={"provider_outputs": outputs, **({"provider_response_diagnostics": evidence_state.get("response_diagnostics", [])} if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS else {})},
-                response_model=response_model,
+                response_model=observed_response_model,
                 outcome="success_repaired" if repaired else "success",
             )
             completed = self.repository.complete(
                 job,
                 owner=owner,
-                response_model=response_model,
+                response_model=job.requested_model,
                 raw_output=outputs[-1],
                 candidates=candidates,
+                observed_response_model=observed_response_model,
             )
             return MonitoringAiRunResult(job=completed, processed=True)
         except EvidenceToolLoopError as exc:
