@@ -1376,10 +1376,6 @@ monitoring_ai_verifier_worker = MonitoringAiWorker(
 def _wake_monitoring_mapping_workers() -> None:
     monitoring_ai_worker.wake()
     monitoring_ai_verifier_worker.wake()
-    # 文档权威双cohort是wake-only worker：不wake永不drain，提交的作业
-    # 会滞留queued/running。主分析与盲核worker都必须随映射链路唤醒。
-    monitoring_doc_auth_worker.wake()
-    monitoring_doc_auth_verifier_worker.wake()
 
 
 monitoring_doc_auth_primary_service = MonitoringAiService(
@@ -1394,16 +1390,13 @@ monitoring_doc_auth_verifier_service = MonitoringAiService(
     current_revision_resolver=_current_monitoring_ai_revision,
     evidence_tool_factory=_monitoring_evidence_tool_factory,
 )
-monitoring_doc_auth_worker = MonitoringAiWorker(
-    monitoring_doc_auth_primary_service,
-    parallelism=int(os.environ.get("WORKBENCH_MONITORING_AI_PARALLELISM", "4")),
-    identity_bound=True,
-)
-monitoring_doc_auth_verifier_worker = MonitoringAiWorker(
-    monitoring_doc_auth_verifier_service,
-    parallelism=1,
-    identity_bound=True,
-)
+# Document-authority and mapping jobs share the same two identity-bound role
+# queues.  One worker pool per role drains every task type for that role; a
+# second document-only pool would claim mapping jobs too and silently double
+# provider concurrency because worker identity is profile-bound, not
+# task-type-bound.
+monitoring_doc_auth_worker = monitoring_ai_worker
+monitoring_doc_auth_verifier_worker = monitoring_ai_verifier_worker
 
 monitoring_document_authority_workflow = MonitoringDocumentAuthorityWorkflow(
     monitoring_ai_repository,

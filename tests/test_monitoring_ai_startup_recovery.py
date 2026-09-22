@@ -121,6 +121,11 @@ def test_startup_retires_old_prompt_contracts_before_waking_worker(
 
 
 def test_document_authority_startup_prompt_sets_are_explicit() -> None:
+    assert app_main.monitoring_doc_auth_worker is app_main.monitoring_ai_worker
+    assert (
+        app_main.monitoring_doc_auth_verifier_worker
+        is app_main.monitoring_ai_verifier_worker
+    )
     assert DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK == {
         "document_authority_analysis": frozenset(
             {
