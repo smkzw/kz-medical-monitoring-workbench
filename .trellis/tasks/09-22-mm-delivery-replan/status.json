@@ -1,10 +1,10 @@
 {
   "schema": "mm-delivery-status-v1",
-  "updated_at": "2026-09-22T23:06:12+08:00",
+  "updated_at": "2026-09-22T23:49:00+08:00",
   "planning_status": "complete",
   "product_status": "not_delivered",
   "goal_status": "active",
-  "source_head": "6dfe6e34f4e7670901b33f4d8ffab5e5f429d6e0",
+  "source_head": "b0b2136bfacc5bfdb645cebaa6b039ef7499a623",
   "next_work_package": "W02",
   "work_packages": [
     {
@@ -37,7 +37,8 @@
       ],
       "status": "in_progress",
       "evidence": [
-        "evidence/W02-decision-and-intake-slice.json"
+        "evidence/W02-decision-and-intake-slice.json",
+        "evidence/W02-configurable-model-route-switch.json"
       ]
     },
     {
