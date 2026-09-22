@@ -1360,27 +1360,6 @@ class AdmissionMappingPipeline:
                 "job_count": len(jobs),
                 "mappings": [],
             }
-        # All terminal with failures: report the failed shards so the caller
-        # can surface bounded unverifiable gaps after retries are exhausted.
-        failed_jobs = [
-            (job.project_id, job.job_id)
-            for job in jobs
-            if str(_value(job.status)) in {"failed", "blocked"}
-            and not getattr(job, "contract_retirement_code", "")
-        ]
-        if failed_jobs:
-            completed_jobs = [
-                job for job in jobs if str(_value(job.status)) == "completed"
-            ]
-            return {
-                "state": "failed",
-                "generation": generation,
-                "job_count": len(jobs),
-                # Completed siblings' candidates remain usable for the
-                # bounded-gap apply path; only failed chunks become gaps.
-                **self._adjudication_payload(completed_jobs),
-                "failed_jobs": failed_jobs,
-            }
         if generation:
             # A failed shard is retried in place. Successful siblings retain
             # their job/candidate identity; polling must never create g02.
@@ -1432,6 +1411,27 @@ class AdmissionMappingPipeline:
                 "mappings": [],
                 "failed_jobs": failed_jobs,
                 **(self._adjudication_payload(completed_jobs) if completed_jobs else {}),
+            }
+
+        # A legacy/non-generation terminal cohort cannot use the bounded
+        # in-place generation recovery above. Keep its successful siblings
+        # visible and report only the failed shards as coverage gaps.
+        failed_jobs = [
+            (job.project_id, job.job_id)
+            for job in jobs
+            if str(_value(job.status)) in {"failed", "blocked"}
+            and not getattr(job, "contract_retirement_code", "")
+        ]
+        if failed_jobs:
+            completed_jobs = [
+                job for job in jobs if str(_value(job.status)) == "completed"
+            ]
+            return {
+                "state": "failed",
+                "generation": generation,
+                "job_count": len(jobs),
+                **self._adjudication_payload(completed_jobs),
+                "failed_jobs": failed_jobs,
             }
 
         record = self._ready_record(
