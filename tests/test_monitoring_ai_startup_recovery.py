@@ -26,7 +26,10 @@ from services.api.app.monitoring_ai_contracts import (
     MonitoringAiTaskType,
 )
 from services.api.app.monitoring_ai_source_packet import MonitoringAiSourcePacket
-from services.api.app.monitoring_ai_service import PROMPT_VERSION_BY_TASK
+from services.api.app.monitoring_ai_service import (
+    CROSS_TABLE_VERIFIER_PROMPT_VERSION,
+    PROMPT_VERSION_BY_TASK,
+)
 from services.api.app.chapter_translation_pipeline import (
     CompositePipelineUnavailableError,
 )
@@ -89,12 +92,15 @@ def test_startup_retires_old_prompt_contracts_before_waking_worker(
                     task_type.value,
                     frozenset({PROMPT_VERSION_BY_TASK[task_type]}),
                 )
-                | (
-                    MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS
-                    | {MONITORING_C3_VERIFIER_PROMPT_VERSION}
-                    if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
-                    else frozenset()
-                )
+                    | (
+                        MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS
+                        | {MONITORING_C3_VERIFIER_PROMPT_VERSION}
+                        if task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
+                        else {CROSS_TABLE_VERIFIER_PROMPT_VERSION}
+                        if task_type
+                        == MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS
+                        else frozenset()
+                    )
             )
             - {PROMPT_VERSION_BY_TASK[task_type]},
             PROTOCOL_RETIREMENT_AUDIT_PROMPT_VERSIONS
@@ -118,8 +124,8 @@ def test_document_authority_startup_prompt_sets_are_explicit() -> None:
     assert DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK == {
         "document_authority_analysis": frozenset(
             {
-                "monitoring-document-authority-primary-v8",
-                "monitoring-document-authority-verifier-v8",
+                "monitoring-document-authority-primary-v9",
+                "monitoring-document-authority-verifier-v9",
             }
         ),
         "document_authority_review": frozenset(
@@ -140,6 +146,8 @@ def test_document_authority_startup_prompt_sets_are_explicit() -> None:
                 "monitoring-document-authority-verifier-v6",
                 "monitoring-document-authority-primary-v7",
                 "monitoring-document-authority-verifier-v7",
+                "monitoring-document-authority-primary-v8",
+                "monitoring-document-authority-verifier-v8",
             }
         ),
         "document_authority_review": frozenset(
@@ -178,6 +186,26 @@ def test_monitoring_authority_defers_ocr_role_resolution_into_runner(
 
     monkeypatch.setattr(app_main.monitoring_document_authority_workflow, "start", start)
     monkeypatch.setattr(
+        app_main.project_source_manifest_service,
+        "build_manifest",
+        lambda _project_id: SimpleNamespace(
+            header_project=SimpleNamespace(
+                public_dict=lambda: {
+                    "project_id": "project-test",
+                    "project_code": "TEST-001",
+                    "project_name": "测试研究",
+                    "indication": "测试适应症",
+                    "product_name": "测试药物",
+                    "study_phase": "II期",
+                    "protocol_id": "TEST-001",
+                    "protocol_version": "V1.0",
+                    "protocol_date": "2026-01-01",
+                    "status": "active",
+                }
+            )
+        ),
+    )
+    monkeypatch.setattr(
         app_main,
         "_runtime_role_context",
         lambda _role: (_ for _ in ()).throw(
@@ -193,6 +221,7 @@ def test_monitoring_authority_defers_ocr_role_resolution_into_runner(
 
     assert result["state"] == "analyzing"
     assert captured["ocr_model"] == "GLM-OCR-bf16"
+    assert captured["project_context"]["project_id"] == "project-test"
     with pytest.raises(CandidateOcrUnavailableError):
         captured["ocr_runner"](1, 200, "ignored", b"png")
 

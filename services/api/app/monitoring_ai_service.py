@@ -3488,6 +3488,14 @@ class MonitoringAiService:
             system_prompt += (
                 " 这是文件权威识别，不是医学结论分析。必须独立检查冻结批次中"
                 "每个候选的正文、表结构、版本与日期证据，完整覆盖四类角色。"
+                "同时必须把input_payload.document_authority_batch."
+                "project_context作为当前项目冻结身份，核对候选正文中的"
+                "方案编号、研究名称、适应症、药物和阶段。在study_identity"
+                "中给出aligned、mismatch或unresolved；不得因为都是MG-K10"
+                "就忽略适应症或方案编号冲突。结论必须引用真实候选"
+                "candidate_id+locator，project_context_sha256必须逐字复制"
+                "project_context.context_sha256。身份冲突时仍完成文件角色"
+                "评估，由系统在裁决前阻断串项目。"
                 "每个角色必须识别一个完整的当前主文件，并把仍然有效、会改变或"
                 "补充主文件内容的勘误、修订或增补文件逐个放入"
                 "supplementary_bindings；每个补充文件必须引用其自身locator。"
@@ -4391,6 +4399,29 @@ class MonitoringAiService:
                 "scope": "violating_fields_only",
                 "instruction": repair_payload["patch_contract"]["instruction"],
             }
+        if (
+            job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
+            and "must not delegate review of supplied study documents"
+            in validation_errors
+        ):
+            evidence_recheck_instruction = (
+                " 对违规字段重新读取本次已授权的字段画像和证据工具回执，"
+                "不得要求用户翻阅已上传的CRF、方案、数据字典或其他研究资料。"
+                "证据足够时由系统给出可追溯解释并将"
+                "user_decision_required设为false；证据不足时保留该字段，"
+                "将recommended_role设为unmapped并明确尚缺证据，"
+                "user_decision_required仍为false，由系统后续补读或重试。"
+                "只有资料之外、确实只能由用户提供且会改变医学分析的事实"
+                "才可提出一个具体问题。不得删除违规字段、提高置信度或把"
+                "未解决映射写成已确认。"
+            )
+            repair_payload["repair_contract"]["instruction"] += (
+                evidence_recheck_instruction
+            )
+            if "patch_contract" in repair_payload:
+                repair_payload["patch_contract"]["instruction"] += (
+                    evidence_recheck_instruction
+                )
         if job.task_type in {
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
@@ -7129,6 +7160,10 @@ class MonitoringAiService:
                 for item in analysis.role_selections
                 if item.selected_candidate_id
                 for locator in item.evidence_locators
+            )
+            referenced.update(
+                (reference.candidate_id, reference.locator)
+                for reference in analysis.study_identity.evidence_references
             )
             confidence_values = [
                 item.confidence for item in analysis.candidate_assessments

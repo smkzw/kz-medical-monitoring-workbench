@@ -697,7 +697,19 @@ def register_mapping_candidate_routes(
             if result.get("authority_status") != "promoted":
                 state = str(result.get("state") or "analyzing")
                 user_choices = result.get("user_choices") or []
-                if state == "needs_user_input":
+                if state == "project_mismatch":
+                    headline = "研究资料与当前项目不一致"
+                    guidance = (
+                        "系统已识别这组资料属于另一项研究，本次不会用于"
+                        "当前项目。请重新选择当前项目的研究方案和病例报告表。"
+                    )
+                elif state == "project_identity_incomplete":
+                    headline = "系统还无法确认资料归属"
+                    guidance = (
+                        "当前资料缺少可用于核对研究编号或适应症的内容。"
+                        "请补充能明确标识当前项目的方案或病例报告表。"
+                    )
+                elif state == "needs_user_input":
                     headline = "还差一项关键信息"
                     guidance = str(result.get("user_question") or "").strip() or (
                         "仅有少量文件关系仍无法唯一确定，请确认系统标出的"

@@ -29,6 +29,8 @@ from packages.medical_monitoring.admission.document_authority import (
     ResolvedRole,
     RoleSelection,
     RoleSupplementaryBinding,
+    StudyIdentityAssessment,
+    StudyIdentityEvidenceReference,
     VERIFIER_PROMPT_VERSION,
     VERIFIER_ADJUDICATION_PROMPT_VERSION,
     VERIFIER_CRITIQUE_PROMPT_VERSION,
@@ -36,8 +38,10 @@ from packages.medical_monitoring.admission.document_authority import (
     build_anonymous_conflict_packet,
     build_anonymous_adjudication_context,
     build_anonymous_critique_context,
+    build_document_authority_project_context,
     document_authority_batch_sha256,
     reconcile_document_authority,
+    resolve_document_authority_project_identity,
     resolve_document_authority_conflicts,
     resolve_document_authority_adjudication,
     resolve_document_authority_critique,
@@ -409,6 +413,75 @@ def test_analysis_rejects_usable_candidate_with_incomplete_extraction() -> None:
 
     with pytest.raises(DocumentAuthorityError, match="candidate_not_usable"):
         validate_document_authority_analysis(batch, _analysis(batch))
+
+
+def _batch_with_project_context() -> dict:
+    batch = _batch()
+    batch["project_context"] = build_document_authority_project_context({
+        "project_id": "proj_sar",
+        "project_code": "MG-K10-SAR-001",
+        "project_name": "MG-K10季节性过敏性鼻炎研究",
+        "indication": "季节性过敏性鼻炎",
+        "product_name": "MG-K10人源化单抗注射液",
+        "study_phase": "II期",
+        "protocol_id": "MG-K10-SAR-001",
+        "protocol_version": "V1.0",
+        "protocol_date": "2026-01-01",
+    })
+    return batch
+
+
+def _analysis_with_identity(
+    batch: dict,
+    *,
+    status: str,
+) -> DocumentAuthorityAnalysis:
+    analysis = _analysis(batch)
+    return analysis.model_copy(update={
+        "study_identity": StudyIdentityAssessment(
+            status=status,
+            project_context_sha256=batch["project_context"]["context_sha256"],
+            evidence_references=(
+                StudyIdentityEvidenceReference(
+                    candidate_id="candidate_protocol",
+                    locator="doc:p1",
+                ),
+            ),
+            rationale="根据方案正文中的研究编号与适应症核对。",
+        )
+    })
+
+
+def test_project_context_requires_an_explicit_evidence_bound_identity_result() -> None:
+    batch = _batch_with_project_context()
+
+    with pytest.raises(
+        DocumentAuthorityError,
+        match="document_authority_project_identity_incomplete",
+    ):
+        validate_document_authority_analysis(batch, _analysis(batch))
+
+    validate_document_authority_analysis(
+        batch,
+        _analysis_with_identity(batch, status="aligned"),
+    )
+
+
+def test_single_evidence_bound_mismatch_blocks_before_role_adjudication() -> None:
+    batch = _batch_with_project_context()
+    primary = _analysis_with_identity(batch, status="aligned")
+    verifier = _analysis_with_identity(batch, status="mismatch")
+
+    result = resolve_document_authority_project_identity(
+        batch,
+        _run(primary, "primary"),
+        _run(verifier, "verifier"),
+    )
+
+    assert result == {
+        "status": "mismatch",
+        "attention_candidate_ids": ["candidate_protocol"],
+    }
 
 
 def _run(

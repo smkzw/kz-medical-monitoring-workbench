@@ -539,6 +539,15 @@ def test_document_authority_promotion_is_server_wired_and_publicly_plain(
         ),
         (
             {
+                "state": "project_mismatch",
+                "authority_status": "not_promoted",
+                "attention_files": ["MG-K10-CSU-001_protocol.docx"],
+            },
+            "研究资料与当前项目不一致",
+            "本次不会用于当前项目",
+        ),
+        (
+            {
                 "state": "needs_user_input",
                 "authority_status": "not_promoted",
                 "user_question": "仅需确认：eCRF 修订说明是否需与主文件一起阅读？",

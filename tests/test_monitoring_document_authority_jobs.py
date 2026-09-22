@@ -978,6 +978,64 @@ def test_product_workflow_retries_one_terminal_failure_once() -> None:
     assert workflow._recover_failed_once((failed, complete)) is False
 
 
+def test_project_mismatch_stops_before_user_decision_is_persisted(
+    tmp_path, monkeypatch
+) -> None:
+    batch = {
+        "batch_id": "mmbatch_" + "d" * 24,
+        "project_context": {"context_sha256": "c" * 64},
+        "candidates": [{
+            "candidate_id": "candidate-other-study",
+            "filename": "other-study-protocol.docx",
+        }],
+    }
+    workflow = object.__new__(MonitoringDocumentAuthorityWorkflow)
+    workflow.repository = SimpleNamespace()
+    workflow._candidate_root = lambda workspace_dir: workspace_dir
+    workflow._load_batch = lambda _root, _batch_id: batch
+    workflow._job = lambda _project_id, _task_type, key: SimpleNamespace(
+        job_id=key
+    )
+    workflow._recover_failed_once = lambda _jobs: False
+    workflow._pending_state = lambda _jobs, _state: None
+
+    def reject_decision_write(**_kwargs):
+        raise AssertionError("project mismatch must stop before decision persistence")
+
+    workflow._effective_user_decision = reject_decision_write
+    monkeypatch.setattr(
+        "services.api.app.monitoring_document_authority_workflow."
+        "load_document_authority_analysis_run",
+        lambda *_args, **_kwargs: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "services.api.app.monitoring_document_authority_workflow."
+        "resolve_document_authority_project_identity",
+        lambda *_args, **_kwargs: {
+            "status": "mismatch",
+            "attention_candidate_ids": ["candidate-other-study"],
+        },
+    )
+
+    result = workflow.advance(
+        project_id="project-current-study",
+        workspace_dir=tmp_path,
+        batch_id=batch["batch_id"],
+        user_role_selections=[{
+            "role": "protocol",
+            "candidate_id": "candidate-other-study",
+        }],
+    )
+
+    assert result == {
+        "state": "project_mismatch",
+        "authority_status": "not_promoted",
+        "batch_id": batch["batch_id"],
+        "identity_status": "mismatch",
+        "attention_files": ["other-study-protocol.docx"],
+    }
+
+
 def test_worker_rejects_downstream_medical_conclusion_in_outer_copy(
     tmp_path,
 ) -> None:

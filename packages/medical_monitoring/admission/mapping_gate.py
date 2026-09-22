@@ -31,19 +31,13 @@ MONITORING_C3_MAPPING_PROVIDER = "opencode-go"
 # 2026-09-22：muse-spark上游不可用，映射主分析同切mimo-v2.6-flash
 # （与文档权威主分析同profile/凭据；请求名=回执名）。
 MONITORING_C3_MAPPING_MODEL = "mimo-v2.6-flash"
-# N5：文档权威专用身份
-# 2026-09-21 晚：opencode-go与ollama-cloud的存储密钥均已失效（实测401），
-# 按用户"muse-spark主+deepseek盲核"的模型意图改为本机OmniRoute可达路由：
-# 主=glm-5.3（旗舰推理），盲核=deepseek-flash，两族独立，走本地路由统一密钥。
+# 文档权威链与字段映射链共用 W00 冻结的两条产品角色。两条调用仍有
+# 独立 profile、作业命名空间和首轮上下文；文档识别阶段不得另行绕到
+# 本机路由。
 DOC_AUTH_PRIMARY_PROVIDER = "opencode-go"
-# 2026-09-22：muse-spark上游不可用（Endpoint is unavailable），按用户指示
-# 换mimo-v2.6-flash（zen回名=请求名，探针通过）。密钥见凭据仓
-# document_authority_primary_ai__opencode_go_mimo。
 DOC_AUTH_PRIMARY_MODEL = "mimo-v2.6-flash"
-DOC_AUTH_VERIFIER_PROVIDER = "omp-router"
-# 请求名必须=回执名（promotion回执校验response_model==requested_model），
-# 本机路由对deepseek-flash的透传名是deepseek-latest-cloud，故直接用它请求。
-DOC_AUTH_VERIFIER_MODEL = "deepseek-latest-cloud"
+DOC_AUTH_VERIFIER_PROVIDER = "opencode-go"
+DOC_AUTH_VERIFIER_MODEL = "deepseek-flash"
 MONITORING_C3_MAPPING_PROFILE_ID = (
     "medical_monitoring_ai__opencode_go_mimo"
 )
@@ -132,10 +126,9 @@ MONITORING_C3_VERIFIER_RUNTIME_PAIRS = frozenset({
         MONITORING_C3_MTPLX_VERIFIER_PROVIDER,
         MONITORING_C3_MTPLX_VERIFIER_MODEL,
     ),
-    # 文档权威专用盲核身份（omp-router/deepseek-latest-cloud，请求名=回执名）
     (DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL),
-    # 历史身份：opencode-go直连盲核（密钥失效前的完成作业/回执仍可重验）
-    ("opencode-go", "deepseek-flash"),
+    # 历史文档权威身份：已持久化作业/回执仍可重验，但不再用于新提交。
+    ("omp-router", "deepseek-latest-cloud"),
 })
 MONITORING_C3_PRIMARY_RUNTIME_PAIRS = frozenset({
     (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL),
@@ -144,7 +137,6 @@ MONITORING_C3_PRIMARY_RUNTIME_PAIRS = frozenset({
     (MONITORING_C3_DEEPSEEK_PRIMARY_PROVIDER, MONITORING_C3_DEEPSEEK_PRIMARY_MODEL),
     (MONITORING_C3_CMS_PRIMARY_PROVIDER, MONITORING_C3_CMS_PRIMARY_MODEL),
     (MONITORING_C3_ALTERNATE_PROVIDER, MONITORING_C3_ALTERNATE_MODEL),
-    # 文档权威专用主分析身份（omp-router/glm-5.3旗舰）
     (DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL),
     # 历史身份：omp-router中转期（2026-09-21/22，opencode密钥失效过渡）
     ("omp-router", "glm-5.3"),

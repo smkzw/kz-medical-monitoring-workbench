@@ -160,9 +160,13 @@ class MonitoringDocumentCandidateBatch:
     batch_id: str
     candidates: tuple[MonitoringDocumentCandidate, ...]
     authority_status: Literal["not_adjudicated"] = "not_adjudicated"
+    project_context: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        payload = asdict(self)
+        if self.project_context is None:
+            payload.pop("project_context", None)
+        return payload
 
 
 class MonitoringDocumentCandidateDecomposer:
@@ -186,7 +190,10 @@ class MonitoringDocumentCandidateDecomposer:
             raise ValueError("monitoring candidate OCR configuration is invalid")
 
     def decompose_many(
-        self, files: list[tuple[str, bytes]]
+        self,
+        files: list[tuple[str, bytes]],
+        *,
+        project_context: dict[str, str] | None = None,
     ) -> MonitoringDocumentCandidateBatch:
         candidates = tuple(
             sorted(
@@ -194,19 +201,24 @@ class MonitoringDocumentCandidateDecomposer:
                 key=lambda item: item.candidate_id,
             )
         )
-        batch_digest = hashlib.sha256(
-            _stable_json([
+        identity_rows: object = [
                 {
                     "candidate_id": candidate.candidate_id,
                     "evidence_revision_sha256": candidate.evidence_revision_sha256,
                 }
                 for candidate in candidates
-            ])
-        ).hexdigest()
+            ]
+        if project_context is not None:
+            identity_rows = {
+                "candidates": identity_rows,
+                "project_context": project_context,
+            }
+        batch_digest = hashlib.sha256(_stable_json(identity_rows)).hexdigest()
         batch = MonitoringDocumentCandidateBatch(
             manifest_version=CANDIDATE_MANIFEST_VERSION,
             batch_id=f"mmbatch_{batch_digest[:24]}",
             candidates=candidates,
+            project_context=project_context,
         )
         self._persist_batch(batch)
         return batch
