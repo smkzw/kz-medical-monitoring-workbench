@@ -60,3 +60,30 @@ def test_digest_is_content_sensitive_and_typed() -> None:
     )
     # 版本标识参与摘要：算法升级不与旧摘要碰撞
     assert FACTS_SOURCE_DIGEST_VERSION in {"facts-source-digest-v2"}
+
+
+def test_clean_preserves_zero_and_false() -> None:
+    """V5-08 R5-02/03：0/False不再被吞，0与空、False与0可区分。"""
+
+    from packages.medical_monitoring.analysis.ae_mh_cross_analysis import _clean
+
+    assert _clean(0) == "0"
+    assert _clean(False) == "false"
+    assert _clean(True) == "true"
+    assert _clean(None) == ""
+    assert _clean("") == ""
+    assert _clean("  ALT  升高 ") == "ALT 升高"
+    assert _clean(3) == "3"
+    # 证据打包后fields仍可区分0与缺失
+    domains = {
+        "AE": [{"SUBJID": "01001", "AECAT": "严重", "IS_SERIOUS": False}],
+        "CM": [{"SUBJID": "01001", "CMTRT": "对乙酰氨基酚", "CMDOSE": 0}],
+    }
+    evidence, _ = build_subject_evidence(domains, "01001")
+    by_domain = {}
+    for item in evidence:
+        fields = {f["field"]: f["value"] for f in item["raw_fields"]["fields"]}
+        by_domain.setdefault(item["raw_fields"]["domain"], fields)
+    assert by_domain["AE"].get("IS_SERIOUS") == "false"
+    # CMDOSE=0保留为"0"（不再吞成缺失）
+    assert by_domain["CM"].get("CMDOSE") == "0"
