@@ -1,8 +1,8 @@
 {
   "schema": "mm-w02-configurable-model-route-switch-v1",
-  "recorded_at": "2026-09-23T04:40:55+08:00",
-  "source_head": "7d0c4c147dcbf81b31eb7222929c115e8ebaee36",
-  "state": "actual_adjudication_in_progress",
+  "recorded_at": "2026-09-23T06:32:00+08:00",
+  "source_head": "c00ee33c56a5ae32dba29a2db8b9a7dce787e996",
+  "state": "paused_actual_adjudication_in_progress",
   "scope": "Medical-monitoring routes are persisted role profiles. Provider, model, reasoning, output budget and listing work-unit size are route data; jobs retain requested/observed identity and source revisions without model-name branches in clinical code.",
   "configured_roles": [
     {
@@ -22,7 +22,7 @@
       "provider": "ollama-cloud",
       "requested_model": "deepseek-v4.1-flash",
       "reasoning_effort": "high",
-      "thinking": "enabled",
+      "thinking": "auto",
       "output_token_budget": 131072,
       "listing_mapping_chunk_size": 4,
       "ready": true
@@ -30,9 +30,9 @@
   ],
   "configuration_evidence": {
     "provider_settings_sha256": "8c089f64aeec1ba415b2e293cd801dd0c4ddc1ebe94f0750bd77b0fe643bb127",
-    "role_bindings_sha256": "19a7af608d554d8b361f7c393a4ff39cc6ce76b43010f641e0f01676e00edbe6",
+    "role_bindings_sha256": "b956fa9be50ba843fed0ce51806569fd973311c19e5b2c3afb711a944718c2a0",
     "credentials": "stored in the native encrypted credential store and excluded from this evidence",
-    "source_commit": "7d0c4c1 W02 make model work limits profile-configurable"
+    "source_commit": "c00ee33 W02 add provider-neutral high-reasoning mode"
   },
   "actual_run": {
     "runtime": "/tmp/mm-w02-correct-mg-runtime-20260922-v2",
@@ -67,42 +67,42 @@
       {
         "provider": "cms-router",
         "status": "completed",
-        "count": 12
+        "count": 47
       },
       {
         "provider": "cms-router",
         "status": "failed",
-        "count": 13
+        "count": 26
       },
       {
         "provider": "cms-router",
         "status": "queued",
-        "count": 58
+        "count": 14
       },
       {
         "provider": "cms-router",
         "status": "running",
-        "count": 4
+        "count": 0
       },
       {
         "provider": "ollama-cloud",
         "status": "completed",
-        "count": 11
+        "count": 33
       },
       {
         "provider": "ollama-cloud",
         "status": "failed",
-        "count": 8
+        "count": 22
       },
       {
         "provider": "ollama-cloud",
         "status": "queued",
-        "count": 184
+        "count": 142
       },
       {
         "provider": "ollama-cloud",
         "status": "running",
-        "count": 4
+        "count": 0
       }
     ],
     "retired_unstarted_work": {
@@ -122,7 +122,15 @@
         "handling": "never adopt reasoning as medical content; use profile-bound work-unit/output limits; exhausted items remain visible coverage gaps"
       }
     ],
-    "local_fallback": "not selected or loaded"
+    "local_fallback": "not selected or loaded",
+    "pause_checkpoint": {
+      "queue_paused": true,
+      "running_jobs": 0,
+      "port_8920": "stopped",
+      "port_8911": "stopped",
+      "sqlite_integrity_check": "ok",
+      "paused_after_in_flight_drain": true
+    }
   },
   "verification": {
     "focused_backend_tests": "644 passed for runtime settings, role bindings, mapping service, bridge, repair, draft repository and migration gate",
@@ -131,13 +139,14 @@
     "python_compile": "passed for changed Python modules",
     "git_diff_check": "passed before commit",
     "actual_route_identity": "Both current remote routes have successful first-pass responses with exact observed model identity; second-pass DeepSeek has also produced complete four-field outputs at high reasoning while other shards correctly failed closed.",
-    "github": "7d0c4c1 pushed to origin/main"
+    "github": "c00ee33 pushed to origin/main before checkpoint documentation",
+    "provider_neutral_reasoning_tests": "84 passed for role persistence and request payload; auto omits provider-specific thinking while preserving reasoning_effort=high"
   },
   "limits": [
-    "Second-pass adjudication is still running; mapping confirmation and facts materialization are not complete.",
+    "Second-pass adjudication is paused before completion; mapping confirmation and facts materialization are not complete.",
     "Some DeepSeek high-reasoning shards exhaust even 131072 output tokens without a final answer; these are technical coverage gaps and are never counted as blind verification.",
     "Some CMS shards fail schema or observed-model contracts; successful sibling receipts remain reusable and failures are not converted into agreement.",
     "No local Qwen route was selected or loaded. Port 8911 remains stopped."
   ],
-  "next_safe_action": "Let the healthy 8920 primary and verifier workers finish the current namespaces without redispatch. Reconcile completed mappings plus visible exhausted gaps, call the product adjudication route to persist receipts, then confirm only if the semantic gate allows and continue to facts materialization/AE-MH analysis."
+  "next_safe_action": "Read HANDOFF_20260923.md; verify paused=1/running=0 and both ports stopped; restart only 8920 with the recorded runtime and 4+4 workers, resume the existing queue without submitting a new generation, then use the product adjudication endpoint for one bounded in-place recovery of failed shards."
 }
