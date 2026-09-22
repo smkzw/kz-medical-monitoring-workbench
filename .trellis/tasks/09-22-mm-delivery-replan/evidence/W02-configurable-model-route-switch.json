@@ -1,0 +1,75 @@
+{
+  "schema": "mm-w02-configurable-model-route-switch-v1",
+  "recorded_at": "2026-09-22T23:49:00+08:00",
+  "source_head": "b0b2136bfacc5bfdb645cebaa6b039ef7499a623",
+  "state": "actual_batch_in_progress",
+  "scope": "The medical-monitoring primary and verifier routes are selected from persisted role profiles. New submissions freeze the exact provider and model identity into each job; source edits are not required to select another OpenAI-compatible route.",
+  "configured_roles": [
+    {
+      "role_id": "medical_monitoring_ai",
+      "profile_id": "medical_monitoring_ai__cms_router_glm53flash",
+      "provider": "cms-router",
+      "requested_model": "glm-5.3-flash",
+      "reasoning_effort": "high",
+      "thinking": "enabled",
+      "ready": true
+    },
+    {
+      "role_id": "medical_monitoring_verifier_ai",
+      "profile_id": "medical_monitoring_verifier_ai__ollama_cloud_dsv41",
+      "provider": "ollama-cloud",
+      "requested_model": "deepseek-v4.1-flash",
+      "reasoning_effort": "high",
+      "thinking": "enabled",
+      "ready": true
+    }
+  ],
+  "configuration_evidence": {
+    "provider_settings_sha256": "d079bbf63cb8106368148d9291ce0ee4fd9bf04183aae4c8d603639a9f380a3a",
+    "role_bindings_sha256": "19a7af608d554d8b361f7c393a4ff39cc6ce76b43010f641e0f01676e00edbe6",
+    "credentials": "stored in the native encrypted credential store and excluded from this evidence"
+  },
+  "actual_run": {
+    "runtime": "/tmp/mm-w02-correct-mg-runtime-20260922-v2",
+    "project_id": "proj_mgk10_sar_real",
+    "attempt_id": "stg-86b77f06eb5746fbb1f50edec7839096",
+    "port": 8920,
+    "port_8911": "stopped",
+    "new_model_jobs": 294,
+    "deterministic_metadata_jobs": 8,
+    "historical_route_jobs": {
+      "opencode-go/mimo-v2.6-flash": "stale_input",
+      "opencode-go/deepseek-flash": "stale_input"
+    },
+    "first_observed_successes": [
+      {
+        "provider": "cms-router",
+        "requested_model": "glm-5.3-flash",
+        "observed_response_model": "glm-5.3-flash"
+      },
+      {
+        "provider": "ollama-cloud",
+        "requested_model": "deepseek-v4.1-flash",
+        "observed_response_model": "deepseek-v4.1-flash"
+      }
+    ],
+    "first_contract_rejection": {
+      "provider": "ollama-cloud",
+      "failure_code": "invalid_ai_output",
+      "reason": "The verifier inserted a Query conclusion into the field-mapping stage; the output contract rejected it after one controlled repair.",
+      "recovery": "After the first pass is terminal, only this same-revision failed shard may be requeued in place. Successful siblings must not rerun."
+    }
+  },
+  "verification": {
+    "focused_tests": "189 passed",
+    "git_diff_check": "passed",
+    "route_identity": "Both requested routes have at least one actual successful field-mapping response with an exact observed model identity.",
+    "generic_route_test": "A custom-router/custom-medical-model role binding is accepted and frozen without adding a source allowlist entry."
+  },
+  "limits": [
+    "The actual 294-job mapping batch is still running; this file does not claim mapping or facts completion.",
+    "One successful response proves route identity and contract compatibility for that shard, not clinical acceptance of the complete study.",
+    "No local Qwen route was selected or loaded by this work."
+  ],
+  "next_safe_action": "Keep port 8911 stopped and let the healthy 8920 workers finish the existing jobs. Inspect terminal failures by cause, use bounded same-revision in-place recovery, then reconcile the two complete route cohorts before mapping confirmation and facts materialization."
+}
