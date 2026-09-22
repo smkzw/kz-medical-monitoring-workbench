@@ -1,6 +1,6 @@
 {
   "schema": "mm-delivery-status-v1",
-  "updated_at": "2026-09-22T16:06:42+08:00",
+  "updated_at": "2026-09-22T16:31:00+08:00",
   "planning_status": "complete",
   "product_status": "not_delivered",
   "goal_status": "active",
@@ -99,10 +99,10 @@
     },
     {
       "id": "0922V2-A02",
-      "status": "not_executed",
-      "head": null,
-      "evidence": [],
-      "reason": "Current review probes are not the specified complete product acceptance."
+      "status": "partial_verified",
+      "head": "1ce3437ed0a1cae844c5e6d27224b90a67778bde",
+      "evidence": ["evidence/W01-immutable-read-slice.json"],
+      "reason": "A second facts project registered after application composition and completed the immutable public API chain without restart or fallback; the test provisioned its frozen facts artifacts directly, so the separate UI/import materialization step remains unverified."
     },
     {
       "id": "0922V2-A03",
@@ -113,10 +113,10 @@
     },
     {
       "id": "0922V2-A04",
-      "status": "not_executed",
-      "head": null,
-      "evidence": [],
-      "reason": "Current review probes are not the specified complete product acceptance."
+      "status": "passed",
+      "head": "1ce3437ed0a1cae844c5e6d27224b90a67778bde",
+      "evidence": ["evidence/W01-immutable-read-slice.json"],
+      "reason": "After project B publication, project A's historical result token returned the identical frozen response and failed closed under project B."
     },
     {
       "id": "0922V2-A05",
@@ -141,10 +141,10 @@
     },
     {
       "id": "0922V2-A08",
-      "status": "not_executed",
-      "head": null,
-      "evidence": [],
-      "reason": "Current review probes are not the specified complete product acceptance."
+      "status": "passed",
+      "head": "1ce3437ed0a1cae844c5e6d27224b90a67778bde",
+      "evidence": ["evidence/W01-immutable-read-slice.json"],
+      "reason": "Twenty-four concurrent actual API reads stayed identical and rows/meta reconciled while the active findings pointer was continuously rewritten."
     },
     {
       "id": "0922V2-A09",
@@ -260,10 +260,10 @@
     },
     {
       "id": "0922V2-A25",
-      "status": "not_executed",
-      "head": null,
-      "evidence": [],
-      "reason": "Current review probes are not the specified complete product acceptance."
+      "status": "passed",
+      "head": "1ce3437ed0a1cae844c5e6d27224b90a67778bde",
+      "evidence": ["evidence/W01-immutable-read-slice.json"],
+      "reason": "A real build_subject_evidence job completed through repository/resolver/worker unchanged; value and type mutations became stale_input before provider invocation."
     },
     {
       "id": "0922V2-A26",
@@ -529,5 +529,5 @@
       "reason": "Current review probes are not the specified complete product acceptance."
     }
   ],
-  "next_action": "Continue W01 with concurrent active-pointer pressure and formal build_subject_evidence worker invalidation, then repair the frontend runtime for browser source acceptance; do not mark W01 complete from API tests alone."
+  "next_action": "Continue W01 by repairing the isolated frontend runtime and executing cold-start, same-subject cross-project, and source-byte browser acceptance; do not mark W01 complete from backend acceptance alone."
 }

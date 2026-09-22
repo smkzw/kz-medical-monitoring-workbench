@@ -1573,3 +1573,9 @@ W00证据位于`../../tasks/09-22-mm-delivery-replan/evidence/{route-lock,projec
 新增从空dispatcher启动、进程内晚注册两个facts研究的完整API回归：两个研究使用相同受试者编号但不同中心与AE内容，依次完成bootstrap→setup→launch→publication→result-entry→overview。实际响应严格返回各自项目、中心和finding；第二项目完成后重开第一项目旧token，响应逐对象一致；把第一项目token用于第二项目时409 fail closed。该路径同时揭示正式daily ModeOutput把公开finding归一为`payload.query_drafts`，结果上下文现直接读取该冻结字段，不再回开活动分析绑定。
 
 集中回归增至137项通过（100条既有deprecation warning）。W01仍不关闭：冷启动浏览器、并发active-pointer压力、正式`build_subject_evidence` worker失效及浏览器来源字节验收仍需完成。
+
+### 2026-09-22 W01并发读取与正式worker新鲜度闭合
+
+公开结果并发验收在真实API上持续改写`aemh-findings.active.json`，同时并行读取24次历史结果；每次finding、meta、artifact identity及总数均来自同一已发布ModeOutput对象，响应与基准逐对象一致。A08通过。
+
+正式facts AI freshness不再按目录最大mtime读取active或复用进程domains缓存；resolver从job的`facts:<snapshot>`锁定版本化manifest，每次worker领取前重新校验manifest与源文件字节。真实`build_subject_evidence`证据创建repository job后，未变源完成；AE值变化及字符串→数值类型变化均在provider调用前转`stale_input_revision`。A25通过。集中事实/API组137项、worker freshness组4项通过；提交`1ce3437`。W01后端尚未替代浏览器验收，下一步修复隔离前端并完成A01/A03/D05的浏览器部分。
