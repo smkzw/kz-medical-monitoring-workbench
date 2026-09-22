@@ -39,11 +39,14 @@ class FactsModeOutputProvider:
         self,
         artifacts_dir: Optional[Path] = None,
         domains_loader: Optional[Callable[[], Mapping[str, list]]] = None,
+        project_ref: str = "",
     ) -> None:
         self._artifacts_dir = artifacts_dir
         # 数据接入的domains快照读取器：用于把分析层evidence_id解析回
         # （表，行）→事件/来源锚点。缺省None=锚点解析降级为unbound。
         self._domains_loader = domains_loader
+        # V5-04：项目身份，binding校验用（空=不校验项目归属）。
+        self._project_ref = str(project_ref or "").strip()
 
     @staticmethod
     def _binding(run_binding: Mapping[str, Any]) -> dict[str, Any]:
@@ -327,60 +330,6 @@ class FactsModeOutputProvider:
             entry_context=context,
         )
 
-    def _daily_findings(
-        self, binding: Mapping[str, Any], r5_packet: Any
-    ) -> list[dict[str, Any]]:
-        ai_findings = self._load_ai_findings()
-        if ai_findings:
-            return self._findings_from_artifact(ai_findings, r5_packet)
-        events_by_ref = {event.event_ref: event for event in r5_packet.events}
-        subjects_by_ref = {
-            subject.subject_ref: subject for subject in r5_packet.subjects
-        }
-        findings: list[dict[str, Any]] = []
-        for risk in r5_packet.risks:
-            if len(findings) >= _MAX_FINDINGS:
-                break
-            if risk.severity not in ("medium", "critical"):
-                continue
-            event = events_by_ref.get(risk.risk_anchor_ref or "")
-            if event is None:
-                continue
-            subject = subjects_by_ref.get(event.subject_ref)
-            subject_label = subject.subject_label if subject else event.subject_ref
-            domain_zh = _DOMAIN_ZH.get(event.domain, event.domain)
-            severity_zh = _SEVERITY_ZH.get(risk.severity, risk.severity)
-            date_text = str(event.start_date or "日期缺失")
-            basis = (
-                f"已核验事实：受试者{subject_label}于{date_text}记录一条"
-                f"{domain_zh}（{event.label_zh}），严重程度{severity_zh}。"
-            )
-            finding_text = (
-                f"「{event.label_zh}」为{severity_zh}{domain_zh}信号，"
-                "需要医学监察员人工核对。"
-            )
-            action = "请下钻受试者旅程与来源记录核对临床语境后确认处置。"
-            findings.append(
-                {
-                    "finding_id": f"facts-finding-{event.event_ref}",
-                    "risk_id": risk.risk_ref,
-                    "issue_id": f"facts-issue-{event.domain}",
-                    "subject_id": event.subject_ref,
-                    "site_id": event.site_ref,
-                    "scope_kind": "subject",
-                    "basis": basis,
-                    "finding": finding_text,
-                    "action": action,
-                    "evidence_refs": list(risk.source_locator_refs)
-                    or list(event.source_locator_refs),
-                    "locator": {
-                        "path": f"facts.{event.domain}",
-                        "record_id": event.event_ref,
-                    },
-                }
-            )
-        return findings
-
     def public_findings(
         self,
         projection: Optional[Mapping[str, Any]] = None,
@@ -505,55 +454,121 @@ class FactsModeOutputProvider:
             "error": read.get("error"),
         }
 
+    _FINDINGS_BINDING = "aemh-findings.active.json"
+
+    def _read_findings_binding(self) -> dict[str, Any]:
+        """V5-04：读取发布指针binding（当前结果指针；发布结果不可变）。
+
+        binding由发布方（finalize/发布流程）落盘：{artifact,
+        content_sha256, project_id, snapshot_digest}。读取时校验
+        文件内容与binding声明一致——不接受同名冒充。
+        """
+
+        if self._artifacts_dir is None:
+            return {}
+        try:
+            value = json.loads(
+                (Path(self._artifacts_dir) / self._FINDINGS_BINDING).read_text(
+                    encoding="utf-8"
+                )
+            )
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(value, dict):
+            return {}
+        artifact = str(value.get("artifact", "")).strip()
+        digest = str(value.get("content_sha256", "")).strip()
+        if (
+            not artifact
+            or "/" in artifact
+            or ".." in artifact
+            or len(digest) != 64
+        ):
+            return {}
+        return value
+
     def _read_ai_findings(self) -> dict[str, Any]:
-        """按冻结名读取AI findings工件，返回带状态与身份的读取结果。
+        """读取AI findings工件，返回带状态与身份的读取结果。
 
         - missing：工件不存在（项目无双cohort lane）
-        - read_failed：存在但JSON损坏或内容hash不符
+        - read_failed：存在但JSON损坏或hash校验不符——调用方不得用
+          备用生成冒充AI分析（事实观察可另路展示并独立标状态）
         - completed_no_findings / completed_with_findings：完成态分离
-          （有效空数组≠缺失，不得触发备用分析）
-        读取目标为固定冻结名（不glob+mtime取最新——旧run不得读到新工件）。
+          （有效空数组≠缺失）
+        目标解析顺序（V5-04冻结结果合同）：
+        1) binding指针存在→读binding声明的工件，并验证工件payload
+           hash==binding.content_sha256（同名不同内容判read_failed）
+        2) 无binding→legacy固定冻结名（历史工件自申报hash校验）
+        不glob+mtime取最新——旧run不得读到新工件。
         """
 
         if self._artifacts_dir is None:
             return {"state": "missing", "findings": None, "artifact": None,
                     "error": "artifacts_dir未配置"}
-        artifact_path = Path(self._artifacts_dir) / _AI_FINDINGS_ARTIFACT
+        binding = self._read_findings_binding()
+        if binding:
+            artifact_name = str(binding["artifact"])
+            expected_digest = str(binding["content_sha256"])
+            project_id = str(binding.get("project_id", "")).strip()
+            if (
+                self._project_ref
+                and project_id
+                and project_id != str(self._project_ref)
+            ):
+                return {"state": "read_failed", "findings": None,
+                        "artifact": artifact_name,
+                        "error": "binding_project_mismatch"}
+            artifact_path = Path(self._artifacts_dir) / artifact_name
+        else:
+            artifact_name = _AI_FINDINGS_ARTIFACT
+            expected_digest = ""
+            artifact_path = Path(self._artifacts_dir) / artifact_name
         if not artifact_path.is_file():
             return {"state": "missing", "findings": None,
-                    "artifact": _AI_FINDINGS_ARTIFACT, "error": None}
+                    "artifact": artifact_name, "error": None}
         try:
             with open(artifact_path, encoding="utf-8") as handle:
                 artifact = json.load(handle)
         except (OSError, ValueError) as exc:
             return {"state": "read_failed", "findings": None,
-                    "artifact": _AI_FINDINGS_ARTIFACT,
+                    "artifact": artifact_name,
                     "error": f"json_decode: {exc}"}
         if not isinstance(artifact, dict):
             return {"state": "read_failed", "findings": None,
-                    "artifact": _AI_FINDINGS_ARTIFACT, "error": "not_object"}
+                    "artifact": artifact_name, "error": "not_object"}
         declared = str(artifact.get("content_sha256", "")).strip()
-        if declared:
-            verify = {k: v for k, v in artifact.items() if k != "content_sha256"}
-            if content_hash(verify) != declared:
-                return {"state": "read_failed", "findings": None,
-                        "artifact": _AI_FINDINGS_ARTIFACT,
-                        "error": "content_sha256_mismatch"}
+        verify = {k: v for k, v in artifact.items() if k != "content_sha256"}
+        recomputed = content_hash(verify)
+        if declared and recomputed != declared:
+            return {"state": "read_failed", "findings": None,
+                    "artifact": artifact_name,
+                    "error": "content_sha256_mismatch"}
+        if expected_digest and recomputed != expected_digest:
+            # 同名工件内容被替换：与binding声明不符（V5-04 R5-11反例）
+            return {"state": "read_failed", "findings": None,
+                    "artifact": artifact_name,
+                    "error": "binding_digest_mismatch"}
         findings = artifact.get("findings")
         if not isinstance(findings, list):
             return {"state": "read_failed", "findings": None,
-                    "artifact": _AI_FINDINGS_ARTIFACT,
+                    "artifact": artifact_name,
                     "error": "findings_not_list"}
         state = (
             "completed_with_findings" if findings else "completed_no_findings"
         )
-        return {
+        result = {
             "state": state,
             "findings": findings,
-            "artifact": _AI_FINDINGS_ARTIFACT,
+            "artifact": artifact_name,
             "content_sha256": declared,
             "error": None,
         }
+        if binding:
+            result["binding"] = {
+                "snapshot_digest": str(binding.get("snapshot_digest", "")),
+                "project_id": str(binding.get("project_id", "")),
+            }
+        return result
 
     def _finding_evidence_ids(self, item: Mapping[str, Any]) -> list[str]:
         """双cohort payload/claims的evidence_ids并集（保序去重）。
@@ -654,6 +669,11 @@ class FactsModeOutputProvider:
         if read["state"] == "completed_no_findings":
             # 有效零发现：如实返回空，不触发备用通用提示（V4-05）。
             return []
+        if read["state"] == "read_failed":
+            # V5-04 R5-12：读失败（损坏/同名替换/hash不符）≠没有AI分析，
+            # 不得悄悄转成一批别的提示冒充结果。状态经findings_meta可见。
+            return []
+        # missing（无AI lane）才走确定性事实提示路径（明确来源标注）。
         return self._deterministic_fallback_findings(binding, r5_packet)
 
     def _deterministic_fallback_findings(
