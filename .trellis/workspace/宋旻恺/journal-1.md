@@ -1544,3 +1544,24 @@ v15代四轮恢复后168/174完成：GLM 84完/3败、deepseek 84完/3败。6个
 ### 2026-09-14 21:20 P3真实publication provider建成
 
 FactsPublicationAuthorityProvider（facts_publication.py）：从62个facts artifact直接构建typed非synthetic R5AuthorityPacket——365真实受试者、25中心、148,727八轨临床事件（表→轨道映射+部分/缺失日期处理+AESEV严重度推导）、1,457实际访视、每事件初始风险、365条受试者流向路径（知情同意→筛选→治疗→研究状态，治疗进入以EX给药记录、状态以SUBJSTA为据）。packet经全部类型/枚举/digest校验。下一步：main组合根切换→前端kz美学重建。
+
+
+### 2026-09-22 工程复审与连续交付规划（本轮仅资料包）
+
+基线a7217af与GitHub main一致；专家0922V2 SHA验证12项通过。九实际生产模块隔离探针复现缺陷，九文件143项回归通过；关键链复核14类问题，不声称全仓逐行/真实医学/浏览器验收。CodeBuddy/deepseek-v4.1-flash:max同session内联源码独立挑战完成（首次工具不可读未计通过）。新入口：../../tasks/09-22-mm-delivery-replan/README.md；PRD/Plan v4/执行规范/跨层合同/八工作包/62验收项/启动prompt齐备。旧goal保持paused；未改产品/未恢复队列/未推GitHub。下一Agent由用户fork后执行W00，再连续完成所有依赖就绪包；保护临床原件、活项目和旧证据。
+
+### 2026-09-22 W00接管基线完成，进入W01
+
+执行机制选择：W00为同一运行库上的只读锚定，由主线程直接完成；W01涉及共享结果上下文和多个消费者，继续由主线程单一所有者整组修改，避免并行写共享合同。仅在冻结切片形成后按AGENTS触发条件安排独立审阅。
+
+W00证据位于`../../tasks/09-22-mm-delivery-replan/evidence/{route-lock,project-materials,reuse-inventory}.json`。当前后端8910 ready（build `api-bc22eb0c4096b565`）；5177虽有监听进程但HTTP返回502，未记为可用；8911保持停止。运行库无非终态监查job，保留`proj_user_caecb8d34865`暂停状态且未做任何队列写入。现行监查主/核角色是opencode-go的mimo-v2.6-flash与deepseek-flash，近期各有可核对的observed identity；历史空observed仍保持unknown。独立GLM角色存在但capability仍unverified；W00未调用任何模型，也未启用本地Qwen降级。
+
+五个规范项目的原件均可定位并做只读SHA-256。运行库中五项目规范ID均无冻结batch/source，因此兼容双快照登记为missing；合成研究和用户测试项目未替代。MG manifest绑定CFDI自查副本；用户另给的DM同名文件字节不同，后续context必须绑定具体source hash。W01现开始修复project/run/snapshot/cutoff/facts/findings/source的不可变读取；集中改完后才运行该组回归。
+
+### 2026-09-22 W01不可变读取第一完整切片
+
+事实物化现在同时写active指针与按snapshot内容寻址的版本化manifest；历史读取按publication snapshot解析，active后移不会把旧token重贴到新facts。GET只读既有manifest，缺失、损坏、未知snapshot及跨项目均fail closed。新manifest来源定位绑定真实表工件SHA与真实行内容；旧无binding schema仅保留只读兼容。
+
+结果读取引入请求作用域`ResolvedResultContext`：四个R6输出按publication登记的content-addressed artifact IDs一次校验并载入；公开finding从该次发布的`affected_query_draft`读取，列表与meta同一对象，不再重开`aemh-findings.active.json`。main组合根改为按项目严格分派facts与mode provider，删除first-provider/SAR默认回退。
+
+集中验证：受影响模块`py_compile`及`git diff --check`通过；facts materialization/manifest/event-time/mode-output/source-digest/R7 router共134项通过（99条既有deprecation warning）。真实MG只读重建仍与已发布R5 digest逐字一致（365受试者、145,616事件、148,193来源），且manifest读前后SHA不变。W01仍为in_progress：冷启动双项目实际API、同SUBJID隔离、旧token在active切换后的公开API、并发pointer压力、共享摘要正式worker及浏览器来源字节验收尚未完成，不能标包完成。

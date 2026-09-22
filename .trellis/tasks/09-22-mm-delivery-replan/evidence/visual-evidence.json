@@ -1,0 +1,7 @@
+{
+  "path": "/tmp/kz_test_round6/final_B_verdict_panel.png",
+  "sha256": "1bd5884fb4d502650df916f21c3537e026a0e50eefbceb2067888810fa4eec88",
+  "reviewed": "2026-09-22",
+  "scope": "historical screenshot inspected, not current deployed browser acceptance",
+  "source_report": "scripts/test_round6/report_C_glm_PSO_adversarial.md"
+}

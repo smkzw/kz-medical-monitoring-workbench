@@ -327,6 +327,7 @@ from packages.medical_monitoring.api.r7_product.continuity_service import (
     build_public_continuity_envelope as _build_public_continuity_envelope_impl,
 )
 from packages.medical_monitoring.api.r7_product.result_context_service import (
+    ResolvedResultContext,
     ResultContextDependencies,
     load_public_result_context as _load_public_result_context_impl,
 )
@@ -781,13 +782,7 @@ def create_medical_monitoring_r7_product_router(
         site_ref: Optional[str] = None,
         require_product_adapter: bool = True,
         continuity_context: bool = False,
-    ) -> tuple[
-        lr.LaunchRegistry,
-        MonitoringRunEntry,
-        lr.LaunchRecord,
-        lr.ResultPublication,
-        Optional[R5ProductAdapter],
-    ]:
+    ) -> ResolvedResultContext:
         return _load_public_result_context_impl(
             result_context_dependencies,
             canonical_project_id,

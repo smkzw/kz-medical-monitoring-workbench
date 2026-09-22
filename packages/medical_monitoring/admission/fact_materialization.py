@@ -26,6 +26,12 @@ from ..intelligence.structure_profile import (
 from ..runtime.runtime_progress import ARTIFACT_DIR_NAME, RUNTIME_DB_NAME, RUNTIME_DIR_NAME
 from .pipeline import ADMISSION_RECORD_KIND, LOCATOR_INDEX_KIND
 from .staging import list_attempt_ids, load_attempt
+from ..projections.facts_publication import (
+    _FACTS_MANIFEST_DIR,
+    _atomic_write_json,
+    _build_facts_manifest,
+    _versioned_manifest_name,
+)
 
 FACT_SET_KIND = "canonical_fact_set"
 FACT_MATERIALIZATION_KIND = "canonical_fact_materialization"
@@ -443,6 +449,52 @@ class FactMaterializationService:
 
             if len(fact_set_manifests) != len(snapshot_ids):
                 raise FactMaterializationError("facts_snapshot_incomplete")
+
+            # Publish the exact listing snapshot set selected by this confirmed
+            # materialization. Public readers must never scan or create this
+            # manifest during a GET.
+            listing_artifact_names = []
+            for snapshot_id in snapshot_ids:
+                snapshot = store.get_listing_snapshot(snapshot_id)
+                listing_artifact_names.append(f"{snapshot.content_hash}.json")
+            manifest_payload = _build_facts_manifest(
+                Path(workspace_dir) / RUNTIME_DIR_NAME / ARTIFACT_DIR_NAME,
+                allowed_files=listing_artifact_names,
+                project_id=project_id,
+                attempt_id=attempt_id,
+                mapping_version=mapping_revision,
+                snapshot_ref="facts:" + content_hash({
+                    "project_id": project_id,
+                    "attempt_id": attempt_id,
+                    "mapping_version": mapping_revision,
+                    "listing_artifacts": listing_artifact_names,
+                })[:24],
+            )
+            if len(manifest_payload.get("tables") or ()) != len(snapshot_ids):
+                raise FactMaterializationError("facts_snapshot_incomplete")
+            artifacts_dir = (
+                Path(workspace_dir) / RUNTIME_DIR_NAME / ARTIFACT_DIR_NAME
+            )
+            versioned_dir = artifacts_dir / _FACTS_MANIFEST_DIR
+            versioned_dir.mkdir(parents=True, exist_ok=True)
+            snapshot_ref = str(manifest_payload["snapshot_ref"])
+            versioned_path = versioned_dir / _versioned_manifest_name(snapshot_ref)
+            if versioned_path.is_file():
+                try:
+                    existing = json.loads(versioned_path.read_text(encoding="utf-8"))
+                except (OSError, ValueError) as exc:
+                    raise FactMaterializationError(
+                        "facts_manifest_version_unreadable"
+                    ) from exc
+                if existing != manifest_payload:
+                    raise FactMaterializationError(
+                        "facts_manifest_version_conflict"
+                    )
+            else:
+                _atomic_write_json(versioned_path, manifest_payload)
+            _atomic_write_json(
+                artifacts_dir / "facts-manifest.json", manifest_payload
+            )
 
             for manifest in fact_set_manifests:
                 _advance(

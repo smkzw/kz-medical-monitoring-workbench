@@ -322,6 +322,7 @@ def _clean(value: Any) -> str:
 
 
 _FACTS_MANIFEST_NAME = "facts-manifest.json"
+_FACTS_MANIFEST_DIR = "facts-manifests"
 _FACTS_MANIFEST_SCHEMA = "facts-table-manifest-v1"
 _ARTIFACT_NAME_RE = re.compile(r"^[0-9a-f]{64}\.json$")
 
@@ -330,14 +331,36 @@ class FactsPublicationError(ValueError):
     """事实工件清单校验失败（篡改/缺失/形态不符）。"""
 
 
-def _build_facts_manifest(artifacts: Path) -> dict[str, Any]:
-    """从严格形态文件构建不可变清单：每表一个条目（mtime最新者当选）。"""
+def _versioned_manifest_name(snapshot_ref: str) -> str:
+    """Return the filesystem-safe immutable manifest name for a snapshot."""
+    return hashlib.sha256(str(snapshot_ref).encode("utf-8")).hexdigest() + ".json"
+
+
+def _build_facts_manifest(
+    artifacts: Path,
+    *,
+    allowed_files: Sequence[str] | None = None,
+    project_id: str = "",
+    attempt_id: str = "",
+    mapping_version: str = "",
+    snapshot_ref: str = "facts-snapshot-001",
+) -> dict[str, Any]:
+    """Build the manifest during materialization, never during a read.
+
+    ``allowed_files`` is the authoritative set of listing snapshot artifacts
+    selected by the confirmed materialization.  The legacy no-filter mode is
+    retained only for explicit migration/tests; public GET paths never call
+    this builder.
+    """
     candidates: dict[str, list[tuple[float, str, str]]] = {}
     skipped: list[dict[str, str]] = []
     if not artifacts.is_dir():
         raise FactsPublicationError(f"facts artifacts dir missing: {artifacts}")
+    allowed = set(allowed_files or ())
     for path in sorted(artifacts.glob("*.json")):
         name = path.name
+        if allowed and name not in allowed:
+            continue
         if not _ARTIFACT_NAME_RE.match(name):
             skipped.append({"file": name, "reason": "non_canonical_name"})
             continue
@@ -374,6 +397,10 @@ def _build_facts_manifest(artifacts: Path) -> dict[str, Any]:
         del chosen_mtime
     return {
         "schema": _FACTS_MANIFEST_SCHEMA,
+        "project_id": str(project_id),
+        "attempt_id": str(attempt_id),
+        "mapping_version": str(mapping_version),
+        "snapshot_ref": str(snapshot_ref or "facts-snapshot-001"),
         "tables": tables,
         "superseded": superseded,
         "skipped": skipped,
@@ -404,50 +431,95 @@ class FactsPublicationAuthorityProvider:
 
     fixture_mode = False
 
-    def __init__(self, workspace_dir: Path, *, project_label: str = "MG-K10-SAR") -> None:
+    def __init__(
+        self,
+        workspace_dir: Path,
+        *,
+        project_ref: str = "",
+        project_label: str = "MG-K10-SAR",
+    ) -> None:
         self._workspace = Path(workspace_dir)
+        self._project_ref = str(project_ref or "").strip()
         self._project_label = project_label
-        self._cache: dict[tuple[str, str], R5AuthorityPacket] = {}
+        self._cache: dict[tuple[str, str, str], R5AuthorityPacket] = {}
 
     # -- loading -----------------------------------------------------------
 
-    def _load_domains(self) -> dict[str, list[dict[str, Any]]]:
+    def _read_manifest(
+        self, snapshot_ref: str | None = None
+    ) -> tuple[dict[str, Any], str]:
+        artifacts = self._workspace / "runtime" / "artifacts"
+        if snapshot_ref:
+            versioned = (
+                artifacts
+                / _FACTS_MANIFEST_DIR
+                / _versioned_manifest_name(snapshot_ref)
+            )
+            manifest_path = versioned if versioned.is_file() else artifacts / _FACTS_MANIFEST_NAME
+        else:
+            manifest_path = artifacts / _FACTS_MANIFEST_NAME
+        if not manifest_path.is_file():
+            raise FactsPublicationError("facts manifest missing")
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise FactsPublicationError("facts manifest unreadable") from exc
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("schema") != _FACTS_MANIFEST_SCHEMA
+            or not isinstance(manifest.get("tables"), list)
+        ):
+            raise FactsPublicationError("facts manifest invalid")
+        manifest_project = str(manifest.get("project_id") or "").strip()
+        if self._project_ref and manifest_project and manifest_project != self._project_ref:
+            raise FactsPublicationError("facts manifest project mismatch")
+        bound_snapshot = str(
+            manifest.get("snapshot_ref") or "facts-snapshot-001"
+        )
+        if snapshot_ref and bound_snapshot != str(snapshot_ref):
+            raise FactsPublicationError("facts snapshot mismatch")
+        return manifest, content_hash(manifest)
+
+    def _load_domains(
+        self, manifest: Mapping[str, Any] | None = None
+    ) -> dict[str, list[dict[str, Any]]]:
         """按持久化不可变清单加载事实表（WP1：不扫描碰巧同名的JSON）。
 
-        首次加载时从"64位十六进制内容hash命名+单表结构"的严格形态文件
-        构建facts-manifest.json（同表多文件取mtime最新，其余记为
-        superseded）；此后一律按清单逐文件校验sha256后加载——同目录的
+        清单必须由物化阶段预先写入。查询只按清单逐文件校验sha256后加载；同目录的
         findings/布局/方案画像等非事实文件永不混入，字节篡改fail-closed。
         """
         artifacts = self._workspace / "runtime" / "artifacts"
-        manifest_path = artifacts / _FACTS_MANIFEST_NAME
-        manifest: dict[str, Any] | None = None
-        if manifest_path.is_file():
-            try:
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                manifest = None
-            if not isinstance(manifest, dict) or manifest.get("schema") != _FACTS_MANIFEST_SCHEMA:
-                manifest = None
         if manifest is None:
-            manifest = _build_facts_manifest(artifacts)
-            _atomic_write_json(manifest_path, manifest)
+            manifest, _manifest_digest = self._read_manifest()
         domains: dict[str, list[dict[str, Any]]] = {}
+        seen_tables: set[str] = set()
         for entry in manifest.get("tables", []):
-            path = artifacts / str(entry["file"])
+            if not isinstance(entry, Mapping):
+                raise FactsPublicationError("facts manifest table entry invalid")
+            table = str(entry.get("table") or "")
+            file_name = str(entry.get("file") or "")
+            digest = str(entry.get("sha256") or "")
+            if (
+                not table
+                or table in seen_tables
+                or not _ARTIFACT_NAME_RE.fullmatch(file_name)
+                or len(digest) != 64
+            ):
+                raise FactsPublicationError("facts manifest table entry invalid")
+            seen_tables.add(table)
+            path = artifacts / file_name
             try:
                 raw = path.read_bytes()
             except OSError as exc:
                 raise FactsPublicationError(
                     f"facts manifest entry unreadable: {entry['file']}: {exc}"
                 ) from exc
-            if hashlib.sha256(raw).hexdigest() != entry["sha256"]:
+            if hashlib.sha256(raw).hexdigest() != digest:
                 raise FactsPublicationError(
                     f"facts manifest digest mismatch (tampered or replaced "
                     f"artifact): {entry['file']}"
                 )
             payload = json.loads(raw.decode("utf-8"))
-            table = str(entry["table"])
             rows = payload.get(table) if isinstance(payload, dict) else None
             if not isinstance(rows, list):
                 raise FactsPublicationError(
@@ -459,16 +531,12 @@ class FactsPublicationAuthorityProvider:
     # -- packet ------------------------------------------------------------
 
     def get_authority(self, identity: Any, **_: Any) -> R5AuthorityPacket:
-        cache_key = (
+        return self.get_packet(
             str(getattr(identity, "project_ref", "")),
-            str(getattr(identity, "snapshot_ref", "")),
+            str(getattr(identity, "run_ref", "")) or None,
+            str(getattr(identity, "snapshot_ref", "")) or None,
+            str(getattr(identity, "cutoff_ref", "")) or None,
         )
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            return cached
-        packet = self._build(cache_key)
-        self._cache[cache_key] = packet
-        return packet
 
     def get_packet(
         self,
@@ -478,17 +546,40 @@ class FactsPublicationAuthorityProvider:
         cutoff_ref: str | None = None,
     ) -> R5AuthorityPacket:
         """Positional adapter consumed by R5ProductAdapter._packet."""
-        key = (str(project_ref), str(snapshot_ref or "facts-snapshot-001"))
+        project = str(project_ref)
+        if self._project_ref and project != self._project_ref:
+            raise FactsPublicationError("facts project mismatch")
+        manifest, manifest_digest = self._read_manifest(snapshot_ref)
+        bound_snapshot = str(
+            manifest.get("snapshot_ref") or "facts-snapshot-001"
+        )
+        requested_snapshot = str(snapshot_ref or bound_snapshot)
+        if requested_snapshot != bound_snapshot:
+            raise FactsPublicationError("facts snapshot mismatch")
+        key = (project, requested_snapshot, manifest_digest)
         cached = self._cache.get(key)
         if cached is not None:
             return cached
-        packet = self._build(key)
+        packet = self._build(key, manifest, manifest_digest)
         self._cache[key] = packet
         return packet
 
-    def _build(self, cache_key: tuple[str, str]) -> R5AuthorityPacket:
-        domains = self._load_domains()
+    def _build(
+        self,
+        cache_key: tuple[str, str, str],
+        manifest: Mapping[str, Any],
+        manifest_digest: str,
+    ) -> R5AuthorityPacket:
+        domains = self._load_domains(manifest)
         snapshot_ref = cache_key[1] or "facts-snapshot-001"
+        table_entries = {
+            str(entry["table"]): dict(entry)
+            for entry in manifest.get("tables", [])
+        }
+        legacy_manifest = not all(
+            str(manifest.get(field) or "").strip()
+            for field in ("project_id", "attempt_id", "mapping_version")
+        )
 
         sources: list[R5SourceRecord] = []
         sites_by_ref: dict[str, dict[str, Any]] = {}
@@ -526,16 +617,37 @@ class FactsPublicationAuthorityProvider:
                 entry["subjects"].add(f"subject-{subj}")
 
         def _locator(table: str, index: int) -> R5SourceRecord:
+            entry = table_entries[table]
+            row = domains[table][index]
             ref = f"loc-{table}-{index:06d}"
+            if legacy_manifest:
+                source_file_ref = f"listing:{table}"
+                source_revision_ref = f"src-rev-{table}"
+                source_revision_content_hash = content_hash({"table": table})[
+                    :64
+                ].replace("-", "0")
+                excerpt = f"{table} 第{index + 1}行原始数据（已校验）"
+            else:
+                source_file_ref = f"facts-artifact:{entry['file']}"
+                source_revision_ref = (
+                    f"facts-table:{table}:{str(entry['sha256'])[:16]}"
+                )
+                source_revision_content_hash = str(entry["sha256"])
+                excerpt = json.dumps(
+                    row,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
             record = R5SourceRecord(
                 locator_ref=ref,
                 snapshot_ref=snapshot_ref,
-                source_file_ref=f"listing:{table}",
-                source_revision_ref=f"src-rev-{table}",
-                source_revision_content_hash=content_hash({"table": table})[:64].replace("-", "0"),
+                source_file_ref=source_file_ref,
+                source_revision_ref=source_revision_ref,
+                source_revision_content_hash=source_revision_content_hash,
                 record_ref=f"row-{table}-{index:06d}",
                 canonical_location=f"{table}!row{index + 1}",
-                excerpt=f"{table} 第{index + 1}行原始数据（已校验）",
+                excerpt=excerpt,
             )
             sources.append(record)
             return record
@@ -697,9 +809,25 @@ class FactsPublicationAuthorityProvider:
             evaluation_content_identities=(content_hash({"snapshot": snapshot_ref, "kind": "evaluation"})[:64],),
             source_revision_content_pairs=(
                 R5SourceRevisionPair(
-                    revision_id="src-rev-facts",
-                    content_hash=content_hash({"facts": True})[:64],
-                    locator_refs=(),
+                    revision_id=(
+                        "src-rev-facts"
+                        if legacy_manifest
+                        else f"facts-manifest:{manifest_digest[:16]}"
+                    ),
+                    content_hash=(
+                        content_hash({"facts": True})[:64]
+                        if legacy_manifest
+                        else manifest_digest
+                    ),
+                    locator_refs=(
+                        ()
+                        if legacy_manifest
+                        else tuple(
+                            dict.fromkeys(
+                                source.locator_ref for source in sources
+                            )
+                        )
+                    ),
                 ),
             ),
             sources=tuple(sources),

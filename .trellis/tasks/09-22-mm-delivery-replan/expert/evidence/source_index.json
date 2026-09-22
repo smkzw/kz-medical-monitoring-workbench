@@ -1,0 +1,232 @@
+{
+  "review_round": "0922V2",
+  "repository": "smkzw/kz-medical-monitoring-workbench",
+  "head": "07b6a09c1644c9261e6e3637f4e497bf775c33a1",
+  "note": "ranges表示本轮读取范围/相关窗口，不保证是完整函数的精确起止。所有代码结论应在实际checkout同SHA复验。",
+  "sources": [
+    {
+      "id": "S01",
+      "path": "scripts/test_round6/HANDOFF_ROUND6.md",
+      "read_range": [
+        1,
+        100
+      ],
+      "purpose": "当前阶段交接：作者报告，不等于独立验收",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/scripts/test_round6/HANDOFF_ROUND6.md#L1-L100"
+    },
+    {
+      "id": "S02",
+      "path": "services/api/app/main.py",
+      "read_range": [
+        1145,
+        1210
+      ],
+      "purpose": "源摘要统一及项目freshness缓存",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/services/api/app/main.py#L1145-L1210"
+    },
+    {
+      "id": "S03",
+      "path": "services/api/app/main.py",
+      "read_range": [
+        3780,
+        4250
+      ],
+      "purpose": "项目provider、setup、adapter/模式输出组装和router注入",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/services/api/app/main.py#L3780-L4250"
+    },
+    {
+      "id": "S04",
+      "path": "packages/medical_monitoring/analysis/ae_mh_cross_analysis.py",
+      "read_range": [
+        30,
+        168
+      ],
+      "purpose": "源摘要、清理、固定域与证据构建",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/packages/medical_monitoring/analysis/ae_mh_cross_analysis.py#L30-L168"
+    },
+    {
+      "id": "S05",
+      "path": "packages/medical_monitoring/analysis/ae_mh_cross_analysis.py",
+      "read_range": [
+        350,
+        475
+      ],
+      "purpose": "命题方向与分级匹配",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/packages/medical_monitoring/analysis/ae_mh_cross_analysis.py#L350-L475"
+    },
+    {
+      "id": "S06",
+      "path": "packages/medical_monitoring/api/r7_product/facts_mode_outputs.py",
+      "read_range": [
+        300,
+        779
+      ],
+      "purpose": "public对象、claims、binding读、状态与锚点",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/packages/medical_monitoring/api/r7_product/facts_mode_outputs.py#L300-L779"
+    },
+    {
+      "id": "S07",
+      "path": "services/api/app/monitoring_document_authority_workflow.py",
+      "read_range": [
+        90,
+        165
+      ],
+      "purpose": "advance中先保存再推进的入口",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/services/api/app/monitoring_document_authority_workflow.py#L90-L165"
+    },
+    {
+      "id": "S08",
+      "path": "services/api/app/monitoring_document_authority_workflow.py",
+      "read_range": [
+        345,
+        500
+      ],
+      "purpose": "用户选择持久化/合并/读取",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/services/api/app/monitoring_document_authority_workflow.py#L345-L500"
+    },
+    {
+      "id": "S09",
+      "path": "services/api/app/monitoring_document_authority_jobs.py",
+      "read_range": [
+        535,
+        625
+      ],
+      "purpose": "用户选择应用与过期角色忽略",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/services/api/app/monitoring_document_authority_jobs.py#L535-L625"
+    },
+    {
+      "id": "S10",
+      "path": "services/api/app/monitoring_document_authority_jobs.py",
+      "read_range": [
+        865,
+        1320
+      ],
+      "purpose": "晋升回执、补充文件依赖、回执重放",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/services/api/app/monitoring_document_authority_jobs.py#L865-L1320"
+    },
+    {
+      "id": "S11",
+      "path": "services/api/app/source_intake.py",
+      "read_range": [
+        585,
+        680
+      ],
+      "purpose": "registry实际晋升回执校验调用点",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/services/api/app/source_intake.py#L585-L680"
+    },
+    {
+      "id": "S12",
+      "path": "services/api/app/source_intake.py",
+      "read_range": [
+        450,
+        490
+      ],
+      "purpose": "registry事务异常回滚行为",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/services/api/app/source_intake.py#L450-L490"
+    },
+    {
+      "id": "S13",
+      "path": "services/api/app/source_intake.py",
+      "read_range": [
+        900,
+        1120
+      ],
+      "purpose": "文档登记入口与正文处理",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/services/api/app/source_intake.py#L900-L1120"
+    },
+    {
+      "id": "S14",
+      "path": "services/api/app/source_intake.py",
+      "read_range": [
+        1530,
+        1735
+      ],
+      "purpose": "文档实际使用校验",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/services/api/app/source_intake.py#L1530-L1735"
+    },
+    {
+      "id": "S15",
+      "path": "services/api/app/monitoring_document_evidence.py",
+      "read_range": [
+        1,
+        230
+      ],
+      "purpose": "文档消费者筛选有效晋升来源",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/services/api/app/monitoring_document_evidence.py#L1-L230"
+    },
+    {
+      "id": "S16",
+      "path": "packages/medical_monitoring/api/r7_product/publication_routes.py",
+      "read_range": [
+        660,
+        805
+      ],
+      "purpose": "公开result旧版本adapter上注入active findings",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/packages/medical_monitoring/api/r7_product/publication_routes.py#L660-L805"
+    },
+    {
+      "id": "S17",
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringWorkspace.jsx",
+      "read_range": [
+        1828,
+        1918
+      ],
+      "purpose": "实际风险卡片/claim计数/导航消费",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/frontend/src/features/medical-monitoring/MedicalMonitoringWorkspace.jsx#L1828-L1918"
+    },
+    {
+      "id": "S18",
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringAdmissionWizard.jsx",
+      "read_range": [
+        57,
+        184
+      ],
+      "purpose": "F7角色与内容确认UI",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/frontend/src/features/medical-monitoring/MedicalMonitoringAdmissionWizard.jsx#L57-L184"
+    },
+    {
+      "id": "S19",
+      "path": "frontend/src/features/medical-monitoring/MedicalMonitoringAdmissionWizard.jsx",
+      "read_range": [
+        700,
+        789
+      ],
+      "purpose": "内容确认固定理由及异步请求",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/frontend/src/features/medical-monitoring/MedicalMonitoringAdmissionWizard.jsx#L700-L789"
+    },
+    {
+      "id": "S20",
+      "path": "scripts/test_round6/report_C_glm_PSO_adversarial.md",
+      "read_range": [
+        1,
+        185
+      ],
+      "purpose": "GUI对抗测试观察和需要纠正的因果推断",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/scripts/test_round6/report_C_glm_PSO_adversarial.md#L1-L185"
+    },
+    {
+      "id": "S21",
+      "path": "tests/test_facts_source_digest_contract.py",
+      "read_range": [
+        1,
+        110
+      ],
+      "purpose": "测试覆盖层级：没有实际current resolver调用",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/blob/07b6a09c1644c9261e6e3637f4e497bf775c33a1/tests/test_facts_source_digest_contract.py#L1-L110"
+    }
+  ],
+  "commits": [
+    {
+      "sha": "34a51758fd5f16bbc3d09012bf0a091cb5657325",
+      "topic": "观测模型列/attempt与成功路径修改",
+      "url": "https://github.com/smkzw/kz-medical-monitoring-workbench/commit/34a51758fd5f16bbc3d09012bf0a091cb5657325"
+    }
+  ],
+  "probe_scaffolding": {
+    "canonical_hash": "stdlib等价JSON摘要，仅适用于本包JSON-compatible合成值",
+    "pairing_external_helpers": "受控fixture的同一evidence_id；实体匹配返回空，只验证共享证据分支",
+    "reader_external_functions": "构造器、mode投影、备用生成用哨兵桩；读取/状态分支按源码转录",
+    "P17": "组合必要依赖演示，非完整verify函数执行",
+    "P18": "抽取continue/索引逻辑，非真实registry事务运行"
+  }
+}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Mapping, Optional
 
 from fastapi.responses import JSONResponse
 
@@ -33,6 +33,84 @@ class ResultContextDependencies:
     read_publication_gate: Any
 
 
+@dataclass(frozen=True)
+class ResolvedResultContext:
+    """One request-scoped, publication-bound result context.
+
+    The mode outputs are copied from the four immutable artifacts recorded on
+    the publication row.  Consumers therefore never reopen an active findings
+    pointer after resolving a historical result token.
+    """
+
+    registry: lr.LaunchRegistry
+    entry: MonitoringRunEntry
+    launch: lr.LaunchRecord
+    publication: lr.ResultPublication
+    adapter: Optional[R5ProductAdapter]
+    mode_outputs: Mapping[str, Mapping[str, Any]]
+    mode_output_artifacts: Mapping[str, str]
+
+    def __iter__(self) -> Iterator[Any]:
+        return iter(
+            (
+                self.registry,
+                self.entry,
+                self.launch,
+                self.publication,
+                self.adapter,
+            )
+        )
+
+    def __getitem__(self, index: int) -> Any:
+        return tuple(self)[index]
+
+    def close(self) -> None:
+        self.entry.close()
+        self.registry.close()
+
+    def public_findings_envelope(self) -> dict[str, Any]:
+        output = self.mode_outputs.get("affected_query_draft")
+        artifact_id = self.mode_output_artifacts.get("affected_query_draft")
+        if output is None:
+            return {
+                "findings": [],
+                "meta": {
+                    "state": "not_applicable",
+                    "artifact": None,
+                    "content_sha256": None,
+                    "total": 0,
+                    "gaps": 0,
+                    "error": None,
+                },
+            }
+        output_payload = output.get("payload")
+        if not isinstance(output_payload, Mapping):
+            raise ProductPublicationError("result_context_unavailable")
+        findings = output_payload.get("findings")
+        if not isinstance(findings, list):
+            raise ProductPublicationError("result_context_unavailable")
+        rows = [dict(item) for item in findings if isinstance(item, Mapping)]
+        if len(rows) != len(findings):
+            raise ProductPublicationError("result_context_unavailable")
+        return {
+            "findings": rows,
+            "meta": {
+                "state": (
+                    "completed_with_findings"
+                    if rows
+                    else "completed_no_findings"
+                ),
+                "artifact": artifact_id,
+                "content_sha256": artifact_id,
+                "total": len(rows),
+                "gaps": sum(
+                    1 for item in rows if item.get("kind") == "coverage_gap"
+                ),
+                "error": None,
+            },
+        }
+
+
 def load_public_result_context(
     dependencies: ResultContextDependencies,
     canonical_project_id: str,
@@ -41,13 +119,7 @@ def load_public_result_context(
     site_ref: Optional[str] = None,
     require_product_adapter: bool = True,
     continuity_context: bool = False,
-) -> tuple[
-    lr.LaunchRegistry,
-    MonitoringRunEntry,
-    lr.LaunchRecord,
-    lr.ResultPublication,
-    Optional[R5ProductAdapter],
-]:
+) -> ResolvedResultContext:
     """Resolve one persisted context and rebuild the accepted R5 view."""
     root = dependencies.root
     open_legacy_view = dependencies.open_legacy_view
@@ -103,30 +175,23 @@ def load_public_result_context(
         ):
             raise ProductPublicationError("result_context_unavailable")
 
-        (
-            current,
-            _setup_manifest,
-            coverage,
-            setup_identity,
-            setup_digest,
-        ) = _publication_setup_inputs(canonical_project_id, launch)
-        current_source_revision = (
-            current.source_revision_id or current.snapshot_ref
-        )
         if (
             site_ref is not None
             and site_ref not in publication.site_coverage
         ):
             raise ProductPublicationError("result_center_out_of_scope")
+        # The result token resolves the persisted publication.  Reading a
+        # historical result must not re-select the project's current active
+        # snapshot or setup manifest; those are launch-time inputs already
+        # frozen on ResultPublication and verified below through the run gate
+        # and authority packet digests.
         if (
             launch.current_snapshot_token != publication.snapshot_token
-            or current.snapshot_token != publication.snapshot_token
-            or current.snapshot_ref != publication.snapshot_ref
-            or current.data_cutoff != publication.data_cutoff
-            or current_source_revision != publication.source_revision_id
-            or tuple(coverage) != tuple(publication.site_coverage)
-            or setup_digest != publication.setup_manifest_digest
-            or setup_identity != dict(publication.setup_manifest_identity)
+            or not publication.snapshot_ref
+            or not publication.source_revision_id
+            or not publication.data_cutoff
+            or not publication.setup_manifest_digest
+            or not publication.setup_manifest_identity
         ):
             raise ProductPublicationError("result_context_unavailable")
 
@@ -200,12 +265,34 @@ def load_public_result_context(
             runtime_dir / RUNTIME_DB_NAME,
             runtime_dir / ARTIFACT_DIR_NAME,
         )
+        mode_outputs: dict[str, Mapping[str, Any]] = {}
+        mode_output_artifacts: dict[str, str] = {}
         try:
-            if any(
-                not r1_store.verify_artifact(member_id)
-                for member_id in publication.artifact_member_ids
-            ):
-                raise ProductPublicationError("result_context_unavailable")
+            for member_id in publication.artifact_member_ids:
+                if not r1_store.verify_artifact(member_id):
+                    raise ProductPublicationError("result_context_unavailable")
+                envelope = r1_store.get_artifact(member_id)
+                payload = envelope.payload
+                output_kind = str(payload.get("output_kind") or "")
+                if (
+                    envelope.run_id != launch.run_id
+                    or not output_kind
+                    or output_kind in mode_outputs
+                    or str(payload.get("project_id") or "")
+                    != canonical_project_id
+                    or str(payload.get("run_id") or "") != launch.run_id
+                    or str(payload.get("data_cutoff") or "")
+                    != publication.data_cutoff
+                    or str(
+                        (payload.get("authority_refs") or {}).get(
+                            "authority_digest"
+                        )
+                    )
+                    != packet.packet_digest
+                ):
+                    raise ProductPublicationError("result_context_unavailable")
+                mode_outputs[output_kind] = dict(payload)
+                mode_output_artifacts[output_kind] = member_id
         finally:
             r1_store.close()
         product_packet = getattr(packet, "product_packet", None)
@@ -270,12 +357,14 @@ def load_public_result_context(
             return product_packet
 
         adapter = R5ProductAdapter(product_packet_provider)
-        return (
-            registry,
-            entry,
-            launch,
-            publication,
-            adapter if require_product_adapter else None,
+        return ResolvedResultContext(
+            registry=registry,
+            entry=entry,
+            launch=launch,
+            publication=publication,
+            adapter=adapter if require_product_adapter else None,
+            mode_outputs=mode_outputs,
+            mode_output_artifacts=mode_output_artifacts,
         )
     except Exception:
         if entry is not None:
@@ -283,4 +372,8 @@ def load_public_result_context(
         registry.close()
         raise
 
-__all__ = ["ResultContextDependencies", "load_public_result_context"]
+__all__ = [
+    "ResolvedResultContext",
+    "ResultContextDependencies",
+    "load_public_result_context",
+]

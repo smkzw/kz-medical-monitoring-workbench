@@ -23,7 +23,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from packages.medical_monitoring.api.r7_product.facts_mode_outputs import (  # noqa: E402
+    FactsModeOutputDispatcher,
     FactsModeOutputProvider,
+)
+from packages.medical_monitoring.api.r7_product.result_context_service import (  # noqa: E402
+    ResolvedResultContext,
 )
 
 
@@ -418,8 +422,65 @@ def test_read_failed_does_not_fall_back_to_deterministic(
     provider = FactsModeOutputProvider(artifacts)
     meta = provider.public_findings_meta(projection={}, project_ref="proj-x")
     assert meta["state"] == "read_failed"
-    # daily路径经_daily_findings同样不得产出备用提示列表
+    # daily/public路径同样不得产出备用提示列表
     assert provider.public_findings(projection={}, project_ref="proj-x") == []
+
+
+def test_malformed_binding_is_read_failed_without_legacy_fallback(
+    artifacts: Path,
+) -> None:
+    _write_artifact(artifacts, {"snapshot_ref": "s", "findings": []})
+    (artifacts / "aemh-findings.active.json").write_text(
+        "{broken", encoding="utf-8"
+    )
+    envelope = FactsModeOutputProvider(artifacts).public_findings_envelope(
+        projection={}, project_ref="proj-x", snapshot_ref="s"
+    )
+    assert envelope["findings"] == []
+    assert envelope["meta"]["state"] == "read_failed"
+    assert envelope["meta"]["error"] == "binding_unreadable"
+
+
+def test_dispatcher_never_falls_back_to_only_registered_project(
+    artifacts: Path,
+) -> None:
+    dispatcher = FactsModeOutputDispatcher(
+        {"proj-a": FactsModeOutputProvider(artifacts, project_ref="proj-a")}
+    )
+    with pytest.raises(KeyError, match="proj-b"):
+        dispatcher.public_findings_envelope(
+            projection={}, project_ref="proj-b", snapshot_ref="s"
+        )
+
+
+def test_resolved_context_reads_findings_from_committed_mode_output() -> None:
+    class Closable:
+        def close(self) -> None:
+            pass
+
+    context = ResolvedResultContext(
+        registry=Closable(),
+        entry=Closable(),
+        launch=object(),
+        publication=object(),
+        adapter=None,
+        mode_outputs={
+            "affected_query_draft": {
+                "payload": {
+                    "findings": [
+                        {"finding_id": "finding-old", "kind": "finding"}
+                    ]
+                }
+            }
+        },
+        mode_output_artifacts={"affected_query_draft": "a" * 64},
+    )
+    envelope = context.public_findings_envelope()
+    assert envelope["findings"] == [
+        {"finding_id": "finding-old", "kind": "finding"}
+    ]
+    assert envelope["meta"]["content_sha256"] == "a" * 64
+    assert envelope["meta"]["state"] == "completed_with_findings"
 
 
 def test_claim_anchors_fail_closed_on_empty_catalog(artifacts: Path) -> None:

@@ -1,0 +1,593 @@
+{
+  "schema": "mm-acceptance-v1",
+  "version": "2026-09-22",
+  "note": "Specification only. Execution status resides only in ../status.json. Expert cases preserved and mapped.",
+  "cases": [
+    {
+      "id": "0922V2-A01",
+      "title": "冷启动无历史研究",
+      "work_package": "W01",
+      "scenario": "空隔离runtime启动，导入第一个完整研究，不预置SAR工程。",
+      "expected": "同进程完成setup/facts/publication/result读；不依赖旧目录、不要求重启。",
+      "required_evidence_level": "actual_api_and_browser",
+      "expert_work_package": "N0-R/N1-R",
+      "required": true
+    },
+    {
+      "id": "0922V2-A02",
+      "title": "进程内新增第二研究",
+      "work_package": "W01",
+      "scenario": "启动后创建第二项目并物化，原项目保持存在。",
+      "expected": "setup/adapter/mode/evidence都解析第二项目，惰性注册不只更新一个字典。",
+      "required_evidence_level": "actual_api",
+      "expert_work_package": "N0-R/N1-R",
+      "required": true
+    },
+    {
+      "id": "0922V2-A03",
+      "title": "同患者号跨研究隔离",
+      "work_package": "W01",
+      "scenario": "A/B项目同SUBJID、AE/LB值及日期不同，交错调用结果和证据。",
+      "expected": "每个响应及来源只属于授权项目/结果；无first-provider或固定SAR借用。",
+      "required_evidence_level": "actual_api_and_browser",
+      "expert_work_package": "N0-R/N1-R",
+      "required": true
+    },
+    {
+      "id": "0922V2-A04",
+      "title": "旧结果不跟随active",
+      "work_package": "W01",
+      "scenario": "先发布A结果，再发布B并更新active；用A token重开。",
+      "expected": "A的finding/事实/来源/计数完全不变；B独立可用。",
+      "required_evidence_level": "actual_api",
+      "expert_work_package": "N1-R",
+      "required": true
+    },
+    {
+      "id": "0922V2-A05",
+      "title": "固定binding替换内容",
+      "work_package": "W01",
+      "scenario": "保持binding不变替换引用工件内容。",
+      "expected": "read_failed且原因具体；不重算expected以放行。",
+      "required_evidence_level": "actual_module_and_api",
+      "expert_work_package": "N1-R",
+      "required": true
+    },
+    {
+      "id": "0922V2-A06",
+      "title": "损坏binding不走legacy",
+      "work_package": "W01",
+      "scenario": "存在合法legacy工件，同时将既有binding写成坏JSON/错误形态。",
+      "expected": "明确binding_read_failed，不读legacy、不生成备用发现。",
+      "required_evidence_level": "actual_module_and_api",
+      "expert_work_package": "N1-R",
+      "required": true
+    },
+    {
+      "id": "0922V2-A07",
+      "title": "binding目标丢失",
+      "work_package": "W01",
+      "scenario": "binding声明工件存在过但现在缺失。",
+      "expected": "read_failed/artifact_missing，不能当作从未有AI分析。",
+      "required_evidence_level": "actual_module_and_api",
+      "expert_work_package": "N1-R",
+      "required": true
+    },
+    {
+      "id": "0922V2-A08",
+      "title": "列表与meta同一版本",
+      "work_package": "W01",
+      "scenario": "并发更新当前指针，在读取列表与统计间施压。",
+      "expected": "一次响应来自同一冻结对象，hash/IDs/总数/缺口可对账。",
+      "required_evidence_level": "actual_api_concurrency",
+      "expert_work_package": "N1-R",
+      "required": true
+    },
+    {
+      "id": "0922V2-A09",
+      "title": "人工决策晋升后可重放",
+      "work_package": "W02",
+      "scenario": "机器角色未收敛，合法用户选择→晋升→receipt核验→document resolver→mapping读文档。",
+      "expected": "完整链通过；无需临时SQL/外部POST替代用户流程；决策随receipt冻结。",
+      "required_evidence_level": "actual_module_api_browser",
+      "expert_work_package": "N0-D",
+      "required": true
+    },
+    {
+      "id": "0922V2-A10",
+      "title": "历史决策不读latest",
+      "work_package": "W02",
+      "scenario": "晋升R1后修改当前选择为R2，再核验R1回执。",
+      "expected": "R1按R1决策验证；篡改R1决策会失败，不读取R2冒充。",
+      "required_evidence_level": "actual_module_and_api",
+      "expert_work_package": "N0-D",
+      "required": true
+    },
+    {
+      "id": "0922V2-A11",
+      "title": "非法选择零持久副作用",
+      "work_package": "W02",
+      "scenario": "提交unknown candidate/错batch/错project，再无参数resolve。",
+      "expected": "首次受控拒绝且持久状态未变；后续poll不被该坏输入污染。",
+      "required_evidence_level": "actual_api_and_store",
+      "expert_work_package": "N0-D",
+      "required": true
+    },
+    {
+      "id": "0922V2-A12",
+      "title": "选择冲突可解释",
+      "work_package": "W02",
+      "scenario": "机器已收敛A，用户提交不同合法B；相同选择重复提交。",
+      "expected": "不同选择明确冲突/过期/修订；相同选择幂等；无静默忽略。",
+      "required_evidence_level": "actual_api_and_browser",
+      "expert_work_package": "N0-D",
+      "required": true
+    },
+    {
+      "id": "0922V2-A13",
+      "title": "选择身份与并发",
+      "work_package": "W02",
+      "scenario": "两个授权请求修改同角色，校验project/attempt/decision version；刷新重启。",
+      "expected": "真实principal审计与CAS成立；无fixed-temp竞态/丢更新；有效状态恢复。",
+      "required_evidence_level": "actual_store_concurrency",
+      "expert_work_package": "N0-D",
+      "required": true
+    },
+    {
+      "id": "0922V2-A14",
+      "title": "主文档警告与补充文档",
+      "work_package": "W02",
+      "scenario": "primary需内容澄清、supplementary技术/内容可用。",
+      "expected": "返回主项及依赖项状态，不KeyError、不单独晋升补充件；确认后可重放。",
+      "required_evidence_level": "actual_module_and_api",
+      "expert_work_package": "N0-D",
+      "required": true
+    },
+    {
+      "id": "0922V2-A15",
+      "title": "内容警告具体可读",
+      "work_package": "W02",
+      "scenario": "可覆盖元数据告警与不可覆盖哈希/越权/错研究错误分别输入。",
+      "expected": "前端展示差异、原证据、影响及合法动作；硬错误不被泛化确认；确认绑定检查revision。",
+      "required_evidence_level": "actual_api_and_browser",
+      "expert_work_package": "N0-D",
+      "required": true
+    },
+    {
+      "id": "0922V2-A16",
+      "title": "相反趋势与相反时序",
+      "work_package": "W04",
+      "scenario": "同来源下ALT升高/降低、给药前/后、不同单位/条件命题。",
+      "expected": "不误标supported/accepted；same_topic与同一判断分开，未决状态有依据。",
+      "required_evidence_level": "actual_analysis_module",
+      "expert_work_package": "N5-M",
+      "required": true
+    },
+    {
+      "id": "0922V2-A17",
+      "title": "等级归属与零发现",
+      "work_package": "W04",
+      "scenario": "本次3级既往1级与本次1级既往3级；普通分析返回0/1项。",
+      "expected": "不因等级集合重叠而同意；合法零发现不转医学分歧或硬凑候选。",
+      "required_evidence_level": "actual_analysis_and_contract",
+      "expert_work_package": "N5-M",
+      "required": true
+    },
+    {
+      "id": "0922V2-A18",
+      "title": "真实公开Finding含导航",
+      "work_package": "W05",
+      "scenario": "由实际overview API而非手构DTO读取一人两AE的AE2问题。",
+      "expected": "含稳定finding/事件/来源及验证状态；UI一次定位AE2，不借AE1。",
+      "required_evidence_level": "actual_api_and_browser",
+      "expert_work_package": "N1-R/N4",
+      "required": true
+    },
+    {
+      "id": "0922V2-A19",
+      "title": "无AE的实验室来源",
+      "work_package": "W05",
+      "scenario": "无AE病例有LB异常和对应原始证据。",
+      "expected": "可访问LB与其时间窗；不构造AE/risk身份作为路由通行证。",
+      "required_evidence_level": "actual_api_and_browser",
+      "expert_work_package": "N1-R/N4",
+      "required": true
+    },
+    {
+      "id": "0922V2-A20",
+      "title": "部分锚点和缺口",
+      "work_package": "W05",
+      "scenario": "空事件目录、部分evidence_id无法解析、其他项目/旧版本引用。",
+      "expected": "不把缺项忽略后标全bound；每条未绑定理由可见；缺口不因无标题而消失。",
+      "required_evidence_level": "actual_module_and_api",
+      "expert_work_package": "N1-R/N4",
+      "required": true
+    },
+    {
+      "id": "0922V2-A21",
+      "title": "观测模型身份保持",
+      "work_package": "W00/W04",
+      "scenario": "请求A，观测别名B/缺失/mismatch分别返回；回放及独立核验读取。",
+      "expected": "observed不改写；alias/unknown/mismatch分开；内容hash不充当模型身份验证。",
+      "required_evidence_level": "actual_gateway_repository_replay",
+      "expert_work_package": "N0-R",
+      "required": true
+    },
+    {
+      "id": "0922V2-A22",
+      "title": "风险列表与内容完整",
+      "work_package": "W05",
+      "scenario": "含长末尾否定、同文不同side/kind/evidence、800+条合成发现。",
+      "expected": "列表/详情结构清楚且来源可点；完整限定保留；无一屏全展开长claim、无后端截断。",
+      "required_evidence_level": "actual_browser",
+      "expert_work_package": "N2/N3",
+      "required": true
+    },
+    {
+      "id": "0922V2-A23",
+      "title": "精确导航与返回",
+      "work_package": "W05",
+      "scenario": "过滤/排序/翻页后进入问题→病例→多条来源→后退/刷新/复制链接。",
+      "expected": "同对象定位且返回上下文恢复；跨人快速点击无旧响应混入。",
+      "required_evidence_level": "actual_browser",
+      "expert_work_package": "N4",
+      "required": true
+    },
+    {
+      "id": "0922V2-A24",
+      "title": "纯查看0模型调用",
+      "work_package": "W05",
+      "scenario": "刷新结果、切人、调整密度、过滤、展开来源、前后退。",
+      "expected": "模型调用计数增量0；Query生成是显式独立动作。",
+      "required_evidence_level": "actual_api_browser_telemetry",
+      "expert_work_package": "N2/N3/N4",
+      "required": true
+    },
+    {
+      "id": "0922V2-A25",
+      "title": "共享摘要真实执行",
+      "work_package": "W01",
+      "scenario": "使用真实build_subject_evidence创建job，走正式current resolver/worker完成。",
+      "expected": "未变源通过；改值/类型/依赖正确失效，禁止仅测试两次辅助函数相等。",
+      "required_evidence_level": "actual_service_repository",
+      "expert_work_package": "N0-R",
+      "required": true
+    },
+    {
+      "id": "0922V2-A26",
+      "title": "增量范围与hash成本",
+      "work_package": "W03",
+      "scenario": "只改一人的一条记录；比较无变更/单病例/全研究。",
+      "expected": "记录实际依赖与执行范围、hash/provider耗时；旧结果不变；不无理由重跑所有人。",
+      "required_evidence_level": "actual_runtime_performance",
+      "expert_work_package": "N0-R/N5-M/N6",
+      "required": true
+    },
+    {
+      "id": "0922V2-A27",
+      "title": "全域与单域覆盖",
+      "work_package": "W03",
+      "scenario": "不同EDC语义映射，真实EX/背景EX2/LB/VS；含单域/无AE和筛败病例。",
+      "expected": "按语义而非表名硬编码；每个适用主题可解释covered/not_applicable/unavailable；完整数据仍可查。",
+      "required_evidence_level": "actual_ingestion_analysis",
+      "expert_work_package": "N5-M",
+      "required": true
+    },
+    {
+      "id": "0922V2-A28",
+      "title": "完整用户链与分母对账",
+      "work_package": "W07",
+      "scenario": "合法完整资料从GUI导入到结果，保留旧项目再启动/更新并测第二研究。",
+      "expected": "无需开发者救场；执行/语义/覆盖/独立核验分母分列；历史96失败有差分归因、未验证项明确。",
+      "required_evidence_level": "actual_browser_and_regression",
+      "expert_work_package": "N6",
+      "required": true
+    },
+    {
+      "id": "D01",
+      "work_package": "W00",
+      "title": "路线与五研究资料冻结",
+      "scenario": "对旧goal、设计、交接和当前有效绑定逐项对账，登记五项目原件/隔离副本与双快照。",
+      "expected": "不自动回旧模型/加载Qwen；requested/observed/能力/合法别名证据明确；合成研究不替代真实五项目。",
+      "required_evidence_level": "source_and_configuration",
+      "required": true
+    },
+    {
+      "id": "D02",
+      "work_package": "W02",
+      "title": "EX违规问题不是删除即通过",
+      "scenario": "模型把已有文档复核交用户；触发受控修订并追踪未解决映射。",
+      "expected": "违规问题不交用户，未解决依赖仍可见；产物经模型补读修订后才可materialize。",
+      "required_evidence_level": "actual_api_and_real_model",
+      "required": true
+    },
+    {
+      "id": "D03",
+      "work_package": "W02",
+      "title": "接入状态与用户负担",
+      "scenario": "完整资料和54表listing，通过GUI导入、定位字段、理解角色差异、刷新/重传/返回。",
+      "expected": "明确字段无需逐列确认；技术失败由系统处理；台账状态真实；null/空缺失选项合同明确，不默认选择未知项。",
+      "required_evidence_level": "actual_api_and_browser",
+      "required": true
+    },
+    {
+      "id": "D04",
+      "work_package": "W01",
+      "title": "坏事实manifest与未知快照",
+      "scenario": "先建A清单，再增加LB、损坏清单、请求不存在snapshot及不同cutoff。",
+      "expected": "坏清单不重建、不吸入新表；未知snapshot拒绝；run/cutoff不被固定值替代；GET不写。",
+      "required_evidence_level": "actual_module_and_api",
+      "required": true
+    },
+    {
+      "id": "D05",
+      "work_package": "W01",
+      "title": "来源字节与原记录真实",
+      "scenario": "同表两份不同源版本，用旧/新结果打开来源。",
+      "expected": "显示源行/区域真实内容与正确版本；内容hash不是表名hash；无伪已校验/伪日期/伪验收hash。",
+      "required_evidence_level": "actual_api_and_browser",
+      "required": true
+    },
+    {
+      "id": "D06",
+      "work_package": "W03",
+      "title": "疾病关键词不产生药物结论",
+      "scenario": "仅提供疾病名称，未提供治疗或IB风险依据。",
+      "expected": "风险/治疗知识仍未知，不由硬编码疾病表补齐；独立模型引用不闭合不得发布。",
+      "required_evidence_level": "actual_module_and_real_model",
+      "required": true
+    },
+    {
+      "id": "D07",
+      "work_package": "W03",
+      "title": "CTCAE与MedDRA固定版本",
+      "scenario": "方案版本与背景资料版本不同、频次和文件格式互换、版本有效期间变化。",
+      "expected": "不用频次/最高版本/docx权重选标准；每项固定有角色来源和适用时间，冲突可见。",
+      "required_evidence_level": "actual_module_and_real_model",
+      "required": true
+    },
+    {
+      "id": "D08",
+      "work_package": "W03",
+      "title": "知识缓存与正式来源边界",
+      "scenario": "候选中增加不相关文档；修改非最大mtime文件；同workspace知识代改变。",
+      "expected": "仅正式允许角色/版本进入知识；所有受影响缓存/任务版本正确变更，旧结果不改变。",
+      "required_evidence_level": "actual_module_and_api",
+      "required": true
+    },
+    {
+      "id": "D09",
+      "work_package": "W03",
+      "title": "异构Excel全覆盖",
+      "scenario": "重复表头/列名、隐藏/合并、多sheet、罕见末行值、公式缺缓存、日期/数值0/False。",
+      "expected": "确定性覆盖全物理内容；模型可按位置补读；原值/显示值/公式分开，未读不标完整。",
+      "required_evidence_level": "actual_reader_and_real_model",
+      "required": true
+    },
+    {
+      "id": "D10",
+      "work_package": "W03",
+      "title": "PDF/Word覆盖与补读",
+      "scenario": "PDF混合扫描页、60页以后关键条款、旋转表格；Word表格/脚注/图/修订。",
+      "expected": "对应区域工具确实读取并引用；无法读取区域明确记录，不以摘要字符数称全文理解。",
+      "required_evidence_level": "actual_reader_and_real_model",
+      "required": true
+    },
+    {
+      "id": "D11",
+      "work_package": "W03",
+      "title": "跨表身份和治疗区分",
+      "scenario": "换表头/域码，同药不同研究，EX为背景治疗，随机后未用药。",
+      "expected": "身份与已接受mapping一致；EX不自动研究药；随机化不等于治疗。",
+      "required_evidence_level": "actual_module_and_real_model",
+      "required": true
+    },
+    {
+      "id": "D12",
+      "work_package": "W03",
+      "title": "模型工具回合独立",
+      "scenario": "两侧相同冻结输入、各自按需补读，并对罕见值/条款产生引用。",
+      "expected": "首轮无答案泄漏，工具回执含范围/hash/预算；没有Codex医学补写；预算耗尽不标全核对。",
+      "required_evidence_level": "real_model_receipts",
+      "required": true
+    },
+    {
+      "id": "D13",
+      "work_package": "W04",
+      "title": "不靠词频或多数票裁决",
+      "scenario": "同正向词但ALT升/降、治疗前/后、grade交换、单侧等级、阴性/阴性。",
+      "expected": "按具体命题核验与证据反证；不机械accepted或把无风险阴性制造新风险。",
+      "required_evidence_level": "actual_module_and_real_model",
+      "required": true
+    },
+    {
+      "id": "D14",
+      "work_package": "W04",
+      "title": "零发现、失败与覆盖分母",
+      "scenario": "单域、无AE的LB、合法0/1/多发现、失败分片及不适用域。",
+      "expected": "每人/域有状态与分母；失败/未分析不显示无风险；人数/候选/作业数不混用。",
+      "required_evidence_level": "actual_api_and_real_model",
+      "required": true
+    },
+    {
+      "id": "D15",
+      "work_package": "W04",
+      "title": "医学六维与证据反证",
+      "scenario": "存在检查异常、已记录AE/MH、替代解释、IB已知风险及未知分级条件。",
+      "expected": "保留强度/严重性/预期性/因果性/优先级区别；异常不自动AE，IB不自动因果，反证可查。",
+      "required_evidence_level": "real_model_and_source_review",
+      "required": true
+    },
+    {
+      "id": "D16",
+      "work_package": "W04",
+      "title": "全域可用而非AE专用",
+      "scenario": "资料适用的CM/IP/救援/禁药、PD/入排/访视、疗效与安全信号。",
+      "expected": "由项目知识与语义域驱动，所有适用域有完成或真实缺口；改变药物/量表不改源码。",
+      "required_evidence_level": "real_model_and_source_review",
+      "required": true
+    },
+    {
+      "id": "D17",
+      "work_package": "W04",
+      "title": "暂停恢复和发布幂等",
+      "scenario": "运行中暂停、进程重启、过期lease、双worker、重复wake和发布重试。",
+      "expected": "在途完整保存；用户暂停不自动恢复；成功单元不重发；持久发布不依赖/tmp；无重复结果。",
+      "required_evidence_level": "actual_runtime_restart",
+      "required": true
+    },
+    {
+      "id": "D18",
+      "work_package": "W05",
+      "title": "错误/未分析/零结果不同空态",
+      "scenario": "公开API返回read_failed/missing/合法零结果/未知state/部分覆盖。",
+      "expected": "meta贯穿normalize及UI；不因[]显示无待核查；计数/未知态与分母自洽。",
+      "required_evidence_level": "actual_api_and_browser",
+      "required": true
+    },
+    {
+      "id": "D19",
+      "work_package": "W05",
+      "title": "八轨真实时间旅程",
+      "scenario": "1440/1920宽屏，密集事件、持续事件、部分日期和窗口外finding。",
+      "expected": "默认fit完整轴，真实时间距离；八轨/未分类可达；finding定位自动纳入可见窗，返回保持原窗。",
+      "required_evidence_level": "actual_browser_and_source",
+      "required": true
+    },
+    {
+      "id": "D20",
+      "work_package": "W05",
+      "title": "忠实数值趋势",
+      "scenario": "零/负数/小数/超高值、缺失、单位不同、参考范围改变。",
+      "expected": "不截顶/不以缺失为零/不跨单位误连；显示值与原始数值/日期一致。",
+      "required_evidence_level": "actual_browser_and_source",
+      "required": true
+    },
+    {
+      "id": "D21",
+      "work_package": "W05",
+      "title": "研究中心流向与正常记录",
+      "scenario": "ICF/筛选/随机/用药/退出不同状态含未知；过滤低风险和聚合。",
+      "expected": "流向/表格分母一致；已治疗有证据；正常值/低风险/聚合均有可达入口。",
+      "required_evidence_level": "actual_browser_and_source",
+      "required": true
+    },
+    {
+      "id": "D22",
+      "work_package": "W05",
+      "title": "来源与Query草稿",
+      "scenario": "finding→事件→来源→返回→编辑保存导出，长文本带关键否定。",
+      "expected": "不默认首条AE；源定位真实；文本展开完整；无审批/外发门；用户编辑不被刷新覆盖。",
+      "required_evidence_level": "actual_api_and_browser",
+      "required": true
+    },
+    {
+      "id": "D23",
+      "work_package": "W06",
+      "title": "真实兼容增量",
+      "scenario": "同研究两次完整listing，新增/修改/消失/范围变化/补录/重现。",
+      "expected": "兼容性可证明；数据/知识/规则变化区分；消失不自动关闭，影响闭包可解释。",
+      "required_evidence_level": "real_snapshot_delta",
+      "required": true
+    },
+    {
+      "id": "D24",
+      "work_package": "W06",
+      "title": "零变化与不可比",
+      "scenario": "同内容重导、跨研究、单位/映射/标准版本不兼容。",
+      "expected": "零变化不报失败；不可比不伪装0变化；旧结果保持原样，复用有证明。",
+      "required_evidence_level": "actual_module_and_api",
+      "required": true
+    },
+    {
+      "id": "D25",
+      "work_package": "W06",
+      "title": "三模式完整输出",
+      "scenario": "同项目日常、锁库前及多轮修订、锁库后固定版本。",
+      "expected": "每模式范围/截止/差异明确，共享事实真相；锁库后不覆盖历史。",
+      "required_evidence_level": "actual_api_and_browser",
+      "required": true
+    },
+    {
+      "id": "D26",
+      "work_package": "W06",
+      "title": "研究中心个例报告与自查包",
+      "scenario": "从冻结结果导出报告、中心清单、个例数据、风险checklist。",
+      "expected": "文件可打开，计数/版本/来源与UI相同，包含覆盖和反证，无条目硬截断。",
+      "required_evidence_level": "rendered_document_and_source",
+      "required": true
+    },
+    {
+      "id": "D27",
+      "work_package": "W06",
+      "title": "风险和草稿版本连续性",
+      "scenario": "影响风险的补录/更正/规则变化和Query用户编辑。",
+      "expected": "稳定关联、重开/合并拆分历史；规则变更不称已解决；草稿不静默覆盖。",
+      "required_evidence_level": "actual_api_and_browser",
+      "required": true
+    },
+    {
+      "id": "D28",
+      "work_package": "W07",
+      "title": "五研究真实全量",
+      "scenario": "W00冻结的MG/RUX/MY009/MY008-302/MY008-301各一次全量。",
+      "expected": "每项资料→facts→全部适用医学分析→看板/旅程/来源/输出独立可用；等价旧结果复用有证明。",
+      "required_evidence_level": "five_project_real_e2e",
+      "required": true
+    },
+    {
+      "id": "D29",
+      "work_package": "W07",
+      "title": "适用真实增量覆盖",
+      "scenario": "每项目盘点兼容双快照并记录判断。",
+      "expected": "存在者至少一次真实增量；不存在者附证据N/A；合成/复制同一文件不得冒充。",
+      "required_evidence_level": "real_snapshot_inventory_and_delta",
+      "required": true
+    },
+    {
+      "id": "D30",
+      "work_package": "W07",
+      "title": "备份恢复与一键启动",
+      "scenario": "一致性备份恢复到另一个隔离目录，启动前后端，打开旧结果和暂停任务。",
+      "expected": "相同版本/数量/源hash/草稿；暂停保持；正确产品端口；无生产库破坏/明文密钥入包。",
+      "required_evidence_level": "actual_restore_and_browser",
+      "required": true
+    },
+    {
+      "id": "D31",
+      "work_package": "W07",
+      "title": "性能及浏览零调用",
+      "scenario": "真实规模数据、800+发现，测冷/热首屏、筛选、旅程/来源、导入/模型/内存。",
+      "expected": "公布硬件/样本/版本和P50/P95可得值；交互目标见验收说明；浏览0模型，不隐截数据。",
+      "required_evidence_level": "measured_runtime",
+      "required": true
+    },
+    {
+      "id": "D32",
+      "work_package": "W07",
+      "title": "回归与清理",
+      "scenario": "最终HEAD完整测试及旧96失败簇；清理旧脚本/可重建缓存。",
+      "expected": "失败有源证据分类，不删断言换绿；活项目/历史回执/会话保留，发布包可追溯。",
+      "required_evidence_level": "regression_and_inventory",
+      "required": true
+    },
+    {
+      "id": "D33",
+      "work_package": "W07",
+      "title": "用户可用性交付",
+      "scenario": "实际医学监查用户或指定独立视觉角色按完整任务操作，并收集用户验收状态。",
+      "expected": "能少动作定位问题和来源，无工程字段机械确认；用户未验收不代填通过。",
+      "required_evidence_level": "browser_and_user_acceptance",
+      "required": true
+    },
+    {
+      "id": "D34",
+      "work_package": "W06",
+      "title": "外部报告审阅继承目标",
+      "scenario": "将有表/图/脚注的外部研究报告与冻结资料对照，使用现有report_review能力。",
+      "expected": "原子主张核对、遗漏矩阵、来源定位、批注副本与按需清洁稿；覆盖不足明确，不能全文已审假称。",
+      "required_evidence_level": "real_model_and_rendered_document",
+      "required": true
+    }
+  ]
+}

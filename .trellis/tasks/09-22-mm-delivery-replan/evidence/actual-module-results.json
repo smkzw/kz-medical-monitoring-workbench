@@ -1,0 +1,130 @@
+{
+  "scope": "actual modules with synthetic temporary fixtures; no API/browser/provider calls",
+  "cases": [
+    {
+      "id": "R10-keyword-risk",
+      "defect_reproduced": true,
+      "observed": {
+        "content_sha256": "c8cdd234f1ce2936ff0a76941cd74edee5e701a4bac1dc88f587a20308c143b7",
+        "ctcae_version": "",
+        "meddra_version": "",
+        "indication_zh": "过敏性鼻炎",
+        "risk_direction_zh": "抗组胺/鼻用糖皮质激素相关嗜睡、鼻部刺激、局部感染风险",
+        "anchors": [
+          {
+            "quote": "适应症：过敏性鼻炎",
+            "where": "candidate.txt"
+          }
+        ],
+        "unknown_visible": false
+      }
+    },
+    {
+      "id": "R10-version-vote",
+      "defect_reproduced": true,
+      "observed": {
+        "content_sha256": "4d6cf352fd08525e77cc1dc31a9e53b3c652c07717616671701f9761fd3cfe00",
+        "ctcae_version": "5.0",
+        "meddra_version": "",
+        "indication_zh": "",
+        "risk_direction_zh": "",
+        "anchors": [
+          {
+            "quote": "CTCAE 5.0",
+            "where": "background.txt"
+          },
+          {
+            "quote": "CTCAE 5.0",
+            "where": "background.txt"
+          },
+          {
+            "quote": "CTCAE 4.0",
+            "where": "candidate.txt"
+          }
+        ],
+        "unknown_visible": false
+      }
+    },
+    {
+      "id": "R04-opposite-predicate",
+      "defect_reproduced": true,
+      "observed": {
+        "accepted": 1,
+        "escalated": 0,
+        "coverage_gap": 0,
+        "unverifiable_gap": 0
+      }
+    },
+    {
+      "id": "R03-bad-binding",
+      "defect_reproduced": true,
+      "observed": {
+        "state": "completed_with_findings",
+        "artifact": "aemh-findings-facts-snapshot-001.dualvlm-full1.json"
+      }
+    },
+    {
+      "id": "R05-public-dto",
+      "defect_reproduced": true,
+      "observed": [
+        "claims",
+        "display_seq",
+        "evidence_ids",
+        "finding_id",
+        "kind",
+        "site_ref",
+        "spine_ref",
+        "state",
+        "state_reason_zh",
+        "subject_label",
+        "subject_ref",
+        "text",
+        "title"
+      ]
+    },
+    {
+      "id": "R03-bound-missing",
+      "defect_reproduced": true,
+      "observed": {
+        "state": "missing",
+        "findings": null,
+        "artifact": "missing.json",
+        "error": null
+      }
+    },
+    {
+      "id": "R11-corrupt-manifest",
+      "defect_reproduced": true,
+      "observed": {
+        "tables_after_corrupt_manifest": [
+          "AE",
+          "LB",
+          "MH"
+        ]
+      }
+    },
+    {
+      "id": "R11-unbound-snapshot",
+      "defect_reproduced": true,
+      "observed": {
+        "snapshot_ref": "nonexistent-history",
+        "run_ref": "run-facts-001"
+      }
+    },
+    {
+      "id": "R06-invalid-persisted",
+      "defect_reproduced": true,
+      "observed": {
+        "rejected": true,
+        "persisted": [
+          {
+            "role": "protocol",
+            "candidate_id": "invalid",
+            "actor": "medical_manager",
+            "decided_at": "2026-09-22T14:42:22.184790"
+          }
+        ]
+      }
+    }
+  ]
+}

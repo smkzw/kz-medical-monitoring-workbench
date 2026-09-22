@@ -1,0 +1,132 @@
+{
+  "review_round": "0922V2",
+  "head": "07b6a09c1644c9261e6e3637f4e497bf775c33a1",
+  "note": "局部探针/源码证据不升级为actual_module/api/browser验证。状态是需求端到端状态，不否认已实现片段。",
+  "previous_issues": [
+    {
+      "previous_id": "V5-01",
+      "topic": "shared digest",
+      "assessment": "局部源码修复，正式job→resolver→完成未独立执行",
+      "status": "partially_fixed",
+      "current_findings": [
+        "0922V2-01"
+      ],
+      "probes": [
+        "P01"
+      ]
+    },
+    {
+      "previous_id": "V5-02",
+      "topic": "multi-project",
+      "assessment": "fresh provider改为按项目；setup/publication/mode仍有旁路",
+      "status": "partially_fixed",
+      "current_findings": [
+        "0922V2-01"
+      ],
+      "probes": []
+    },
+    {
+      "previous_id": "V5-03",
+      "topic": "observed identity",
+      "assessment": "观测列/attempt保留实际响应；全消费者别名/独立性合同待闭合",
+      "status": "partially_fixed",
+      "current_findings": [],
+      "probes": []
+    },
+    {
+      "previous_id": "V5-04",
+      "topic": "result freeze",
+      "assessment": "固定binding拒内容替换；active读/坏binding/缺文件旁路未关",
+      "status": "partially_fixed",
+      "current_findings": [
+        "0922V2-03"
+      ],
+      "probes": [
+        "P05",
+        "P06",
+        "P07",
+        "P12",
+        "P13",
+        "P14"
+      ]
+    },
+    {
+      "previous_id": "V5-05",
+      "topic": "anchors",
+      "assessment": "空目录不再bound；公开DTO仍未接通锚点",
+      "status": "partially_fixed",
+      "current_findings": [
+        "0922V2-05"
+      ],
+      "probes": []
+    },
+    {
+      "previous_id": "V5-06",
+      "topic": "claim verification",
+      "assessment": "neutral和简单等级冲突有保护；语义相反仍可同意",
+      "status": "partially_fixed",
+      "current_findings": [
+        "0922V2-04"
+      ],
+      "probes": [
+        "P03",
+        "P04",
+        "P09",
+        "P10",
+        "P11"
+      ]
+    },
+    {
+      "previous_id": "V5-07",
+      "topic": "claim content",
+      "assessment": "400字符限制移除、合并保留集合；实际展示及逐条溯源关系待验证",
+      "status": "partially_fixed",
+      "current_findings": [
+        "0922V2-09"
+      ],
+      "probes": []
+    },
+    {
+      "previous_id": "V5-08",
+      "topic": "evidence completeness",
+      "assessment": "分析clean保0/False；完整域/单域/原始类型等仍未完成",
+      "status": "partially_fixed",
+      "current_findings": [
+        "0922V2-09"
+      ],
+      "probes": [
+        "P02"
+      ]
+    },
+    {
+      "previous_id": "V5-09",
+      "topic": "F7 persistence",
+      "assessment": "合法重读可用；先写后验、回执决策遗漏、冲突静默忽略",
+      "status": "partially_fixed",
+      "current_findings": [
+        "0922V2-02",
+        "0922V2-06",
+        "0922V2-07",
+        "0922V2-08"
+      ],
+      "probes": [
+        "P08",
+        "P15",
+        "P16",
+        "P17",
+        "P18"
+      ]
+    },
+    {
+      "previous_id": "V5-10",
+      "topic": "UI worklist",
+      "assessment": "上一轮宽屏CSS保留；本轮未完成列表/详情/来源一跳",
+      "status": "open",
+      "current_findings": [
+        "0922V2-05",
+        "0922V2-09"
+      ],
+      "probes": []
+    }
+  ]
+}

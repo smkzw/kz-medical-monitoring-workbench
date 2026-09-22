@@ -1,0 +1,80 @@
+{
+  "schema": "mm-project-materials-v1",
+  "captured_at": "2026-09-22T15:20:00+08:00",
+  "manifest_authority": "services/api/app/project_source_manifest.py",
+  "projects": [
+    {
+      "project_id": "proj_mgk10_sar_real",
+      "study_code": "MG-K10-SAR-001",
+      "availability": "available",
+      "compatible_double_snapshot": "missing",
+      "sources": [
+        {"source_id":"mgk10_sar_listing_20260120","role":"monitoring_listing","size":17013973,"sha256":"81f47614ca6ab96c3d0a3e45d72ec49c98690fb49e8b574b1dc6b06f7e8259e3","path":"/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/13. CFDI核查/自查/评分SDV/【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx"},
+        {"source_id":"mgk10_sar_protocol_v2_1","role":"protocol_docx","size":418455,"sha256":"075c93b45414dcb4bb33ef1cf623d295a9d8f029d7560ca484a0c0267c4fdabd","path":"/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/4. Protocol/MG-K10-SAR-001_临床研究方案_ V2.1_20250919_clean版 .docx"},
+        {"source_id":"user_supplied_dm_listing_copy","role":"unbound_user_supplied_listing","size":17014302,"sha256":"e711c52fa4b41ed77270bfadefa56018a9576afe42fd2ef051e2230c6e03f4a3","path":"/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/9. DM/【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx","note":"Same filename but different bytes from the manifest-bound CFDI copy; do not merge by name."}
+      ]
+    },
+    {
+      "project_id": "proj_rux_03_002",
+      "study_code": "RUX-03-002",
+      "availability": "available",
+      "compatible_double_snapshot": "missing",
+      "sources": [
+        {"source_id":"rux_listing_20250612","role":"monitoring_listing","size":18855463,"sha256":"b68d53feb7cd4501d5fae876a0053db2843597eed216b76203c2c9ea6daea343"},
+        {"source_id":"rux_subject_report_20250613","role":"monitoring_subject_report","size":41984,"sha256":"a58661be3f7ac7724e4920cb82caa4ed9da77c4c5b71379ae94e1e64cbf4e1b1"},
+        {"source_id":"rux_protocol_v1_3","role":"protocol_docx","size":2307102,"sha256":"8783a740fc0595491f059b8753342f1819e746d80dc390317302ae30b5de5b62"},
+        {"source_id":"rux_sdtm_package","role":"sdtm_package","availability":"available_directory"},
+        {"source_id":"rux_final_tfl_package","role":"tfl_output_package","availability":"available_directory"},
+        {"source_id":"rux_pv_plan_package","role":"pv_plan_package","availability":"available_directory"}
+      ]
+    },
+    {
+      "project_id": "proj_my009_uc",
+      "study_code": "MY009-UC",
+      "availability": "available",
+      "compatible_double_snapshot": "missing",
+      "sources": [
+        {"source_id":"my009_protocol_v3_0","role":"protocol_docx","size":428150,"sha256":"d173e4b05d5856f62affd21abb28345d71b6ef61f2c322f8f9454ff9e19b75ae"},
+        {"source_id":"my009_mm_listing_20260408","role":"monitoring_listing","size":626507,"sha256":"c3dfa3933e76788a2f586f05eb921f117ed0a5fd00f926591b1fbdb888f2d7e0"},
+        {"source_id":"my009_dsur4_source","role":"dsur_source","size":43547,"sha256":"98bcb052eb18de1362b8db3f5b6075790e6aa0fae93bdd290d98c8ea73f1a7a0"},
+        {"source_id":"my009_evf_subject_bundle","role":"eligibility_raw_subject_bundle","availability":"available_directory"},
+        {"source_id":"my009_safety_package_202604","role":"safety_pv_package","availability":"available_directory"}
+      ]
+    },
+    {
+      "project_id": "proj_my008_pnh_3_01",
+      "study_code": "MY008211A-PNH-3-01",
+      "availability": "available_source_manifest_only",
+      "compatible_double_snapshot": "missing",
+      "sources": [
+        {"source_id":"my008_pnh_3_01_locked_dataset","role":"monitoring_locked_dataset","size":3565691,"sha256":"080facc4057d7e56052d40b4a5cdd37373e4c832b3a04da9ecadd123fff45220"},
+        {"source_id":"my008_pnh_protocol_v1_1","role":"clinical_study_protocol","size":419004,"sha256":"265858e23249191d382775882c2d6be539e1e88f084fc0e8c4816cb715460aed"},
+        {"source_id":"my008_pnh_csr","role":"csr_docx","size":1695520,"sha256":"d1e7f08d04772535a1383a188e7772aad6bcebe71e3423c834f0228a002c0d7d"},
+        {"source_id":"my008_pnh_safety_plan","role":"safety_management_plan","size":241437,"sha256":"5f45d843e8f1f8121ca42292abc71ebd75663c62872a012d23e1fc33c754e84a"},
+        {"source_id":"my008_pnh_tfl_delivery","role":"tfl_dataset_and_output_package","availability":"available_directory"}
+      ]
+    },
+    {
+      "project_id": "proj_my008_pnh_3_02",
+      "study_code": "MY008211A-PNH-3-02",
+      "availability": "available_source_manifest_only",
+      "compatible_double_snapshot": "missing",
+      "sources": [
+        {"source_id":"my008_pnh_3_02_locked_dataset","role":"monitoring_locked_dataset","size":15149424,"sha256":"152b8c2eb4d398ca2cfd861ee7932942eb753d6494ae7c93a5806734d5ced106"},
+        {"source_id":"my008_pnh_3_02_protocol_v2_1","role":"clinical_study_protocol","size":482811,"sha256":"562af73b1a7dda045a42540947e810a1c6026cfee53c6205fc4c304037345e90"},
+        {"source_id":"my008_pnh_3_02_csr","role":"csr_docx","size":1249386,"sha256":"6da11971e38b336b99de8e8db3a9619381b0b22e4c138ae289f30c7bad6280e5"},
+        {"source_id":"my008_pnh_3_02_tfl_delivery","role":"tfl_dataset_and_output_package","availability":"available_directory"}
+      ]
+    }
+  ],
+  "runtime_batch_inventory": {
+    "canonical_project_batch_count": 0,
+    "canonical_project_source_count": 0,
+    "meaning": "The five source manifests are available, but none has a frozen canonical runtime batch in the inspected database."
+  },
+  "boundaries": [
+    "Original clinical files were read only for metadata and SHA-256.",
+    "Directory entries are availability checks only; their contents were not parsed.",
+    "Synthetic CSU/PSO fixtures are excluded from the five-project acceptance set."
+  ]
+}

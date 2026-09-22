@@ -1,0 +1,15 @@
+{
+  "date": "2026-09-22",
+  "acceptance_cases": 62,
+  "expert_cases": 28,
+  "additional_cases": 34,
+  "case_ids_unique": true,
+  "all_cases_mapped": true,
+  "work_packages": 8,
+  "dependencies_acyclic": true,
+  "broken_links": [],
+  "product_source_diff": [
+    "\".trellis/workspace/\\345\\256\\213\\346\\227\\273\\346\\201\\272/journal-1.md\""
+  ],
+  "scope": "document/pack consistency; product acceptance remains not_executed"
+}

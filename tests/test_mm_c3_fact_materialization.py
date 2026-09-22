@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -129,6 +130,16 @@ def test_materializes_idempotent_row_facts_with_exact_cell_locators(tmp_path: Pa
         "values": 8,
         "source_values_verified": 8,
     }
+    manifest_path = workspace / RUNTIME_DIR_NAME / ARTIFACT_DIR_NAME / "facts-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["project_id"] == PROJECT_ID
+    assert manifest["attempt_id"] == attempt_id
+    assert manifest["mapping_version"] == "monmaprev_test"
+    assert manifest["snapshot_ref"].startswith("facts:")
+    assert [entry["table"] for entry in manifest["tables"]] == ["AE"]
+    versioned = list((manifest_path.parent / "facts-manifests").glob("*.json"))
+    assert len(versioned) == 1
+    assert json.loads(versioned[0].read_text(encoding="utf-8")) == manifest
     store = _store(workspace)
     try:
         summary = store.get_domain_object(FACT_MATERIALIZATION_KIND, attempt_id)

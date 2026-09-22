@@ -1,0 +1,533 @@
+{
+  "schema": "mm-delivery-status-v1",
+  "updated_at": "2026-09-22T15:47:18+08:00",
+  "planning_status": "complete",
+  "product_status": "not_delivered",
+  "goal_status": "active",
+  "source_head": "a7217af080b96896bdc4cbc9317cb139e4386569",
+  "next_work_package": "W01",
+  "work_packages": [
+    {
+      "id": "W00",
+      "title": "接管基线、路线与可复用证据",
+      "dependencies": [],
+      "status": "completed",
+      "evidence": [
+        "evidence/route-lock.json",
+        "evidence/project-materials.json",
+        "evidence/reuse-inventory.json"
+      ]
+    },
+    {
+      "id": "W01",
+      "title": "项目、结果、事实与来源的不可变读取",
+      "dependencies": [
+        "W00"
+      ],
+      "status": "in_progress",
+      "evidence": [
+        "evidence/W01-immutable-read-slice.json"
+      ]
+    },
+    {
+      "id": "W02",
+      "title": "文档理解、可重放决策与低负担接入",
+      "dependencies": [
+        "W01"
+      ],
+      "status": "not_started",
+      "evidence": []
+    },
+    {
+      "id": "W03",
+      "title": "语义事实、知识来源与完整证据工具",
+      "dependencies": [
+        "W02"
+      ],
+      "status": "not_started",
+      "evidence": []
+    },
+    {
+      "id": "W04",
+      "title": "独立命题核验、医学扩域与持久收尾",
+      "dependencies": [
+        "W03"
+      ],
+      "status": "not_started",
+      "evidence": []
+    },
+    {
+      "id": "W05",
+      "title": "统一公开结果与可用的中文监查工作区",
+      "dependencies": [
+        "W01",
+        "W02",
+        "W03"
+      ],
+      "status": "not_started",
+      "evidence": []
+    },
+    {
+      "id": "W06",
+      "title": "兼容增量、三模式与核查报告",
+      "dependencies": [
+        "W04",
+        "W05"
+      ],
+      "status": "not_started",
+      "evidence": []
+    },
+    {
+      "id": "W07",
+      "title": "五项目泛化、恢复启动与最终验收",
+      "dependencies": [
+        "W04",
+        "W05",
+        "W06"
+      ],
+      "status": "not_started",
+      "evidence": []
+    }
+  ],
+  "acceptance": [
+    {
+      "id": "0922V2-A01",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A02",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A03",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A04",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A05",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A06",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A07",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A08",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A09",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A10",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A11",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A12",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A13",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A14",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A15",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A16",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A17",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A18",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A19",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A20",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A21",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A22",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A23",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A24",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A25",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A26",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A27",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "0922V2-A28",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D01",
+      "status": "passed",
+      "head": "a7217af080b96896bdc4cbc9317cb139e4386569",
+      "evidence": [
+        "evidence/route-lock.json",
+        "evidence/project-materials.json",
+        "evidence/reuse-inventory.json"
+      ],
+      "reason": "Current role bindings, observed-model receipts, queue state and five canonical source inventories were frozen read-only. Compatible double snapshots are explicitly missing rather than substituted with synthetic or user-test projects."
+    },
+    {
+      "id": "D02",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D03",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D04",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D05",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D06",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D07",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D08",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D09",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D10",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D11",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D12",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D13",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D14",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D15",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D16",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D17",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D18",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D19",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D20",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D21",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D22",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D23",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D24",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D25",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D26",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D27",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D28",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D29",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D30",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D31",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D32",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D33",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    },
+    {
+      "id": "D34",
+      "status": "not_executed",
+      "head": null,
+      "evidence": [],
+      "reason": "Current review probes are not the specified complete product acceptance."
+    }
+  ],
+  "next_action": "Continue W01 with isolated actual-API dual-project and historical-token scenarios, then shared-summary worker and browser source acceptance; do not mark W01 complete from module tests alone."
+}

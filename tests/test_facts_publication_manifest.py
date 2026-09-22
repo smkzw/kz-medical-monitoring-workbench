@@ -19,8 +19,12 @@ sys.path.insert(0, str(ROOT))
 
 from packages.medical_monitoring.projections.facts_publication import (  # noqa: E402
     FactsPublicationAuthorityProvider,
+    FactsPublicationError,
+    _atomic_write_json,
+    _build_facts_manifest,
     _domain_for,
     _infer_domain_by_columns,
+    _versioned_manifest_name,
 )
 
 
@@ -99,7 +103,30 @@ def _make_workspace(tmp_path: Path) -> Path:
         json.dumps({"protocol": {"ctcae_version": "5.0"}}),
         encoding="utf-8",
     )
+    _atomic_write_json(
+        artifacts / "facts-manifest.json",
+        _build_facts_manifest(
+            artifacts,
+            project_id="proj-test",
+            attempt_id="attempt-test",
+            mapping_version="map-test",
+            snapshot_ref="facts-snapshot-001",
+        ),
+    )
     return workspace
+
+
+def test_loader_does_not_create_missing_manifest(tmp_path: Path) -> None:
+    workspace = tmp_path / "missing-manifest"
+    artifacts = workspace / "runtime" / "artifacts"
+    artifacts.mkdir(parents=True)
+    _write_table_artifact(artifacts, "AE", [{"SUBJID": "01001"}])
+
+    import pytest
+
+    with pytest.raises(FactsPublicationError, match="manifest missing"):
+        FactsPublicationAuthorityProvider(workspace)._load_domains()
+    assert not (artifacts / "facts-manifest.json").exists()
 
 
 def test_loader_uses_immutable_manifest_and_excludes_non_facts(
@@ -145,3 +172,74 @@ def test_loader_fails_closed_on_tampered_artifact(tmp_path: Path) -> None:
 
     with pytest.raises(Exception, match="digest|mismatch|篡改"):
         FactsPublicationAuthorityProvider(workspace)._load_domains()
+
+
+def test_provider_rejects_wrong_project_and_unknown_snapshot(tmp_path: Path) -> None:
+    workspace = _make_workspace(tmp_path)
+    provider = FactsPublicationAuthorityProvider(
+        workspace, project_ref="proj-test"
+    )
+
+    import pytest
+
+    with pytest.raises(FactsPublicationError, match="project mismatch"):
+        provider.get_packet("proj-other", snapshot_ref="facts-snapshot-001")
+    with pytest.raises(FactsPublicationError, match="snapshot mismatch"):
+        provider.get_packet("proj-test", snapshot_ref="facts-snapshot-other")
+
+
+def test_source_locator_uses_real_artifact_hash_and_row(tmp_path: Path) -> None:
+    workspace = _make_workspace(tmp_path)
+    manifest = json.loads(
+        (workspace / "runtime" / "artifacts" / "facts-manifest.json").read_text()
+    )
+    ae_entry = next(item for item in manifest["tables"] if item["table"] == "AE")
+    packet = FactsPublicationAuthorityProvider(
+        workspace, project_ref="proj-test"
+    ).get_packet("proj-test", snapshot_ref="facts-snapshot-001")
+    source = next(item for item in packet.sources if "AE" in item.canonical_location)
+    assert source.source_revision_content_hash == ae_entry["sha256"]
+    assert source.source_file_ref == f"facts-artifact:{ae_entry['file']}"
+    assert json.loads(source.excerpt)["AETERM"] == "头痛"
+
+
+def test_provider_reads_versioned_manifest_after_active_pointer_moves(
+    tmp_path: Path,
+) -> None:
+    workspace = _make_workspace(tmp_path)
+    artifacts = workspace / "runtime" / "artifacts"
+    old_manifest = json.loads((artifacts / "facts-manifest.json").read_text())
+    old_snapshot = old_manifest["snapshot_ref"]
+    versions = artifacts / "facts-manifests"
+    versions.mkdir()
+    _atomic_write_json(
+        versions / _versioned_manifest_name(old_snapshot), old_manifest
+    )
+
+    lb = _write_table_artifact(
+        artifacts,
+        "LB",
+        [{"SUBJID": "01001", "LBTEST": "ALT", "LBORRES": "42"}],
+    )
+    new_manifest = _build_facts_manifest(
+        artifacts,
+        allowed_files=[lb.name],
+        project_id="proj-test",
+        attempt_id="attempt-new",
+        mapping_version="map-new",
+        snapshot_ref="facts:new-snapshot",
+    )
+    _atomic_write_json(artifacts / "facts-manifest.json", new_manifest)
+
+    provider = FactsPublicationAuthorityProvider(
+        workspace, project_ref="proj-test"
+    )
+    old_packet = provider.get_packet(
+        "proj-test", snapshot_ref=old_snapshot
+    )
+    new_packet = provider.get_packet(
+        "proj-test", snapshot_ref="facts:new-snapshot"
+    )
+    assert any(source.canonical_location.startswith("AE!") for source in old_packet.sources)
+    assert not any(source.canonical_location.startswith("LB!") for source in old_packet.sources)
+    assert any(source.canonical_location.startswith("LB!") for source in new_packet.sources)

@@ -16,6 +16,8 @@ sys.path.insert(0, str(ROOT))
 
 from packages.medical_monitoring.projections.facts_publication import (  # noqa: E402
     FactsPublicationAuthorityProvider,
+    _atomic_write_json,
+    _build_facts_manifest,
 )
 
 
@@ -33,6 +35,14 @@ def _workspace(tmp_path: Path, tables: dict[str, list[dict]]) -> Path:
         (artifacts / f"{digest}.json").write_text(
             json_dumps(payload), encoding="utf-8"
         )
+    _atomic_write_json(
+        artifacts / "facts-manifest.json",
+        _build_facts_manifest(
+            artifacts,
+            project_id="proj-test",
+            snapshot_ref="facts-snapshot-001",
+        ),
+    )
     return workspace
 
 
@@ -70,7 +80,7 @@ def test_ae_event_keeps_real_end_date(tmp_path: Path) -> None:
         },
     )
     provider = FactsPublicationAuthorityProvider(workspace)
-    packet = provider.get_packet("proj-test", snapshot_ref="facts-s2")
+    packet = provider.get_packet("proj-test", snapshot_ref="facts-snapshot-001")
     ae_events = [e for e in packet.events if e.domain == "ae"]
     by_label = {e.label_zh: e for e in ae_events}
     headache = next(e for label, e in by_label.items() if "头痛" in label)
@@ -97,7 +107,7 @@ def test_start_column_prefers_stdat_over_page_dates(tmp_path: Path) -> None:
         },
     )
     provider = FactsPublicationAuthorityProvider(workspace)
-    packet = provider.get_packet("proj-test", snapshot_ref="facts-s3")
+    packet = provider.get_packet("proj-test", snapshot_ref="facts-snapshot-001")
     cm_events = [e for e in packet.events if e.domain == "cm"]
     assert cm_events, "CM event missing"
     event = cm_events[0]
@@ -134,7 +144,7 @@ def test_severity_source_honesty(tmp_path: Path) -> None:
         },
     )
     provider = FactsPublicationAuthorityProvider(workspace)
-    packet = provider.get_packet("proj-test", snapshot_ref="facts-s4")
+    packet = provider.get_packet("proj-test", snapshot_ref="facts-snapshot-001")
     risks = packet.risks
     # 风险经event_ref回链到事件标签定位（风险类型是通用核查标签，不含术语）
     def _risk_for(term: str):
@@ -173,7 +183,7 @@ def test_event_carries_original_record_id(tmp_path: Path) -> None:
         },
     )
     provider = FactsPublicationAuthorityProvider(workspace)
-    packet = provider.get_packet("proj-test", snapshot_ref="facts-s5")
+    packet = provider.get_packet("proj-test", snapshot_ref="facts-snapshot-001")
     headache = next(e for e in packet.events if "头痛" in (e.label_zh or ""))
     diarrhea = next(e for e in packet.events if "腹泻" in (e.label_zh or ""))
     assert headache.source_record_id == "A-0042"

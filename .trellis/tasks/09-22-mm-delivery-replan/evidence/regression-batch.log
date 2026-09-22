@@ -1,0 +1,94 @@
+........................................................................ [ 50%]
+.......................................................................  [100%]
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:228
+<frozen importlib._bootstrap>:228
+  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:228
+<frozen importlib._bootstrap>:228
+  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:228
+  <frozen importlib._bootstrap>:228: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+services/api/app/main.py:1736
+  /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/main.py:1736: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+.venv/lib/python3.9/site-packages/fastapi/applications.py:4579
+.venv/lib/python3.9/site-packages/fastapi/applications.py:4579
+.venv/lib/python3.9/site-packages/fastapi/applications.py:4579
+.venv/lib/python3.9/site-packages/fastapi/applications.py:4579
+.venv/lib/python3.9/site-packages/fastapi/applications.py:4579
+.venv/lib/python3.9/site-packages/fastapi/applications.py:4579
+  /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/lib/python3.9/site-packages/fastapi/applications.py:4579: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+services/api/app/main.py:1746
+  /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/main.py:1746: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+services/api/app/main.py:1800
+  /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/main.py:1800: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+services/api/app/main.py:1828
+  /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/main.py:1828: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+services/api/app/main.py:1837
+  /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/main.py:1837: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+services/api/app/main.py:2893
+  /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/services/api/app/main.py:2893: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+packages/medical_monitoring/api/r7_product/project_operations.py:143
+  /Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/packages/medical_monitoring/api/r7_product/project_operations.py:143: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+143 passed, 18 warnings in 4.26s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

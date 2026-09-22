@@ -1,0 +1,15 @@
+{
+  "requested_agent": "codebuddy",
+  "requested_provider": "codebuddy-cli",
+  "requested_model": "deepseek-v4.1-flash",
+  "requested_effort": "max",
+  "effective_agent": "codebuddy",
+  "effective_provider": "codebuddy-cli",
+  "effective_model": "deepseek-v4.1-flash",
+  "effective_effort": "max",
+  "round_count": 1,
+  "output_sha256": "32fe17cbd11b087ed51c40c91647e34a7679f6fdc7b15f509300fd7c813e6d24",
+  "scope": "same-session inline source excerpt review; no tools or browser, source selections by owner",
+  "source_head": "a7217af080b96896bdc4cbc9317cb139e4386569",
+  "report_sha256": "32fe17cbd11b087ed51c40c91647e34a7679f6fdc7b15f509300fd7c813e6d24"
+}

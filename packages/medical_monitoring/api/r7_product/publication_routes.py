@@ -741,22 +741,15 @@ def register_public_result_routes(router: APIRouter, context: PublicationRouteCo
             )
             # Facts lane: surface the dual-cohort AE/MH findings artifact on
             # the public overview projection (digest recomputed downstream).
-            findings_provider = getattr(r6_provider, "public_findings", None)
-            meta_provider = getattr(r6_provider, "public_findings_meta", None)
-            if callable(findings_provider):
-                injected = findings_provider(
-                    projection=result.get("projection") or {},
-                    project_ref=canonical,
+            findings_bundle = context.public_findings_envelope()
+            projection = result.get("projection")
+            if isinstance(projection, dict):
+                injected = findings_bundle.get("findings") or []
+                if injected:
+                    projection["query_findings"] = injected
+                projection["query_findings_meta"] = dict(
+                    findings_bundle.get("meta") or {}
                 )
-                projection = result.get("projection")
-                if isinstance(projection, dict):
-                    if injected:
-                        projection["query_findings"] = injected
-                    if callable(meta_provider):
-                        projection["query_findings_meta"] = meta_provider(
-                            projection=result.get("projection") or {},
-                            project_ref=canonical,
-                        )
             return _public_result_envelope(
                 result,
                 launch=launch,

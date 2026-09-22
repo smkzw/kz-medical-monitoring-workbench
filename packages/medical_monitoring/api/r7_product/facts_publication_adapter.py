@@ -154,14 +154,11 @@ class FactsProviderDispatcher:
 
     def __init__(self, providers_by_project: dict[str, Any]) -> None:
         self._providers = dict(providers_by_project)
-        self._fallback = next(iter(self._providers.values()), None)
 
     def _provider_for(self, project_ref: Any) -> Any:
         provider = self._providers.get(str(project_ref or ""))
         if provider is not None:
             return provider
-        if len(self._providers) == 1:
-            return self._fallback
         raise KeyError(
             f"no materialized facts provider for project {project_ref!r} "
             f"(available: {sorted(self._providers)})"

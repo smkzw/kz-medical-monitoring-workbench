@@ -334,6 +334,7 @@ class FactsModeOutputProvider:
         self,
         projection: Optional[Mapping[str, Any]] = None,
         project_ref: str = "",
+        snapshot_ref: str = "",
     ) -> list[dict[str, Any]]:
         """Audience-facing projection of the dual-cohort findings.
 
@@ -343,7 +344,18 @@ class FactsModeOutputProvider:
         state与artifact身份经 public_findings_meta 暴露。
         """
 
-        read = self._read_ai_findings()
+        read = self._read_ai_findings(
+            project_ref=project_ref,
+            snapshot_ref=snapshot_ref,
+        )
+        return self._public_findings_from_read(read, projection=projection)
+
+    def _public_findings_from_read(
+        self,
+        read: Mapping[str, Any],
+        *,
+        projection: Optional[Mapping[str, Any]] = None,
+    ) -> list[dict[str, Any]]:
         if read["state"] not in ("completed_with_findings", "completed_no_findings"):
             return []
         subjects_by_label: dict[str, Mapping[str, Any]] = {}
@@ -455,10 +467,20 @@ class FactsModeOutputProvider:
         self,
         projection: Optional[Mapping[str, Any]] = None,
         project_ref: str = "",
+        snapshot_ref: str = "",
     ) -> dict[str, Any]:
         """读取状态与工件身份（missing/read_failed/完成态分离，V4-05/06）。"""
 
-        read = self._read_ai_findings()
+        read = self._read_ai_findings(
+            project_ref=project_ref,
+            snapshot_ref=snapshot_ref,
+        )
+        return self._public_findings_meta_from_read(read)
+
+    @staticmethod
+    def _public_findings_meta_from_read(
+        read: Mapping[str, Any],
+    ) -> dict[str, Any]:
         findings = read.get("findings") or []
         gaps = sum(
             1
@@ -474,9 +496,28 @@ class FactsModeOutputProvider:
             "error": read.get("error"),
         }
 
+    def public_findings_envelope(
+        self,
+        *,
+        projection: Optional[Mapping[str, Any]] = None,
+        project_ref: str = "",
+        snapshot_ref: str = "",
+    ) -> dict[str, Any]:
+        """Read rows and status from one immutable findings artifact."""
+        read = self._read_ai_findings(
+            project_ref=project_ref,
+            snapshot_ref=snapshot_ref,
+        )
+        return {
+            "findings": self._public_findings_from_read(
+                read, projection=projection
+            ),
+            "meta": self._public_findings_meta_from_read(read),
+        }
+
     _FINDINGS_BINDING = "aemh-findings.active.json"
 
-    def _read_findings_binding(self) -> dict[str, Any]:
+    def _read_findings_binding(self) -> dict[str, Any] | None:
         """V5-04：读取发布指针binding（当前结果指针；发布结果不可变）。
 
         binding由发布方（finalize/发布流程）落盘：{artifact,
@@ -485,17 +526,18 @@ class FactsModeOutputProvider:
         """
 
         if self._artifacts_dir is None:
-            return {}
+            return None
+        binding_path = Path(self._artifacts_dir) / self._FINDINGS_BINDING
+        if not binding_path.is_file():
+            return None
         try:
             value = json.loads(
-                (Path(self._artifacts_dir) / self._FINDINGS_BINDING).read_text(
-                    encoding="utf-8"
-                )
+                binding_path.read_text(encoding="utf-8")
             )
         except (OSError, ValueError):
-            return {}
+            return {"_binding_error": "binding_unreadable"}
         if not isinstance(value, dict):
-            return {}
+            return {"_binding_error": "binding_not_object"}
         artifact = str(value.get("artifact", "")).strip()
         digest = str(value.get("content_sha256", "")).strip()
         if (
@@ -504,10 +546,15 @@ class FactsModeOutputProvider:
             or ".." in artifact
             or len(digest) != 64
         ):
-            return {}
+            return {"_binding_error": "binding_invalid"}
         return value
 
-    def _read_ai_findings(self) -> dict[str, Any]:
+    def _read_ai_findings(
+        self,
+        *,
+        project_ref: str = "",
+        snapshot_ref: str = "",
+    ) -> dict[str, Any]:
         """读取AI findings工件，返回带状态与身份的读取结果。
 
         - missing：工件不存在（项目无双cohort lane）
@@ -526,15 +573,19 @@ class FactsModeOutputProvider:
             return {"state": "missing", "findings": None, "artifact": None,
                     "error": "artifacts_dir未配置"}
         binding = self._read_findings_binding()
+        if binding and binding.get("_binding_error"):
+            return {
+                "state": "read_failed",
+                "findings": None,
+                "artifact": None,
+                "error": str(binding["_binding_error"]),
+            }
         if binding:
             artifact_name = str(binding["artifact"])
             expected_digest = str(binding["content_sha256"])
             project_id = str(binding.get("project_id", "")).strip()
-            if (
-                self._project_ref
-                and project_id
-                and project_id != str(self._project_ref)
-            ):
+            expected_project = str(project_ref or self._project_ref).strip()
+            if expected_project and project_id != expected_project:
                 return {"state": "read_failed", "findings": None,
                         "artifact": artifact_name,
                         "error": "binding_project_mismatch"}
@@ -556,6 +607,16 @@ class FactsModeOutputProvider:
         if not isinstance(artifact, dict):
             return {"state": "read_failed", "findings": None,
                     "artifact": artifact_name, "error": "not_object"}
+        artifact_project = str(artifact.get("project_id") or "").strip()
+        if project_ref and artifact_project and artifact_project != str(project_ref):
+            return {"state": "read_failed", "findings": None,
+                    "artifact": artifact_name,
+                    "error": "artifact_project_mismatch"}
+        artifact_snapshot = str(artifact.get("snapshot_ref") or "").strip()
+        if snapshot_ref and artifact_snapshot != str(snapshot_ref):
+            return {"state": "read_failed", "findings": None,
+                    "artifact": artifact_name,
+                    "error": "artifact_snapshot_mismatch"}
         declared = str(artifact.get("content_sha256", "")).strip()
         verify = {k: v for k, v in artifact.items() if k != "content_sha256"}
         recomputed = content_hash(verify)
@@ -695,7 +756,10 @@ class FactsModeOutputProvider:
     def _daily_findings(
         self, binding: Mapping[str, Any], r5_packet: Any
     ) -> list[dict[str, Any]]:
-        read = self._read_ai_findings()
+        read = self._read_ai_findings(
+            project_ref=str(binding.get("project_id") or ""),
+            snapshot_ref=str(getattr(r5_packet, "snapshot_ref", "") or ""),
+        )
         if read["state"] == "completed_with_findings":
             return self._findings_from_artifact(read["findings"], r5_packet)
         if read["state"] == "completed_no_findings":
@@ -847,4 +911,49 @@ class FactsModeOutputProvider:
         return findings
 
 
-__all__ = ["FactsModeOutputProvider"]
+class FactsModeOutputDispatcher:
+    """Resolve every mode/findings read by its explicit project identity."""
+
+    def __init__(self, providers_by_project: Mapping[str, FactsModeOutputProvider]) -> None:
+        self._providers = dict(providers_by_project)
+
+    def _provider_for(self, project_ref: Any) -> FactsModeOutputProvider:
+        project = str(project_ref or "")
+        try:
+            return self._providers[project]
+        except KeyError as exc:
+            raise KeyError(
+                f"no facts mode provider for project {project!r}"
+            ) from exc
+
+    def get_mode_outputs(
+        self,
+        run_binding: Mapping[str, Any],
+        r5_packet: Any,
+        **kwargs: Any,
+    ) -> tuple[dict[str, Any], ...]:
+        return self._provider_for(run_binding.get("project_id")).get_mode_outputs(
+            run_binding, r5_packet, **kwargs
+        )
+
+    def public_findings_envelope(
+        self,
+        *,
+        projection: Optional[Mapping[str, Any]] = None,
+        project_ref: str = "",
+        snapshot_ref: str = "",
+    ) -> dict[str, Any]:
+        return self._provider_for(project_ref).public_findings_envelope(
+            projection=projection,
+            project_ref=project_ref,
+            snapshot_ref=snapshot_ref,
+        )
+
+    def public_findings(self, **kwargs: Any) -> list[dict[str, Any]]:
+        return self.public_findings_envelope(**kwargs)["findings"]
+
+    def public_findings_meta(self, **kwargs: Any) -> dict[str, Any]:
+        return self.public_findings_envelope(**kwargs)["meta"]
+
+
+__all__ = ["FactsModeOutputDispatcher", "FactsModeOutputProvider"]
