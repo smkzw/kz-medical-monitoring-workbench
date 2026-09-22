@@ -4450,6 +4450,21 @@ class MonitoringAiService:
                 repair_payload["patch_contract"]["instruction"] += (
                     scientific_boundary_instruction
                 )
+        if (
+            job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
+            and "provider output contains definitive approval language"
+            in validation_errors
+        ):
+            approval_boundary_instruction = (
+                " 重建完整候选时只陈述字段语义建议、证据限制和仍待解决之处；"
+                "title、text及structured_payload均不得把模型候选描述为已批准、"
+                "已确认、正式结论、最终结论或可替代医学监察员的决定。不得通过"
+                "删除候选或字段来规避校验，也不得改变证据、提高置信度或掩盖"
+                "覆盖不足。"
+            )
+            repair_payload["repair_contract"]["instruction"] += (
+                approval_boundary_instruction
+            )
         if job.task_type in {
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
