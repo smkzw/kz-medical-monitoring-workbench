@@ -227,6 +227,7 @@ class DocumentAuthorityPromotionRequest(BaseModel):
     # 用户裁决：对双模型链无法收敛的角色，由医学经理绑定文件角色
     # （candidate_id为空=该角色缺失）。校验在workflow层fail-closed。
     user_role_selections: List[Dict[str, str]] = Field(default_factory=list)
+    expected_decision_version: Optional[StrictInt] = Field(default=None, ge=0)
 
 
 @dataclass(frozen=True)
@@ -664,9 +665,11 @@ def register_mapping_candidate_routes(
         except pb.ProjectBackupError as exc:
             return _run_entry_error_response(exc)
         try:
+            actor = getattr(auth, "principal_id", None) or "medical_manager"
             result = context.monitoring_document_authority_promoter(
                 project_id=canonical,
                 workspace_dir=context.workspace_dir(context.root, canonical),
+                actor=str(actor),
                 **payload.model_dump(),
             )
             if result.get("state") == "failed":
@@ -741,6 +744,10 @@ def register_mapping_candidate_routes(
                         if str(value).strip()
                     ],
                 }
+                if result.get("decision_version") is not None:
+                    response_payload["decision_version"] = int(
+                        result["decision_version"]
+                    )
                 if user_choices:
                     response_payload["user_choices"] = user_choices
                 content_confirmations = result.get("content_confirmations") or []

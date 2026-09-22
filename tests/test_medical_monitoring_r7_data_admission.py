@@ -495,6 +495,7 @@ def test_document_authority_promotion_is_server_wired_and_publicly_plain(
         f"{_base()}/data-admissions/attempt-0001/study-documents/resolve",
         json={
             "batch_id": f"mmbatch_{'a' * 24}",
+            "expected_decision_version": 2,
         },
     )
 
@@ -508,6 +509,8 @@ def test_document_authority_promotion_is_server_wired_and_publicly_plain(
     assert calls[0]["workspace_dir"] == (
         tmp_path / "runtime" / "medical_monitoring_r7" / PROJECT_A
     )
+    assert calls[0]["expected_decision_version"] == 2
+    assert calls[0]["actor"]
     selections = [
         kwargs
         for name, kwargs in mapping.calls

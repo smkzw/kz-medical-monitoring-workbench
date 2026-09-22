@@ -57,10 +57,11 @@ from .monitoring_ai_contracts import (
 )
 from .monitoring_ai_repository import MonitoringAiRepository
 
-PROMOTION_RECEIPT_SCHEMA_VERSION = "monitoring-document-authority-promotion-v4"
+PROMOTION_RECEIPT_SCHEMA_VERSION = "monitoring-document-authority-promotion-v5"
 _REPLAY_PROMOTION_RECEIPT_SCHEMA_VERSIONS = frozenset({
     "monitoring-document-authority-promotion-v2",
     "monitoring-document-authority-promotion-v3",
+    "monitoring-document-authority-promotion-v4",
     PROMOTION_RECEIPT_SCHEMA_VERSION,
 })
 _PRIMARY_REGISTRATION_KEYS = frozenset({
@@ -876,6 +877,7 @@ def promote_document_authority_from_jobs(
     primary_critique_job_id: str = "",
     verifier_critique_job_id: str = "",
     user_role_selections: Any = (),
+    decision_record: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     candidate_root = Path(candidate_root)
     frozen_batch = _load_json(
@@ -900,7 +902,46 @@ def promote_document_authority_from_jobs(
         user_role_selections=user_role_selections,
     )
     if resolution["state"] != "resolved":
-        return {**resolution, "authority_status": "not_promoted"}
+        return {
+            **resolution,
+            "authority_status": "not_promoted",
+            "decision_version": (
+                int(decision_record["decision_version"])
+                if decision_record is not None
+                else None
+            ),
+        }
+
+    frozen_decision: dict[str, Any] | None = None
+    if decision_record is not None:
+        frozen_decision = _json_value(decision_record)
+        unsigned_decision = {
+            key: value
+            for key, value in frozen_decision.items()
+            if key != "decision_sha256"
+        }
+        normalized_selections = sorted(
+            (
+                {
+                    "role": str(item.get("role") or ""),
+                    "candidate_id": str(item.get("candidate_id") or ""),
+                }
+                for item in (user_role_selections or ())
+            ),
+            key=lambda item: item["role"],
+        )
+        if (
+            frozen_decision.get("schema_version")
+            != "monitoring-document-authority-decision-v2"
+            or frozen_decision.get("project_id") != project_id
+            or frozen_decision.get("batch_id") != candidate_batch.get("batch_id")
+            or frozen_decision.get("batch_manifest_sha256")
+            != content_sha256(candidate_batch)
+            or frozen_decision.get("selections") != normalized_selections
+            or frozen_decision.get("decision_sha256")
+            != content_sha256(unsigned_decision)
+        ):
+            raise DocumentAuthorityError("document_authority_decision_invalid")
 
     candidates = {
         str(item["candidate_id"]): item for item in candidate_batch["candidates"]
@@ -990,6 +1031,17 @@ def promote_document_authority_from_jobs(
                         not in {"allowed", "confirmed_after_warning"}
                     )
                 ):
+                    unresolved_checks = [
+                        check
+                        for check in validation.checks
+                        if check.outcome in {"warning", "mismatch"}
+                    ]
+                    can_confirm = (
+                        validation.technical_status == "ready"
+                        and validation.use_status == "requires_confirmation"
+                        and bool(unresolved_checks)
+                        and all(check.overridable for check in unresolved_checks)
+                    )
                     blocked_entries.append({
                         "role": role,
                         "source_entry_id": registration.entry.entry_id,
@@ -998,6 +1050,22 @@ def promote_document_authority_from_jobs(
                         "content_status": str(validation.content_status),
                         "use_status": str(validation.use_status),
                         "revision": int(getattr(validation, "revision", 1) or 1),
+                        "summary": str(validation.summary),
+                        "can_confirm": can_confirm,
+                        "acknowledged_check_codes": [
+                            check.check_code for check in unresolved_checks
+                        ],
+                        "checks": [
+                            {
+                                "label": check.label,
+                                "expected_value": check.expected_value,
+                                "observed_value": check.observed_value,
+                                "outcome": check.outcome,
+                                "overridable": check.overridable,
+                                "evidence_locators": list(check.evidence_locators),
+                            }
+                            for check in unresolved_checks
+                        ],
                     })
                     continue
             claim = (role, binding_kind, str(candidate["candidate_id"]))
@@ -1035,6 +1103,11 @@ def promote_document_authority_from_jobs(
                     "确认沿用；确认后监查链路将继续。"
                 ),
                 "content_confirmations": blocked_entries,
+                "decision_version": (
+                    int(frozen_decision["decision_version"])
+                    if frozen_decision is not None
+                    else None
+                ),
             }
         receipt = {
             "schema_version": PROMOTION_RECEIPT_SCHEMA_VERSION,
@@ -1066,6 +1139,7 @@ def promote_document_authority_from_jobs(
             "adjudication_run_ids": resolution.get("adjudication_run_ids", []),
             "critique_run_ids": resolution.get("critique_run_ids", []),
             "document_identities": resolution["document_identities"],
+            "decision": frozen_decision,
             "registrations": registrations,
         }
         receipt_sha256 = content_sha256(receipt)
@@ -1083,6 +1157,11 @@ def promote_document_authority_from_jobs(
         "authority_status": "promoted",
         "promotion_receipt_sha256": receipt_sha256,
         "registrations": registrations,
+        "decision_version": (
+            int(frozen_decision["decision_version"])
+            if frozen_decision is not None
+            else None
+        ),
     }
 
 
@@ -1216,6 +1295,35 @@ def verify_document_authority_promotion_receipt(
         }
         if critique_jobs and set(critique_by_role) != {"primary", "verifier"}:
             return False
+        frozen_decision = receipt.get("decision")
+        if receipt_schema == PROMOTION_RECEIPT_SCHEMA_VERSION:
+            if frozen_decision is not None:
+                if not isinstance(frozen_decision, Mapping):
+                    return False
+                unsigned_decision = {
+                    key: value
+                    for key, value in frozen_decision.items()
+                    if key != "decision_sha256"
+                }
+                if (
+                    frozen_decision.get("schema_version")
+                    != "monitoring-document-authority-decision-v2"
+                    or frozen_decision.get("project_id") != project_id
+                    or frozen_decision.get("batch_id")
+                    != candidate_batch.get("batch_id")
+                    or frozen_decision.get("batch_manifest_sha256")
+                    != content_sha256(candidate_batch)
+                    or frozen_decision.get("decision_sha256")
+                    != content_sha256(unsigned_decision)
+                ):
+                    return False
+            frozen_selections = (
+                list(frozen_decision.get("selections", ()))
+                if frozen_decision is not None
+                else []
+            )
+        else:
+            frozen_selections = []
         resolution = resolve_document_authority_from_jobs(
             repository,
             project_id=project_id,
@@ -1242,6 +1350,7 @@ def verify_document_authority_promotion_receipt(
             verifier_critique_job_id=(
                 critique_by_role["verifier"].job_id if critique_by_role else ""
             ),
+            user_role_selections=frozen_selections,
         )
         candidates = {
             str(item["candidate_id"]): item
@@ -1271,9 +1380,14 @@ def verify_document_authority_promotion_receipt(
             and sorted(receipt.get("critique_run_ids", ()))
             == sorted(resolution.get("critique_run_ids", []))
             and receipt["document_identities"] == resolution["document_identities"]
+            and (
+                receipt.get("decision") == frozen_decision
+                if receipt_schema == PROMOTION_RECEIPT_SCHEMA_VERSION
+                else True
+            )
             and _registrations_bind_resolution(registrations, claims, candidates)
         )
-    except (KeyError, RuntimeError, TypeError, ValueError):
+    except (DocumentAuthorityError, KeyError, RuntimeError, TypeError, ValueError):
         return False
 
 

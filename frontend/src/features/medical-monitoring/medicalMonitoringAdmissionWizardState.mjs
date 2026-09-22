@@ -4,8 +4,8 @@
 
 export const ADMISSION_WIZARD_STEPS = Object.freeze([
   { key: "select-source", title: "选择数据" },
-  { key: "review-profile", title: "查看系统识别结果" },
-  { key: "confirm-fields", title: "核对系统识别" },
+  { key: "review-profile", title: "查看导入概况" },
+  { key: "confirm-fields", title: "处理少量疑点" },
 ]);
 
 export const ADMISSION_SUPPORTED_SUFFIX_TEXT = ".csv / .xls / .xlsx / .xlsm";
@@ -283,7 +283,7 @@ export function admissionPrimaryAction(state) {
       return { key: "reading", label: "正在识别数据结构…", disabled: true };
     case "ready":
       return state.stepIndex === 1
-        ? { key: "advance", label: "下一步：核对系统识别" }
+        ? { key: "advance", label: "下一步：让系统核对字段" }
         : { key: "finish", label: "完成接入" };
     case "done":
       return { key: "restart", label: "再接入一批数据" };

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from typing import Any
 
@@ -36,6 +38,7 @@ from services.api.app.monitoring_ai_contracts import (
     MonitoringAiJobStatus,
     MonitoringAiSourceBinding,
     MonitoringAiTaskType,
+    content_sha256,
 )
 from services.api.app.monitoring_ai_repository import MonitoringAiRepository
 from services.api.app.monitoring_ai_service import (
@@ -2125,6 +2128,109 @@ def test_composite_authority_promotes_main_and_supplementary_files_atomically(
         ) is False, mutation.__name__
 
 
+def test_content_confirmation_exposes_actionable_differences(tmp_path) -> None:
+    candidate_root = tmp_path / "candidates"
+    batch = MonitoringDocumentCandidateDecomposer(candidate_root).decompose_many(
+        _composite_files()
+    ).to_dict()
+    batch = json.loads(
+        (candidate_root / "batches" / f"{batch['batch_id']}.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    repository, job_ids = _run_composite_analysis_jobs(tmp_path, batch)
+    registry = SourceRegistryService(
+        SourceRegistryStore(tmp_path / "registry-warning.jsonl"),
+        content_validation_service=SourceContentValidationService(
+            SourceContentValidationStore(tmp_path / "validations-warning.sqlite3")
+        ),
+        expected_context_resolver=lambda *_args: SourceExpectedContext(
+            project_identifiers=("PROJECT-NOT-IN-FILES",),
+        ),
+    )
+
+    result = promote_document_authority_from_jobs(
+        repository,
+        project_id="project-document-authority",
+        candidate_batch=batch,
+        candidate_root=candidate_root,
+        source_registry=registry,
+        primary_analysis_job_id=job_ids[0],
+        verifier_analysis_job_id=job_ids[1],
+    )
+
+    assert result["state"] == "needs_user_input"
+    assert result["authority_status"] == "not_promoted"
+    assert result["content_confirmations"]
+    for confirmation in result["content_confirmations"]:
+        assert confirmation["checks"]
+        assert confirmation["acknowledged_check_codes"]
+        assert confirmation["can_confirm"] is True
+        assert all(
+            check["label"] and "expected_value" in check and "observed_value" in check
+            for check in confirmation["checks"]
+        )
+
+
+def test_promotion_receipt_replays_frozen_decision(tmp_path) -> None:
+    candidate_root = tmp_path / "candidates"
+    batch = MonitoringDocumentCandidateDecomposer(candidate_root).decompose_many(
+        _composite_files()
+    ).to_dict()
+    batch = json.loads(
+        (candidate_root / "batches" / f"{batch['batch_id']}.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    repository, job_ids = _run_composite_analysis_jobs(tmp_path, batch)
+    registry = SourceRegistryService(SourceRegistryStore(tmp_path / "registry.jsonl"))
+    protocol_id = next(
+        item["candidate_id"]
+        for item in batch["candidates"]
+        if item["filename"] == "protocol.docx"
+    )
+    unsigned = {
+        "schema_version": "monitoring-document-authority-decision-v2",
+        "batch_id": batch["batch_id"],
+        "project_id": "project-document-authority",
+        "batch_manifest_sha256": content_sha256(batch),
+        "decision_version": 1,
+        "previous_decision_sha256": "",
+        "actor": "reviewer-1",
+        "decided_at": "2026-09-22T00:00:00+00:00",
+        "selections": [{"role": "protocol", "candidate_id": protocol_id}],
+    }
+    decision = {**unsigned, "decision_sha256": content_sha256(unsigned)}
+
+    result = promote_document_authority_from_jobs(
+        repository,
+        project_id="project-document-authority",
+        candidate_batch=batch,
+        candidate_root=candidate_root,
+        source_registry=registry,
+        primary_analysis_job_id=job_ids[0],
+        verifier_analysis_job_id=job_ids[1],
+        user_role_selections=decision["selections"],
+        decision_record=decision,
+    )
+    receipt = registry.list_entries("project-document-authority")[0].metadata[
+        "document_authority_receipt"
+    ]
+    assert receipt["decision"] == decision
+    assert verify_document_authority_promotion_receipt(
+        repository,
+        project_id="project-document-authority",
+        receipt=receipt,
+    ) is True
+    tampered = json.loads(json.dumps(receipt))
+    tampered["decision"]["selections"][0]["candidate_id"] = "mmcandidate_tampered"
+    assert verify_document_authority_promotion_receipt(
+        repository,
+        project_id="project-document-authority",
+        receipt=tampered,
+    ) is False
+
+
 def test_composite_authority_rejects_candidate_claimed_by_two_roles(
     tmp_path,
     monkeypatch,
@@ -2426,7 +2532,7 @@ def test_user_role_selection_overrides_unresolved_role() -> None:
 
 
 def test_user_selections_persist_and_reload(tmp_path) -> None:
-    """V5-09：裁决落盘后，刷新/重启/无参数resolve仍读取同一裁决。"""
+    """Decision revisions survive refresh and reject stale divergent writes."""
 
     import json as _json
     from services.api.app.monitoring_document_authority_workflow import (
@@ -2436,6 +2542,16 @@ def test_user_selections_persist_and_reload(tmp_path) -> None:
     workflow = object.__new__(MonitoringDocumentAuthorityWorkflow)
     workspace = tmp_path / "ws"
     batch_id = "mmbatch_" + "b" * 24
+    batch = {
+        "batch_id": batch_id,
+        "candidates": [
+            {"candidate_id": "mmcandidate_a"},
+            {"candidate_id": "mmcandidate_b"},
+        ],
+    }
+    batch_path = workflow._candidate_root(workspace) / "batches" / f"{batch_id}.json"
+    batch_path.parent.mkdir(parents=True)
+    batch_path.write_text(_json.dumps(batch), encoding="utf-8")
     def _core(items):
         return sorted(
             (item["role"], item["candidate_id"]) for item in items
@@ -2474,6 +2590,7 @@ def test_user_selections_persist_and_reload(tmp_path) -> None:
             {"role": "protocol", "candidate_id": "mmcandidate_b"},
             {"role": "sap", "candidate_id": ""},
         ],
+        expected_decision_version=1,
     )
     by_role = {item["role"]: item for item in revised}
     assert by_role["protocol"]["candidate_id"] == "mmcandidate_b"
@@ -2481,6 +2598,121 @@ def test_user_selections_persist_and_reload(tmp_path) -> None:
     on_disk = _json.loads(
         (workflow._selections_path(workspace, batch_id)).read_text(encoding="utf-8")
     )
-    assert on_disk["schema_version"] == "monitoring-document-authority-user-selections-v1"
+    assert on_disk["schema_version"] == "monitoring-document-authority-decision-v2"
     assert on_disk["project_id"] == "p1"
     assert len(on_disk["selections"]) == 2
+    assert on_disk["decision_version"] == 2
+    assert on_disk["actor"] == "medical_manager"
+    assert workflow._decision_revision_path(workspace, batch_id, 1).is_file()
+    assert workflow._decision_revision_path(workspace, batch_id, 2).is_file()
+
+    with pytest.raises(
+        DocumentAuthorityError,
+        match="document_authority_decision_revision_conflict",
+    ):
+        workflow._effective_user_selections(
+            project_id="p1",
+            workspace_dir=workspace,
+            batch_id=batch_id,
+            user_role_selections=[
+                {"role": "protocol", "candidate_id": "mmcandidate_a"}
+            ],
+            expected_decision_version=1,
+        )
+
+    legacy_workspace = tmp_path / "legacy-ws"
+    legacy_batch_path = (
+        workflow._candidate_root(legacy_workspace)
+        / "batches"
+        / f"{batch_id}.json"
+    )
+    legacy_batch_path.parent.mkdir(parents=True)
+    legacy_batch_path.write_text(_json.dumps(batch), encoding="utf-8")
+    legacy_pointer = workflow._selections_path(legacy_workspace, batch_id)
+    legacy_pointer.parent.mkdir(parents=True)
+    legacy_pointer.write_text(
+        _json.dumps({
+            "schema_version": "monitoring-document-authority-user-selections-v1",
+            "batch_id": batch_id,
+            "project_id": "p1",
+            "updated_at": "2026-09-14T15:00:00+00:00",
+            "selections": [{
+                "role": "protocol",
+                "candidate_id": "mmcandidate_a",
+                "actor": "medical-manager-legacy",
+            }],
+        }),
+        encoding="utf-8",
+    )
+    migrated = workflow._effective_user_selections(
+        project_id="p1",
+        workspace_dir=legacy_workspace,
+        batch_id=batch_id,
+        user_role_selections=(),
+    )
+    assert _core(migrated) == [("protocol", "mmcandidate_a")]
+    migrated_on_disk = _json.loads(legacy_pointer.read_text(encoding="utf-8"))
+    assert migrated_on_disk["schema_version"] == (
+        "monitoring-document-authority-decision-v2"
+    )
+    assert migrated_on_disk["actor"] == "medical-manager-legacy"
+    assert migrated_on_disk["decided_at"] == "2026-09-14T15:00:00+00:00"
+
+
+def test_user_selection_cas_serializes_concurrent_writers(tmp_path) -> None:
+    workflow = object.__new__(MonitoringDocumentAuthorityWorkflow)
+    workspace = tmp_path / "ws"
+    batch_id = "mmbatch_" + "c" * 24
+    batch = {
+        "batch_id": batch_id,
+        "candidates": [
+            {"candidate_id": "mmcandidate_a"},
+            {"candidate_id": "mmcandidate_b"},
+            {"candidate_id": "mmcandidate_c"},
+        ],
+    }
+    batch_path = workflow._candidate_root(workspace) / "batches" / f"{batch_id}.json"
+    batch_path.parent.mkdir(parents=True)
+    batch_path.write_text(json.dumps(batch), encoding="utf-8")
+    workflow._effective_user_selections(
+        project_id="p1",
+        workspace_dir=workspace,
+        batch_id=batch_id,
+        user_role_selections=[
+            {"role": "protocol", "candidate_id": "mmcandidate_a"}
+        ],
+    )
+
+    barrier = threading.Barrier(2)
+
+    def update(candidate_id: str) -> str:
+        barrier.wait(timeout=5)
+        try:
+            workflow._effective_user_selections(
+                project_id="p1",
+                workspace_dir=workspace,
+                batch_id=batch_id,
+                user_role_selections=[
+                    {"role": "protocol", "candidate_id": candidate_id}
+                ],
+                expected_decision_version=1,
+            )
+        except DocumentAuthorityError as exc:
+            return str(exc)
+        return "written"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(update, ("mmcandidate_b", "mmcandidate_c")))
+
+    assert sorted(outcomes) == [
+        "document_authority_decision_revision_conflict",
+        "written",
+    ]
+    current = workflow._load_user_selections(workspace, batch_id)
+    assert current is not None
+    assert current["decision_version"] == 2
+    assert current["selections"][0]["candidate_id"] in {
+        "mmcandidate_b",
+        "mmcandidate_c",
+    }
+    assert workflow._decision_revision_path(workspace, batch_id, 2).is_file()

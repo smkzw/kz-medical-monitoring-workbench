@@ -56,6 +56,17 @@ function mappingTypeText(value) {
   })[value] || "类型待定";
 }
 
+const DOCUMENT_ROLE_LABELS = Object.freeze({
+  protocol: "研究方案",
+  investigator_brochure: "研究者手册",
+  ecrf: "电子病例报告表",
+  sap: "统计分析计划",
+});
+
+function documentRoleLabel(role) {
+  return DOCUMENT_ROLE_LABELS[role] || "研究文件";
+}
+
 function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onContentConfirm }) {
   const [choices, setChoices] = useState({});
   if (!state || (state.phase === "loading" && !state.payload)) {
@@ -85,32 +96,48 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
       </ul>
       {(payload.content_confirmations || []).length ? (
         <fieldset className="monitoring-admission-user-choices">
-          <legend>内容核对确认（逐项核对后确认沿用）</legend>
+          <legend>系统发现以下内容差异</legend>
           {(payload.content_confirmations || []).map((entry) => (
             <div key={entry.source_entry_id} role="group" aria-label={`内容核对：${entry.filename}`}>
-              <strong>{entry.filename}</strong>
-              <small>
-                {" "}角色 {entry.role} · 内容核对：{entry.content_status} · 使用状态：{entry.use_status}
-              </small>
-              <button
-                type="button"
-                className="monitoring-admission-secondary"
-                disabled={processing}
-                onClick={() => onContentConfirm?.(entry)}
-                title="我已核对该文件内容，确认按当前内容沿用"
-              >
-                我已核对，确认沿用
-              </button>
+              <strong>{documentRoleLabel(entry.role)}：{entry.filename}</strong>
+              <small>{entry.summary || "文件内容与当前研究信息存在差异。"}</small>
+              <ul className="monitoring-admission-content-differences">
+                {(entry.checks || []).map((check, index) => (
+                  <li key={`${entry.source_entry_id}-${index}`}>
+                    <strong>{check.label}</strong>
+                    <span>当前项目：{check.expected_value || "未提供"}</span>
+                    <span>文件内容：{check.observed_value || "未识别"}</span>
+                    {check.evidence_locators?.length ? (
+                      <small>依据位置：{check.evidence_locators.join("；")}</small>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              {entry.can_confirm ? (
+                <button
+                  type="button"
+                  className="monitoring-admission-secondary"
+                  disabled={processing}
+                  onClick={() => onContentConfirm?.(entry)}
+                  title="确认差异不影响本次医学监查，继续使用该文件"
+                >
+                  差异不影响本次监查，继续使用
+                </button>
+              ) : (
+                <p className="monitoring-admission-warning">
+                  该差异不能直接忽略，请更换正确文件后重新上传。
+                </p>
+              )}
             </div>
           ))}
         </fieldset>
       ) : null}
       {userChoices.length ? (
         <fieldset className="monitoring-admission-user-choices">
-          <legend>请确认每个文件角色对应的文件（医学判断以您为准）</legend>
+          <legend>系统只剩以下文件关系无法确定</legend>
           {userChoices.map((choice) => (
-            <div key={choice.role} role="group" aria-label={`文件角色：${choice.role}`}>
-              <strong>角色：{choice.role}</strong>
+            <div key={choice.role} role="group" aria-label={`文件类型：${documentRoleLabel(choice.role)}`}>
+              <strong>哪份是{documentRoleLabel(choice.role)}？</strong>
               {choice.options.map((option) => (
                 <label key={option.candidate_id || "__missing__"} style={{ display: "block" }}>
                   <input
@@ -124,8 +151,8 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
                   />
                   {" "}
                   {option.candidate_id
-                    ? `这是${choice.role}文件：${option.filename}`
-                    : `没有${choice.role}文件（该角色缺失）`}
+                    ? option.filename
+                    : `本次未提供${documentRoleLabel(choice.role)}`}
                 </label>
               ))}
             </div>
@@ -140,9 +167,9 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
                 candidate_id: choices[choice.role] || "",
               })),
             )}
-            title={allAnswered ? "提交裁决并继续核对" : "请先为每个角色作出选择"}
+            title={allAnswered ? "保存选择并继续" : "请先完成上方选择"}
           >
-            提交裁决并继续
+            保存选择并继续
           </button>
         </fieldset>
       ) : null}
@@ -492,37 +519,40 @@ export function MedicalMonitoringAdmissionWizardView({
             <p className="monitoring-admission-big monitoring-admission-summary">
               {profile.summaryText}
             </p>
-            {profile.tables.map((table) => (
-              <section
-                key={`${table.name}-${table.sourceFile}`}
-                className="monitoring-admission-table"
-                aria-label={`数据表 ${table.name}`}
-              >
-                <header className="monitoring-admission-table-head">
-                  <h3>{table.name}</h3>
-                  <span className="monitoring-admission-table-meta">
-                    {table.rowsText} · {table.columnCount} 列{table.sourceFile ? ` · 来源 ${table.sourceFile}` : ""}
-                  </span>
-                </header>
-                <ul className="monitoring-admission-columns">
-                  {table.columns.map((column) => (
-                    <li key={column.name}>
-                      <span className="monitoring-admission-column-name">{column.name}</span>
-                      <span className="monitoring-admission-column-meta">
-                        {[column.typeText, column.missingText, column.dateRangeText].filter(Boolean).join(" · ")}
-                      </span>
-                      {column.roles.length > 0 ? (
-                        <span className="monitoring-admission-roles">{column.roles.join("、")}</span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
+            <details className="monitoring-admission-table-details">
+              <summary>
+                查看 {profile.tables.length} 张表的结构
+                <span>仅在需要时展开</span>
+              </summary>
+              {profile.tables.map((table) => (
+                <details
+                  key={`${table.name}-${table.sourceFile}`}
+                  className="monitoring-admission-table"
+                >
+                  <summary className="monitoring-admission-table-head">
+                    <strong>{table.name}</strong>
+                    <span className="monitoring-admission-table-meta">
+                      {table.rowsText} · {table.columnCount} 列
+                    </span>
+                  </summary>
+                  <ul className="monitoring-admission-columns">
+                    {table.columns.map((column) => (
+                      <li key={column.name}>
+                        <span className="monitoring-admission-column-name">{column.name}</span>
+                        <span className="monitoring-admission-column-meta">
+                          {[column.typeText, column.missingText, column.dateRangeText].filter(Boolean).join(" · ")}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ))}
+            </details>
           </div>
         ) : profile && stepIndex === 2 ? (
           <>
             <DocumentReadinessPanel
+              key={`${state.attemptId}:${documentState?.payload?.analysis_token || "pending"}`}
               state={documentState}
               onFiles={onDocumentFiles}
               onRetry={onDocumentRetry}
@@ -601,7 +631,10 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   const adjudicationInFlight = useRef(false);
   const confirmInFlight = useRef(false);
   const documentUploadInFlight = useRef(false);
+  const importRequestGeneration = useRef(0);
   const documentRequestGeneration = useRef(0);
+  const mappingRequestGeneration = useRef(0);
+  const factsRequestGeneration = useRef(0);
   const factsInFlight = useRef(false);
   const [factState, setFactState] = useState({ phase: "idle", payload: null, error: null });
 
@@ -626,24 +659,38 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   }, [api, state.attemptId, state.phase, state.projectId]);
 
   const submitImport = useCallback(async () => {
+    const generation = importRequestGeneration.current + 1;
+    importRequestGeneration.current = generation;
+    documentRequestGeneration.current += 1;
+    mappingRequestGeneration.current += 1;
+    factsRequestGeneration.current += 1;
     dispatch({ type: "import-start" });
     if (!state.projectId.trim()) return;
+    mappingDispatch({ type: "reset" });
+    setDocumentState({ phase: "idle", payload: null, error: null });
+    setFactState({ phase: "idle", payload: null, error: null });
+    adoptInFlight.current = false;
+    adjudicationInFlight.current = false;
+    confirmInFlight.current = false;
+    factsInFlight.current = false;
     try {
       const payload = state.selectedFiles.length
         ? await api.createDataAdmissionUpload(state.projectId, state.selectedFiles)
         : await api.createDataAdmission(state.projectId, { source_dir: state.sourceDir });
-      dispatch({ type: "import-created", payload });
-      mappingDispatch({ type: "reset" });
-      setDocumentState({ phase: "idle", payload: null, error: null });
-      adoptInFlight.current = false;
-      adjudicationInFlight.current = false;
+      if (importRequestGeneration.current === generation) {
+        dispatch({ type: "import-created", payload });
+      }
     } catch (error) {
-      dispatch({ type: "error", error });
+      if (importRequestGeneration.current === generation) {
+        dispatch({ type: "error", error });
+      }
     }
   }, [api, state.projectId, state.selectedFiles, state.sourceDir]);
 
   const loadMappingCandidates = useCallback(async () => {
     if (!state.projectId || !state.attemptId) return;
+    const generation = mappingRequestGeneration.current + 1;
+    mappingRequestGeneration.current = generation;
     mappingDispatch({ type: "load-start" });
     try {
       const payload = await loadOrStartAdmissionMapping(
@@ -651,6 +698,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         state.projectId,
         state.attemptId,
       );
+      if (mappingRequestGeneration.current !== generation) return;
       mappingDispatch({ type: "load-ready", payload });
       if (
         payload?.confirmation_status === "confirmed"
@@ -659,6 +707,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         dispatch({ type: "finish" });
       }
     } catch (error) {
+      if (mappingRequestGeneration.current !== generation) return;
       mappingDispatch({
         type: "error",
         error: {
@@ -703,7 +752,10 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         state.projectId,
         state.attemptId,
         documentState.payload?.analysis_token,
-        { userRoleSelections: selections },
+        {
+          userRoleSelections: selections,
+          expectedDecisionVersion: documentState.payload?.decision_version,
+        },
       );
       if (documentRequestGeneration.current === generation) {
         setDocumentState({
@@ -724,11 +776,13 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   }, [api, documentState.payload?.analysis_token, state.attemptId, state.projectId]);
 
   const submitContentConfirmation = useCallback(async (entry) => {
-    if (!state.projectId || !entry?.source_entry_id) return;
+    if (!state.projectId || !entry?.source_entry_id || !entry?.can_confirm) return;
+    const generation = documentRequestGeneration.current + 1;
+    documentRequestGeneration.current = generation;
     try {
       await api.confirmContentValidation(state.projectId, entry.source_entry_id, {
-        reason: "医学核对后确认按当前内容沿用（文件角色裁决环节）。",
-        acknowledgedCheckCodes: [],
+        reason: `已核对${entry.filename || "该研究文件"}所列差异，确认不影响本次医学监查并继续使用。`,
+        acknowledgedCheckCodes: entry.acknowledged_check_codes || [],
         expectedRevision: entry.revision || 1,
         idempotencyKey: `doc-content-confirm-${entry.source_entry_id}-${entry.revision || 1}`,
       });
@@ -738,16 +792,20 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         state.attemptId,
         documentState.payload?.analysis_token,
       );
-      setDocumentState({
-        phase: payload.ready ? "ready" : (payload.state || "analyzing"),
-        payload,
-        error: null,
-      });
+      if (documentRequestGeneration.current === generation) {
+        setDocumentState({
+          phase: payload.ready ? "ready" : (payload.state || "analyzing"),
+          payload,
+          error: null,
+        });
+      }
     } catch (error) {
-      setDocumentState((current) => ({
-        ...current,
-        error: error?.detail?.message || error?.message || "内容确认失败，请重试。",
-      }));
+      if (documentRequestGeneration.current === generation) {
+        setDocumentState((current) => ({
+          ...current,
+          error: error?.detail?.message || error?.message || "内容确认失败，请重试。",
+        }));
+      }
     }
   }, [api, documentState.payload?.analysis_token, state.attemptId, state.projectId]);
 
@@ -756,9 +814,9 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       !files?.length || !state.projectId || !state.attemptId
       || documentUploadInFlight.current
     ) return;
-    documentUploadInFlight.current = true;
     const generation = documentRequestGeneration.current + 1;
     documentRequestGeneration.current = generation;
+    documentUploadInFlight.current = generation;
     setDocumentState((current) => ({ ...current, phase: "uploading", error: null }));
     try {
       const payload = await api.analyzeStudyDocuments(
@@ -778,7 +836,9 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         }));
       }
     } finally {
-      documentUploadInFlight.current = false;
+      if (documentUploadInFlight.current === generation) {
+        documentUploadInFlight.current = false;
+      }
     }
   }, [api, state.attemptId, state.projectId]);
 
@@ -789,23 +849,29 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       || !documentState.payload?.analysis_token
     ) return undefined;
     const timer = setTimeout(async () => {
+      const generation = documentRequestGeneration.current + 1;
+      documentRequestGeneration.current = generation;
       try {
         const payload = await api.resolveStudyDocuments(
           state.projectId,
           state.attemptId,
           documentState.payload.analysis_token,
         );
-        setDocumentState({
-          phase: payload.ready ? "ready" : (payload.state || "analyzing"),
-          payload,
-          error: null,
-        });
+        if (documentRequestGeneration.current === generation) {
+          setDocumentState({
+            phase: payload.ready ? "ready" : (payload.state || "analyzing"),
+            payload,
+            error: null,
+          });
+        }
       } catch (error) {
-        setDocumentState({
-          phase: "failed",
-          payload: null,
-          error: error?.detail?.message || error?.message || "研究文件核对失败。",
-        });
+        if (documentRequestGeneration.current === generation) {
+          setDocumentState({
+            phase: "failed",
+            payload: null,
+            error: error?.detail?.message || error?.message || "研究文件核对失败。",
+          });
+        }
       }
     }, 1500);
     return () => clearTimeout(timer);
@@ -857,15 +923,18 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     return () => clearTimeout(timer);
   }, [loadMappingCandidates, mappingState.payload?.state, mappingState.phase]);
 
-  const advanceAdjudication = useCallback(async (draft) => {
+  const advanceAdjudication = useCallback(async (draft, activeGeneration = null) => {
     if (!draft?.draft_id || adjudicationInFlight.current) return;
-    adjudicationInFlight.current = true;
+    const generation = activeGeneration ?? (mappingRequestGeneration.current + 1);
+    if (activeGeneration === null) mappingRequestGeneration.current = generation;
+    adjudicationInFlight.current = generation;
     try {
       const payload = await api.adjudicateDataAdmissionMappingDraft(
         state.projectId,
         state.attemptId,
         { draft_id: draft.draft_id },
       );
+      if (mappingRequestGeneration.current !== generation) return;
       const adjudicationState = payload?.adjudication?.state;
       mappingDispatch({
         type: adjudicationState === "running"
@@ -876,6 +945,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         payload,
       });
     } catch (error) {
+      if (mappingRequestGeneration.current !== generation) return;
       mappingDispatch({
         type: "adjudication-blocked",
         payload: draft,
@@ -884,7 +954,9 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         },
       });
     } finally {
-      adjudicationInFlight.current = false;
+      if (adjudicationInFlight.current === generation) {
+        adjudicationInFlight.current = false;
+      }
     }
   }, [api, state.attemptId, state.projectId]);
 
@@ -892,7 +964,9 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   // one focused independent pass before showing any residual questions.
   const adoptDraft = useCallback(async () => {
     if (adoptInFlight.current) return;
-    adoptInFlight.current = true;
+    const generation = mappingRequestGeneration.current + 1;
+    mappingRequestGeneration.current = generation;
+    adoptInFlight.current = generation;
     mappingDispatch({ type: "adopt-start" });
     try {
       const draft = await api.adoptDataAdmissionMappingDraft(
@@ -900,10 +974,12 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         state.attemptId,
         { reason: "采用系统字段识别结果，进入医学确认。" },
       );
+      if (mappingRequestGeneration.current !== generation) return;
       mappingDispatch({ type: "adjudication-start", payload: draft });
-      await advanceAdjudication(draft);
+      await advanceAdjudication(draft, generation);
     } catch (error) {
-      adoptInFlight.current = false;
+      if (mappingRequestGeneration.current !== generation) return;
+      if (adoptInFlight.current === generation) adoptInFlight.current = false;
       mappingDispatch({
         type: "error",
         error: {
@@ -911,6 +987,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           guidance: ["请稍后重试；若持续失败，请确认字段识别已生成完成。"],
         },
       });
+    } finally {
+      if (adoptInFlight.current === generation) adoptInFlight.current = false;
     }
   }, [advanceAdjudication, api, state.attemptId, state.projectId]);
 
@@ -936,7 +1014,9 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
 
   const confirmDraft = useCallback(async () => {
     if (!mappingState.draft?.draft_id || confirmInFlight.current) return;
-    confirmInFlight.current = true;
+    const generation = mappingRequestGeneration.current + 1;
+    mappingRequestGeneration.current = generation;
+    confirmInFlight.current = generation;
     mappingDispatch({ type: "confirm-start" });
     try {
       const questionCount = mappingState.payload?.questionCount || 0;
@@ -951,26 +1031,35 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           automatic: questionCount === 0,
         },
       );
+      if (mappingRequestGeneration.current !== generation) return;
       mappingDispatch({ type: "confirm-ready", payload: revision });
       dispatch({ type: "finish" });
     } catch (error) {
-      confirmInFlight.current = false;
+      if (mappingRequestGeneration.current !== generation) return;
+      if (confirmInFlight.current === generation) confirmInFlight.current = false;
       mappingDispatch(mappingConfirmationFailureAction(error, mappingState.draft));
+    } finally {
+      if (confirmInFlight.current === generation) confirmInFlight.current = false;
     }
   }, [api, mappingState, state.attemptId, state.projectId]);
 
   const generateFacts = useCallback(async () => {
     if (!state.projectId || !state.attemptId || factsInFlight.current) return;
-    factsInFlight.current = true;
+    const generation = factsRequestGeneration.current + 1;
+    factsRequestGeneration.current = generation;
+    factsInFlight.current = generation;
     setFactState({ phase: "generating", payload: null, error: null });
     try {
       const payload = await api.generateDataAdmissionFacts(
         state.projectId,
         state.attemptId,
       );
-      setFactState({ phase: "ready", payload, error: null });
+      if (factsRequestGeneration.current === generation) {
+        setFactState({ phase: "ready", payload, error: null });
+      }
     } catch (error) {
-      factsInFlight.current = false;
+      if (factsRequestGeneration.current !== generation) return;
+      if (factsInFlight.current === generation) factsInFlight.current = false;
       setFactState({
         phase: "failed",
         payload: null,
@@ -979,6 +1068,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           guidance: ["请点击重试；原始文件不会被修改。"],
         },
       });
+    } finally {
+      if (factsInFlight.current === generation) factsInFlight.current = false;
     }
   }, [api, state.attemptId, state.projectId]);
 
@@ -1057,6 +1148,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
 
   const onAnswerCard = useCallback(async (card, note) => {
     if (!mappingState.draft || mappingState.phase !== "drafting") return;
+    const generation = mappingRequestGeneration.current + 1;
+    mappingRequestGeneration.current = generation;
     try {
       const draft = await api.editDataAdmissionMappingDraftField(
         state.projectId,
@@ -1076,8 +1169,10 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           idempotency_key: requestKey("admission-mapping-answer"),
         },
       );
+      if (mappingRequestGeneration.current !== generation) return;
       mappingDispatch({ type: "answer-ready", key: card.key, payload: draft });
     } catch (error) {
+      if (mappingRequestGeneration.current !== generation) return;
       mappingDispatch({
         type: "draft-error",
         error: {
