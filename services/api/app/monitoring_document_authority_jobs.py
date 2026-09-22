@@ -960,6 +960,7 @@ def promote_document_authority_from_jobs(
 
     registrations = []
     entry_id_by_claim: dict[tuple[str, str, str], str] = {}
+    blocked_entries: list[dict[str, Any]] = []
     with source_registry.store.transaction():
         for role, binding_kind, candidate, content in prepared:
             registration = source_registry.register_monitoring_mapping_document(
@@ -989,9 +990,16 @@ def promote_document_authority_from_jobs(
                         not in {"allowed", "confirmed_after_warning"}
                     )
                 ):
-                    raise DocumentAuthorityError(
-                        "document_authority_registration_validation_blocked"
-                    )
+                    blocked_entries.append({
+                        "role": role,
+                        "source_entry_id": registration.entry.entry_id,
+                        "filename": str(candidate.get("filename") or ""),
+                        "technical_status": str(validation.technical_status),
+                        "content_status": str(validation.content_status),
+                        "use_status": str(validation.use_status),
+                        "revision": int(getattr(validation, "revision", 1) or 1),
+                    })
+                    continue
             claim = (role, binding_kind, str(candidate["candidate_id"]))
             item = {
                 "role": role,
@@ -1018,6 +1026,16 @@ def promote_document_authority_from_jobs(
                 item["supplementary_source_entry_ids"] = (
                     supplement_entry_ids_by_role.get(item["role"], [])
                 )
+        if blocked_entries:
+            return {
+                "state": "needs_user_input",
+                "authority_status": "not_promoted",
+                "user_question": (
+                    "部分文件内容与预期上下文不一致，需要您逐项核对后"
+                    "确认沿用；确认后监查链路将继续。"
+                ),
+                "content_confirmations": blocked_entries,
+            }
         receipt = {
             "schema_version": PROMOTION_RECEIPT_SCHEMA_VERSION,
             "batch_id": resolution["batch_id"],
