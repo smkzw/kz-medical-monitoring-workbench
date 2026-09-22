@@ -2407,17 +2407,22 @@ def test_user_role_selection_overrides_unresolved_role() -> None:
     assert by_role["protocol"]["user_adjudicated"] is True
     assert by_role["sap"]["status"] == "missing"
 
-    # 未知角色或未知候选：fail-closed
-    for bad in (
-        [{"role": "protocol", "candidate_id": "mmcandidate_zzz"}],
-        [{"role": "ecrf", "candidate_id": "mmcandidate_a"}],
-    ):
-        try:
-            _apply_user_role_selections(resolved, bad, batch)
-        except DocumentAuthorityError:
-            pass
-        else:
-            raise AssertionError("invalid selection must fail closed")
+    # 未知候选：fail-closed（数据完整性不容忍）
+    try:
+        _apply_user_role_selections(
+            resolved, [{"role": "protocol", "candidate_id": "mmcandidate_zzz"}], batch
+        )
+    except DocumentAuthorityError:
+        pass
+    else:
+        raise AssertionError("unknown candidate must fail closed")
+    # 过期裁决（角色已自动收敛）：静默忽略，不再报错
+    stale = _apply_user_role_selections(
+        resolved, [{"role": "ecrf", "candidate_id": "mmcandidate_a"}], batch
+    )
+    assert stale["unresolved_roles"] == ["protocol", "sap"]
+    ecrf_item = [i for i in stale["resolved_roles"] if i["role"] == "ecrf"][0]
+    assert ecrf_item.get("user_adjudicated") is not True
 
 
 def test_user_selections_persist_and_reload(tmp_path) -> None:
