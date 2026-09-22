@@ -1603,3 +1603,17 @@ W00证据位于`../../tasks/09-22-mm-delivery-replan/evidence/{route-lock,projec
 未完成：W01仍是partial；W02的完整GUI晋升→resolver→mapping→facts链未走通；A09及A10-A15要求的完整实际API/浏览器证据未齐；EX invalid_ai_output的D02真实双模型修订未执行；远程MiniMax/GLM可用性未在本会话复核；五项目、增量、报告、备份恢复、一键启动和最终验收均未开始或未完成。不得把本切片标记为交付完成。
 
 暂停现场：goal按用户指令置paused；8911保持停止。隔离8920与5178在记录提交后停止；临床原件、运行库、隔离导入副本、历史回执均保留；未跟踪旧包`medical-monitoring-delivery-0922.zip`未纳入提交。恢复后先读`status.json`和`evidence/W02-decision-and-intake-slice.json`，核实批准远程双路线且不得自动启用MTPLX，再在隔离运行库完成一次真实文档→映射循环，集中取得A09/A12/A15/D02/D03证据。
+
+### 2026-09-22 W02 研究身份先验阻断与当前双路线实证
+
+执行机制：本切片由主线程单一所有者完成同一文档权威链的修复和验证；尚未关闭W02，也不把模型一致意见代替产品验收。源码提交`5dc01f9`。
+
+问题与修复：真实隔离运行中，SAR项目上传CSU方案和eCRF指南时，旧流程先讨论“指南是否算eCRF”，没有先阻断研究归属错误。现将当前项目编号、名称、适应症、药物、阶段及方案版本冻结进候选批次，批次ID也绑定该context。MiniMax/GLM旧目标没有自动回切；新作业严格使用W00当前已批准并以回执核实的`opencode-go/mimo-v2.6-flash`主分析和`opencode-go/deepseek-flash`盲核。两路首轮分别核对同一冻结项目身份并引用真实候选locator；任一路给出有证据的mismatch即在文件角色裁决前停止，不按主模型、票数或置信度放行。进一步把身份门移到用户选择落盘之前，错研究资料不会留下角色决定。
+
+真实API证据：隔离项目`proj_user_b6f785a59868`期望季节性过敏性鼻炎，上传的两份CSU文档形成批次`mmbatch_a60f702dd136adfd1ef5c648`，冻结context SHA为`39b9db70...5f00`。两条独立作业均一次完成，请求、响应和observed model逐字匹配，各自引用两份候选并判断mismatch；公开API返回“研究资料与当前项目不一致”，说明本次不会用于当前项目。安全摘要已并入`evidence/W02-decision-and-intake-slice.json`。
+
+用户负担：系统现在优先处理最严重的“资料属于另一研究”，不会先要求用户理解eCRF指南/表单等工程化角色争议。错误资料不能靠“确认沿用”进入后续事实或医学分析。缺少足够研究标识时显示“系统还无法确认资料归属”，要求补一份能标识项目的方案或病例报告表。
+
+验证：受影响Python文件编译通过；文档权威、作业/回放、补丁修复、R7接入、启动恢复及EX修复定向测试共146项通过（49条既有deprecation warning）；`git diff --check`通过。合成CSU listing的实际产品模型EX模块恢复另保留573行、10域、60字段（含5个EX字段），全字段保留且未把已上传资料复核交用户，但它不是API/浏览器验收，因此D02仅partial。
+
+限制：Chrome扩展未启用file URL access，ego浏览器无法操作文件选择器；本次真实multipart上传走同一隔离localhost API，随后单独检查浏览器界面。不能声称浏览器已显示错研究提示。W01/W02均仍进行中；完整GUI晋升→resolver→mapping→facts、浏览器警告、实际API EX修复和其余决策矩阵仍待完成。下一步必须换用身份正确的隔离MG项目继续，不能复用故意错配的SAR项目，也不能自动加载本地Qwen/MTPLX。8911继续保持停止。
