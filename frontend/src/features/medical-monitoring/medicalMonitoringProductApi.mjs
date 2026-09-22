@@ -489,6 +489,19 @@ export function createMedicalMonitoringProductApi({
       );
     },
 
+    confirmContentValidation(projectId, sourceEntryId, { reason, acknowledgedCheckCodes = [], expectedRevision, idempotencyKey, signal } = {}) {
+      return post(
+        `/api/projects/${requireId(projectId, "projectId")}/sources/${requireId(sourceEntryId, "sourceEntryId")}/content-validation/confirm`,
+        {
+          reason: reason || "",
+          acknowledged_check_codes: acknowledgedCheckCodes,
+          expected_revision: expectedRevision,
+          idempotency_key: idempotencyKey,
+        },
+        { signal },
+      );
+    },
+
     startDataAdmissionMappingCandidates(projectId, attemptId, { signal } = {}) {
       return post(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionMappingCandidates(
         requireId(projectId, "projectId"),

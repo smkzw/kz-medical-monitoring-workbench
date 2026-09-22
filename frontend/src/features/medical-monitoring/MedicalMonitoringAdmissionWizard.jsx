@@ -56,7 +56,7 @@ function mappingTypeText(value) {
   })[value] || "类型待定";
 }
 
-function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate }) {
+function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onContentConfirm }) {
   const [choices, setChoices] = useState({});
   if (!state || (state.phase === "loading" && !state.payload)) {
     return <p className="monitoring-admission-loading" role="status">正在核对研究文档…</p>;
@@ -83,6 +83,28 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate }) {
           </li>
         ))}
       </ul>
+      {(payload.content_confirmations || []).length ? (
+        <fieldset className="monitoring-admission-user-choices">
+          <legend>内容核对确认（逐项核对后确认沿用）</legend>
+          {(payload.content_confirmations || []).map((entry) => (
+            <div key={entry.source_entry_id} role="group" aria-label={`内容核对：${entry.filename}`}>
+              <strong>{entry.filename}</strong>
+              <small>
+                {" "}角色 {entry.role} · 内容核对：{entry.content_status} · 使用状态：{entry.use_status}
+              </small>
+              <button
+                type="button"
+                className="monitoring-admission-secondary"
+                disabled={processing}
+                onClick={() => onContentConfirm?.(entry)}
+                title="我已核对该文件内容，确认按当前内容沿用"
+              >
+                我已核对，确认沿用
+              </button>
+            </div>
+          ))}
+        </fieldset>
+      ) : null}
       {userChoices.length ? (
         <fieldset className="monitoring-admission-user-choices">
           <legend>请确认每个文件角色对应的文件（医学判断以您为准）</legend>
@@ -338,6 +360,7 @@ export function MedicalMonitoringAdmissionWizardView({
   onDocumentFiles,
   onDocumentRetry,
   onDocumentAdjudicate,
+  onDocumentContentConfirm,
 }) {
   const phase = state?.phase || "input";
   const stepIndex = state?.stepIndex || 0;
@@ -504,6 +527,7 @@ export function MedicalMonitoringAdmissionWizardView({
               onFiles={onDocumentFiles}
               onRetry={onDocumentRetry}
               onAdjudicate={onDocumentAdjudicate}
+              onContentConfirm={onDocumentContentConfirm}
             />
             {documentState?.payload?.ready ? (
               <MappingConfirmPanel
@@ -696,6 +720,34 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           error: error?.detail?.message || error?.message || "裁决提交失败，请重试。",
         }));
       }
+    }
+  }, [api, documentState.payload?.analysis_token, state.attemptId, state.projectId]);
+
+  const submitContentConfirmation = useCallback(async (entry) => {
+    if (!state.projectId || !entry?.source_entry_id) return;
+    try {
+      await api.confirmContentValidation(state.projectId, entry.source_entry_id, {
+        reason: "医学核对后确认按当前内容沿用（文件角色裁决环节）。",
+        acknowledgedCheckCodes: [],
+        expectedRevision: entry.revision || 1,
+        idempotencyKey: `doc-content-confirm-${entry.source_entry_id}-${entry.revision || 1}`,
+      });
+      // 确认后重发resolve推进链路
+      const payload = await api.resolveStudyDocuments(
+        state.projectId,
+        state.attemptId,
+        documentState.payload?.analysis_token,
+      );
+      setDocumentState({
+        phase: payload.ready ? "ready" : (payload.state || "analyzing"),
+        payload,
+        error: null,
+      });
+    } catch (error) {
+      setDocumentState((current) => ({
+        ...current,
+        error: error?.detail?.message || error?.message || "内容确认失败，请重试。",
+      }));
     }
   }, [api, documentState.payload?.analysis_token, state.attemptId, state.projectId]);
 
@@ -1054,6 +1106,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onDocumentFiles={analyzeDocuments}
       onDocumentRetry={loadDocumentReadiness}
       onDocumentAdjudicate={submitDocumentAdjudication}
+      onDocumentContentConfirm={submitContentConfirmation}
     />
     </>
   );

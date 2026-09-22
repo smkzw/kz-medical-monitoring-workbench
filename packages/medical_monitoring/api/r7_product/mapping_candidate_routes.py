@@ -743,6 +743,14 @@ def register_mapping_candidate_routes(
                 }
                 if user_choices:
                     response_payload["user_choices"] = user_choices
+                content_confirmations = result.get("content_confirmations") or []
+                if content_confirmations:
+                    response_payload["content_confirmations"] = content_confirmations
+                    response_payload["headline"] = "需要您核对文件内容"
+                    response_payload["guidance"] = (
+                        "部分文件内容与预期上下文不一致。请逐项核对后"
+                        "确认沿用，或更换文件后重新上传。"
+                    )
                 return response_payload
             for registration in result.get("registrations", ()):
                 pipeline.select_document(
