@@ -219,6 +219,36 @@ def test_patch_repair_rebuilds_mapping_conclusions_and_false_questions(
     assert len(repair_payload["patch_contract"]["violating_fields"]) == 2
 
 
+def test_full_repair_rewrites_candidate_approval_claim(tmp_path: Path) -> None:
+    def invalid_approval_claim(envelope: Any) -> Dict[str, Any]:
+        result = _dependency_compliant(_valid_output(envelope))
+        result["candidates"][0]["title"] = "已医学批准的正式字段映射"
+        return result
+
+    provider = FakeProvider(
+        [invalid_approval_claim, lambda envelope: _dependency_compliant(
+            _valid_output(envelope)
+        )]
+    )
+    service = _service(tmp_path, provider)
+    service.evidence_tool_factory = _patch_factory()
+    _submit_v71(service)
+
+    result = service.run_next("worker-approval-boundary")
+
+    assert result.job is not None
+    assert result.job.status == MonitoringAiJobStatus.COMPLETED, (
+        result.job.failure_message
+    )
+    repair_payload = provider.envelopes[1].payload
+    assert "patch_contract" not in repair_payload
+    instruction = repair_payload["repair_contract"]["instruction"]
+    assert "不得把模型候选描述为已批准、已确认、正式结论、最终结论" in (
+        instruction
+    )
+    assert "不得通过删除候选或字段来规避校验" in instruction
+
+
 def test_patch_repair_rejects_unknown_target(tmp_path: Path) -> None:
     def patch_with_unknown_field(envelope: Any) -> Dict[str, Any]:
         patch = _patch_fixing_field_zero(envelope)
