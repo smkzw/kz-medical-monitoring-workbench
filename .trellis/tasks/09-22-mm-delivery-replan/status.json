@@ -1,10 +1,10 @@
 {
   "schema": "mm-delivery-status-v1",
-  "updated_at": "2026-09-22T16:31:00+08:00",
+  "updated_at": "2026-09-22T16:43:14+08:00",
   "planning_status": "complete",
   "product_status": "not_delivered",
   "goal_status": "active",
-  "source_head": "a7217af080b96896bdc4cbc9317cb139e4386569",
+  "source_head": "02aecf956c98961f89d751249bb0b8586572cd2f",
   "next_work_package": "W01",
   "work_packages": [
     {
@@ -92,16 +92,20 @@
   "acceptance": [
     {
       "id": "0922V2-A01",
-      "status": "not_executed",
-      "head": null,
-      "evidence": [],
-      "reason": "Current review probes are not the specified complete product acceptance."
+      "status": "partial_verified",
+      "head": "02aecf956c98961f89d751249bb0b8586572cd2f",
+      "evidence": [
+        "evidence/W01-immutable-read-slice.json"
+      ],
+      "reason": "A fresh isolated runtime created its first monitoring project and imported the real MG listing through the browser: 1 file, 62 tables and 148788 rows, with immutable first-listing identity binding and no AI job. The required facts/publication/result browser chain is not yet complete."
     },
     {
       "id": "0922V2-A02",
       "status": "partial_verified",
       "head": "1ce3437ed0a1cae844c5e6d27224b90a67778bde",
-      "evidence": ["evidence/W01-immutable-read-slice.json"],
+      "evidence": [
+        "evidence/W01-immutable-read-slice.json"
+      ],
       "reason": "A second facts project registered after application composition and completed the immutable public API chain without restart or fallback; the test provisioned its frozen facts artifacts directly, so the separate UI/import materialization step remains unverified."
     },
     {
@@ -115,7 +119,9 @@
       "id": "0922V2-A04",
       "status": "passed",
       "head": "1ce3437ed0a1cae844c5e6d27224b90a67778bde",
-      "evidence": ["evidence/W01-immutable-read-slice.json"],
+      "evidence": [
+        "evidence/W01-immutable-read-slice.json"
+      ],
       "reason": "After project B publication, project A's historical result token returned the identical frozen response and failed closed under project B."
     },
     {
@@ -143,7 +149,9 @@
       "id": "0922V2-A08",
       "status": "passed",
       "head": "1ce3437ed0a1cae844c5e6d27224b90a67778bde",
-      "evidence": ["evidence/W01-immutable-read-slice.json"],
+      "evidence": [
+        "evidence/W01-immutable-read-slice.json"
+      ],
       "reason": "Twenty-four concurrent actual API reads stayed identical and rows/meta reconciled while the active findings pointer was continuously rewritten."
     },
     {
@@ -262,7 +270,9 @@
       "id": "0922V2-A25",
       "status": "passed",
       "head": "1ce3437ed0a1cae844c5e6d27224b90a67778bde",
-      "evidence": ["evidence/W01-immutable-read-slice.json"],
+      "evidence": [
+        "evidence/W01-immutable-read-slice.json"
+      ],
       "reason": "A real build_subject_evidence job completed through repository/resolver/worker unchanged; value and type mutations became stale_input before provider invocation."
     },
     {
@@ -529,5 +539,5 @@
       "reason": "Current review probes are not the specified complete product acceptance."
     }
   ],
-  "next_action": "Continue W01 by repairing the isolated frontend runtime and executing cold-start, same-subject cross-project, and source-byte browser acceptance; do not mark W01 complete from backend acceptance alone."
+  "next_action": "Continue W01 with an isolated immutable published-result browser fixture: complete A01 result read, A03 same-SUBJID cross-project isolation, and D05 exact source-byte/version drilldown without invoking or substituting any model; then close W01 only if all remaining module/API negative cases are evidenced."
 }

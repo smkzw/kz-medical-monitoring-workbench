@@ -1579,3 +1579,11 @@ W00证据位于`../../tasks/09-22-mm-delivery-replan/evidence/{route-lock,projec
 公开结果并发验收在真实API上持续改写`aemh-findings.active.json`，同时并行读取24次历史结果；每次finding、meta、artifact identity及总数均来自同一已发布ModeOutput对象，响应与基准逐对象一致。A08通过。
 
 正式facts AI freshness不再按目录最大mtime读取active或复用进程domains缓存；resolver从job的`facts:<snapshot>`锁定版本化manifest，每次worker领取前重新校验manifest与源文件字节。真实`build_subject_evidence`证据创建repository job后，未变源完成；AE值变化及字符串→数值类型变化均在provider调用前转`stale_input_revision`。A25通过。集中事实/API组137项、worker freshness组4项通过；提交`1ce3437`。W01后端尚未替代浏览器验收，下一步修复隔离前端并完成A01/A03/D05的浏览器部分。
+
+### 2026-09-22 W01冷启动浏览器接入与首次研究身份绑定
+
+修复首次用户建项的临时`MW-*`编号与真实listing `STUDYID`必然冲突：仅`user_created_from_zero`、自动`MW-*`、`*-DRAFT`、草案版本项目可从第一份完整listing采纳唯一研究身份；绑定以不可变domain object保存，后续不同研究资料明确拒绝。身份门前仅在内存准备revision/snapshot/locator，跨研究拒绝实测三类写入均为0；多研究ID和legacy revalidate不允许采纳。提交`02aecf9`，准入文件33项通过。相邻扩展探针114项通过，1项旧mapping retry夹具因repository double缺少`candidates()`失败，调用栈不经过本改动，未计为本修复回归也未宣称全套通过。
+
+隔离后端8920使用`/tmp/mm-w01-browser-runtime-20260922-v2`，8911保持停止。ego(lite)真实操作从空runtime创建首个医学监查项目并导入MG只读隔离副本：1文件、62表、148,788行，attempt=`stg-a45f1a60278a4752b28eabde4f5b4676`，状态`profile_ready`，identity=`adopted`，binding v1；原件与副本SHA-256均为`e711c52f...f4a3`。库内1 source revision、62 snapshots、62 locator indexes；AI jobs=0，未调用本地Qwen。A01仅冷启动导入部分达到，facts→publication→result浏览器链未完成，仍为partial。
+
+视觉实测同时确认W02必须降负担：第二步把62张表全部纵向展开，页面极长；确定性候选还把TOC标签等误标为受试者标识。后续必须让双模型先完成表/列全局语义理解，自动接受高可信结论，只把少量真实且可行动的分歧以医学中文呈现给用户。当前未点击“下一步：核对系统识别”，避免在双远程路线未核实前触发任何本地降级。

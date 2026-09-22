@@ -1,8 +1,8 @@
 {
   "schema": "mm-w01-evidence-v1",
-  "recorded_at": "2026-09-22T16:31:00+08:00",
+  "recorded_at": "2026-09-22T16:43:14+08:00",
   "state": "partial_verified",
-  "source_head": "a7217af080b96896bdc4cbc9317cb139e4386569",
+  "source_head": "02aecf956c98961f89d751249bb0b8586572cd2f",
   "scope": [
     "materialization writes active and immutable versioned facts manifests",
     "facts reads bind project and requested snapshot without GET writes",
@@ -39,11 +39,42 @@
       "sources": 148193,
       "stored_and_rebuilt_r5_digest": "ce91b07575316c1c9800819423336ec1fdebd527acefda7a6cc22f2996d4e265",
       "manifest_sha256_before_after": "3d905b57c42ad3dad1c4850391b488b6ef898e907d98c4bab45b8203258c9f3b"
+    },
+    "provisional_identity_admission": {
+      "commit": "02aecf956c98961f89d751249bb0b8586572cd2f",
+      "focused_pytest": "33 passed",
+      "py_compile": "passed",
+      "git_diff_check": "passed",
+      "rejected_cross_study_writes": {
+        "source_revisions": 0,
+        "listing_snapshots": 0,
+        "locator_indexes": 0
+      },
+      "adjacent_probe": "114 passed, 1 failed in an unrelated pre-existing mapping retry fixture whose repository double lacks candidates()"
+    },
+    "browser_cold_start_import": {
+      "runtime": "/tmp/mm-w01-browser-runtime-20260922-v2",
+      "project_id": "proj_user_b6f785a59868",
+      "attempt_id": "stg-a45f1a60278a4752b28eabde4f5b4676",
+      "state": "profile_ready",
+      "files": 1,
+      "tables": 62,
+      "rows": 148788,
+      "source_sha256": "e711c52fa4b41ed77270bfadefa56018a9576afe42fd2ef051e2230c6e03f4a3",
+      "source_copy_matches_original": true,
+      "project_identity_status": "adopted",
+      "identity_binding_version": 1,
+      "source_revisions": 1,
+      "listing_snapshots": 62,
+      "locator_indexes": 62,
+      "monitoring_ai_jobs": 0,
+      "local_qwen_used": false
     }
   },
   "not_yet_accepted": [
-    "isolated cold-start actual API and browser",
-    "browser source-byte acceptance"
+    "A01 full setup through facts, publication and result read in the browser; the cold-start browser import portion is verified only",
+    "A03 same-subject cross-project browser isolation",
+    "D05 browser source-byte drilldown for an immutable published result"
   ],
   "newly_verified_actual_api": [
     "two projects registered after process composition remain isolated",
@@ -54,5 +85,15 @@
     "24 concurrent public API reads remain identical while the active findings pointer is rewritten",
     "real build_subject_evidence stamps complete through repository and worker when unchanged",
     "value and type changes invalidate the claimed job before any provider call"
+  ],
+  "newly_verified_actual_browser": [
+    "an empty isolated runtime can create a first user monitoring project and import the real MG listing without a legacy SAR workspace",
+    "the provisional MW identity adopts exactly one observed study identity and persists an immutable binding before later imports",
+    "the browser renders the real 62-table, 148788-row profile while the original and isolated-copy SHA-256 remain identical",
+    "no monitoring AI job was created during deterministic profiling and no local Qwen route was invoked"
+  ],
+  "ui_observations_for_w02": [
+    "the second-step profile expands all tables into one very long page, which is too burdensome for the target user",
+    "deterministic candidate badges visibly over-classify non-subject columns such as TOC labels; W02 model-led mapping must suppress confident-noise and ask only actionable unresolved differences"
   ]
 }
