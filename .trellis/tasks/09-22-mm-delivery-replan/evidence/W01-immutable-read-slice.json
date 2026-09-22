@@ -14,7 +14,7 @@
     "py_compile": "passed",
     "git_diff_check": "passed",
     "pytest": {
-      "result": "134 passed",
+      "result": "136 passed",
       "warnings": 99,
       "command_scope": [
         "test_mm_c3_fact_materialization.py",

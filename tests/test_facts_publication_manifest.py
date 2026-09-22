@@ -26,6 +26,9 @@ from packages.medical_monitoring.projections.facts_publication import (  # noqa:
     _infer_domain_by_columns,
     _versioned_manifest_name,
 )
+from packages.medical_monitoring.api.r7_product.facts_publication_adapter import (  # noqa: E402
+    FactsProviderDispatcher,
+)
 
 
 def test_unknown_table_falls_back_to_unclassified() -> None:
@@ -243,3 +246,25 @@ def test_provider_reads_versioned_manifest_after_active_pointer_moves(
     assert any(source.canonical_location.startswith("AE!") for source in old_packet.sources)
     assert not any(source.canonical_location.startswith("LB!") for source in old_packet.sources)
     assert any(source.canonical_location.startswith("LB!") for source in new_packet.sources)
+
+
+def test_publication_dispatcher_registers_late_project_without_fallback() -> None:
+    created: list[str] = []
+
+    class Provider:
+        def get_packet(self, project_ref: str, *_: object) -> str:
+            return project_ref
+
+    def factory(project: str) -> Provider | None:
+        created.append(project)
+        return Provider() if project == "proj-late" else None
+
+    dispatcher = FactsProviderDispatcher({}, provider_factory=factory)
+    assert dispatcher.get_packet("proj-late") == "proj-late"
+    assert dispatcher.get_packet("proj-late") == "proj-late"
+    assert created == ["proj-late"]
+
+    import pytest
+
+    with pytest.raises(KeyError, match="proj-unknown"):
+        dispatcher.get_packet("proj-unknown")

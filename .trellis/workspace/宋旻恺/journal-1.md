@@ -1565,3 +1565,5 @@ W00证据位于`../../tasks/09-22-mm-delivery-replan/evidence/{route-lock,projec
 结果读取引入请求作用域`ResolvedResultContext`：四个R6输出按publication登记的content-addressed artifact IDs一次校验并载入；公开finding从该次发布的`affected_query_draft`读取，列表与meta同一对象，不再重开`aemh-findings.active.json`。main组合根改为按项目严格分派facts与mode provider，删除first-provider/SAR默认回退。
 
 集中验证：受影响模块`py_compile`及`git diff --check`通过；facts materialization/manifest/event-time/mode-output/source-digest/R7 router共134项通过（99条既有deprecation warning）。真实MG只读重建仍与已发布R5 digest逐字一致（365受试者、145,616事件、148,193来源），且manifest读前后SHA不变。W01仍为in_progress：冷启动双项目实际API、同SUBJID隔离、旧token在active切换后的公开API、并发pointer压力、共享摘要正式worker及浏览器来源字节验收尚未完成，不能标包完成。
+
+同进程新增研究组合根复核发现：初始dispatcher虽严格按项目，但只捕获进程启动时已有workspace，后物化项目仅进入裸provider缓存，adapter与mode-output映射不会同步更新。现改为惰性factory注册并缓存，未知项目仍拒绝且绝不回落到唯一项目；真实facts dispatcher即使启动时为空也保持可接入，合成fixture显式走合成provider。新增两项晚注册反例后本组集中回归为136项通过。
