@@ -1144,10 +1144,7 @@ monitoring_ai_risk_packet_resolver = MonitoringAiRiskPacketResolver(
 )
 
 
-_FACTS_DOMAINS_CACHE: dict[str, Any] = {"signature": None, "domains": None}
-
-
-def _current_facts_analysis_revision(job):
+def _current_facts_analysis_revision(job, *, snapshot_ref: str = ""):
     """Freshness for facts-lane analysis jobs.
 
     V5-01统一合同：`facts:<table>`源摘要由
@@ -1155,41 +1152,35 @@ def _current_facts_analysis_revision(job):
     唯一计算（全表冻结行内容、类型保留、版本化）——与
     ``build_subject_evidence`` 盖章共用同一函数，禁止行数式摘要回潮。
     历史作业以旧算法盖章，按新算法重算不等即判stale：策略变化不伪造
-    数据变化。domains加载缓存按V5-02含project与manifest身份（见下）。
+    数据变化。读取必须绑定job提交时的snapshot并在worker领取前重新校验
+    manifest与源文件字节；不能用active目录mtime或进程缓存替代冻结来源。
     """
     from packages.medical_monitoring.analysis.ae_mh_cross_analysis import (  # noqa: PLC0415
         facts_table_source_digest,
     )
 
-    workspace = (
-        RUNTIME_DIR / "medical_monitoring_r7" / str(job.project_id)
+    frozen_snapshot = str(snapshot_ref or "").strip()
+    if not frozen_snapshot:
+        batch_revision = str(
+            getattr(job.input_revision, "batch_revision", "") or ""
+        ).strip()
+        if batch_revision.startswith("facts:"):
+            frozen_snapshot = batch_revision[len("facts:") :]
+    if not frozen_snapshot:
+        return ""
+    provider_for_project = globals().get("_r7_facts_provider_for")
+    provider = (
+        provider_for_project(str(job.project_id))
+        if callable(provider_for_project)
+        else None
     )
-    artifacts = workspace / "runtime" / "artifacts"
-    if not artifacts.is_dir():
+    if provider is None:
         return ""
     try:
-        signature = max(
-            (path.stat().st_mtime_ns, path.name)
-            for path in artifacts.glob("*.json")
-        )
-    except (OSError, ValueError):
+        manifest, _manifest_digest = provider._read_manifest(frozen_snapshot)
+        domains = provider._load_domains(manifest)
+    except Exception:
         return ""
-    cache_key = (str(job.project_id), signature)
-    if _FACTS_DOMAINS_CACHE["signature"] != cache_key:
-        provider_for_project = globals().get("_r7_facts_provider_for")
-        provider = (
-            provider_for_project(str(job.project_id))
-            if callable(provider_for_project)
-            else None
-        )
-        try:
-            _FACTS_DOMAINS_CACHE["domains"] = (
-                provider._load_domains() if provider is not None else None
-            )
-            _FACTS_DOMAINS_CACHE["signature"] = cache_key
-        except Exception:
-            return ""
-    domains = _FACTS_DOMAINS_CACHE["domains"]
     if not isinstance(domains, dict):
         return ""
     for binding in job.input_revision.sources:
@@ -1296,7 +1287,9 @@ def _current_monitoring_ai_revision(job):
                     ).strip() == "facts-materialized"
                     and job.business_key.startswith("aemh:")
                 ):
-                    return _current_facts_analysis_revision(job)
+                    return _current_facts_analysis_revision(
+                        job, snapshot_ref=batch_id
+                    )
             return ""
         except (KeyError, ValueError):
             return ""
