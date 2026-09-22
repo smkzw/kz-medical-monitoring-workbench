@@ -12,7 +12,7 @@ yet; the S4 machinery arrives together with the dual-model analysis phase.
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from ...projections.publication.r5_publication_authority import (
     R5AuthorityPacket as R5PublicationPacket,
@@ -152,13 +152,24 @@ class FactsProviderDispatcher:
 
     fixture_mode = False
 
-    def __init__(self, providers_by_project: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        providers_by_project: dict[str, Any],
+        provider_factory: Optional[Callable[[str], Any]] = None,
+    ) -> None:
         self._providers = dict(providers_by_project)
+        self._provider_factory = provider_factory
 
     def _provider_for(self, project_ref: Any) -> Any:
         provider = self._providers.get(str(project_ref or ""))
         if provider is not None:
             return provider
+        project = str(project_ref or "")
+        if self._provider_factory is not None and project:
+            provider = self._provider_factory(project)
+            if provider is not None:
+                self._providers[project] = provider
+                return provider
         raise KeyError(
             f"no materialized facts provider for project {project_ref!r} "
             f"(available: {sorted(self._providers)})"

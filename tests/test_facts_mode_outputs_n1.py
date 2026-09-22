@@ -453,6 +453,29 @@ def test_dispatcher_never_falls_back_to_only_registered_project(
         )
 
 
+def test_dispatcher_registers_late_materialized_project_once(
+    artifacts: Path,
+) -> None:
+    created: list[str] = []
+
+    def factory(project: str) -> FactsModeOutputProvider | None:
+        created.append(project)
+        if project != "proj-late":
+            return None
+        return FactsModeOutputProvider(artifacts, project_ref=project)
+
+    dispatcher = FactsModeOutputDispatcher({}, provider_factory=factory)
+    first = dispatcher.public_findings_envelope(
+        projection={}, project_ref="proj-late", snapshot_ref="s"
+    )
+    second = dispatcher.public_findings_envelope(
+        projection={}, project_ref="proj-late", snapshot_ref="s"
+    )
+    assert first["meta"]["state"] == "missing"
+    assert second["meta"]["state"] == "missing"
+    assert created == ["proj-late"]
+
+
 def test_resolved_context_reads_findings_from_committed_mode_output() -> None:
     class Closable:
         def close(self) -> None:

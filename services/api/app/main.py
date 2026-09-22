@@ -3897,7 +3897,7 @@ def _r7_real_setup_inputs(canonical_project_id: str):
     from packages.medical_monitoring.runtime import run_setup as _rs
 
     workspace = RUNTIME_DIR / "medical_monitoring_r7" / canonical_project_id
-    provider = _r7_facts_providers_by_project.get(canonical_project_id)
+    provider = _r7_facts_provider_for(canonical_project_id)
     if (
         provider is None
         or not (workspace / "runtime" / "artifacts").is_dir()
@@ -3963,36 +3963,69 @@ def _r7_real_setup_inputs(canonical_project_id: str):
     return (snapshot,), ()
 
 
-_r7_facts_mode_output_provider = None
-_r7_facts_publication_adapter = None
-if _r7_facts_providers_by_project:
-    from packages.medical_monitoring.api.r7_product.facts_mode_outputs import (  # noqa: E402
-        FactsModeOutputDispatcher as _FactsModeOutputDispatcher,
-        FactsModeOutputProvider as _FactsModeOutputProvider,
-    )
-    from packages.medical_monitoring.api.r7_product.facts_publication_adapter import (  # noqa: E402
-        FactsPublicationAdapter as _FactsPublicationAdapter,
-        FactsProviderDispatcher as _FactsProviderDispatcher,
-    )
+from packages.medical_monitoring.api.r7_product.facts_mode_outputs import (  # noqa: E402
+    FactsModeOutputDispatcher as _FactsModeOutputDispatcher,
+    FactsModeOutputProvider as _FactsModeOutputProvider,
+)
+from packages.medical_monitoring.api.r7_product.facts_publication_adapter import (  # noqa: E402
+    FactsPublicationAdapter as _FactsPublicationAdapter,
+    FactsProviderDispatcher as _FactsProviderDispatcher,
+)
 
-    _r7_facts_adapters_by_project = {
-        project: _FactsPublicationAdapter(provider)
-        for project, provider in _r7_facts_providers_by_project.items()
-    }
-    _r7_facts_publication_adapter = _FactsProviderDispatcher(
-        _r7_facts_adapters_by_project
+_r7_facts_adapters_by_project = {
+    project: _FactsPublicationAdapter(provider)
+    for project, provider in _r7_facts_providers_by_project.items()
+}
+
+
+def _r7_facts_adapter_for(project_id: str):
+    project = str(project_id)
+    adapter = _r7_facts_adapters_by_project.get(project)
+    if adapter is not None:
+        return adapter
+    provider = _r7_facts_provider_for(project)
+    if provider is None:
+        return None
+    adapter = _FactsPublicationAdapter(provider)
+    _r7_facts_adapters_by_project[project] = adapter
+    return adapter
+
+
+_r7_facts_publication_adapter = _FactsProviderDispatcher(
+    _r7_facts_adapters_by_project,
+    provider_factory=_r7_facts_adapter_for,
+)
+_r7_facts_mode_outputs_by_project = {
+    project: _FactsModeOutputProvider(
+        _r7_facts_root / project / "runtime" / "artifacts",
+        domains_loader=provider._load_domains,
+        project_ref=project,
     )
-    _r7_facts_mode_outputs_by_project = {
-        project: _FactsModeOutputProvider(
-            _r7_facts_root / project / "runtime" / "artifacts",
-            domains_loader=provider._load_domains,
-            project_ref=project,
-        )
-        for project, provider in _r7_facts_providers_by_project.items()
-    }
-    _r7_facts_mode_output_provider = _FactsModeOutputDispatcher(
-        _r7_facts_mode_outputs_by_project
+    for project, provider in _r7_facts_providers_by_project.items()
+}
+
+
+def _r7_facts_mode_output_for(project_id: str):
+    project = str(project_id)
+    output = _r7_facts_mode_outputs_by_project.get(project)
+    if output is not None:
+        return output
+    provider = _r7_facts_provider_for(project)
+    if provider is None:
+        return None
+    output = _FactsModeOutputProvider(
+        _r7_facts_root / project / "runtime" / "artifacts",
+        domains_loader=provider._load_domains,
+        project_ref=project,
     )
+    _r7_facts_mode_outputs_by_project[project] = output
+    return output
+
+
+_r7_facts_mode_output_provider = _FactsModeOutputDispatcher(
+    _r7_facts_mode_outputs_by_project,
+    provider_factory=_r7_facts_mode_output_for,
+)
 
 
 def _resolve_synthetic_product_principal(request: Request) -> MonitoringAuthenticatedPrincipal | None:
@@ -4013,9 +4046,9 @@ def _resolve_r7_product_project(project_id: str) -> str:
 app.include_router(
     create_medical_monitoring_r5_product_router(
         authority_provider=(
-            _r7_facts_publication_adapter
-            if _r7_facts_publication_adapter is not None
-            else None
+            _r7_synthetic_publication_provider
+            if _r5_s7_fixture_mode
+            else _r7_facts_publication_adapter
         ),
         principal_resolver=_resolve_synthetic_product_principal,
         require_server_principal=True,
@@ -4130,14 +4163,14 @@ app.include_router(
         principal_resolver=_resolve_synthetic_product_principal,
         require_server_principal=True,
         publication_authority_provider=(
-            _r7_facts_publication_adapter
-            if _r7_facts_publication_adapter is not None
-            else _r7_synthetic_publication_provider
+            _r7_synthetic_publication_provider
+            if _r5_s7_fixture_mode
+            else _r7_facts_publication_adapter
         ),
         r6_output_provider=(
-            _r7_facts_mode_output_provider
-            if _r7_facts_mode_output_provider is not None
-            else _r7_synthetic_mode_output_provider
+            _r7_synthetic_mode_output_provider
+            if _r5_s7_fixture_mode
+            else _r7_facts_mode_output_provider
         ),
         admission_pipeline=DataAdmissionPipeline(
             parse_listing_file,

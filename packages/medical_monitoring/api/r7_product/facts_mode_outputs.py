@@ -914,17 +914,28 @@ class FactsModeOutputProvider:
 class FactsModeOutputDispatcher:
     """Resolve every mode/findings read by its explicit project identity."""
 
-    def __init__(self, providers_by_project: Mapping[str, FactsModeOutputProvider]) -> None:
+    def __init__(
+        self,
+        providers_by_project: Mapping[str, FactsModeOutputProvider],
+        provider_factory: Optional[
+            Callable[[str], Optional[FactsModeOutputProvider]]
+        ] = None,
+    ) -> None:
         self._providers = dict(providers_by_project)
+        self._provider_factory = provider_factory
 
     def _provider_for(self, project_ref: Any) -> FactsModeOutputProvider:
         project = str(project_ref or "")
-        try:
-            return self._providers[project]
-        except KeyError as exc:
+        provider = self._providers.get(project)
+        if provider is None and self._provider_factory is not None and project:
+            provider = self._provider_factory(project)
+            if provider is not None:
+                self._providers[project] = provider
+        if provider is None:
             raise KeyError(
                 f"no facts mode provider for project {project!r}"
-            ) from exc
+            )
+        return provider
 
     def get_mode_outputs(
         self,
