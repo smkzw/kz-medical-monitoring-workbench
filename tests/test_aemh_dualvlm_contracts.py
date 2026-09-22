@@ -165,11 +165,11 @@ def test_merge_four_states_with_technical_wording() -> None:
         "state": "escalated",
         "primary": {
             "title": "线索A",
-            "text": "主侧单方线索A",
+            "text": "主侧单方线索A：存在异常需关注",
             "domains": ["AE"],
             "payload": {
                 "claims": [
-                    {"text": "主侧单方线索A", "evidence_ids": ["ev-ae-1"]}
+                    {"text": "主侧单方线索A：存在异常需关注", "evidence_ids": ["ev-ae-1"]}
                 ]
             },
         },
@@ -193,9 +193,11 @@ def test_merge_four_states_with_technical_wording() -> None:
         )[0]
 
     # confirmed：对侧一致候选 → accepted
+    # V5-06：确认要求双侧立场都明确正向——fixture补方向词
+    # （旧fixture"对侧确认线索A"无方向词，收紧后为escalated属预期）。
     confirmed_repo = _repo_with(
         "completed",
-        [_candidate("fv-c1", "线索A", "对侧确认线索A")],
+        [_candidate("fv-c1", "线索A", "对侧确认：存在线索A所述异常，需关注")],
     )
     item = _run(confirmed_repo, {"fid-1": "fv-1"})
     assert item["state"] == "accepted"
@@ -361,6 +363,9 @@ def test_clues_agree_rejects_opposite_direction_on_same_evidence():
     affirmative = Clue("CM指征与AE可能不匹配", "CM指征提示本研究疾病但AE未记录，存在漏报可能", shared)
     assert _clues_agree(positive, affirmative), "同方向同证据应判一致"
 
-    # neutral方向不否决
+    # V5-06修订（行为依据：词频方向不能当确认依据）：neutral=无法判定
+    # 方向，不得作为确认基础——保守升级为可见分歧交人工/定向核实。
     neutral = Clue("两记录涉及同一受试者", "两条记录引用同一受试者编号", shared)
-    assert _clues_agree(positive, neutral), "neutral方向不做方向否决"
+    assert not _clues_agree(positive, neutral), (
+        "neutral方向不得确认（V5-06）"
+    )

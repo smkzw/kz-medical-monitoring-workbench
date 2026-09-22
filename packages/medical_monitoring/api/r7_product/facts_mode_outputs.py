@@ -396,19 +396,38 @@ class FactsModeOutputProvider:
         真实形态：observations=观察事实条目；data_gaps=资料缺口条目；
         recommended_review=推荐核实（非医学终审）。每条目挂payload级
         evidence_ids（观察所引原始记录）；兼容claims[]嵌套形态。
+        V5-07：text完整保留（不再[:400]硬切——尾部限定/否定不能丢）；
+        相同文字跨side/kind不丢弃，合并为同一条并保留sides/kinds与
+        evidence并集（provenance集合）。
         """
 
         claims_out: list[dict[str, Any]] = []
-        seen_texts: set[str] = set()
+        by_text: dict[str, dict[str, Any]] = {}
 
-        def _add(text: str, kind: str, eids: list[str]) -> None:
+        def _add(text: str, kind: str, eids: list[str], side: str) -> None:
             text = text.strip()
-            if not text or text in seen_texts:
+            if not text:
                 return
-            seen_texts.add(text)
-            claims_out.append(
-                {"text": text[:400], "kind": kind, "evidence_ids": eids}
-            )
+            existing = by_text.get(text)
+            if existing is None:
+                record = {
+                    "text": text,
+                    "kind": kind,
+                    "evidence_ids": list(dict.fromkeys(eids)),
+                    "sides": [side] if side in ("primary", "verifier") else [],
+                    "kinds": [kind] if kind else [],
+                }
+                by_text[text] = record
+                claims_out.append(record)
+                return
+            # 同文不同来源/kind：合并保留provenance，不丢另一侧
+            for eid in eids:
+                if eid and eid not in existing["evidence_ids"]:
+                    existing["evidence_ids"].append(eid)
+            if kind and kind not in existing["kinds"]:
+                existing["kinds"].append(kind)
+            if side in ("primary", "verifier") and side not in existing["sides"]:
+                existing["sides"].append(side)
 
         for side in ("primary", "verifier"):
             cohort = item.get(side) or {}
@@ -417,18 +436,19 @@ class FactsModeOutputProvider:
                 continue
             pooled = [str(e) for e in (payload.get("evidence_ids") or [])]
             for observation in (payload.get("observations") or []):
-                _add(str(observation), "observation", pooled)
+                _add(str(observation), "observation", pooled, side)
             for claim in (payload.get("claims") or []):
                 _add(
                     str(claim.get("text", "")),
                     str(claim.get("kind", "")),
                     [str(e) for e in (claim.get("evidence_ids") or [])],
+                    side,
                 )
             for gap in (payload.get("data_gaps") or []):
-                _add(str(gap), "data_gap", [])
+                _add(str(gap), "data_gap", [], side)
             recommended = payload.get("recommended_review") or ""
             if isinstance(recommended, str) and recommended.strip():
-                _add(recommended, "recommended_review", [])
+                _add(recommended, "recommended_review", [], side)
         return claims_out
 
     def public_findings_meta(
