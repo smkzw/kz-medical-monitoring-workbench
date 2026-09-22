@@ -670,7 +670,27 @@ def register_mapping_candidate_routes(
                 **payload.model_dump(),
             )
             if result.get("state") == "failed":
-                return _mapping_error("mapping_document_authority_incomplete")
+                # V5会商L2-1：失败必须可诊断。作业级failure_code/message
+                # 透传给前端与台账，不再用同一句通用文案掩盖差异。
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "code": "mapping_document_authority_failed",
+                        "message": (
+                            "研究文件自动核对未完成（见诊断信息）；"
+                            "可对文件角色作出裁决后重试，或重新上传文件。"
+                        ),
+                        "detail": {
+                            "failure_code": str(result.get("failure_code") or ""),
+                            "failure_message": str(
+                                result.get("failure_message") or ""
+                            )[:400],
+                            "failed_jobs": list(result.get("failed_jobs", ()) or []),
+                        },
+                        "project_id": canonical,
+                        "state": "failed",
+                    },
+                )
             if result.get("authority_status") != "promoted":
                 state = str(result.get("state") or "analyzing")
                 user_choices = result.get("user_choices") or []
@@ -738,8 +758,33 @@ def register_mapping_candidate_routes(
                 workspace_dir=context.workspace_dir(context.root, canonical),
             )
             return {"project_id": canonical, **dict(readiness)}
-        except Exception:
-            return _mapping_error("mapping_document_authority_incomplete")
+        except DocumentAuthorityError as exc:
+            # V5会商L2-1：DocumentAuthorityError携带精确错误码（如
+            # document_authority_job_attempt_invalid）——透传而非吞噬。
+            diagnostic = str(exc).strip() or "document_authority_error"
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "code": "mapping_document_authority_failed",
+                    "message": (
+                        "研究文件自动核对未完成（诊断：" + diagnostic
+                        + "）；可对文件角色作出裁决后重试。"
+                    ),
+                    "detail": {"error_code": diagnostic},
+                    "project_id": canonical,
+                    "state": "failed",
+                },
+            )
+        except Exception as exc:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "code": "mapping_document_authority_error",
+                    "message": "研究文件核对发生未预期错误，请重试或反馈。",
+                    "detail": {"error_type": type(exc).__name__},
+                    "project_id": canonical,
+                },
+            )
         finally:
             write_permit.release()
 

@@ -517,7 +517,35 @@ class MonitoringDocumentAuthorityWorkflow:
         if any(job.status in _ACTIVE for job in jobs):
             return {"state": active_state, "authority_status": "not_promoted"}
         if any(job.status != MonitoringAiJobStatus.COMPLETED for job in jobs):
-            return {"state": "failed", "authority_status": "not_promoted"}
+            # V5会商L2-1：失败必须可诊断——携带作业级错误码与消息透传。
+            failed_jobs = [
+                {
+                    "business_key": str(job.business_key),
+                    "status": str(job.status.value)
+                    if hasattr(job.status, "value")
+                    else str(job.status),
+                    "failure_code": str(getattr(job, "failure_code", "") or ""),
+                    "failure_message": str(
+                        getattr(job, "failure_message", "") or ""
+                    )[:300],
+                    "observed_response_model": str(
+                        getattr(job, "observed_response_model", "") or ""
+                    ),
+                }
+                for job in jobs
+                if job.status != MonitoringAiJobStatus.COMPLETED
+            ]
+            return {
+                "state": "failed",
+                "authority_status": "not_promoted",
+                "failure_code": failed_jobs[0]["failure_code"]
+                if failed_jobs
+                else "",
+                "failure_message": failed_jobs[0]["failure_message"]
+                if failed_jobs
+                else "",
+                "failed_jobs": failed_jobs,
+            }
         return None
 
     def _recover_failed_once(self, jobs: tuple[Any, Any]) -> bool:
