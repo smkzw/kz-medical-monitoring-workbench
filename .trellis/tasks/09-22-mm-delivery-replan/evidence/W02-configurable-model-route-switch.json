@@ -1,9 +1,9 @@
 {
   "schema": "mm-w02-configurable-model-route-switch-v1",
-  "recorded_at": "2026-09-22T23:49:00+08:00",
-  "source_head": "b0b2136bfacc5bfdb645cebaa6b039ef7499a623",
-  "state": "actual_batch_in_progress",
-  "scope": "The medical-monitoring primary and verifier routes are selected from persisted role profiles. New submissions freeze the exact provider and model identity into each job; source edits are not required to select another OpenAI-compatible route.",
+  "recorded_at": "2026-09-23T04:40:55+08:00",
+  "source_head": "7d0c4c147dcbf81b31eb7222929c115e8ebaee36",
+  "state": "actual_adjudication_in_progress",
+  "scope": "Medical-monitoring routes are persisted role profiles. Provider, model, reasoning, output budget and listing work-unit size are route data; jobs retain requested/observed identity and source revisions without model-name branches in clinical code.",
   "configured_roles": [
     {
       "role_id": "medical_monitoring_ai",
@@ -12,6 +12,8 @@
       "requested_model": "glm-5.3-flash",
       "reasoning_effort": "high",
       "thinking": "enabled",
+      "output_token_budget": 65536,
+      "listing_mapping_chunk_size": 12,
       "ready": true
     },
     {
@@ -21,13 +23,16 @@
       "requested_model": "deepseek-v4.1-flash",
       "reasoning_effort": "high",
       "thinking": "enabled",
+      "output_token_budget": 131072,
+      "listing_mapping_chunk_size": 4,
       "ready": true
     }
   ],
   "configuration_evidence": {
-    "provider_settings_sha256": "d079bbf63cb8106368148d9291ce0ee4fd9bf04183aae4c8d603639a9f380a3a",
+    "provider_settings_sha256": "8c089f64aeec1ba415b2e293cd801dd0c4ddc1ebe94f0750bd77b0fe643bb127",
     "role_bindings_sha256": "19a7af608d554d8b361f7c393a4ff39cc6ce76b43010f641e0f01676e00edbe6",
-    "credentials": "stored in the native encrypted credential store and excluded from this evidence"
+    "credentials": "stored in the native encrypted credential store and excluded from this evidence",
+    "source_commit": "7d0c4c1 W02 make model work limits profile-configurable"
   },
   "actual_run": {
     "runtime": "/tmp/mm-w02-correct-mg-runtime-20260922-v2",
@@ -35,41 +40,104 @@
     "attempt_id": "stg-86b77f06eb5746fbb1f50edec7839096",
     "port": 8920,
     "port_8911": "stopped",
-    "new_model_jobs": 294,
-    "deterministic_metadata_jobs": 8,
-    "historical_route_jobs": {
-      "opencode-go/mimo-v2.6-flash": "stale_input",
-      "opencode-go/deepseek-flash": "stale_input"
-    },
-    "first_observed_successes": [
-      {
+    "first_pass": {
+      "primary": {
         "provider": "cms-router",
         "requested_model": "glm-5.3-flash",
-        "observed_response_model": "glm-5.3-flash"
+        "completed_jobs": 147
+      },
+      "verifier": {
+        "provider": "ollama-cloud",
+        "requested_model": "deepseek-v4.1-flash",
+        "completed_jobs": 147
+      },
+      "deterministic_metadata_jobs": 8,
+      "result": "Both complete cohorts were assembled into draft monmapdraft_90eb7a7e2bd34430d94c839a5286 with 1495 fields and 151 exact primary source jobs."
+    },
+    "mapping_draft": {
+      "draft_id": "monmapdraft_90eb7a7e2bd34430d94c839a5286",
+      "version": 1,
+      "field_count": 1495,
+      "domain_count": 62,
+      "system_adopted_count": 1494,
+      "initial_user_question_count": 1,
+      "dual_adjudication_field_count": 700
+    },
+    "adjudication_snapshot": [
+      {
+        "provider": "cms-router",
+        "status": "completed",
+        "count": 12
+      },
+      {
+        "provider": "cms-router",
+        "status": "failed",
+        "count": 13
+      },
+      {
+        "provider": "cms-router",
+        "status": "queued",
+        "count": 58
+      },
+      {
+        "provider": "cms-router",
+        "status": "running",
+        "count": 4
       },
       {
         "provider": "ollama-cloud",
-        "requested_model": "deepseek-v4.1-flash",
-        "observed_response_model": "deepseek-v4.1-flash"
+        "status": "completed",
+        "count": 11
+      },
+      {
+        "provider": "ollama-cloud",
+        "status": "failed",
+        "count": 8
+      },
+      {
+        "provider": "ollama-cloud",
+        "status": "queued",
+        "count": 184
+      },
+      {
+        "provider": "ollama-cloud",
+        "status": "running",
+        "count": 4
       }
     ],
-    "first_contract_rejection": {
-      "provider": "ollama-cloud",
-      "failure_code": "invalid_ai_output",
-      "reason": "The verifier inserted a Query conclusion into the field-mapping stage; the output contract rejected it after one controlled repair.",
-      "recovery": "After the first pass is terminal, only this same-revision failed shard may be requeued in place. Successful siblings must not rerun."
-    }
+    "retired_unstarted_work": {
+      "ollama_cloud_large_chunks": 77,
+      "cms_router_duplicate_default_namespace": 87,
+      "terminal_receipts_preserved": true
+    },
+    "observed_failure_classes": [
+      {
+        "route": "cms-router/glm-5.3-flash",
+        "class": "schema or response-identity rejection",
+        "handling": "fail closed; preserve successful siblings; bounded in-place recovery only"
+      },
+      {
+        "route": "ollama-cloud/deepseek-v4.1-flash high",
+        "class": "provider_reasoning_only with finish_reason=length",
+        "handling": "never adopt reasoning as medical content; use profile-bound work-unit/output limits; exhausted items remain visible coverage gaps"
+      }
+    ],
+    "local_fallback": "not selected or loaded"
   },
   "verification": {
-    "focused_tests": "189 passed",
-    "git_diff_check": "passed",
-    "route_identity": "Both requested routes have at least one actual successful field-mapping response with an exact observed model identity.",
-    "generic_route_test": "A custom-router/custom-medical-model role binding is accepted and frozen without adding a source allowlist entry."
+    "focused_backend_tests": "644 passed for runtime settings, role bindings, mapping service, bridge, repair, draft repository and migration gate",
+    "latest_route_budget_tests": "538 passed including exact bound-runtime 131072 budget",
+    "frontend_build": "vite production build passed",
+    "python_compile": "passed for changed Python modules",
+    "git_diff_check": "passed before commit",
+    "actual_route_identity": "Both current remote routes have successful first-pass responses with exact observed model identity; second-pass DeepSeek has also produced complete four-field outputs at high reasoning while other shards correctly failed closed.",
+    "github": "7d0c4c1 pushed to origin/main"
   },
   "limits": [
-    "The actual 294-job mapping batch is still running; this file does not claim mapping or facts completion.",
-    "One successful response proves route identity and contract compatibility for that shard, not clinical acceptance of the complete study.",
-    "No local Qwen route was selected or loaded by this work."
+    "Second-pass adjudication is still running; mapping confirmation and facts materialization are not complete.",
+    "Some DeepSeek high-reasoning shards exhaust even 131072 output tokens without a final answer; these are technical coverage gaps and are never counted as blind verification.",
+    "Some CMS shards fail schema or observed-model contracts; successful sibling receipts remain reusable and failures are not converted into agreement.",
+    "No local Qwen route was selected or loaded. Port 8911 remains stopped."
   ],
-  "next_safe_action": "Keep port 8911 stopped and let the healthy 8920 workers finish the existing jobs. Inspect terminal failures by cause, use bounded same-revision in-place recovery, then reconcile the two complete route cohorts before mapping confirmation and facts materialization."
+  "next_safe_action": "Let the healthy 8920 primary and verifier workers finish the current namespaces without redispatch. Reconcile completed mappings plus visible exhausted gaps, call the product adjudication route to persist receipts, then confirm only if the semantic gate allows and continue to facts materialization/AE-MH analysis."
 }
