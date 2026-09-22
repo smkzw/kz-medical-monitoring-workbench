@@ -17,6 +17,9 @@ from packages.medical_monitoring.admission.mapping_gate import (
     MONITORING_C3_MAPPING_PROFILE_ID,
     MONITORING_C3_MAPPING_PROVIDER,
     MONITORING_C3_VERIFIER_MODEL,
+    MONITORING_C3_VERIFIER_PROVIDER,
+    CMS_ROUTER_API_KEY_ENV,
+    CMS_ROUTER_BASE_URL,
     ZHIPU_CODING_PLAN_API_KEY_ENV,
     ZHIPU_CODING_PLAN_BASE_URL,
     MONITORING_C3_GLM_VERIFIER_PROFILE_ID,
@@ -160,8 +163,8 @@ ROLE_DEFINITIONS: tuple[AiRoleDefinition, ...] = (
         label="医学监查AI",
         description="字段对应建议、医学风险候选、受试者历程与医学解释。",
         recommendation=(
-            "默认由 MiniMax M3 直连主分析、智谱 GLM-5.3 Flash 独立核对；"
-            "仅在两条远程路线均不可用时使用本地 MTPLX Qwen3.8 Flash Next。"
+            "默认由 CMS Router 的 GLM-5.3 Flash 主分析、Ollama Cloud 的 "
+            "DeepSeek V4.1 Flash 独立盲核；可通过角色配置切换获准模型。"
         ),
         default_model=MONITORING_C3_MAPPING_MODEL,
     ),
@@ -169,8 +172,8 @@ ROLE_DEFINITIONS: tuple[AiRoleDefinition, ...] = (
         role_id=DOCUMENT_AUTHORITY_PRIMARY_AI_ROLE,
         label="文档权威主分析",
         description="研究方案/eCRF文件独立识别与交叉核对（主分析侧）。",
-        recommendation="默认使用 Muse Spark 1.3 Contributor（high推理）。",
-        default_model="muse-spark-1.3-contributor",
+        recommendation="默认使用 CMS Router 的 GLM-5.3 Flash（high推理）。",
+        default_model=MONITORING_C3_MAPPING_MODEL,
     ),
     AiRoleDefinition(
         role_id=DOCUMENT_AUTHORITY_VERIFIER_AI_ROLE,
@@ -184,9 +187,8 @@ ROLE_DEFINITIONS: tuple[AiRoleDefinition, ...] = (
         label="医学监查独立核对AI",
         description="对主分析 cohort 的字段对应建议执行独立、盲态的全量核对。",
         recommendation=(
-            "独立核对使用本机 MTPLX Qwen3.8 Flash Next（xhigh思考，约200k"
-            "有效上下文，原生VLM），与云端主分析保持模型、部署与上下文"
-            "隔离；本地服务不可用时核对失败闭合，不静默替换。"
+            "独立核对使用 Ollama Cloud 的 DeepSeek V4.1 Flash（high推理），"
+            "与主分析保持首轮上下文隔离；可通过角色配置切换获准模型。"
         ),
         default_model=MONITORING_C3_VERIFIER_MODEL,
     ),
@@ -319,14 +321,14 @@ def _builtin_profiles() -> tuple[AiProviderProfile, ...]:
             profile_id=MONITORING_C3_MAPPING_PROFILE_ID,
             provider=MONITORING_C3_MAPPING_PROVIDER,
             label="GLM-5.3 Flash 医学监查主分析（主力，high思考）",
-            base_url=ZHIPU_CODING_PLAN_BASE_URL,
+            base_url=CMS_ROUTER_BASE_URL,
             model=MONITORING_C3_MAPPING_MODEL,
             expected_response_model=MONITORING_C3_MAPPING_MODEL,
-            api_key_env=ZHIPU_CODING_PLAN_API_KEY_ENV,
+            api_key_env=CMS_ROUTER_API_KEY_ENV,
             deployment_scope="cloud",
             discovery_mode="manual_plus_probe",
-            timeout_seconds=600.0,
-            output_token_budget=32_768,
+            timeout_seconds=900.0,
+            output_token_budget=65_536,
             enabled=True,
         ),
         AiProviderProfile(
@@ -357,16 +359,16 @@ def _builtin_profiles() -> tuple[AiProviderProfile, ...]:
         ),
         AiProviderProfile(
             profile_id=MONITORING_C3_VERIFIER_PROFILE_ID,
-            provider="deepseek",
-            label="DeepSeek Flash 医学监查独立盲核对（high思考）",
-            base_url="https://api.deepseek.com/v1",
-            model="deepseek-flash",
-            expected_response_model="deepseek-flash",
-            api_key_env="DEEPSEEK_API_KEY",
+            provider=MONITORING_C3_VERIFIER_PROVIDER,
+            label="DeepSeek V4.1 Flash 医学监查独立盲核（high思考）",
+            base_url="https://ollama.com/v1",
+            model=MONITORING_C3_VERIFIER_MODEL,
+            expected_response_model=MONITORING_C3_VERIFIER_MODEL,
+            api_key_env="OLLAMA_CLOUD_API_KEY",
             deployment_scope="cloud",
             discovery_mode="manual_plus_probe",
-            timeout_seconds=600.0,
-            output_token_budget=32_768,
+            timeout_seconds=900.0,
+            output_token_budget=65_536,
             enabled=True,
         ),
         AiProviderProfile(
@@ -580,16 +582,16 @@ class AiRoleRuntimeSettingsStore:
             ),
             DOCUMENT_AUTHORITY_PRIMARY_AI_ROLE: AiRoleBinding(
                 role_id=DOCUMENT_AUTHORITY_PRIMARY_AI_ROLE,
-                profile_id="document_authority_primary_ai__opencode_go_muse",
-                model="muse-spark-1.3-contributor",
+                profile_id=MONITORING_C3_MAPPING_PROFILE_ID,
+                model=MONITORING_C3_MAPPING_MODEL,
                 enabled=True,
                 thinking=THINKING_ENABLED,
                 reasoning_effort="high",
             ),
             DOCUMENT_AUTHORITY_VERIFIER_AI_ROLE: AiRoleBinding(
                 role_id=DOCUMENT_AUTHORITY_VERIFIER_AI_ROLE,
-                profile_id="medical_monitoring_verifier_ai__ollama_cloud_dsv41",
-                model="deepseek-v4.1-flash",
+                profile_id=MONITORING_C3_VERIFIER_PROFILE_ID,
+                model=MONITORING_C3_VERIFIER_MODEL,
                 enabled=True,
                 thinking=THINKING_ENABLED,
                 reasoning_effort="high",

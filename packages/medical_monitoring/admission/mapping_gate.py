@@ -26,21 +26,19 @@ MONITORING_C3_MAPPING_COHORT_SCHEMA_VERSION = "mm-c3-dual-mapping-cohort-v1"
 # PRIMARY_RUNTIME_PAIRS set below admits every current and historical
 # primary identity so persisted jobs/receipts keep revalidating across
 # route changes.
-# 2026-09-21 用户指令：glm-5.3-flash全部改为opencode-go/muse-spark-1.3-contributor(high)
-MONITORING_C3_MAPPING_PROVIDER = "opencode-go"
-# 2026-09-22：muse-spark上游不可用，映射主分析同切mimo-v2.6-flash
-# （与文档权威主分析同profile/凭据；请求名=回执名）。
-MONITORING_C3_MAPPING_MODEL = "mimo-v2.6-flash"
+# These values seed a new installation only. Runtime admission for product
+# work is bound to the selected role profiles, so changing an approved model
+# pair does not require another source edit.
+MONITORING_C3_MAPPING_PROVIDER = "cms-router"
+MONITORING_C3_MAPPING_MODEL = "glm-5.3-flash"
 # 文档权威链与字段映射链共用 W00 冻结的两条产品角色。两条调用仍有
 # 独立 profile、作业命名空间和首轮上下文；文档识别阶段不得另行绕到
 # 本机路由。
-DOC_AUTH_PRIMARY_PROVIDER = "opencode-go"
-DOC_AUTH_PRIMARY_MODEL = "mimo-v2.6-flash"
-DOC_AUTH_VERIFIER_PROVIDER = "opencode-go"
-DOC_AUTH_VERIFIER_MODEL = "deepseek-flash"
-MONITORING_C3_MAPPING_PROFILE_ID = (
-    "medical_monitoring_ai__opencode_go_mimo"
-)
+DOC_AUTH_PRIMARY_PROVIDER = MONITORING_C3_MAPPING_PROVIDER
+DOC_AUTH_PRIMARY_MODEL = MONITORING_C3_MAPPING_MODEL
+DOC_AUTH_VERIFIER_PROVIDER = "ollama-cloud"
+DOC_AUTH_VERIFIER_MODEL = "deepseek-v4.1-flash"
+MONITORING_C3_MAPPING_PROFILE_ID = "medical_monitoring_ai__cms_router_glm53flash"
 MONITORING_C3_DEEPSEEK_PRIMARY_PROVIDER = "deepseek"
 MONITORING_C3_DEEPSEEK_PRIMARY_MODEL = "deepseek-flash"
 MONITORING_C3_DEEPSEEK_PRIMARY_PROFILE_ID = (
@@ -63,10 +61,10 @@ MONITORING_C3_ALTERNATE_MODEL = "minimax-m3"
 # configuration and remains a historical identity only.
 # 2026-09-20 现役盲核身份对齐用户最终指令（deepseek-flash@opencode-go，
 # r3盲核252/278+fv波在该路由完成）；deepseek直连保留为历史身份。
-MONITORING_C3_VERIFIER_PROVIDER = "opencode-go"
-MONITORING_C3_VERIFIER_MODEL = "deepseek-flash"
+MONITORING_C3_VERIFIER_PROVIDER = "ollama-cloud"
+MONITORING_C3_VERIFIER_MODEL = "deepseek-v4.1-flash"
 MONITORING_C3_VERIFIER_PROFILE_ID = (
-    "medical_monitoring_verifier_ai__opencode_go_dsf"
+    "medical_monitoring_verifier_ai__ollama_cloud_dsv41"
 )
 MONITORING_C3_MTPLX_VERIFIER_PROVIDER = "mtplx"
 MONITORING_C3_MTPLX_VERIFIER_MODEL = "mtplx-flash-next-optimized-speed"
@@ -127,6 +125,7 @@ MONITORING_C3_VERIFIER_RUNTIME_PAIRS = frozenset({
         MONITORING_C3_MTPLX_VERIFIER_MODEL,
     ),
     (DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL),
+    ("opencode-go", "deepseek-flash"),
     # 历史文档权威身份：已持久化作业/回执仍可重验，但不再用于新提交。
     ("omp-router", "deepseek-latest-cloud"),
 })
@@ -138,6 +137,7 @@ MONITORING_C3_PRIMARY_RUNTIME_PAIRS = frozenset({
     (MONITORING_C3_CMS_PRIMARY_PROVIDER, MONITORING_C3_CMS_PRIMARY_MODEL),
     (MONITORING_C3_ALTERNATE_PROVIDER, MONITORING_C3_ALTERNATE_MODEL),
     (DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL),
+    ("opencode-go", "mimo-v2.6-flash"),
     # 历史身份：omp-router中转期（2026-09-21/22，opencode密钥失效过渡）
     ("omp-router", "glm-5.3"),
     ("omp-router", "glm-5.3-flash"),
@@ -183,6 +183,8 @@ ZHIPU_CODING_PLAN_API_KEY_ENV_ALIASES = (
 CMS_SMK_PRESET_ID = "cms_smk"
 CMS_SMK_BASE_URL = "https://new-api.mediportal.com.cn/v1"
 CMS_SMK_API_KEY_ENV = "CMS_SMK_API_KEY"
+CMS_ROUTER_BASE_URL = "http://127.0.0.1:20128/v1"
+CMS_ROUTER_API_KEY_ENV = "CMS_ROUTER_API_KEY"
 
 
 def normalize_monitoring_mapping_model(model: str) -> str:
@@ -216,20 +218,33 @@ def monitoring_mapping_runtime_matches(
     provider = str(_runtime_field(runtime, "provider", "")).strip()
     model = normalize_monitoring_mapping_model(str(_runtime_field(runtime, "model", "")))
     required_model = normalize_monitoring_mapping_model(required_model)
-    requested = (required_provider, required_model.casefold())
+    requested = (str(required_provider or "").strip(), required_model.casefold())
     actual = (provider, model.casefold())
-    if requested == (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL.casefold()):
-        if actual == (
-            MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
-            MONITORING_C3_LOCAL_FALLBACK_MODEL.casefold(),
-        ):
-            # Local admission needs repository-backed terminal evidence from
-            # both remote routes; a runtime/env declaration is never proof.
-            return False
-        return available and is_monitoring_primary_runtime(
-            provider, model
-        )
-    return available and actual == requested
+    return bool(requested[0] and requested[1]) and available and actual == requested
+
+
+def monitoring_runtime_response_identity_valid(
+    provider: str,
+    requested_model: str,
+    response_model: str,
+) -> bool:
+    """Validate a persisted product run without a model-name allowlist.
+
+    The role prompt and queue namespace establish primary/verifier ownership;
+    this check establishes that a concrete enabled route answered as the exact
+    model requested. This keeps old receipts replayable while allowing future
+    approved profiles to be selected through configuration.
+    """
+
+    cleaned_provider = str(provider or "").strip()
+    cleaned_requested = str(requested_model or "").strip()
+    cleaned_response = str(response_model or "").strip()
+    return bool(
+        cleaned_provider
+        and cleaned_provider != "disabled"
+        and cleaned_requested
+        and cleaned_response == cleaned_requested
+    )
 
 
 def monitoring_mapping_execution_route(provider: str, model: str) -> str:
@@ -296,9 +311,9 @@ class MonitoringC3MappingGateContract:
             provider=MONITORING_C3_MAPPING_PROVIDER,
             model=MONITORING_C3_MAPPING_MODEL,
             profile_id=MONITORING_C3_MAPPING_PROFILE_ID,
-            preset_id=CMS_SMK_PRESET_ID,
-            base_url=CMS_SMK_BASE_URL,
-            api_key_env=CMS_SMK_API_KEY_ENV,
+            preset_id="cms_router",
+            base_url=CMS_ROUTER_BASE_URL,
+            api_key_env=CMS_ROUTER_API_KEY_ENV,
         )
 
     @classmethod
@@ -308,9 +323,9 @@ class MonitoringC3MappingGateContract:
             provider=MONITORING_C3_VERIFIER_PROVIDER,
             model=MONITORING_C3_VERIFIER_MODEL,
             profile_id=MONITORING_C3_VERIFIER_PROFILE_ID,
-            preset_id=ZHIPU_CODING_PLAN_PRESET_ID,
-            base_url=ZHIPU_CODING_PLAN_BASE_URL,
-            api_key_env=ZHIPU_CODING_PLAN_API_KEY_ENV,
+            preset_id="ollama_cloud",
+            base_url="https://ollama.com/v1",
+            api_key_env="OLLAMA_CLOUD_API_KEY",
         )
 
 

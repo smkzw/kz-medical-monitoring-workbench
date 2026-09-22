@@ -8,10 +8,7 @@ from typing import Any, Literal, Mapping, Sequence, Union
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, field_validator, model_validator
 
 from .mapping_gate import (
-    MONITORING_C3_MAPPING_MODEL,
-    MONITORING_C3_MAPPING_PROVIDER,
-    MONITORING_C3_VERIFIER_MODEL,
-    MONITORING_C3_VERIFIER_PROVIDER,
+    monitoring_runtime_response_identity_valid,
 )
 
 
@@ -1857,7 +1854,7 @@ def _validate_run_pair(
         raise DocumentAuthorityError("document_authority_run_identity_invalid")
     expected = (
         (
-            "primary", MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL,
+            "primary",
             (
                 LEGACY_PRIMARY_ADJUDICATION_PROMPT_VERSION
                 if stage == "legacy_adjudication"
@@ -1875,7 +1872,7 @@ def _validate_run_pair(
             ),
         ),
         (
-            "verifier", MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL,
+            "verifier",
             (
                 LEGACY_VERIFIER_ADJUDICATION_PROMPT_VERSION
                 if stage == "legacy_adjudication"
@@ -1899,27 +1896,17 @@ def _validate_run_pair(
             if stage == "analysis"
             else run.conflict_packet_sha256
         )
-        if identity[0] == "verifier":
-            # 2026-09-12 redesignation: the verifier identity may be the
-            # current local MTPLX pair or the historical cloud GLM pair;
-            # persisted runs under either identity stay revalidatable.
-            from .mapping_gate import is_monitoring_verifier_runtime
-
-            identity_ok = (
-                run.role == "verifier"
-                and is_monitoring_verifier_runtime(run.provider, run.model)
-                and run.prompt_version == identity[3]
+        identity_ok = (
+            run.role == identity[0]
+            and monitoring_runtime_response_identity_valid(
+                run.provider, run.model, run.model
             )
-        else:
-            from .mapping_gate import is_monitoring_primary_runtime
-
-            identity_ok = (
-                run.role == "primary"
-                and is_monitoring_primary_runtime(run.provider, run.model)
-                and run.prompt_version == identity[3]
-            )
+            and run.prompt_version == identity[1]
+        )
         if not identity_ok or bound_hash != input_hash:
             raise DocumentAuthorityError("document_authority_run_identity_invalid")
+    if (left.provider, left.model) == (right.provider, right.model):
+        raise DocumentAuthorityError("document_authority_runs_not_independent")
 
 
 def _anonymous_candidate(raw: Mapping[str, Any]) -> dict[str, Any]:

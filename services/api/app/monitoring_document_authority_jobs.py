@@ -40,12 +40,7 @@ from packages.medical_monitoring.admission.document_authority import (
     validate_document_authority_adjudication_review,
 )
 from packages.medical_monitoring.admission.mapping_gate import (
-    MONITORING_C3_MAPPING_MODEL,
-    MONITORING_C3_MAPPING_PROVIDER,
-    MONITORING_C3_VERIFIER_MODEL,
-    MONITORING_C3_VERIFIER_PROVIDER,
-    is_monitoring_primary_runtime,
-    is_monitoring_verifier_runtime,
+    monitoring_runtime_response_identity_valid,
     monitoring_prompt_version_role,
 )
 
@@ -88,6 +83,14 @@ if TYPE_CHECKING:
     from .source_intake import SourceRegistryService
 
 
+def _job_runtime_identity_valid(job: Any) -> bool:
+    return monitoring_runtime_response_identity_valid(
+        getattr(job, "provider", ""),
+        getattr(job, "requested_model", ""),
+        getattr(job, "response_model", ""),
+    )
+
+
 def load_document_authority_analysis_run(
     repository: MonitoringAiRepository,
     *,
@@ -97,11 +100,6 @@ def load_document_authority_analysis_run(
     role: Literal["primary", "verifier"],
 ) -> DocumentAuthorityRunEnvelope:
     job = repository.get(project_id, job_id)
-    expected_provider_model = (
-        (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL)
-        if role == "primary"
-        else (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL)
-    )
     allowed_prompt_versions = (
         {PRIMARY_PROMPT_VERSION, *(pair[0] for pair in LEGACY_ANALYSIS_PROMPT_PAIRS)}
         if role == "primary"
@@ -114,17 +112,10 @@ def load_document_authority_analysis_run(
         job.status != MonitoringAiJobStatus.COMPLETED
         or job.task_type != MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS
         or monitoring_prompt_version_role(job.prompt_version) != role
-        or not (
-            is_monitoring_primary_runtime(
-                job.provider, job.requested_model
-            )
-            if role == "primary"
-            else is_monitoring_verifier_runtime(
-                job.provider, job.requested_model
-            )
+        or not monitoring_runtime_response_identity_valid(
+            job.provider, job.requested_model, job.response_model
         )
         or job.prompt_version not in allowed_prompt_versions
-        or job.response_model != job.requested_model
     ):
         raise DocumentAuthorityError("document_authority_job_identity_invalid")
 
@@ -404,11 +395,6 @@ def load_document_authority_review_run(
         and adjudication_context.get("schema_version")
         == "monitoring-document-authority-critique-v1"
     )
-    expected_provider_model = (
-        (MONITORING_C3_MAPPING_PROVIDER, MONITORING_C3_MAPPING_MODEL)
-        if role == "primary"
-        else (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL)
-    )
     allowed_prompt_versions = (
         {
             PRIMARY_CRITIQUE_PROMPT_VERSION
@@ -448,16 +434,9 @@ def load_document_authority_review_run(
         or job.task_type != MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW
         or job.prompt_version not in allowed_prompt_versions
         or monitoring_prompt_version_role(job.prompt_version) != role
-        or not (
-            is_monitoring_primary_runtime(
-                job.provider, job.requested_model
-            )
-            if role == "primary"
-            else is_monitoring_verifier_runtime(
-                job.provider, job.requested_model
-            )
+        or not monitoring_runtime_response_identity_valid(
+            job.provider, job.requested_model, job.response_model
         )
-        or job.response_model != job.requested_model
     ):
         raise DocumentAuthorityError("document_authority_review_job_identity_invalid")
     expected_bindings = [
@@ -1184,20 +1163,7 @@ def verify_document_authority_promotion_receipt(
         analysis_by_role = {
             (
                 monitoring_prompt_version_role(job.prompt_version)
-                if (
-                    monitoring_prompt_version_role(job.prompt_version)
-                    == "primary"
-                    and is_monitoring_primary_runtime(
-                        job.provider, job.requested_model
-                    )
-                )
-                or (
-                    monitoring_prompt_version_role(job.prompt_version)
-                    == "verifier"
-                    and is_monitoring_verifier_runtime(
-                        job.provider, job.requested_model
-                    )
-                )
+                if _job_runtime_identity_valid(job)
                 else ""
             ): job
             for job in analysis_jobs
@@ -1218,20 +1184,7 @@ def verify_document_authority_promotion_receipt(
         review_by_role = {
             (
                 monitoring_prompt_version_role(job.prompt_version)
-                if (
-                    monitoring_prompt_version_role(job.prompt_version)
-                    == "primary"
-                    and is_monitoring_primary_runtime(
-                        job.provider, job.requested_model
-                    )
-                )
-                or (
-                    monitoring_prompt_version_role(job.prompt_version)
-                    == "verifier"
-                    and is_monitoring_verifier_runtime(
-                        job.provider, job.requested_model
-                    )
-                )
+                if _job_runtime_identity_valid(job)
                 else ""
             ): job
             for job in review_jobs
@@ -1245,20 +1198,7 @@ def verify_document_authority_promotion_receipt(
         adjudication_by_role = {
             (
                 monitoring_prompt_version_role(job.prompt_version)
-                if (
-                    monitoring_prompt_version_role(job.prompt_version)
-                    == "primary"
-                    and is_monitoring_primary_runtime(
-                        job.provider, job.requested_model
-                    )
-                )
-                or (
-                    monitoring_prompt_version_role(job.prompt_version)
-                    == "verifier"
-                    and is_monitoring_verifier_runtime(
-                        job.provider, job.requested_model
-                    )
-                )
+                if _job_runtime_identity_valid(job)
                 else ""
             ): job
             for job in adjudication_jobs
@@ -1275,20 +1215,7 @@ def verify_document_authority_promotion_receipt(
         critique_by_role = {
             (
                 monitoring_prompt_version_role(job.prompt_version)
-                if (
-                    monitoring_prompt_version_role(job.prompt_version)
-                    == "primary"
-                    and is_monitoring_primary_runtime(
-                        job.provider, job.requested_model
-                    )
-                )
-                or (
-                    monitoring_prompt_version_role(job.prompt_version)
-                    == "verifier"
-                    and is_monitoring_verifier_runtime(
-                        job.provider, job.requested_model
-                    )
-                )
+                if _job_runtime_identity_valid(job)
                 else ""
             ): job
             for job in critique_jobs

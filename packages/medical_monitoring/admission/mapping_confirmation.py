@@ -339,6 +339,7 @@ class AdmissionMappingConfirmationService:
     # namespace. They are route-neutral: they neither block nor satisfy the
     # dual-model contract. Empty keeps the gate fail-closed.
     system_routes: tuple[tuple[str, str], ...] = ()
+    primary_runtime_resolver: Optional[Callable[[], Any]] = None
     require_dual_reconciliation: bool = False
 
     def __post_init__(self) -> None:
@@ -367,6 +368,16 @@ class AdmissionMappingConfirmationService:
         routes: list[str] = []
         providers: set[str] = set()
         offending: list[str] = []
+        configured_primary = None
+        if self.primary_runtime_resolver is not None:
+            runtime = self.primary_runtime_resolver()
+            if bool(getattr(runtime, "available", False)):
+                configured_primary = (
+                    str(getattr(runtime, "provider", "") or "").strip(),
+                    normalize_monitoring_mapping_model(
+                        str(getattr(runtime, "model", "") or "")
+                    ).strip(),
+                )
         for provider, model in identities:
             cleaned = (
                 str(provider or "").strip(),
@@ -374,7 +385,11 @@ class AdmissionMappingConfirmationService:
             )
             if cleaned in self._system_route_set:
                 continue
-            executed = monitoring_mapping_execution_route(*cleaned)
+            executed = (
+                MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY
+                if configured_primary is not None and cleaned == configured_primary
+                else monitoring_mapping_execution_route(*cleaned)
+            )
             providers.add(cleaned[0])
             if executed in _OFFENDING_EXECUTION_ROUTES:
                 offending.append(executed)
