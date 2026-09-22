@@ -70,7 +70,10 @@ _MAPPING_MESSAGES = {
         "请点击重试。"
     ),
     "mapping_verifier_incomplete": "系统仍在复核，当前不需要您确认。",
-    "mapping_reconciliation_required": "资料或核对结果已变化，需要系统重新核实；您此前的回答已保留。",
+    "mapping_reconciliation_required": (
+        "资料或核对结果已变化，系统会重新核实，不需要您逐项确认；"
+        "您此前的回答已保留。"
+    ),
     "mapping_draft_unconfigured": "系统暂时无法保存识别结果，请稍后重试。",
     "mapping_bridge_failed": "生成字段对应建议时出现问题，本次结果未保存。请重试；如再次失败请联系管理员。",
     "mapping_document_evidence_resolver_unavailable": (

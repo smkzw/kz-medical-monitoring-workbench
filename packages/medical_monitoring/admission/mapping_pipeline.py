@@ -128,8 +128,6 @@ def _completed_payload_equivalent_cohort(
     # the payload/revision signature already covers byte-exactly. Grouping
     # across digests lets completed cohorts from earlier route/prompt
     # namespaces satisfy an identical work unit.
-    import re as _re
-
     groups: dict[tuple[str, int], list[Any]] = {}
     for job in available:
         match = _ADJUDICATION_GENERATION_RE.search(str(job.business_key))
@@ -257,9 +255,18 @@ def _latest_job_cohort(
 
     if not jobs:
         return ()
-    latest = max(jobs, key=lambda item: (item.created_at, item.job_id))
+    model_jobs = [
+        job for job in jobs
+        if str(getattr(job, "provider", "")) != "workbench-system"
+    ]
+    selectable = model_jobs or list(jobs)
+    latest_created_at = max(item.created_at for item in selectable)
+    latest_at_time = [
+        item for item in selectable if item.created_at == latest_created_at
+    ]
+    latest = max(latest_at_time, key=lambda item: item.job_id)
 
-    def identity(job: Any, *, required: bool = False) -> tuple[str, str]:
+    def identity(job: Any, *, required: bool = False) -> tuple[str, str, str, str]:
         try:
             payload = repository.input_payload(job.project_id, job.job_id)
             profile = payload.get("field_profile") or {}
@@ -268,15 +275,33 @@ def _latest_job_cohort(
             profile_sha = ""
         if not profile_sha and required:
             raise AdmissionMappingPipelineError("mapping_bridge_failed")
-        return str(job.prompt_version), profile_sha
+        return (
+            str(job.prompt_version),
+            profile_sha,
+            str(job.provider or "").strip(),
+            str(job.requested_model or "").strip().casefold(),
+        )
 
     cohort_identity = identity(latest, required=True)
     cohort_prompt = cohort_identity[0]
+    latest_routes = {
+        (
+            str(getattr(job, "provider", "") or "").strip(),
+            str(getattr(job, "requested_model", "") or "").strip().casefold(),
+        )
+        for job in latest_at_time
+        if str(getattr(job, "provider", "")) != "workbench-system"
+    }
     return tuple(
         job
         for job in jobs
         if str(job.prompt_version) == cohort_prompt
-        and identity(job, required=True) == cohort_identity
+        and identity(job, required=True)[:2] == cohort_identity[:2]
+        and (
+            identity(job, required=True)[2:] == cohort_identity[2:]
+            or identity(job, required=True)[2:] in latest_routes
+            or str(getattr(job, "provider", "")) == "workbench-system"
+        )
     )
 
 
@@ -307,6 +332,7 @@ class AdmissionMappingPipeline:
         explicit_mapping_dependencies: bool = False,
         visual_tool_reads: bool = False,
         role_equivalence: bool = False,
+        bind_runtime_from_services: bool = False,
     ) -> None:
         self._service = ai_service
         self._repository = ai_repository
@@ -331,6 +357,7 @@ class AdmissionMappingPipeline:
         self._role_equivalence = bool(role_equivalence)
         if self._role_equivalence and not self._visual_tool_reads:
             raise ValueError("role equivalence requires the current visual evidence contract")
+        self._bind_runtime_from_services = bool(bind_runtime_from_services)
 
     @property
     def adjudication_comparison_policy(self):
@@ -683,16 +710,23 @@ class AdmissionMappingPipeline:
         contract: MonitoringMappingCohortContract,
     ) -> bool:
         runtime = service.runtime_resolver()
-        if contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY:
-            return monitoring_mapping_runtime_matches(
-                runtime,
-                required_provider=self._required_provider,
-                required_model=self._required_model,
-            )
+        required_provider, required_model = self._expected_runtime_identity(
+            service, contract.cohort, runtime=runtime
+        )
+        if (
+            not self._bind_runtime_from_services
+            and contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
+            and self._runtime_identity(runtime)
+            in {
+                (provider, model.casefold())
+                for provider, model in MONITORING_C3_PRIMARY_RUNTIME_PAIRS
+            }
+        ):
+            return bool(getattr(runtime, "available", False))
         return monitoring_mapping_runtime_matches(
             runtime,
-            required_provider=self._verifier_required_provider,
-            required_model=self._verifier_required_model,
+            required_provider=required_provider,
+            required_model=required_model,
         )
 
     @staticmethod
@@ -700,6 +734,24 @@ class AdmissionMappingPipeline:
         provider = str(getattr(runtime, "provider", "") or "").strip()
         model = str(getattr(runtime, "model", "") or "").strip().casefold()
         return provider, model
+
+    def _expected_runtime_identity(
+        self,
+        service: Any,
+        cohort: str,
+        *,
+        runtime: Any = None,
+    ) -> tuple[str, str]:
+        if self._bind_runtime_from_services:
+            return self._runtime_identity(
+                runtime if runtime is not None else service.runtime_resolver()
+            )
+        if cohort == MONITORING_MAPPING_COHORT_PRIMARY:
+            return self._required_provider, self._required_model.casefold()
+        return (
+            self._verifier_required_provider,
+            self._verifier_required_model.casefold(),
+        )
 
     def _remote_unavailability_receipt(
         self,
@@ -1124,14 +1176,10 @@ class AdmissionMappingPipeline:
         attempt_id: str,
         allow_local_fallback: bool,
     ) -> MappingHarnessInput:
-        runtime_identity = self._runtime_identity(service.runtime_resolver())
-        expected_identity = (
-            (self._required_provider, self._required_model.casefold())
-            if contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
-            else (
-                self._verifier_required_provider,
-                self._verifier_required_model.casefold(),
-            )
+        runtime = service.runtime_resolver()
+        runtime_identity = self._runtime_identity(runtime)
+        expected_identity = self._expected_runtime_identity(
+            service, contract.cohort, runtime=runtime
         )
         local_identity = (
             MONITORING_C3_LOCAL_FALLBACK_PROVIDER,
@@ -1147,11 +1195,16 @@ class AdmissionMappingPipeline:
                 project_id=project_id,
                 attempt_id=attempt_id,
             )
-        alternate_primary = (
-            contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
-            and runtime_identity == ("cms-router", "minimax-m3")
+        legacy_primary = (
+            not self._bind_runtime_from_services
+            and contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
+            and runtime_identity
+            in {
+                (provider, model.casefold())
+                for provider, model in MONITORING_C3_PRIMARY_RUNTIME_PAIRS
+            }
         )
-        if runtime_identity != expected_identity and not alternate_primary:
+        if runtime_identity != expected_identity and not legacy_primary:
             raise AdmissionMappingPipelineError("mapping_model_not_configured")
         return harness_input
 
@@ -1306,11 +1359,8 @@ class AdmissionMappingPipeline:
                     # Provider identity is part of the work-unit identity:
                     # switching the model route must open a fresh adjudication
                     # namespace instead of colliding with prior-route rows.
-                    "runtime": (
-                        self._required_provider if contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
-                        else self._verifier_required_provider,
-                        self._required_model.casefold() if contract.cohort == MONITORING_MAPPING_COHORT_PRIMARY
-                        else self._verifier_required_model.casefold(),
+                    "runtime": self._expected_runtime_identity(
+                        service, contract.cohort
                     ),
                 },
                 ensure_ascii=False,

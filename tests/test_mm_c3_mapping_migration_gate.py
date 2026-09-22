@@ -77,7 +77,7 @@ def test_execution_route_classification_covers_all_gate_routes() -> None:
     # The verifier identity is recognized regardless of historical case.
     assert (
         monitoring_mapping_execution_route(
-            MONITORING_C3_VERIFIER_PROVIDER, "GLM-5.3-FLASH"
+            MONITORING_C3_VERIFIER_PROVIDER, "DEEPSEEK-V4.1-FLASH"
         )
         == MONITORING_C3_MAPPING_EXECUTION_ROUTE_VERIFIER
     )

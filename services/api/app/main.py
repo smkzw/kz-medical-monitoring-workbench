@@ -3964,6 +3964,10 @@ _r7_admission_mapping_pipeline = AdmissionMappingPipeline(
     explicit_mapping_dependencies=True,
     visual_tool_reads=True,
     role_equivalence=True,
+    # Product routes are selected by persisted role configuration. Exact
+    # provider/model/profile identity is frozen by MonitoringAiService when a
+    # job is submitted; no source edit is needed for a later approved switch.
+    bind_runtime_from_services=True,
 )
 _r7_admission_mapping_confirmation = AdmissionMappingConfirmationService(
     mapping_pipeline=_r7_admission_mapping_pipeline,
@@ -3980,6 +3984,7 @@ _r7_admission_mapping_confirmation = AdmissionMappingConfirmationService(
     system_routes=(
         (DETERMINISTIC_METADATA_PROVIDER, DETERMINISTIC_METADATA_MODEL),
     ),
+    primary_runtime_resolver=resolve_monitoring_ai_runtime,
     require_dual_reconciliation=True,
 )
 _r7_admission_fact_materializer = FactMaterializationService(

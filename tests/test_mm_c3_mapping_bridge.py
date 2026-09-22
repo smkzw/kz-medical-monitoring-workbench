@@ -756,6 +756,34 @@ def test_pipeline_accepts_direct_cms_router_minimax_alternate(tmp_path: Path) ->
     }
 
 
+def test_pipeline_binds_new_submissions_to_configured_role_runtime(tmp_path: Path) -> None:
+    attempt_id, workspace = _admit(tmp_path)
+    repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
+    service = MonitoringAiService(
+        repository,
+        runtime_resolver=lambda: _runtime("custom-router", "custom-medical-model"),
+    )
+    pipeline = AdmissionMappingPipeline(
+        ai_service=service,
+        ai_repository=repository,
+        input_revision_factory=MonitoringAiInputRevision.model_validate,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+        relationship_profiler=_stub_profiler,
+        bind_runtime_from_services=True,
+    )
+
+    result = pipeline.generate_candidates(
+        project_id=PROJECT_ID,
+        attempt_id=attempt_id,
+        workspace_dir=workspace,
+    )
+
+    assert result["execution"] == {
+        "providers": ["custom-router"],
+        "requested_models": ["custom-medical-model"],
+    }
+
+
 def test_local_mtplx_fallback_rejects_environment_declaration() -> None:
     local = _runtime(
         MONITORING_C3_LOCAL_FALLBACK_PROVIDER,

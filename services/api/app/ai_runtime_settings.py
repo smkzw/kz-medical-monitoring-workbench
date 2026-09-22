@@ -13,8 +13,8 @@ from cryptography.fernet import Fernet, InvalidToken
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from packages.medical_monitoring.admission.mapping_gate import (
-    MONITORING_C3_VERIFIER_MODEL,
-    MONITORING_C3_VERIFIER_PROVIDER,
+    CMS_ROUTER_API_KEY_ENV,
+    CMS_ROUTER_BASE_URL,
     ZHIPU_CODING_PLAN_API_KEY_ENV,
     ZHIPU_CODING_PLAN_API_KEY_ENV_ALIASES,
     ZHIPU_CODING_PLAN_BASE_URL,
@@ -175,11 +175,31 @@ PROVIDER_PRESETS: tuple[AiProviderPreset, ...] = (
     ),
     AiProviderPreset(
         preset_id=ZHIPU_CODING_PLAN_PRESET_ID,
-        provider=MONITORING_C3_VERIFIER_PROVIDER,
+        provider="zhipu-coding-plan",
         label="智谱 Coding Plan 直连",
         base_url=ZHIPU_CODING_PLAN_BASE_URL,
-        default_model=MONITORING_C3_VERIFIER_MODEL,
+        default_model="glm-5.3-flash",
         api_key_env=ZHIPU_CODING_PLAN_API_KEY_ENV,
+        deployment_scope="cloud",
+        discovery_mode="manual_plus_probe",
+    ),
+    AiProviderPreset(
+        preset_id="cms_router",
+        provider="cms-router",
+        label="CMS Router（OpenAI兼容）",
+        base_url=CMS_ROUTER_BASE_URL,
+        default_model="glm-5.3-flash",
+        api_key_env=CMS_ROUTER_API_KEY_ENV,
+        deployment_scope="cloud",
+        discovery_mode="manual_plus_probe",
+    ),
+    AiProviderPreset(
+        preset_id="ollama_cloud",
+        provider="ollama-cloud",
+        label="Ollama Cloud（OpenAI兼容）",
+        base_url="https://ollama.com/v1",
+        default_model="deepseek-v4.1-flash",
+        api_key_env="OLLAMA_CLOUD_API_KEY",
         deployment_scope="cloud",
         discovery_mode="manual_plus_probe",
     ),
@@ -349,7 +369,7 @@ class AiRuntimeSettingsStore:
         names = [profile.api_key_env]
         if profile.provider == "alibaba_token_plan":
             names.extend(ALIBABA_TOKEN_PLAN_API_KEY_ENV_ALIASES)
-        elif profile.provider == MONITORING_C3_VERIFIER_PROVIDER:
+        elif profile.provider == "zhipu-coding-plan":
             names.extend(ZHIPU_CODING_PLAN_API_KEY_ENV_ALIASES)
         return tuple(dict.fromkeys(name for name in names if name))
 
