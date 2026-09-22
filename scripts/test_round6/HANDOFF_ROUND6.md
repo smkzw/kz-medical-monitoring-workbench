@@ -53,7 +53,9 @@ prompt=/tmp/kz_test_round6/consultation_prompt.md（F7 验收判定/validation_b
 
 **已贯通**：建项（勾选监查）→ 监查工作区 → Listing 接入（10 表/573 行秒级；54 表/18 万行 132-210s）→ 结构识别 → 方案/eCRF 上传 → 文档权威全链（analysis→review→adjudication→critique 双模型）→ needs_user_input 结构化裁决 → 用户裁决持久化 → 内容 mismatch 确认沿用 → **promoted** → 映射候选生成（55 条，mimo 全量运行）
 
-**当前断点（下一个工程切片）**：映射候选生成 9/10 完成后 `state=needs_attention, confirmation=pending_confirmation`——待确认/待决议问题需要前端映射确认交互闭环（数据在，UI 决策流未走通）。1 个失败作业需归因（可能为 mimo 输出质量，与已修复的 RoleSelection 证据归一同类）。
+**当前断点（下一个工程切片）**：映射候选生成 9/10 完成后 `state=needs_attention, confirmation=pending_confirmation`——55 条候选已生成，1 个待决问题（critical）需要前端映射确认交互闭环（数据在，UI 决策流未走通）。
+
+**失败作业归因（已查明）**：唯一失败作业=EX 表映射（attempt 1/1，controlled repair 后仍失败），失败码 `invalid_ai_output`——mimo 生成的 user decision question 违反合同规则"user decision questions must not delegate review of supplied study documents back to the user"（模型把已供文档的复核又推回给用户）。与 RoleSelection 证据归一同类：归一丢弃该问题条目即可合规（下一切片实施）。
 
 **推断被打通但需完整文件集实测**：promoted→mapping→facts→首次监查运行的最终一段（需要 protocol 在位+映射确认后的 facts 物化触发）。
 
