@@ -1164,6 +1164,10 @@ class OpenAICompatibleAiProvider:
         }
         if self.stream_enabled:
             request_payload["stream"] = True
+            # W02-E0：请求逐调用usage回报（stream.usage已在解析状态消费；
+            # 不支持该字段的路由可能拒绝——先经合成探针验证，失败时由
+            # 现有错误路径暴露，不做全provider静默降级）。
+            request_payload["stream_options"] = {"include_usage": True}
         thinking = self.default_thinking or envelope.thinking
         reasoning_effort = self.default_reasoning_effort or envelope.reasoning_effort
         if thinking in {"enabled", "disabled"}:
