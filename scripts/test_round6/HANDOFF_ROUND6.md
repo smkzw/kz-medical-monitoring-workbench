@@ -98,6 +98,8 @@ prompt=/tmp/kz_test_round6/consultation_prompt.md（F7 验收判定/validation_b
 
 **根因分类（0923V1 §3.1 类型4：可定位字段格式错误）**：需要按片分析失败载荷，实施与文档权威 RoleSelection 同类的输出归一（良性 extra 键丢弃/缺键补默认），或对映射 adjudication 的 structured_payload schema 做 R23 同款宽容化。这是明确的下一步工程切片（预计一个窗口）。
 
+**精确诊断（已查明）**：4 个失败分片的实际输出 `field_mappings` 均为空数组——模型在 adjudication 合同下拒绝产出映射条目（违反"必须覆盖全部授权字段"合同）。prompt 版本：adjudication-verifier-v14-tools-v7.1 / adjudication-primary-v16-tools-v7.1。**修复模式**：按 0923V1 §3.3 创建 v15/v17 后继 prompt（显式指令：即使语义未决也必须产出覆盖全部授权字段的 field_mappings 数组 + user_decision_required=true 标记；空 payload 会被拒收），为新 prompt 版本提交后继工作单元覆盖这 4 个分片。参照 v5 verifier 同族修复的验证路径。
+
 **完成即打通**：adjudication receipts 全量落盘 → confirm 通过 → facts 物化 → 首次监查运行 → proj_user_ddedac094408 端到端完成。
 
 ## 五、下一步（优先级序）
