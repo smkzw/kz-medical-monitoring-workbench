@@ -1376,15 +1376,20 @@ class OpenAICompatibleAiProvider:
             **self.response_diagnostics,
             **contract_diag,
         }
-        if self.expected_response_model and not verified_response_model:
-            raise AiProviderRuntimeError(
-                "AI provider response did not include the configured model name",
-                diagnostics={
-                    **self.response_diagnostics,
-                    "failure_code": "provider_response_model_missing",
-                },
-            )
         if (
+            self.expected_response_model
+            and not verified_response_model
+        ):
+            # 部分上游路由（OmniRoute/SSE重推理路径）偶发整条流都不回显
+            # model 字段；请求本身发往配置端点且内容/结束原因完整。
+            # “缺失”与“不匹配”不同：不匹配仍硬失败，缺失放行并在诊断中
+            # 留痕（response_model_missing_accepted），由服务层按请求身份
+            # 归一记录，不给伪造模型身份留空间。
+            self.response_diagnostics = {
+                **self.response_diagnostics,
+                "response_model_missing_accepted": True,
+            }
+        elif (
             self.expected_response_model
             and verified_response_model != self.expected_response_model
         ):

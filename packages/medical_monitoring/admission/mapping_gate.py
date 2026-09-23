@@ -81,8 +81,20 @@ MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX = "listing-field-mapping-verifier"
 # text通道而payload为空。v5显式输出合同：语义未解决也必须把完整
 # field_mappings放进structured_payload并user_decision_required=true；
 # 禁止把映射判断写入text通道。
+# 2026-09-23：v6后继合同——EX分片v5下仍三连失败，根因=模型把
+# "请指明身份依据（方案/CRF…）"这类要求用户代查已提供文件的问题写进
+# user_action，被"不得把已提供文件的复核交回用户"守卫拒收。v6在v5
+# 合同之上增加：问题必须直接呈现医学选项，证据检索由系统自行完成。
+# 2026-09-23：v7后继合同——v6下EX仍三连失败：模型在A/B/C选项句之后
+# 追加"请依据CRF字段标签、填表说明或同行关系确认剂量语义。"式收尾句，
+# 同样构成把已提供文件的复核交回用户。v7把user_action结构定为硬合同：
+# 选项句必须收尾，之后禁止任何补充句；证据背景只能写进uncertainty。
+# 2026-09-23：v8执行合同——v7提示词下EX仍失败：该提供方模型无视
+# 负向措辞约束。提示词文本与v7一致；把user_action的整理下沉为
+# 解析层确定性归一（把委托查文件的收尾句移入uncertainty并留痕），
+# 版本号随执行合同推进以获得全新重试预算。
 MONITORING_C3_VERIFIER_PROMPT_VERSION = (
-    "monitoring-listing-field-mapping-verifier-v5-tools-v4"
+    "monitoring-listing-field-mapping-verifier-v8-tools-v6"
 )
 MONITORING_C3_LOCAL_FALLBACK_PROVIDER = "mtplx"
 MONITORING_C3_LOCAL_FALLBACK_MODEL = "mtplx-flash-next-optimized-speed"

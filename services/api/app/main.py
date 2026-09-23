@@ -1015,12 +1015,17 @@ def _expected_source_context(
         ),
         indication_terms=(header.indication,) if header.indication else (),
         expected_file_role=expected_role,
-        expected_protocol_version=header.protocol_version,
+        # 绿地空壳项目的“草案”是平台占位版本，不是用户断言的方案版本；
+        # 真实方案正文永远无法包含它，作为期望值只会制造必然的确认负担。
+        expected_protocol_version=(
+            "" if _project_is_greenfield_shell(project_id)
+            else header.protocol_version
+        ),
     )
 
 
-def _allow_initial_monitoring_identity_adoption(project_id: str) -> bool:
-    """Allow one listing identity to bind only a generated greenfield shell."""
+def _project_is_greenfield_shell(project_id: str) -> bool:
+    """True for a user-created from-zero project still on generated identity."""
 
     if not project_source_manifest_service.is_user_created_project(project_id):
         return False
@@ -1032,6 +1037,12 @@ def _allow_initial_monitoring_identity_adoption(project_id: str) -> bool:
         and header.protocol_id == f"{header.project_code}-DRAFT"
         and header.protocol_version == "草案"
     )
+
+
+def _allow_initial_monitoring_identity_adoption(project_id: str) -> bool:
+    """Allow one listing identity to bind only a generated greenfield shell."""
+
+    return _project_is_greenfield_shell(project_id)
 
 
 source_registry = SourceRegistryService(
@@ -4059,9 +4070,20 @@ def _start_r7_monitoring_document_authority(
     workspace_dir: Path,
     files: list[tuple[str, bytes]],
 ) -> dict[str, object]:
-    project_context = project_source_manifest_service.build_manifest(
-        project_id
-    ).header_project.public_dict()
+    header_project = (
+        project_source_manifest_service.build_manifest(project_id).header_project
+    )
+    project_context = header_project.public_dict()
+    if _allow_initial_monitoring_identity_adoption(project_id):
+        # 绿地空壳项目：平台生成的项目编号和占位方案号（MW-…-DRAFT/草案）
+        # 不是用户断言的研究事实，真实文件正文永远不可能包含它们；把它们
+        # 冻结为预期身份必然制造串项目误报。只冻结用户录入的名称、药物、
+        # 适应症与阶段，让身份判断落在用户可作证的事实上。
+        project_context = {
+            key: value
+            for key, value in project_context.items()
+            if key not in ("project_code", "protocol_id", "protocol_version")
+        }
     return monitoring_document_authority_workflow.start(
         project_id=project_id,
         workspace_dir=workspace_dir,
@@ -4728,6 +4750,58 @@ def restore_project(project_id: str):
     return {"restored": True, "project_id": project_id}
 
 
+
+
+def _init_monitoring_runtime_dbs(project_id: str) -> None:
+    """创建项目级运行时 DB 并写入 schema markers（0923V1 修复）。
+
+    这些 DB 是 `inspect_project_schema` 的 required members。没有它们，
+    project_open_blocked 会阻断 run-setup 和 execution/start。
+    """
+    import sqlite3
+    ws = RUNTIME_DIR / "medical_monitoring_r7" / project_id
+    ws.mkdir(parents=True, exist_ok=True)
+    ddls = [
+        ("execution_profiles.sqlite3",
+         "CREATE TABLE IF NOT EXISTS profile_store_meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);"
+         "CREATE TABLE IF NOT EXISTS profile_layer_versions (layer_kind TEXT NOT NULL, scope_key TEXT NOT NULL, "
+         "revision INTEGER NOT NULL, record_id TEXT NOT NULL UNIQUE, payload_json TEXT NOT NULL, "
+         "content_digest TEXT NOT NULL, PRIMARY KEY (layer_kind, scope_key, revision));",
+         "profile_store_meta", "schema_version", "mm-r7-profile-store-v1"),
+        ("monitoring_run_bindings.sqlite3",
+         "CREATE TABLE IF NOT EXISTS monitoring_run_bindings (run_id TEXT PRIMARY KEY NOT NULL, "
+         "binding_digest TEXT NOT NULL, project_id TEXT NOT NULL, mode TEXT NOT NULL, "
+         "execution_basis TEXT NOT NULL, data_cutoff TEXT NOT NULL, source_revision_id TEXT NOT NULL, "
+         "prior_accepted_snapshot_ref TEXT, execution_profile_id TEXT NOT NULL, "
+         "execution_profile_digest TEXT NOT NULL, profile_id TEXT NOT NULL, user_config_name TEXT NOT NULL, "
+         "effective_selector TEXT NOT NULL, adapter_id TEXT NOT NULL, adapter_version TEXT NOT NULL, "
+         "fallback_profile_ids_json TEXT NOT NULL, schema_version TEXT NOT NULL, "
+         "frozen_profile_json TEXT NOT NULL, record_json TEXT NOT NULL);",
+         None, None, None),
+        ("launch_registry.sqlite3",
+         "CREATE TABLE IF NOT EXISTS r7_launch_registry_meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);",
+         "r7_launch_registry_meta", "schema_version", "mm-r7-slice07c2-launch-registry-v4"),
+        ("risk_rules.sqlite3",
+         "CREATE TABLE IF NOT EXISTS r7_risk_rule_revisions (project_id TEXT NOT NULL, "
+         "revision INTEGER NOT NULL, revision_token TEXT NOT NULL, candidate_id TEXT NOT NULL, "
+         "subject TEXT NOT NULL, condition TEXT NOT NULL, applicable_scope TEXT NOT NULL, "
+         "starting_run TEXT NOT NULL, summary TEXT NOT NULL, created_at TEXT NOT NULL, "
+         "rule_digest TEXT NOT NULL, selectable INTEGER NOT NULL, idempotency_key TEXT, "
+         "idempotency_fingerprint TEXT, PRIMARY KEY(project_id, revision), "
+         "UNIQUE(project_id, revision_token), UNIQUE(project_id, idempotency_key));",
+         None, None, None),
+    ]
+    for db_name, ddl, meta_table, meta_key, meta_val in ddls:
+        db_path = ws / db_name
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript(ddl)
+        if meta_table and meta_key:
+            conn.execute(f"INSERT OR REPLACE INTO {meta_table} (key, value) VALUES (?, ?)",
+                         (meta_key, meta_val))
+        conn.commit()
+        conn.close()
+
+
 @app.post("/api/projects", status_code=201)
 def create_project(request: UserProjectCreateRequest):
     try:
@@ -4752,6 +4826,10 @@ def create_project(request: UserProjectCreateRequest):
             ),
         )
         project = project_source_manifest_service.build_manifest(record.project_id).public_project_dict()
+        # 0923V1：API 创建的项目自动初始化监查模块运行时 DB（确保
+        # execution/start 等 Monitor 运行操作能找到所需的 schema）。
+        if any(m == "medical_monitoring" for m in getattr(record, "modules", ())):
+            _init_monitoring_runtime_dbs(record.project_id)
         return {
             "project": project,
             "entry_mode": record.entry_mode,
