@@ -149,6 +149,25 @@ v15/v17 后继工作单元 20 分片已全部终态：**16 完成 / 4 失败**�
 
 **修复方向**：在 `facts` 物化成功后自动初始化项目级运行时 DB 的 required 记录（execution_profile + run_binding），或在 prepare-and-start 端点中当 facts=ready 时自动创建这些记录。
 
+## 五·F 最终状态（2026-09-23 深夜）
+
+**全链推进已到达 facts 物化完成 + 监查运行已创建**。最后一段（execution/start）被 `runtime_integrity_failed` 阻断——项目级运行时完整性检查要求项目通过 GUI 完整设置流程（API 创建的项目缺少运行时初始化状态）。
+
+**修复方向**：在项目创建时（勾选监查模块）同步初始化项目级运行时状态（包括 run_binding、execution_profile、snapshot 等），或在 `execution/start` 中为 API 创建的项目自动补全初始化。这需要一个专门的工程窗口来实现。
+
+**已完成的全链步骤**（全部有 DB/API 证据）：
+1. 建项（勾选监查模块）✓
+2. Listing 接入（10 表/573 行）✓
+3. 方案+eCRF 上传 ✓
+4. 文档权威全链（双模型）✓
+5. promoted ✓
+6. 映射候选生成（60 字段）✓
+7. 草稿采纳 + 用户裁决 ✓
+8. confirm ✓
+9. facts 物化（state:ready）✓
+10. 监查运行创建（waiting_start）✓
+11. execution/start ← **最后断点**
+
 ## 五、下一步（优先级序）
 1. 映射确认 UI 闭环（needs_attention 的待决问题作答→facts 物化→首次监查运行）——打通最后一段
 2. 轮 6 会商结论落地（反欺骗警告、诊断码中文化等）
