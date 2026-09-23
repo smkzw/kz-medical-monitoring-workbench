@@ -110,6 +110,19 @@ v15/v17 后继工作单元 20 分片已全部终态：**16 完成 / 4 失败**�
 
 **下一切片（精确）**：对 role_equivalence 声明增加归一化层——模型产出的维度对象若有 `relation`/`rationale` 但 `evidence_ids` 结构错误（如字符串而非列表、引用了不存在的evidence），做良性归一（字符串→单元素列表；引用已声明evidence_ids集合作关联）；完全缺失relation则保守降为 `insufficient`。参照 doc-authority RoleSelection 归一模式。或：在 prompt 中加入一个完整的五维声明 few-shot 示例。
 
+## 五·E project_open_blocked 精确诊断（2026-09-23）
+
+**根因**：`inspect_project_schema` 将 API 创建的项目分类为 CORRUPT/UNKNOWN，因为 `profile_store`（execution_profiles.sqlite3）和 `run_binding`（monitoring_run_bindings.sqlite3）这两个 required=True 的 DB 从未被创建。这些 DB 只在浏览器 GUI 完整设置流程中初始化。
+
+** chicken-and-egg**：run-setup options 需要通过 schema inspection → schema inspection 要求 required DB 存在 → required DB 只在 setup 流程中创建 → setup 被自身前置条件阻断。
+
+**手动初始化尝试**：用 DDL + marker + user_version 创建了 4 个 DB，分类从 CORRUPT → UNKNOWN（schema_version 不匹配已知版本）。仍被 project_open_blocked 阻塞。
+
+**修复方向**：
+1. 在项目创建时（POST /api/projects 勾选监查模块），同步初始化 project-level runtime DBs（profile_store/run_binding/launch_registry/risk_rules）
+2. 或修改 `inspect_project_schema` 对 API 创建的新项目返回 "initializing" 而非 CORRUPT
+3. 或在 run-setup options 端点中延迟 schema inspection（只在真正启动运行时才检查）
+
 ## 五、下一步（优先级序）
 1. 映射确认 UI 闭环（needs_attention 的待决问题作答→facts 物化→首次监查运行）——打通最后一段
 2. 轮 6 会商结论落地（反欺骗警告、诊断码中文化等）
