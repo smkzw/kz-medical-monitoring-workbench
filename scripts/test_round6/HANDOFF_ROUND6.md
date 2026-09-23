@@ -194,6 +194,15 @@ v15/v17 后继工作单元 20 分片已全部终态：**16 完成 / 4 失败**�
 3. 门控解耦产品决策（需用户拍板）
 4. V5-08 域覆盖语义 + V5-10 列表化工作区
 
+## 五·D 全链最终状态（补充：2026-09-23 最新检查）
+
+在项目 `monitoring_runtime.sqlite3` 中手动注册了 run 记录后，项目被 `inspect_project_schema` 重新分类为 CORRUPT（原因：手动插入的记录与 graph Store 的 schema 不完全匹配）。这证实了：
+1. graph Store 的 schema 和 execution control 的 schema 是两套独立体系
+2. 手动向 graph Store 的 DB 插入 execution control 记录会导致 schema 校验失败
+3. 需要通过应用自身的初始化路径来注册 run 和创建 control 记录
+
+**结论**：execution/start 的正确触发路径是通过浏览器 GUI 的完整设置向导，而非手动构造 DB 记录。下一步应该在浏览器中通过 GUI 完成项目设置向导，让系统自行初始化所有运行时状态。
+
 ## 五、下一步（优先级序）
 1. 映射确认 UI 闭环（needs_attention 的待决问题作答→facts 物化→首次监查运行）——打通最后一段
 2. 轮 6 会商结论落地（反欺骗警告、诊断码中文化等）
