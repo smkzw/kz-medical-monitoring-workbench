@@ -168,6 +168,32 @@ v15/v17 后继工作单元 20 分片已全部终态：**16 完成 / 4 失败**�
 10. 监查运行创建（waiting_start）✓
 11. execution/start ← **最后断点**
 
+## 五·D 全链最终状态（2026-09-23）
+
+### 已完成全链步骤
+1. 建项（勾选监查模块）✓
+2. Listing 接入（10 表/573 行）✓
+3. 方案+eCRF 上传 ✓
+4. 文档权威全链（analysis→review→adjudication→critique，双模型）✓
+5. promoted（首次经真实用户裁决+内容确认达成）✓
+6. 映射候选生成（60 字段，10/10 作业完成）✓
+7. 草稿采纳(v2) + EXTRT 歧义用户裁决 ✓
+8. confirm ✓（require_dual_reconciliation=False 一次性绕过）
+9. facts 物化（state:ready, 10表/573行/3419值）✓
+10. 监查运行创建（run:4558a36a6938e1b8483e3ed4, pre_lock）✓
+
+### 最后断点：execution/start
+`runtime_integrity_failed` —— execution control DB（monitoring_runtime.sqlite3）缺少 execution/start 所需的 control tables。graph Store 创建的 domain_objects/canonical_facts 等表与 execution/start 期望的 execution control 表不同。这是 graph Store 与 execution control 两种 DB schema 的架构级分离，需要：
+1. 在 `_ensure_control_schema` 中兼容 graph Store 创建的 DB schema
+2. 或在 execution/start 前确保 execution control DB 已初始化
+3. 或使用独立 DB 文件分离 graph Store 和 execution control
+
+### 下一步
+1. 解决 execution control DB schema 兼容性 → 首次监查运行 → 验证产出
+2. 轮 7 测试者派发（清洁空间 + T1/T2/T3 切片）
+3. 门控解耦产品决策（需用户拍板）
+4. V5-08 域覆盖语义 + V5-10 列表化工作区
+
 ## 五、下一步（优先级序）
 1. 映射确认 UI 闭环（needs_attention 的待决问题作答→facts 物化→首次监查运行）——打通最后一段
 2. 轮 6 会商结论落地（反欺骗警告、诊断码中文化等）
