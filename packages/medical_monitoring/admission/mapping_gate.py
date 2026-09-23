@@ -31,8 +31,8 @@ MONITORING_C3_MAPPING_MODEL = "glm-5.3-flash"
 # 本机路由。
 DOC_AUTH_PRIMARY_PROVIDER = MONITORING_C3_MAPPING_PROVIDER
 DOC_AUTH_PRIMARY_MODEL = MONITORING_C3_MAPPING_MODEL
-DOC_AUTH_VERIFIER_PROVIDER = "ollama-cloud"
-DOC_AUTH_VERIFIER_MODEL = "deepseek-v4.1-flash"
+DOC_AUTH_VERIFIER_PROVIDER = "cms-router"
+DOC_AUTH_VERIFIER_MODEL = "deepseek-latest-cloud"
 MONITORING_C3_MAPPING_PROFILE_ID = "medical_monitoring_ai__cms_router_glm53flash"
 MONITORING_C3_DEEPSEEK_PRIMARY_PROVIDER = "deepseek"
 MONITORING_C3_DEEPSEEK_PRIMARY_MODEL = "deepseek-flash"
@@ -44,13 +44,14 @@ MONITORING_C3_CMS_PRIMARY_MODEL = "MiniMax-M3"
 MONITORING_C3_CMS_PRIMARY_PROFILE_ID = "medical_monitoring_ai__cms_smk_minimax_m3"
 MONITORING_C3_ALTERNATE_PROVIDER = "cms-router"
 MONITORING_C3_ALTERNATE_MODEL = "minimax-m3"
-# The current verifier default is Ollama Cloud DeepSeek V4.1 Flash.  Earlier
-# MTPLX, GLM and opencode-go identities remain below strictly so their frozen
-# receipts can be replayed; none is an automatic fallback for a new run.
-MONITORING_C3_VERIFIER_PROVIDER = "ollama-cloud"
-MONITORING_C3_VERIFIER_MODEL = "deepseek-v4.1-flash"
+# 2026-09-23 用户指定：盲核切cms-router/deepseek-latest-cloud（与主分析
+# 同路由不同模型族；请求名=回执名，探针+实测通过）。ollama-cloud密钥
+# 未提供，恢复后可回切。Earlier MTPLX/GLM/opencode-go identities remain
+# below so their frozen receipts can be replayed.
+MONITORING_C3_VERIFIER_PROVIDER = "cms-router"
+MONITORING_C3_VERIFIER_MODEL = "deepseek-latest-cloud"
 MONITORING_C3_VERIFIER_PROFILE_ID = (
-    "medical_monitoring_verifier_ai__ollama_cloud_dsv41"
+    "medical_monitoring_verifier_ai__cms_router_dlc"
 )
 MONITORING_C3_MTPLX_VERIFIER_PROVIDER = "mtplx"
 MONITORING_C3_MTPLX_VERIFIER_MODEL = "mtplx-flash-next-optimized-speed"
@@ -104,6 +105,8 @@ MONITORING_C3_SUPPORTED_RUNTIMES = frozenset({
 # here never authorizes a new call; new calls freeze the selected role profile.
 MONITORING_C3_VERIFIER_RUNTIME_PAIRS = frozenset({
     (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
+    # 历史身份：ollama-cloud直连盲核（密钥未提供暂停，冻结回执仍可重验）
+    ("ollama-cloud", "deepseek-v4.1-flash"),
     (MONITORING_C3_GLM_VERIFIER_PROVIDER, MONITORING_C3_GLM_VERIFIER_MODEL),
     (
         MONITORING_C3_MTPLX_VERIFIER_PROVIDER,

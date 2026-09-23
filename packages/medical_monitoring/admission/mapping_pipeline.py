@@ -118,6 +118,9 @@ def _completed_payload_equivalent_cohort(
                 str(row.profile_id),
                 str(row.provider),
                 str(row.requested_model),
+                # R23-01：prompt版本/策略属于执行身份——同一输入在旧提示下
+                # 完成不授权新提示复用（审核策略改变≠数据改变）。
+                str(getattr(row, "prompt_version", "") or ""),
             )
             for row in rows
         ))

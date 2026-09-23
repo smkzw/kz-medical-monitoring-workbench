@@ -981,6 +981,7 @@ def promote_document_authority_from_jobs(
     registrations = []
     entry_id_by_claim: dict[tuple[str, str, str], str] = {}
     blocked_entries: list[dict[str, Any]] = []
+    blocked_primary_candidate_ids: set[str] = set()
     with source_registry.store.transaction():
         for role, binding_kind, candidate, content in prepared:
             registration = source_registry.register_monitoring_mapping_document(
@@ -1046,8 +1047,26 @@ def promote_document_authority_from_jobs(
                             for check in unresolved_checks
                         ],
                     })
+                    if binding_kind == "primary":
+                        blocked_primary_candidate_ids.add(
+                            str(candidate["candidate_id"])
+                        )
                     continue
             claim = (role, binding_kind, str(candidate["candidate_id"]))
+            if binding_kind == "supplementary" and (
+                main_candidate_by_role[role] in blocked_primary_candidate_ids
+            ):
+                # R23-05：主文档被内容确认阻断时，补充文档保持依赖阻断
+                # ——不索引缺失的primary登记（防KeyError），不伪造可用。
+                blocked_entries.append({
+                    "role": role,
+                    "source_entry_id": registration.entry.entry_id,
+                    "filename": str(candidate.get("filename") or ""),
+                    "binding_kind": "supplementary",
+                    "dependency_blocked": True,
+                    "primary_candidate_id": main_candidate_by_role[role],
+                })
+                continue
             item = {
                 "role": role,
                 "candidate_id": claim[2],
