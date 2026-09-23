@@ -90,6 +90,16 @@ prompt=/tmp/kz_test_round6/consultation_prompt.md（F7 验收判定/validation_b
 
 **下一切片（精确）**：verifier EX 分片输出合同修复（模型把语义保守判断写进正文而非 payload——需检查 EX 域 verifier prompt 是否缺少"语义未解决也要产出 payload+user_question"的显式输出指令）；或按 0923V1 §3.1 将 verifier 技术缺口作为可显式记录的域级缺口参与 confirm（产品语义决策，需与门控解耦一并裁决）。
 
+## 五·C 裁决链路深度状态（2026-09-23 晚）
+
+**已打通**：证据刷新后映射重跑 20/20 作业（glm 10 + deepseek 10）全部完成 → 草稿 v2（60字段）→ EXTRT 歧义用户裁决 → 触发 dual-reconciliation（46 处分歧）→ adjudication 20 分片提交。
+
+**当前卡点**：4 个 adjudication 分片反复 invalid_ai_output（AE-verifier / VS-verifier / ICF_TRACK-verifier / EX-primary）——deepseek/glm 在这些分片上持续产出违反 structured_payload 合同的输出（extra_forbidden / 缺 payload）。已做 retry_terminal 重试仍失败。
+
+**根因分类（0923V1 §3.1 类型4：可定位字段格式错误）**：需要按片分析失败载荷，实施与文档权威 RoleSelection 同类的输出归一（良性 extra 键丢弃/缺键补默认），或对映射 adjudication 的 structured_payload schema 做 R23 同款宽容化。这是明确的下一步工程切片（预计一个窗口）。
+
+**完成即打通**：adjudication receipts 全量落盘 → confirm 通过 → facts 物化 → 首次监查运行 → proj_user_ddedac094408 端到端完成。
+
 ## 五、下一步（优先级序）
 1. 映射确认 UI 闭环（needs_attention 的待决问题作答→facts 物化→首次监查运行）——打通最后一段
 2. 轮 6 会商结论落地（反欺骗警告、诊断码中文化等）
