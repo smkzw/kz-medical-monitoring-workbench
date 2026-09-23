@@ -18,6 +18,50 @@ def option_identity(domain, source_field, option):
     return content_hash({'domain': domain, 'source_field': source_field, 'option': option})
 
 
+def _normalize_dimensions(dimensions, allowed_evidence_ids):
+    """R23轮6：良性结构变异归一——模型在五维轴上产出不规范对象时，
+    做确定性修正而非直接拒收。
+
+    - axis非dict（如纯字符串"insufficient"）→ 构造insufficient轴
+    - relation缺失或不在RELATIONS → 降为insufficient
+    - evidence_ids为字符串 → 包装为单元素列表
+    - evidence_ids含非allowed项 → 过滤保留allowed子集
+    - rationale缺失/空白 → 填入确定性占位说明
+    归一后仍不合规（dimension键缺失等）由后续严格校验统一拒收。
+    """
+    if not isinstance(dimensions, dict):
+        return
+    for axis_name, axis in dimensions.items():
+        if isinstance(axis, str) and axis.strip():
+            dimensions[axis_name] = {
+                'relation': axis if axis in RELATIONS else 'insufficient',
+                'evidence_ids': [],
+                'rationale': f'模型以文本形式返回该维度判断：{axis.strip()}',
+            }
+            axis = dimensions[axis_name]
+        if not isinstance(axis, dict):
+            dimensions[axis_name] = {
+                'relation': 'insufficient', 'evidence_ids': [],
+                'rationale': '模型未能产出该维度的结构化判断',
+            }
+            continue
+        relation = axis.get('relation')
+        if relation not in RELATIONS:
+            axis['relation'] = 'insufficient'
+            if not axis.get('rationale'):
+                axis['rationale'] = '模型返回的relation值不在合法集合内，保守降级'
+        eids = axis.get('evidence_ids')
+        if isinstance(eids, str):
+            axis['evidence_ids'] = [eids] if eids.strip() else []
+        elif not isinstance(eids, list):
+            axis['evidence_ids'] = []
+        else:
+            axis['evidence_ids'] = [str(x) for x in eids if isinstance(x, str)]
+        rationale = axis.get('rationale')
+        if not isinstance(rationale, str) or not rationale.strip():
+            axis['rationale'] = '该维度判断依据未在payload中完整表述，保守归入insufficient'
+
+
 def bind_role_declaration(declaration, *, domain, source_field, options, evidence_ids, source_scope_sha256):
     """Validate model-authored proof and attach the exact anonymous options.
 
@@ -32,6 +76,7 @@ def bind_role_declaration(declaration, *, domain, source_field, options, evidenc
         'judgment', 'option_ids', 'dimensions', 'counterevidence_summary',
     }:
         raise ValueError('role_equivalence_shape_invalid')
+    _normalize_dimensions(declaration['dimensions'], evidence_ids)
     if declaration['judgment'] not in RELATIONS:
         raise ValueError('role_equivalence_judgment_invalid')
     bound = []
