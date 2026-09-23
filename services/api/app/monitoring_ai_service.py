@@ -3408,6 +3408,7 @@ class MonitoringAiService:
                 "monitoring-listing-field-mapping-verifier-v2-tools-v1",
                 "monitoring-listing-field-mapping-verifier-v3-tools-v2",
                 "monitoring-listing-field-mapping-verifier-v4-tools-v3",
+                "monitoring-listing-field-mapping-verifier-v5-tools-v4",
             }:
                 system_prompt += (
                     " 你现在是全量盲核harness，不是主分析的复述者。输入中不会"
@@ -3417,6 +3418,20 @@ class MonitoringAiService:
                     "不得因为字段名熟悉就忽略值证据，也不得把候选join写成已确认"
                     "关系。输出仍须覆盖本次授权的全部字段，证据不足时保守标为"
                     "unmapped；严禁生成CTCAE分级、风险、Query或其他临床结论。"
+                )
+            if job.prompt_version == "monitoring-listing-field-mapping-verifier-v5-tools-v4":
+                # R23轮6后继合同：EX分片三连失败的根因是模型把语义保守
+                # 判断写入text通道而structured_payload为空。输出合同显式化。
+                system_prompt += (
+                    " 输出合同（最高优先级）：每个候选的structured_payload必须"
+                    "包含完整field_mappings数组，覆盖本次授权的全部字段。"
+                    "当某字段的语义证据不足或存在未决医学问题时，你仍然必须"
+                    "在field_mappings中给出该字段的映射条目，并将"
+                    "user_decision_required设为true、在user_action中用中文"
+                    "说明未决点——这是唯一的合法表达方式。严禁把映射判断、"
+                    "字段清单或语义结论写入text通道；text只能是对payload的"
+                    "简短摘要。空structured_payload或把内容全部写入text的"
+                    "输出将被系统拒收。"
                 )
             adjudication_contract = provider_input_payload[
                 "field_profile"

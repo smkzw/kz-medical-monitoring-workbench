@@ -961,6 +961,26 @@ source_content_validation_service = SourceContentValidationService(
 )
 
 
+def _study_code_tokens(text: str) -> tuple[str, ...]:
+    """0923V1会商R2根治：从用户输入的研究/产品名称中提取研究代号token。
+
+    平台自造的项目代号（MW-III-XXXX）在建项之后才诞生，任何真实方案
+    正文都不可能含有它——用它做project_identity期望值是结构性误报工厂。
+    用户输入的名称里的拉丁代号token（如MG-K10、RUX-03-002、CMS-D001）
+    才是真实方案正文可含的标识。至少含一个数字、长度≥3，避免碎词。
+    """
+    import re as _re
+    tokens = _re.findall(
+        r"[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)+", text or ""
+    )
+    return tuple(
+        dict.fromkeys(
+            token for token in tokens
+            if len(token) >= 3 and any(ch.isdigit() for ch in token)
+        )
+    )
+
+
 def _expected_source_context(
     project_id: str,
     module: str,
@@ -976,10 +996,21 @@ def _expected_source_context(
         }.get(module, "clinical_data_file")
     else:
         expected_role = source_kind
+    # 0923V1会商R2根治：期望标识=平台代号 + 用户输入名称中的研究代号
+    # token（真实方案正文可含），使真文件match、错文件仍mismatch。
+    user_identifiers = _study_code_tokens(
+        f"{header.product_name} {header.project_name}"
+    )
     return SourceExpectedContext(
         project_identifiers=tuple(
             dict.fromkeys(
-                value for value in (header.project_code, header.protocol_id) if value
+                value
+                for value in (
+                    header.project_code,
+                    header.protocol_id,
+                    *user_identifiers,
+                )
+                if value
             )
         ),
         indication_terms=(header.indication,) if header.indication else (),
