@@ -17,6 +17,8 @@ STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS = frozenset({
     "monitoring-listing-field-mapping-adjudication-v16-tools-v7.1",
     "monitoring-listing-field-mapping-adjudication-verifier-v13-tools-v7.1",
     "monitoring-listing-field-mapping-adjudication-verifier-v14-tools-v7.1",
+    "monitoring-listing-field-mapping-adjudication-verifier-v15-tools-v7.2",
+    "monitoring-listing-field-mapping-adjudication-v17-tools-v7.2",
 })
 
 # v7.1 residue contract: the controlled repair round re-emits only the
@@ -34,6 +36,8 @@ PATCH_REPAIR_MAPPING_PROMPT_VERSIONS = frozenset({
     "monitoring-listing-field-mapping-adjudication-v16-tools-v7.1",
     "monitoring-listing-field-mapping-adjudication-verifier-v13-tools-v7.1",
     "monitoring-listing-field-mapping-adjudication-verifier-v14-tools-v7.1",
+    "monitoring-listing-field-mapping-adjudication-verifier-v15-tools-v7.2",
+    "monitoring-listing-field-mapping-adjudication-v17-tools-v7.2",
 })
 
 ROLE_EQUIVALENCE_EVIDENCE_PROMPT_VERSIONS = frozenset({

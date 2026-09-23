@@ -381,8 +381,10 @@ class AdmissionMappingPipeline:
     def _adjudication_prompt_version(self, cohort):
         verifier = cohort == MONITORING_MAPPING_COHORT_VERIFIER
         if self._role_equivalence:
-            return ("monitoring-listing-field-mapping-adjudication-verifier-v14-tools-v7.1" if verifier
-                    else "monitoring-listing-field-mapping-adjudication-v16-tools-v7.1")
+            # 2026-09-23：v15/v17后继合同——空field_mappings拒收修复+
+            # 显式"语义未决仍须产出全字段payload+user_decision_required"指令。
+            return ("monitoring-listing-field-mapping-adjudication-verifier-v15-tools-v7.2" if verifier
+                    else "monitoring-listing-field-mapping-adjudication-v17-tools-v7.2")
         if self._visual_tool_reads:
             return ("monitoring-listing-field-mapping-adjudication-verifier-v6-tools-v3" if verifier
                     else "monitoring-listing-field-mapping-adjudication-v8-tools-v3")
