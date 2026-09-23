@@ -95,6 +95,7 @@ from packages.medical_monitoring.admission.document_evidence import (
 )
 from packages.medical_monitoring.admission.document_authority import (
     CURRENT_PROMPT_VERSIONS_BY_TASK as DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK,  # noqa: F401
+    DOCUMENT_AUTHORITY_SCHEMA_VERSION,
     LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK as DOCUMENT_AUTHORITY_LEGACY_TERMINAL_PROMPT_VERSIONS_BY_TASK,  # noqa: F401
     PRIMARY_ADJUDICATION_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_ADJUDICATION_PROMPT_VERSION,
     PRIMARY_CRITIQUE_PROMPT_VERSION as DOCUMENT_AUTHORITY_PRIMARY_CRITIQUE_PROMPT_VERSION,
@@ -2507,6 +2508,9 @@ class MonitoringAiService:
                 input_payload=input_payload,
                 evidence_state=evidence_state,
             )
+            initial_output = self._normalize_document_authority_provider_output(
+                job, initial_output
+            )
             outputs: List[Any] = [initial_output]
             stale_result = self._fail_if_revision_changed(
                 job,
@@ -2578,6 +2582,11 @@ class MonitoringAiService:
                     repair_envelope,
                     input_payload=input_payload,
                     evidence_state=evidence_state,
+                )
+                repaired_output = (
+                    self._normalize_document_authority_provider_output(
+                        job, repaired_output
+                    )
                 )
                 outputs.append(repaired_output)
                 stale_result = self._fail_if_revision_changed(
@@ -3425,6 +3434,9 @@ class MonitoringAiService:
                 "monitoring-listing-field-mapping-verifier-v3-tools-v2",
                 "monitoring-listing-field-mapping-verifier-v4-tools-v3",
                 "monitoring-listing-field-mapping-verifier-v5-tools-v4",
+                "monitoring-listing-field-mapping-verifier-v6-tools-v5",
+                "monitoring-listing-field-mapping-verifier-v7-tools-v6",
+                "monitoring-listing-field-mapping-verifier-v8-tools-v6",
             }:
                 system_prompt += (
                     " 你现在是全量盲核harness，不是主分析的复述者。输入中不会"
@@ -3448,6 +3460,50 @@ class MonitoringAiService:
                     "字段清单或语义结论写入text通道；text只能是对payload的"
                     "简短摘要。空structured_payload或把内容全部写入text的"
                     "输出将被系统拒收。"
+                )
+            if job.prompt_version in {
+                "monitoring-listing-field-mapping-verifier-v6-tools-v5",
+                "monitoring-listing-field-mapping-verifier-v7-tools-v6",
+                "monitoring-listing-field-mapping-verifier-v8-tools-v6",
+            }:
+                # v6/v7后继合同：EX分片在v5下仍三连失败——模型生成了
+                # "请指明身份依据（方案/CRF…）"式问题，要求用户代查系统
+                # 已提供的文件，被fail-closed守卫拒收。v6在v5输出合同之上
+                # 明确：需要用户裁决的问题必须直接呈现医学选项，文件证据
+                # 由系统自行检索，绝不把已提供文件的复核交回用户。
+                system_prompt += (
+                    " 输出合同（最高优先级）：每个候选的structured_payload必须"
+                    "包含完整field_mappings数组，覆盖本次授权的全部字段。"
+                    "当某字段的语义证据不足或存在未决医学问题时，你仍然必须"
+                    "在field_mappings中给出该字段的映射条目，并将"
+                    "user_decision_required设为true、在user_action中用中文"
+                    "说明未决点——这是唯一的合法表达方式。严禁把映射判断、"
+                    "字段清单或语义结论写入text通道；text只能是对payload的"
+                    "简短摘要。空structured_payload或把内容全部写入text的"
+                    "输出将被系统拒收。"
+                    " user_action问题的措辞合同：只能向医学经理提出医学选择"
+                    "（例如“A：按试验药物治疗记录采用；B：按非试验伴随用药"
+                    "处理；C：无法确定”），不得要求用户查看、查阅、核对或"
+                    "指明已提供文件（方案、eCRF、研究者手册、IB、SAP）中的"
+                    "内容作为答案依据。文件与数据证据的检索由你借助输入"
+                    "证据自行完成；穷尽证据后仍需用户裁决时，问题必须落实为"
+                    "具体的医学选项，而不是让用户去翻文件。"
+                )
+            if job.prompt_version in {
+                "monitoring-listing-field-mapping-verifier-v7-tools-v6",
+                "monitoring-listing-field-mapping-verifier-v8-tools-v6",
+            }:
+                # v7追加：v6下模型在A/B/C选项句后又追加
+                # "请依据CRF字段标签、填表说明或同行关系确认剂量语义。"
+                # 一类收尾句——同样被守卫拒收。user_action结构定为硬合同。
+                system_prompt += (
+                    " user_action结构硬合同：user_action必须以医学选项句收尾"
+                    "（“……？A：……；B：……；C：无法确定。”），选项句之后"
+                    "不得再有任何句子、行动指示或补充说明。特别禁止在选项后"
+                    "追加“请依据CRF字段标签、填表说明或同行关系确认……”"
+                    "一类把证据检索交回用户的句子。证据检索与核对由系统完成；"
+                    "需要向医学经理交代的证据背景或不确定性，只能写入该字段"
+                    "的uncertainty，不得写进user_action。"
                 )
             adjudication_contract = provider_input_payload[
                 "field_profile"
@@ -3948,7 +4004,11 @@ class MonitoringAiService:
                     runtime_env.get("WORKBENCH_AI_OUTPUT_TOKEN_BUDGET", "0")
                     or 0
                 )
-                or 12_000
+                # v19/v17起映射/裁决输出含role_equivalence五维证书与
+                # dependency_fields，单分片原始JSON可达15k字节以上；
+                # 12_000预算会把JSON截断在流中（strict_raw_truncated），
+                # 修复轮无法补救截断。映射任务预算提高到24_000。
+                or 24_000
                 if job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
                 else (
                     _DOCUMENT_AUTHORITY_MAX_OUTPUT_TOKENS
@@ -5109,7 +5169,9 @@ class MonitoringAiService:
                     input_payload,
                 )
                 if job.prompt_version in ROLE_EQUIVALENCE_PROMPT_VERSIONS:
-                    self._bind_role_equivalence_declarations(normalized, input_payload)
+                    self._bind_role_equivalence_declarations(
+                        normalized, input_payload, job=job
+                    )
                 if not _contains_cjk(candidate.title) or any(
                     (
                         not _contains_cjk(
@@ -7386,7 +7448,7 @@ class MonitoringAiService:
         })[:28]
 
     @staticmethod
-    def _bind_role_equivalence_declarations(structured_payload, input_payload):
+    def _bind_role_equivalence_declarations(structured_payload, input_payload, job=None):
         from packages.medical_monitoring.admission.role_equivalence import bind_role_declaration
         from packages.medical_monitoring.intelligence.primitives import content_hash
         rows = input_payload["field_profile"].get("adjudication_contract", {}).get("candidate_options_review", ())
@@ -7396,10 +7458,60 @@ class MonitoringAiService:
             if declaration is None:
                 continue
             pair = (mapping["domain"], mapping["source_field"])
+            allowed = list(mapping.get("evidence_ids", ()))
+            if job is not None:
+                # 模型可能把服务端提供的画像证据编号只写进维度轴，漏进
+                # 字段自身的evidence_ids。该编号由服务端按冻结输入计算，
+                # 可确定性授权：轴引用了它就把并进字段级允许集合；
+                # 其余未授权编号仍由闭包校验拒收。
+                provided = (
+                    MonitoringAiService._mapping_profile_evidence_id(
+                        job, input_payload["field_profile"], pair[0], pair[1]
+                    ),
+                )
+                cited = {
+                    str(evidence_id)
+                    for axis in (declaration.get("dimensions") or {}).values()
+                    if isinstance(axis, dict)
+                    for evidence_id in (axis.get("evidence_ids") or [])
+                    if isinstance(evidence_id, str)
+                }
+                allowed = allowed + sorted(
+                    (cited & set(provided)) - set(allowed)
+                )
+            authorized = set(allowed)
+            unclosable = False
+            for axis in (declaration.get("dimensions") or {}).values():
+                if not isinstance(axis, dict) or not isinstance(
+                    axis.get("evidence_ids"), list
+                ):
+                    continue
+                kept = [
+                    evidence_id
+                    for evidence_id in axis["evidence_ids"]
+                    if evidence_id in authorized
+                ]
+                if kept != axis["evidence_ids"]:
+                    unclosable = unclosable or (
+                        axis.get("relation") == "equivalent" and not kept
+                    )
+                    axis["evidence_ids"] = kept
+            if unclosable:
+                # 等价证书引用了无法闭到冻结证据的证据编号：证书不成立。
+                # 保守删除整份声明，该字段保持未决，交由用户裁决；
+                # 不伪造等价结论。
+                mapping["uncertainty"] = (
+                    str(mapping.get("uncertainty") or "")
+                    + ("；" if mapping.get("uncertainty") else "")
+                    + "【系统确定性整理】等价声明引用了无法闭合到冻结证据的"
+                    "证据编号，证书不成立已删除，相关字段保持未决。"
+                )
+                mapping["role_equivalence"] = None
+                continue
             try:
                 mapping["role_equivalence"] = bind_role_declaration(
                     declaration, domain=pair[0], source_field=pair[1], options=by_field.get(pair, ()),
-                    evidence_ids=mapping.get("evidence_ids", ()),
+                    evidence_ids=allowed,
                     source_scope_sha256=content_hash({"project_id": input_payload["field_profile"].get("project_id"),
                         "sources": input_payload["field_profile"].get("source_bindings", ())}),
                 )
@@ -8167,6 +8279,116 @@ class MonitoringAiService:
         )
         return env
 
+    @staticmethod
+    def _normalize_mapping_user_actions(payload: Mapping[str, Any]) -> None:
+        """Move delegating evidence-retrieval suffixes out of user_action.
+
+        Some providers append an instruction like
+        "请依据CRF字段标签、填表说明或同行关系确认剂量语义。" AFTER an
+        otherwise well-formed medical-option question. That sentence
+        delegates retrieval of already supplied documents back to the
+        user, which the output contract forbids, and the pattern survives
+        prompt-level prohibitions across repair rounds. The medical
+        options are untouched: only sentences that (a) match the
+        delegation guard and (b) appear after the question mark are
+        removed; they are preserved in the mapping's uncertainty field
+        with an explicit marker, and the raw provider output stays in the
+        attempt record for audit. A payload whose question cannot be
+        cleanly separated is left untouched and keeps failing closed.
+        """
+
+        mappings = payload.get("field_mappings")
+        if not isinstance(mappings, list):
+            return
+        for mapping in mappings:
+            if not isinstance(mapping, Mapping):
+                continue
+            user_action = str(mapping.get("user_action") or "")
+            if not user_action or "？" not in user_action:
+                continue
+            if not _delegates_available_evidence_to_user(user_action):
+                continue
+            question_seen = False
+            kept: List[str] = []
+            dropped: List[str] = []
+            for sentence in re.split(r"(?<=[。！？!?])", user_action):
+                if not sentence:
+                    continue
+                if question_seen and _delegates_available_evidence_to_user(
+                    sentence
+                ):
+                    dropped.append(sentence)
+                    continue
+                if not question_seen and ("？" in sentence or "?" in sentence):
+                    question_seen = True
+                kept.append(sentence)
+            if not dropped:
+                continue
+            cleaned = "".join(kept)
+            if "？" not in cleaned or _delegates_available_evidence_to_user(
+                cleaned
+            ):
+                continue
+            uncertainty = str(mapping.get("uncertainty") or "")
+            marker = (
+                "【系统确定性整理】以下要求用户自行核对已提供文件的指示"
+                "已移出user_action（文件证据由系统检索）："
+                + "".join(dropped)
+            )
+            mapping["user_action"] = cleaned
+            mapping["uncertainty"] = (
+                uncertainty + ("；" if uncertainty else "") + marker
+            )
+
+    @staticmethod
+    def _normalize_document_authority_provider_output(
+        job: MonitoringAiJob,
+        output: Any,
+    ) -> Any:
+        """Rewrap a bare document-authority payload into the task envelope.
+
+        Independent models occasionally return the complete analysis or
+        review payload without the generic task wrapper. The payload itself
+        is stored verbatim; the server only fills its own job identity
+        fields and neutral candidate scaffolding, so the fail-closed
+        content validation (batch digest, locators, identity) still judges
+        the model's own work. Malformed payloads that do not match the
+        known bare shape keep failing closed unchanged.
+        """
+
+        if job.task_type not in (
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+        ) or not isinstance(output, Mapping):
+            return output
+        if "candidates" in output:
+            return output
+        if output.get("schema_version") != DOCUMENT_AUTHORITY_SCHEMA_VERSION:
+            return output
+        is_analysis = (
+            job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS
+        )
+        marker = "candidate_assessments" if is_analysis else "decisions"
+        if marker not in output:
+            return output
+        return {
+            "schema_version": MONITORING_AI_SCHEMA_VERSION,
+            "task_id": job.job_id,
+            "task_type": job.task_type.value,
+            "input_revision_sha256": job.input_revision_sha256,
+            "candidates": [
+                {
+                    "candidate_type": TASK_CANDIDATE_TYPES[job.task_type][0],
+                    "title": (
+                        "文档权威独立分析"
+                        if is_analysis
+                        else "文档权威独立复核"
+                    ),
+                    "structured_payload": dict(output),
+                }
+            ],
+        }
+
     def _parse_provider_output(
         self,
         job: MonitoringAiJob,
@@ -8196,6 +8418,9 @@ class MonitoringAiService:
                 candidate = dict(item)
                 candidate.pop("system_generated_evidence", None)
                 candidate.pop("system_generated_mapping_provenance", None)
+                structured = candidate.get("structured_payload")
+                if isinstance(structured, Mapping):
+                    self._normalize_mapping_user_actions(structured)
                 candidates.append(candidate)
             output["candidates"] = candidates
         try:
@@ -8440,7 +8665,12 @@ class MonitoringAiService:
                 "provider expected response model identity is missing or "
                 "does not match the job"
             )
-        if not actual or actual != expected:
+        if not actual:
+            # 网关已对“响应缺失模型名”放行（诊断留痕
+            # response_model_missing_accepted）：请求发往配置端点，
+            # 观测身份记为空并按请求身份归一，不阻塞完成路径。
+            return job.requested_model
+        if actual != expected:
             raise MonitoringAiResponseIdentityError(
                 "provider response model identity is missing or mismatched"
             )

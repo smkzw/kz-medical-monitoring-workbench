@@ -53,14 +53,15 @@ MAPPING_ADJUDICATION_PROMPT_VERSION = (
 MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION = (
     "monitoring-listing-field-mapping-adjudication-verifier-v3"
 )
-# Current adjudication deployment is tools-v7.1 (v7 contract plus patch-mode
-# controlled repair for violating fields). v5/v3 remain the flags-off
-# constructor's prompt names but are no longer a current queue deployment:
-# startup supersession retires their queued/running work and keeps only
-# terminal audit evidence, so the pre-v7 contract can never wake again.
+# Current adjudication deployment is tools-v7.2 (v17/v15 role-equivalence
+# contract: 空 field_mappings 拒收修复 + 语义未决仍须产出全字段 payload).
+# v16/v14-tools-v7.1 and older remain listed as legacy terminal prompts: the
+# startup supersession retires queued/running work of any non-current version,
+# so this set MUST list exactly what _adjudication_prompt_version deploys —
+# a stale entry here makes every restart kill the live adjudication rounds.
 MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS = frozenset({
-    "monitoring-listing-field-mapping-adjudication-v16-tools-v7.1",
-    "monitoring-listing-field-mapping-adjudication-verifier-v14-tools-v7.1",
+    "monitoring-listing-field-mapping-adjudication-v19-tools-v7.2",
+    "monitoring-listing-field-mapping-adjudication-verifier-v17-tools-v7.2",
 })
 MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS = frozenset({
     "monitoring-listing-field-mapping-adjudication-v3",
@@ -75,6 +76,12 @@ MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS = frozenset({
     "monitoring-listing-field-mapping-adjudication-verifier-v12-tools-v7.1",
     "monitoring-listing-field-mapping-adjudication-v15-tools-v7.1",
     "monitoring-listing-field-mapping-adjudication-verifier-v13-tools-v7.1",
+    "monitoring-listing-field-mapping-adjudication-v16-tools-v7.1",
+    "monitoring-listing-field-mapping-adjudication-verifier-v14-tools-v7.1",
+    "monitoring-listing-field-mapping-adjudication-v17-tools-v7.2",
+    "monitoring-listing-field-mapping-adjudication-verifier-v15-tools-v7.2",
+    "monitoring-listing-field-mapping-adjudication-v18-tools-v7.2",
+    "monitoring-listing-field-mapping-adjudication-verifier-v16-tools-v7.2",
     MAPPING_ADJUDICATION_PROMPT_VERSION,
     MAPPING_ADJUDICATION_VERIFIER_PROMPT_VERSION,
 })
@@ -383,8 +390,15 @@ class AdmissionMappingPipeline:
         if self._role_equivalence:
             # 2026-09-23：v15/v17后继合同——空field_mappings拒收修复+
             # 显式"语义未决仍须产出全字段payload+user_decision_required"指令。
-            return ("monitoring-listing-field-mapping-adjudication-verifier-v15-tools-v7.2" if verifier
-                    else "monitoring-listing-field-mapping-adjudication-v17-tools-v7.2")
+            # 2026-09-23：v16/v18——提示词文本与v15/v17一致；因startup
+            # supersession的current-set滞后曾把v17/v15队列整体退役（已修复
+            # current-set），版本推进以打开全新作业命名空间、获得全新重试预算。
+            # 2026-09-23：v17/v19——v16/v18曾因feature-set漏注册（已补齐
+            # STRICT/PATCH_REPAIR/ROLE_EQUIVALENCE/DEPENDENCY/EVIDENCE全链）
+            # 产出了缺dependency_fields、未经等价绑定的候选；版本再推进
+            # 以脱离该残缺命名空间，让完整合同下重跑。
+            return ("monitoring-listing-field-mapping-adjudication-verifier-v17-tools-v7.2" if verifier
+                    else "monitoring-listing-field-mapping-adjudication-v19-tools-v7.2")
         if self._visual_tool_reads:
             return ("monitoring-listing-field-mapping-adjudication-verifier-v6-tools-v3" if verifier
                     else "monitoring-listing-field-mapping-adjudication-v8-tools-v3")
@@ -1512,13 +1526,18 @@ class AdmissionMappingPipeline:
         if generation:
             # A failed shard is retried in place. Successful siblings retain
             # their job/candidate identity; polling must never create g02.
+            # stale_input shards whose frozen revision matches again are
+            # resumable the same way: retry_terminal accepts them, and this
+            # in-place retry loop is the only path that can reach them.
             resolver = getattr(service, "current_revision_resolver", None)
             retry = getattr(self._repository, "retry_terminal", None)
             resumed = []
             if callable(resolver) and callable(retry):
                 for job in jobs:
-                    if (str(_value(job.status)) != "failed"
-                            or getattr(job, "contract_retirement_code", "")):
+                    if (
+                        str(_value(job.status)) not in {"failed", "stale_input"}
+                        or getattr(job, "contract_retirement_code", "")
+                    ):
                         resumed.append(job)
                         continue
                     current_revision = resolver(job)

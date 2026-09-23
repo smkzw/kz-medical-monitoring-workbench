@@ -455,35 +455,76 @@ def _build_current_runtime_schema_shape() -> Dict[str, Any]:
 _CURRENT_RUNTIME_SCHEMA_SHAPE = _build_current_runtime_schema_shape()
 
 
+def _runtime_schema_integrity(connection: sqlite3.Connection) -> None:
+    """Run the full read-only integrity gate on an open connection."""
+
+    connection.execute("PRAGMA query_only=ON")
+    if int(connection.execute("PRAGMA query_only").fetchone()[0]) != 1:
+        raise sqlite3.DatabaseError("query_only was not enabled")
+    quick_rows = connection.execute("PRAGMA quick_check").fetchall()
+    if not quick_rows or any(
+        str(row[0]).lower() != "ok" for row in quick_rows
+    ):
+        raise sqlite3.DatabaseError("quick_check failed")
+    if connection.execute("PRAGMA foreign_key_check").fetchall():
+        raise sqlite3.DatabaseError("foreign_key_check failed")
+    marker = connection.execute(
+        "SELECT value FROM meta WHERE key='schema_version'"
+    ).fetchone()
+    if marker is None or str(marker[0]) != "6":
+        raise sqlite3.DatabaseError("schema_version is not current")
+    actual_shape = _runtime_schema_shape(connection)
+    # R7 may add its optional execution-control table to this shared
+    # runtime database; the local Store gate owns only the R1 shape.
+    actual_shape["tables"].pop("r7_execution_control", None)
+    if actual_shape != _CURRENT_RUNTIME_SCHEMA_SHAPE:
+        raise sqlite3.DatabaseError("runtime schema shape is not current")
+
+
+def _open_schema_probe_connection(db_path: Path) -> sqlite3.Connection:
+    """Open the database read-only for the integrity gate.
+
+    A ``mode=ro`` URI connection cannot create the ``-shm`` sidecar that a
+    persistently WAL-mode database requires, so the connect itself may
+    succeed while the first query fails with "unable to open database
+    file" whenever no other process currently holds the sidecar open.
+    That is an availability condition of the probe, not evidence of a
+    schema problem: retry briefly, then fall back to the read-write
+    driver pinned read-only via ``query_only`` (which the gate requires
+    on every connection anyway).
+    """
+
+    uri = "file:" + quote(str(db_path.resolve()), safe="/") + "?mode=ro"
+    last_error: Optional[Exception] = None
+    for attempt in range(3):
+        connection: Optional[sqlite3.Connection] = None
+        try:
+            connection = sqlite3.connect(uri, uri=True, isolation_level=None)
+            _runtime_schema_integrity(connection)
+            return connection
+        except sqlite3.OperationalError as exc:
+            last_error = exc
+            if connection is not None:
+                connection.close()
+            if "unable to open database file" not in str(exc):
+                raise
+            time.sleep(0.15 * (attempt + 1))
+    connection = sqlite3.connect(str(db_path), isolation_level=None)
+    try:
+        _runtime_schema_integrity(connection)
+    except Exception:
+        connection.close()
+        raise
+    return connection
+
+
 def _assert_current_schema(db_path: Path) -> None:
     """Fail closed before opening an existing non-current runtime database."""
     if not db_path.exists():
         return
     connection: Optional[sqlite3.Connection] = None
     try:
-        uri = "file:" + quote(str(db_path.resolve()), safe="/") + "?mode=ro"
-        connection = sqlite3.connect(uri, uri=True, isolation_level=None)
-        connection.execute("PRAGMA query_only=ON")
-        if int(connection.execute("PRAGMA query_only").fetchone()[0]) != 1:
-            raise sqlite3.DatabaseError("query_only was not enabled")
-        quick_rows = connection.execute("PRAGMA quick_check").fetchall()
-        if not quick_rows or any(
-            str(row[0]).lower() != "ok" for row in quick_rows
-        ):
-            raise sqlite3.DatabaseError("quick_check failed")
-        if connection.execute("PRAGMA foreign_key_check").fetchall():
-            raise sqlite3.DatabaseError("foreign_key_check failed")
-        marker = connection.execute(
-            "SELECT value FROM meta WHERE key='schema_version'"
-        ).fetchone()
-        if marker is None or str(marker[0]) != "6":
-            raise sqlite3.DatabaseError("schema_version is not current")
-        actual_shape = _runtime_schema_shape(connection)
-        # R7 may add its optional execution-control table to this shared
-        # runtime database; the local Store gate owns only the R1 shape.
-        actual_shape["tables"].pop("r7_execution_control", None)
-        if actual_shape != _CURRENT_RUNTIME_SCHEMA_SHAPE:
-            raise sqlite3.DatabaseError("runtime schema shape is not current")
+        connection = _open_schema_probe_connection(db_path)
     except (OSError, sqlite3.Error, TypeError, ValueError) as exc:
         raise StoreError("unsupported schema") from exc
     finally:

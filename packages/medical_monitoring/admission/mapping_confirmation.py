@@ -1126,20 +1126,52 @@ class AdmissionMappingConfirmationService:
         return projected
 
     def _cohort_recoveries_exhausted(self, cohort_results) -> bool:
-        """True when every failed adjudication job burned its retries."""
-        for result in cohort_results.values():
-            for item in result.get("mappings") or []:
-                continue
+        """True when every failed adjudication job burned its retries.
+
+        The bounded budget is the automatic-recovery count, not the raw
+        attempt counter: operator requeues legitimately inflate attempts
+        without opening new automatic budget, and a job whose automatic
+        recovery is spent can never be resumed by the in-place loop again.
+        """
+        from packages.medical_monitoring.admission.mapping_pipeline import (
+            _ADJUDICATION_AUTO_RECOVERY_LIMIT,
+        )
         # mappings only carries completed work; query the repository directly
         # via the jobs the pipeline reported (job_ids live in mappings rows).
         for result in cohort_results.values():
             for job_ref in result.get("failed_jobs") or []:
                 job = self.ai_repository.get(job_ref[0], job_ref[1])
+                arc = self._automatic_recovery_count(job_ref[0], job_ref[1])
+                if arc >= int(_ADJUDICATION_AUTO_RECOVERY_LIMIT):
+                    continue
                 if int(getattr(job, "attempt_count", 0) or 0) < int(
                     getattr(job, "max_attempts", 0) or 0
                 ):
                     return False
         return True
+
+    def _automatic_recovery_count(self, project_id: str, job_id: str) -> int:
+        """Read the bounded-recovery counter from the durable job row.
+
+        The job model intentionally omits bookkeeping columns; the raw row
+        is the authority for how much automatic recovery budget is spent.
+        """
+        connect = getattr(self.ai_repository, "_connect", None)
+        if not callable(connect):
+            return 0
+        try:
+            with connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT automatic_recovery_count
+                    FROM monitoring_ai_jobs
+                    WHERE project_id = ? AND job_id = ?
+                    """,
+                    (project_id, job_id),
+                ).fetchone()
+            return int(row[0]) if row is not None else 0
+        except Exception:
+            return 0
 
     def _gap_fields_for_failed_chunks(
         self,
