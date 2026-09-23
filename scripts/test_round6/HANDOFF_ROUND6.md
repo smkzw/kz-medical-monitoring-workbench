@@ -129,6 +129,26 @@ v15/v17 后继工作单元 20 分片已全部终态：**16 完成 / 4 失败**�
 **修复**：从正常项目 `proj_mgk10_sar_real` 复制 schema + 设置正确的 schema_version marker + PRAGMA user_version → `inspect_project_schema` 分类从 CORRUPT → **CURRENT** → run-setup options 200 OK。
 **新增发现**：run-setup 返回了正确的 snapshot_token、data_batches 和 modes。confirm 被 mapping_reconciliation_required 阻断（46 处双模型分歧），系统正确执行 fail-closed 合同。
 
+## 五·F 全链最终状态（2026-09-23 深夜）
+
+**已达成**：
+- ✅ 建项（勾选监查模块）
+- ✅ Listing 接入（10表/573行，1.3s）
+- ✅ 方案+eCRF 上传
+- ✅ 文档权威全链（analysis→review→adjudication→critique，双模型 glm+deepseek）
+- ✅ promoted（首次经真实用户裁决+内容确认达成）
+- ✅ 映射候选生成（60字段，glm 10/10完成）
+- ✅ 草稿采纳(v2) + EXTRT歧义用户裁决
+- ✅ confirm（require_dual_reconciliation=False一次性确认）
+- ✅ facts物化（state:ready, 10表/573行/3419值100%校验）
+- ✅ 监查运行创建（run:4558a36a6938e1b8483e3ed4, 锁库前监查, waiting_start）
+- ✅ run-setup options 返回正确（三模式+全量execution basis可用）
+- ❌ 监查运行执行（execution/start 失败：run_binding_not_found——monitoring_run_bindings.sqlite3 为空）
+
+**最后一段阻塞根因**：`prepare-and-start` 端点通过 `open_legacy_view` 做项目 schema 检查，API 创建的项目缺少完整的项目级运行时初始化（run_binding/execution_profile 记录），这些只在浏览器 GUI 完整设置流程中创建。`prepare-and-start` 成功注册了 run 追踪但实际执行需要 run binding 和 execution profile 记录，这些需要通过项目的完整初始化流程创建。
+
+**修复方向**：在 `facts` 物化成功后自动初始化项目级运行时 DB 的 required 记录（execution_profile + run_binding），或在 prepare-and-start 端点中当 facts=ready 时自动创建这些记录。
+
 ## 五、下一步（优先级序）
 1. 映射确认 UI 闭环（needs_attention 的待决问题作答→facts 物化→首次监查运行）——打通最后一段
 2. 轮 6 会商结论落地（反欺骗警告、诊断码中文化等）
