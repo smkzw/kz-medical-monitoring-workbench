@@ -102,6 +102,14 @@ prompt=/tmp/kz_test_round6/consultation_prompt.md（F7 验收判定/validation_b
 
 **完成即打通**：adjudication receipts 全量落盘 → confirm 通过 → facts 物化 → 首次监查运行 → proj_user_ddedac094408 端到端完成。
 
+## 五·D v15/v17后继轮结果（2026-09-23 深夜）
+
+v15/v17 后继工作单元 20 分片已全部终态：**16 完成 / 4 失败**。4 个失败分片统一违约 `role_equivalence_axis_invalid:*`（模型在五维声明的 dimensions 里产出不符 `{'relation','evidence_ids','rationale'}` 结构的对象）——**跨 v14/v16 与 v15/v17 两个 prompt 代际、deepseek/glm 两个模型持续复现**，属深层嵌套结构化输出的已知模型弱点。
+
+**失败分片**：EX-primary(glm)、AE-verifier(deepseek)、VS-verifier(deepseek)、ICF_TRACK-verifier(deepseek)。
+
+**下一切片（精确）**：对 role_equivalence 声明增加归一化层——模型产出的维度对象若有 `relation`/`rationale` 但 `evidence_ids` 结构错误（如字符串而非列表、引用了不存在的evidence），做良性归一（字符串→单元素列表；引用已声明evidence_ids集合作关联）；完全缺失relation则保守降为 `insufficient`。参照 doc-authority RoleSelection 归一模式。或：在 prompt 中加入一个完整的五维声明 few-shot 示例。
+
 ## 五、下一步（优先级序）
 1. 映射确认 UI 闭环（needs_attention 的待决问题作答→facts 物化→首次监查运行）——打通最后一段
 2. 轮 6 会商结论落地（反欺骗警告、诊断码中文化等）

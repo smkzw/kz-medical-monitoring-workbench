@@ -3403,6 +3403,22 @@ class MonitoringAiService:
                 "不足以单独构成用户决定；只有该缺口确实导致下游医学分类"
                 "无法确定并会改变分析结果时，才可标为true。"
             )
+            if str(getattr(job, "prompt_version", "")).startswith(
+                ("monitoring-listing-field-mapping-adjudication-v17-tools-v7.2",
+                 "monitoring-listing-field-mapping-adjudication-verifier-v15-tools-v7.2"),
+            ):
+                # R23轮6后继合同（0923V1 §3.3）：空field_mappings拒收——
+                # 语义未决也必须产出覆盖全部授权字段的payload，禁止写入text。
+                system_prompt += (
+                    " 输出合同（最高优先级）：structured_payload.field_mappings"
+                    "必须覆盖fields列出的每一个字段，一个不得少。当某字段的"
+                    "医学语义证据不足或存在未决问题（如盲态给药标签、组别分配"
+                    "无法从本表判定）时，你仍然必须输出该字段的映射条目："
+                    "field_kind按实际来源性质填写，recommended_role填最可能的"
+                    "角色，user_decision_required设为true，user_action用中文"
+                    "写明需要医学经理裁决的具体问题。空field_mappings或把"
+                    "映射结论全部写进text的输出会被系统直接拒收。"
+                )
             if job.prompt_version in {
                 _C3_VERIFIER_PROMPT_VERSION,
                 "monitoring-listing-field-mapping-verifier-v2-tools-v1",
