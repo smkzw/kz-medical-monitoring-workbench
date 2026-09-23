@@ -77,8 +77,12 @@ MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX = "listing-field-mapping-verifier"
 # The verifier prompt version lives in this namespace contract because the
 # verifier prompt must evolve independently of the primary prompt owned by
 # the service layer.
+# 2026-09-23：v5后继合同——EX分片三连失败根因=模型把语义保守判断写入
+# text通道而payload为空。v5显式输出合同：语义未解决也必须把完整
+# field_mappings放进structured_payload并user_decision_required=true；
+# 禁止把映射判断写入text通道。
 MONITORING_C3_VERIFIER_PROMPT_VERSION = (
-    "monitoring-listing-field-mapping-verifier-v1"
+    "monitoring-listing-field-mapping-verifier-v5-tools-v4"
 )
 MONITORING_C3_LOCAL_FALLBACK_PROVIDER = "mtplx"
 MONITORING_C3_LOCAL_FALLBACK_MODEL = "mtplx-flash-next-optimized-speed"

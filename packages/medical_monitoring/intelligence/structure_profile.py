@@ -382,6 +382,10 @@ def build_listing_profile(
         rows: List[Dict[str, Any]] = table["rows"]
         row_numbers: List[int] = table["row_numbers"]
         columns: List[ColumnProfile] = []
+        # R3（轮6会商）：受试者标识每表至多一列——兜底规则（全不同非数值
+        # 文本列）只授予首个候选，防止SUBJSTA/PAGELMDT/DSTERM等第二波误标
+        # 污染受试者级聚合。
+        fallback_subject_taken = False
         for column_index, header in enumerate(headers):
             missing = sum(1 for row in rows if is_missing(row.get(header)))
             distinct_values = []
@@ -415,12 +419,14 @@ def build_listing_profile(
             ) and not is_subject
             is_subject_candidate = is_subject or (
                 not _is_record_number_column
+                and not fallback_subject_taken
                 and distinct_count == non_missing and distinct_count >= 3 and counts["text"] == non_missing
             )
             reasons: List[str] = []
             if is_subject:
                 reasons.append("header matches generic subject token")
             elif is_subject_candidate:
+                fallback_subject_taken = True
                 reasons.append("all non-missing values are distinct non-numeric text")
             if is_visit:
                 reasons.append("header matches generic visit token")
