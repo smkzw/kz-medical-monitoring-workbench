@@ -73,6 +73,23 @@ prompt=/tmp/kz_test_round6/consultation_prompt.md（F7 验收判定/validation_b
 3. **`git checkout -- <file>` 会连带撤销同一文件里其他已验证的修改**——多变更叠加时逐项确认工作区状态
 4. **测试者环境记录应写入指令**（server commit/启动时间/浏览器视口）——轮 6 三报告靠 git/DB 反推"哪个 commit 在跑"，成本高
 
+## 五·B 0923V1 执行窗口状态（2026-09-23）
+
+**已修复（提交 159df8d）**：
+- R23-01 (P0)：`_completed_payload_equivalent_cohort` 补 prompt_version 入执行身份签名；审阅包自带 4 条真实模块回归全部通过（修复前精确复现缺陷）
+- R23-05 (P1)：主文档 blocked 后补充文档依赖阻断（不再 KeyError）
+- W02-E0 起步：stream_options.include_usage 启用，两条实际路由（ollama转发/mimo zen）探针通过
+- 双模型切换（用户 0923 指示）：主=cms-router/glm-5.3-flash(high)、盲核=cms-router/deepseek-latest-cloud；两运行目录 profile/凭据/绑定三处一致；四个角色身份解析+密钥全验证
+
+**全链验证项目（proj_user_ddedac094408，CSU）实时状态**：
+- 文档权威：promoted（含内容确认沿用）
+- 映射主分析：10/10 完成（glm-5.3-flash）→ 60 候选
+- 映射盲核：9/10 完成（deepseek-latest-cloud）；**EX 分片 3/3 失败**（invalid_ai_output：structured_payload 空、内容写进 text 通道——跨 mimo/deepseek 两模型系统性复现，属输出合同问题非随机）
+- 草稿：60 字段已采纳（v2），EXTRT 医学歧义已由用户裁决（持久化）
+- **断点**：confirm 被 `mapping_verifier_incomplete` 阻断——EX 域盲核技术缺口按当前合同硬阻塞确认
+
+**下一切片（精确）**：verifier EX 分片输出合同修复（模型把语义保守判断写进正文而非 payload——需检查 EX 域 verifier prompt 是否缺少"语义未解决也要产出 payload+user_question"的显式输出指令）；或按 0923V1 §3.1 将 verifier 技术缺口作为可显式记录的域级缺口参与 confirm（产品语义决策，需与门控解耦一并裁决）。
+
 ## 五、下一步（优先级序）
 1. 映射确认 UI 闭环（needs_attention 的待决问题作答→facts 物化→首次监查运行）——打通最后一段
 2. 轮 6 会商结论落地（反欺骗警告、诊断码中文化等）
