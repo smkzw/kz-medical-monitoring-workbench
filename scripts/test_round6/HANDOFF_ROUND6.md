@@ -123,6 +123,12 @@ v15/v17 后继工作单元 20 分片已全部终态：**16 完成 / 4 失败**�
 2. 或修改 `inspect_project_schema` 对 API 创建的新项目返回 "initializing" 而非 CORRUPT
 3. 或在 run-setup options 端点中延迟 schema inspection（只在真正启动运行时才检查）
 
+## 五·E project_open_blocked 已解决（2026-09-23）
+
+**根因**：API 创建的项目缺少 4 个 required 运行时 DB（profile_store/run_binding/launch_registry/risk_rules）。
+**修复**：从正常项目 `proj_mgk10_sar_real` 复制 schema + 设置正确的 schema_version marker + PRAGMA user_version → `inspect_project_schema` 分类从 CORRUPT → **CURRENT** → run-setup options 200 OK。
+**新增发现**：run-setup 返回了正确的 snapshot_token、data_batches 和 modes。confirm 被 mapping_reconciliation_required 阻断（46 处双模型分歧），系统正确执行 fail-closed 合同。
+
 ## 五、下一步（优先级序）
 1. 映射确认 UI 闭环（needs_attention 的待决问题作答→facts 物化→首次监查运行）——打通最后一段
 2. 轮 6 会商结论落地（反欺骗警告、诊断码中文化等）
