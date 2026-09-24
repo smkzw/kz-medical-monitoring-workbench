@@ -5,7 +5,7 @@ import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
 from .monitoring_ai_contracts import (
@@ -1076,6 +1076,42 @@ class MonitoringAiRepository:
             (project_id, job_id),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    def call_ledger_summary(
+        self,
+        project_id: str,
+        job_id: str | None = None,
+    ) -> dict[str, Any]:
+        """E0：按job（或全项目）聚合物理调用成本。"""
+        conditions = "WHERE project_id = ?"
+        params: list[Any] = [project_id]
+        if job_id:
+            conditions += " AND job_id = ?"
+            params.append(job_id)
+        with self._connect() as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                f"SELECT * FROM monitoring_ai_call_ledger {conditions} ORDER BY created_at",
+                params,
+            ).fetchall()
+        calls = [dict(r) for r in rows]
+        total = len(calls)
+        def _sum(key: str) -> int:
+            return sum(int(r[key]) for r in calls if r.get(key) is not None)
+        return {
+            "project_id": project_id,
+            **({"job_id": job_id} if job_id else {}),
+            "total_calls": total,
+            "successful_calls": sum(1 for r in calls if r.get("outcome") == "success"),
+            "failed_calls": sum(1 for r in calls if r.get("outcome") not in ("success", "")),
+            "total_prompt_tokens": _sum("prompt_tokens") or 0,
+            "total_completion_tokens": _sum("completion_tokens") or 0,
+            "total_reasoning_tokens": _sum("reasoning_tokens") or 0,
+            "total_cached_tokens": _sum("cached_tokens") or 0,
+            "total_tokens": _sum("total_tokens") or 0,
+            "usage_unknown_count": sum(1 for r in calls if r.get("usage_unknown")),
+            "total_response_bytes": _sum("response_bytes") or 0,
+        }
 
     def attempts(
         self,

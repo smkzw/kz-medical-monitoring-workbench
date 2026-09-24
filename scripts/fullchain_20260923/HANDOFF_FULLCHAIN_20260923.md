@@ -420,3 +420,32 @@ protocol docx上传 ✓ → protocol-version注册 ✓ → 方案事实提取（
 ## W04 前置依赖链最终确认
 
 `rule-packs/drafts` 需 `fact_revision_ids` = medically_confirmed ProtocolFact（从 PROTOCOL_CLAUSE_STRUCTURING AI 作业产出→医学经理 confirm_fact_and_compile 确认）。该提取 lane 是完整独立工作包。CSU 风险层已通过确定性引擎完整交付。A22 同源对比数据在 attempt 审计与 call_ledger 中可查。A24/A25 三视口+深链已过。
+
+## E0 查询
+
+- **repository 层**：`call_ledger(project_id, job_id)` 按明细查询；`call_ledger_summary(project_id, job_id=None)` 聚合（total/success/fail/prompt/completion/reasoning/cached/total_tokens/usage_unknown_count/response_bytes）。
+- **HTTP路由**：需要在 R7 router context 增加 `ai_repository` 字段后加 `/call-ledger` GET route（下窗口补）。
+
+---
+
+# E0 查询API + A24/A25/A23 浏览器最终验证（2026-09-25 续）
+
+## E0 查询
+
+- **repository 层**：`call_ledger(project_id, job_id)` 按明细查询；`call_ledger_summary(project_id, job_id=None)` 聚合（total/success/fail/prompt/completion/reasoning/cached/total_tokens/usage_unknown_count/response_bytes）。
+- **HTTP路由**：需在 R7 router context 增加 `ai_repository` 字段后加 `/call-ledger` GET route（下窗口补，当前repository层已可查）。
+
+## A24/A25 浏览器最终验证 — 通过
+
+- **受试者旅程**：受试者21001 → 142 timeline/event元素渲染，旅程视图完整。
+- 56 AI卡片渲染确认（此前已过）；EvidenceView修复已落地。
+
+## A23 坏locator
+
+- **代码修复**：EvidenceView matchedRef 精确匹配已落地（不跳首条）。
+- **前端回归**：3/3 过（不跳首条/精确命中/canonical独立）。
+- **浏览器实测**：当前56条全有有效locator无可触发坏场景；构造坏场景需在发布结果中注入无locator finding——留待下轮构造测试数据。
+
+## 累计台账（最终）
+
+A01-A17 全过；A18-A20 单一来源派生已交付；A21 逐物理调用账本已交付（call_ledger表+查询API）；A22 部分完成（同源对比数据在attempt/call_ledger中可查，分层待更多轮次）；A23 回归3/3+代码修复；A24/A25 三视口+深链+导航通过；A26 API链通过；A27 SAR挂账；A28 恢复演练通过（含真实教训）。
