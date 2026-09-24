@@ -238,3 +238,29 @@ W03 run（result-context:e61bc2f3...）的**确定性风险引擎在运行内产
 - **A27**：SAR旧运行未授权不动（分账已挂账）。
 - **A28**：空脚手架备份已做；全量恢复演练未跑。
 - 全量测试332绿；提交本段后push。
+
+---
+
+# A24/A25 浏览器实测（ego lite，2026-09-24 深夜）
+
+## A24 宽屏紧凑列表与卡片渲染 — 通过
+
+- 1920×1080 视口：**56 张AI线索卡片全渲染**（data-query-finding=56），状态分布 30 accepted / 26 escalated 与后端一致。
+- 容器宽 1693px 无横向溢出（bodyScrollWidth 1905 ≤ viewport），紧凑卡片列表非长文平铺。
+- 首卡真实内容：标题「过敏性鼻炎病史记录为非持续，但近期存在抗组胺用药，病史状态与用药指征一致性待核对」+ 14 条语义分点（observations/data_gaps/recommended_review 合并去重）。
+- 修复补丁（本轮）：overview 的 query_findings 注入从"冻结Query草稿"切回"活binding读取"（快照域限定+digest校验，V5-04当前指针语义）——冻结草稿字段（query_draft_id/risk_id/draft_state）与AI线索卡片字段（state/title/claims/subject_label）是两个DTO，此前混用导致卡片空白。截图 /tmp/w03_cards.png。
+
+## A25 导航与零模型调用 — 通过
+
+- AI卡片 →「进入受试者医学旅程」→ 受试者21001旅程视图：**27事件/7访视/27风险锚点**，域分布（试验用药8/检验8/方案符合性7/合并用药2/AE1/MH1），风险定位徽章「AE·中风险」渲染。
+- 导航全程零模型调用：aemh作业总数前后一致（32，无新增）——浏览/筛选/跳转全部读已发布结果上下文。
+- 截图 /tmp/w03_journey.png。
+
+## A23 证据不跳首条
+
+- 代码修复已落地并构建通过（EvidenceView matchedRef 精确匹配，未命中显示「未能精确匹配目标来源定位」）；本轮浏览器走查未触发坏locator场景（全部命中的定位显示正常），坏locator场景回归留待下轮构造用例。
+
+## E0（A18–A22）与 A28 — 未开工/部分，如实
+
+- E0成本账本：include_usage请求+attempt/observed分离已具备地基，逐物理调用账本未开工。
+- A28：空脚手架备份已做；全量恢复演练未跑。A27：SAR未授权不动。
