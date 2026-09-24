@@ -124,13 +124,19 @@ class FactsModeOutputProvider:
         ]
         if mode == "daily":
             findings = self._daily_findings(binding, r5_packet)
+            # Query-draft合同：draft必须锚定risk（risk_id非空）。未绑定
+            # risk的AI线索保留在findings工件与meta计数中（完整台账），
+            # 但不进入risk-anchored查询草稿——不伪造risk身份。
+            risk_anchored = [
+                finding for finding in findings if finding.get("risk_id")
+            ]
             return mo.build_daily_mode_outputs(
                 binding,
                 contract,
                 authority_refs=refs,
                 coverage_refs=refs,
                 qc_refs=refs,
-                findings=findings,
+                findings=risk_anchored,
                 risks=risk_rows,
                 entry_context=context,
             )
@@ -899,6 +905,9 @@ class FactsModeOutputProvider:
                         else {}
                     ),
                     "evidence_ids": self._finding_evidence_ids(item),
+                    # Query-draft合同要求可核验的evidence_refs：锚点定位符
+                    # 就是精确来源引用（A25溯源用同一引用）。
+                    "evidence_refs": list(anchors["anchor_locator_refs"]),
                     "basis": basis,
                     "finding": f"「{title}」",
                     "action": "请下钻受试者旅程与来源记录核对临床语境后确认处置。",

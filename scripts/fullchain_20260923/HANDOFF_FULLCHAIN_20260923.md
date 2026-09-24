@@ -169,3 +169,44 @@
 - gap字段（EX×3+LB_HEM×6）不在canonical facts语义层——证据包构建时这些列的缺失是**按设计**，finding不得引用其语义值（R24-02边界）。
 - 成本记账：32作业按物理调用入账（E0最低要求：job/attempt/用量入audit）。
 - 零发现合法：若双队列一致认为无跨表线索，completed_no_findings如实落盘（V4-05）。
+
+---
+
+# W03 交付：AI 风险/线索层产出并溯源（2026-09-24 深夜）
+
+## 已交付
+
+1. **32个双队列线索作业**（16受试者 × 主glm-5.3-flash + 盲核deepseek-latest-cloud）：build_subject_evidence 通用证据包（facts manifest 加载10表 domains）→ submit_cohorts 冻结合同提交 → 30直通 + 2例裸载荷失败（跨表 clue 载荷缺任务信封，同 R24 裸载荷病）→ **新增 `_normalize_cross_table_provider_output` 机械归一**（形状完全匹配 `_CrossTableCluePayload` 才重包，内层 subject_id 与证据包不符则照旧拒收）→ 重试后 **32/32 全 completed**。
+2. **裁决合并**：`adjudicate()` → **56 条发现**（30 accepted 双核一致 + 26 escalated 待医学复核，0 coverage/unverifiable gap），finding_id 稳定（subject+side+clue 内容 hash）。
+3. **findings artifact + binding**：`aemh-findings-facts:bd2f....json`（content_sha256 内部自洽）+ `aemh-findings.active.json` 发布指针（V5-04 当前结果指针合同），生产读取端验证 `completed_with_findings`。
+4. **W03 run 发布可用**：run:d9036fa9af2aac5487c86888 → `result-context:e61bc2f3e67d4d009cec65f80409a763` → 总览 **query_findings: 56 全部为 aemh AI 发现**，样本线索「过敏性鼻炎病史持续期间发生上呼吸道感染不良事件（AE+MH跨表线索）」带 evidence_refs=['loc-AE-000014','loc-MH-000014'] 可溯源。
+
+## 根因修复（本段新增）
+
+- **跨表裸载荷归一**（monitoring_ai_service）：`_normalize_cross_table_provider_output`——与 doc-authority 归一同哲学，只机械补信封、内层身份严格校验。
+- **findings producer/consumer 合同缺口**：`_findings_from_artifact` 此前只发 evidence_ids，而 query-draft 合同要求可核验 evidence_refs + risk 锚定。修复：投影补 `evidence_refs`（=anchor_locator_refs，A25 溯源同引用）；daily 输出仅收 risk 锚定的发现进 Query 草稿（不伪造 risk 身份），未锚定线索保留在 artifact 完整台账与 meta 计数。
+
+## 验收台账（acceptance/cases_0924V1.json 对照，截至本记录）
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| A01 身份缺失不伪造 | **已执行通过** | tests/test_mm_r24_identity_raw.py::test_response_model_missing_stays_unknown（真实模块）|
+| A02 显式不符阻断 | **已执行通过** | 同文件 test_response_model_explicit_mismatch_still_raises |
+| A03 原始输出不可变 | **已执行通过** | 同文件 test_parse_output_normalization_does_not_mutate_caller_payload |
+| A05 机械信封验内层 | **已执行通过** | 归一仅匹配精确形状；内层 batch/subject 校验在严格层保留（实测两处裸载荷通过/拒收行为）|
+| A07 stale恢复耗尽不漏项 | **已执行通过** | mapping_pipeline failed_jobs 含 stale_input + 真实EX/LB_HEM分片耗尽后进gap清单 |
+| A09 失败payload不可读 | **已执行通过** | 显式错误码 mapping_adjudication_failed_payload_unreadable（替换静默continue）|
+| A10 gap编辑与receipt原子性 | **已执行通过** | test_mark_gap_receipt_failure_propagates |
+| A11 跨reconciliation幂等 | **已执行通过** | test_mark_gap_writes_machine_marker_and_binds_sha |
+| A12 8字段完整对账 | **已执行通过** | /tmp/eight_field_ledger.py 输出 + handoff表格 |
+| A13 人工/机器待办分离 | **已执行通过** | adjudication投影含 unverifiable_gap_count + remaining_system_review_count + remaining_question_count 三分离 |
+| A23 证据不跳首条 | **代码已落地，浏览器实测待跑** | EvidenceView matchedRef 修复（esbuild过）|
+| A26 CSU正常GUI闭环 | **API链已执行通过** | confirmed→facts v2→首run→publication；GUI浏览器截图未补 |
+| A28 备份恢复+台账 | **部分** | 空脚手架备份 recovery/r24_scaffold_backup_20260924/；status.json分账已更新 |
+| A04/A06/A08/A14–A17/A18–A22/A24/A25/A27 | 未执行/部分 | A14–A17需风险规则链（W04）；A18–A22成本账本（E0）未开工；A24/A25需浏览器；A27 SAR未授权不动 |
+
+## 下窗口
+
+- W04：CSU风险规则链（rule-packs→compile→execute-risks）→ AI发现risk锚定后升级为Query drafts。
+- A04/A06补回归（条件性CRF后缀保留/全响应往返长中文用例）。
+- A24/A25浏览器实测（ego lite）；E0成本账本开工。
