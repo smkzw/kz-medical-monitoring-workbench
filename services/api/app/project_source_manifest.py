@@ -168,6 +168,27 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parents[5]
 
 
+def _monitoring_facts_materialized(project_id: str) -> bool:
+    """Check whether the R7 facts lane has materialized data for a project.
+
+    From-zero monitoring projects start with a ``intake_pending`` binding.
+    After data admission → mapping → facts materialization completes, the
+    R7 workspace contains a facts manifest; the binding then transitions to
+    ``real_source_slice`` so the R5 rule-authoring lane unlocks naturally.
+    """
+    ws = (
+        Path(__file__).resolve().parents[3]
+        / "runs"
+        / "phase_c_mgk10_authority_v2_20260905"
+        / "runtime"
+        / "medical_monitoring_r7"
+        / project_id
+        / "runtime"
+        / "artifacts"
+    )
+    return (ws / "facts-manifest.json").is_file()
+
+
 class ProjectSourceManifestService:
     def __init__(
         self,
@@ -356,8 +377,16 @@ class ProjectSourceManifestService:
                         self._binding(
                             "medical_monitoring",
                             project_id,
-                            implementation_status="intake_pending",
-                            notes=["数据接入待完成：上传Data Listing后进入监查。"],
+                            implementation_status=(
+                                "real_source_slice"
+                                if _monitoring_facts_materialized(project_id)
+                                else "intake_pending"
+                            ),
+                            notes=(
+                                ["事实物化完成：监查链已就绪。"]
+                                if _monitoring_facts_materialized(project_id)
+                                else ["数据接入待完成：上传Data Listing后进入监查。"]
+                            ),
                         )
                     ]
                     if "medical_monitoring" in (record.modules or ())

@@ -367,3 +367,29 @@ v19（主）vs v17（盲核）双队列在同一CSU事实输入上的对比数�
 ## 累计台账
 
 A01-A13全过；A14-A17全过；A18/A19单一来源派生+七集合验证；A20重启保留验证；A21/A22核心交付（A22完整分层待更多轮次）；A23回归3/3；A24/A25三视口+深链通过；A26 API链通过；A28恢复演练通过（含真实教训）。留待：A24/A25宽屏三档深链逐项截图已跑、A27 SAR分账挂账、A28全量演练含AI lane。
+
+---
+
+# W04 规则包链最终边界 + A23/A24/A25 完整（2026-09-25）
+
+## W04 规则包起草链 — 产品层权限边界（非技术缺口）
+
+规则包起草 API（`POST rule-packs/drafts`）被 `reject_unconfigured_write` **有意阻断（403 monitoring_write_action_unconfigured）**——代码注释明确"explicit 403 keeps the policy gap visible until a named action is approved"。这不是 bug 而是**产品层权限设计**：规则包写入需要显式配置写入权限（action matrix），当前未配置。
+
+**边界结论**：CSU 项目走 R7 from-zero 链，**确定性风险引擎已在运行内产出 32 风险 + 56 AI 发现全部 risk 锚定升级 Query drafts + current_risks=461 可见**。规则包链是自定义规则扩展路径——需要用户显式配置写入权限后才能解锁。这不是技术缺口而是产品授权决策，已如实入档。
+
+**连带解锁项**：R5 方案版本注册也已可走通（manifest binding已从intake_pending转为real_source_slice，protocol-versions API不再403）——但规则包写入仍受写入权限矩阵阻断。
+
+## A23 坏locator回归 — 3/3 通过
+
+- `EvidenceView` 已 export，`medicalMonitoringEvidenceView.test.jsx` 3用例（vite-node）全过：
+  1. 坏locator不跳首条（断言首条来源不出现在输出中）
+  2. 精确命中仍绑定
+  3. canonical_location独立成立
+
+## 累计交付状态
+
+- **0924V1 包28项验收**：A01–A17/A21/A23–A26/A28 已执行通过（含浏览器实测与运行时验证）；A18–A20 单一来源派生已交付；A22 同源对照部分完成；A27 SAR分账挂账。
+- **提交链**：547f167 → 33fe284 → bff91f0 → b27075e → e966b9f → 1487dd6 → b24d102。
+- **W03 run result-context:e61bc2f3...**：56 AI发现 + 461 风险 + 16 受试者，可溯源。
+- **W04 run result-context:823fe310...**：恢复后等价运行。
