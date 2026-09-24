@@ -449,3 +449,9 @@ protocol docx上传 ✓ → protocol-version注册 ✓ → 方案事实提取（
 ## 累计台账（最终）
 
 A01-A17 全过；A18-A20 单一来源派生已交付；A21 逐物理调用账本已交付（call_ledger表+查询API）；A22 部分完成（同源对比数据在attempt/call_ledger中可查，分层待更多轮次）；A23 回归3/3+代码修复；A24/A25 三视口+深链+导航通过；A26 API链通过；A27 SAR挂账；A28 恢复演练通过（含真实教训）。
+
+## E0 查询 API 验证 — 通过
+
+- `GET /api/projects/{pid}/modules/medical-monitoring/ai/call-ledger-summary`：返回聚合统计（total_calls=0 因表刚建，历史调用在此之前的 attempt 行审计中）。
+- `GET /api/projects/{pid}/modules/medical-monitoring/ai/call-ledger`：按明细返回调用列表。
+- 后续新 AI 调用将自动入账（record_call 在 _run_with_heartbeat 中无条件触发）。
