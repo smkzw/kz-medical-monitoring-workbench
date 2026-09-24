@@ -1795,7 +1795,7 @@ export function SubjectWorkspaceView({
   );
 }
 
-function EvidenceView({ payload, route, onBack }) {
+export function EvidenceView({ payload, route, onBack }) {
   const publicResult = payload?.publicResultContext === true;
   const evidence = payload.projection.sourceEvidence || {};
   // R24-07：目标locator无法匹配时明确“不可定位”，绝不回退第一条来源

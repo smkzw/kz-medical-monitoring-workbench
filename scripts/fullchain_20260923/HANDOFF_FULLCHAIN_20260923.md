@@ -294,3 +294,28 @@ EvidenceView修复（matchedRef精确匹配）已落地；本轮浏览器走查�
 - **A20**（重启保留暂停/旧任务）：已验证——重启多次后W03/W03 run保留（每次重启后重跑成功）。
 - **A21**（逐物理调用用量）：**已交付**（本段）。
 - **A22**（失败缓存）：部分——`_obtain_r6_mode_outputs`无缓存，失败不缓存为成功；同源对照未做。
+
+---
+
+# A23 回归用例 + W04 规则包链边界结论（2026-09-24 深夜三）
+
+## A23 坏locator回归用例 — 已构造并全过（3/3）
+
+`frontend/src/features/medical-monitoring/medicalMonitoringEvidenceView.test.jsx`（EvidenceView已export；vite-node运行）：
+1. **坏locator不跳首条**：目标loc-missing在两条source_refs中无匹配→显示「未能精确匹配目标来源定位」，断言不出现「已完成来源一跳定位」、不出现首条来源的record_ref/excerpt（R-A/A来源不得出现）。
+2. **精确命中仍绑定**：loc-B命中→「已完成来源一跳定位」+ R-B呈现。
+3. **canonical_location独立成立**：evidence自带定位说明时按自身展示，不借用他条。
+
+## W04 规则包链边界结论（重要——纠正上段"下窗口开工"的预判）
+
+**CSU项目走R7 from-zero链，rule-packs起草链属于R5 protocol lane**：`rule-packs/drafts`需要`protocol_version_id`+`confirmed fact_revision_ids`（R5方案事实确认产物），且整个`/modules/medical-monitoring` R5路由族被`source_readiness_unconfirmed`门挡住（CSU的R5来源状态=intake_pending，未走R5激活流程）。
+
+**关键事实**：CSU的确定性风险引擎**已经在run内执行**（W03 run产出32条risk-AE-*风险，facts-baseline-rules-v1内置规则），56条AI发现已全部risk锚定升级为Query drafts，current_risks=461可见——**规则包起草链是自定义规则的扩展路径，不是当前风险层的必需前置**。
+
+**结论**：CSU风险层当前已满足0924V1包"首个真实来源闭合结果"要求；rule-packs链留待CSU项目走R5方案事实确认（上传方案→protocol-version→facts确认）后自然解锁，不强行打通R5门（避免为链而链）。此结论已与包内"不另建平台/不为链而链"约束一致。
+
+## 验收台账最终状态
+
+- **已执行通过**：A01–A13、A14–A17、A21、A23（3用例）、A24、A25、A26（API链）、A28。
+- **部分/留待**：A18–A20（版本单一来源派生部分完成）、A22（同源对照未做）、A24/A25（宽屏三档与深链复制未逐项跑）、A27（SAR分账挂账未授权不动）、A28（恢复演练通过，全量演练含AI lane未跑）。
+- 推进记录：af5494e→bff91f0→b27075e→本次。
