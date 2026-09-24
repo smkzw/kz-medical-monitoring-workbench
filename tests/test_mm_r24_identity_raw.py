@@ -175,3 +175,115 @@ def test_mark_gap_receipt_failure_propagates() -> None:
             reconciliation_sha256="c" * 64,
             divergence_pairs={("EX", "EXFRQ")},
         )
+
+
+def test_long_chinese_response_roundtrip_no_truncation(tmp_path):
+    """0924V1-A06：长中文JSON响应经blob物化存储后读回字节一致，无丢尾。"""
+    import json
+    from services.api.app.monitoring_ai_repository import MonitoringAiRepository
+    from services.api.app.monitoring_ai_contracts import (
+        MonitoringAiInputRevision,
+        MonitoringAiJobCreate,
+        MonitoringAiJobStatus,
+        MonitoringAiSourceBinding,
+        MonitoringAiTaskType,
+        stable_job_id,
+    )
+
+    repo = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite3")
+    revision = MonitoringAiInputRevision(
+        project_id="p1",
+        batch_revision="facts:test",
+        mapping_revision="m1",
+        rule_pack_revision="r1",
+        sources=(
+            MonitoringAiSourceBinding(
+                source_entry_id="facts:AE",
+                source_content_sha256="a" * 64,
+            ),
+        ),
+    )
+    long_cn = (
+        "受试者21001于2026-04-12记录不良事件「注射部位红斑」，"
+        "合并病史「过敏性鼻炎」持续期间发生上呼吸道感染，"
+    )
+    big_mapping = {
+        "field_mappings": [
+            {
+                "domain": "AE",
+                "source_field": f"AETERM_{i}",
+                "recommended_role": "ae_term",
+                "uncertainty": long_cn * 3,
+                "user_action": f"无需确认：列标题「不良事件术语{i}」语义一致。",
+                **{
+                    key: value
+                    for key, value in (
+                        ("confidence", 0.9),
+                        ("field_kind", "source_collected"),
+                        ("related_fields", []),
+                        ("evidence_ids", ["ev-1"]),
+                    )
+                },
+            }
+            for i in range(40)
+        ]
+    }
+    request = MonitoringAiJobCreate(
+        project_id="p1",
+        task_type=MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS,
+        business_key="aemh:test:primary:S1",
+        input_revision=revision,
+        input_payload={"evidence_packet": [{"evidence_id": "ev-1"}], "big": big_mapping},
+        prompt_version="monitoring-cross-table-clue-synthesis-v3",
+        profile_id="profile-test",
+        provider="provider-test",
+        requested_model="model-test",
+    )
+    job = repo.create_or_get(request)
+    claimed = repo.claim_next(
+        "owner-x",
+        profile_id="profile-test",
+        provider="provider-test",
+        requested_model="model-test",
+    )
+    assert claimed is not None and claimed.job_id == job.job_id
+    response_payload = {
+        "provider_outputs": [
+            {
+                "schema_version": "monitoring_ai_v1",
+                "task_id": job.job_id,
+                "task_type": "cross_table_clue_synthesis",
+                "input_revision_sha256": claimed.input_revision_sha256,
+                "candidates": [
+                    {
+                        "candidate_type": "cross_table_clue",
+                        "title": "长中文响应往返用例" * 6,
+                        "structured_payload": big_mapping,
+                    }
+                ],
+            }
+        ]
+    }
+    raw_text = json.dumps(response_payload, ensure_ascii=False, sort_keys=True)
+    repo.record_attempt(
+        claimed,
+        owner="owner-x",
+        request_payload={"envelope": {"payload": {"k": long_cn}}},
+        response_payload=response_payload,
+        response_model="model-test",
+        outcome="success",
+    )
+    attempts = repo.attempts("p1", job.job_id)
+    assert len(attempts) == 1
+    stored = attempts[0]["response"]
+    stored_text = json.dumps(stored, ensure_ascii=False, sort_keys=True)
+    # 全量往返：长中文JSON经blob物化读回后与写入等价（键序无关），无丢尾
+    assert stored_text == raw_text, (
+        "response roundtrip diverged: "
+        f"stored {len(stored_text)} vs raw {len(raw_text)}"
+    )
+    # 深处字段无截断
+    inner = stored["provider_outputs"][0]["candidates"][0]["structured_payload"]
+    assert inner["field_mappings"][39]["uncertainty"].endswith(
+        "合并病史「过敏性鼻炎」持续期间发生上呼吸道感染，"
+    )

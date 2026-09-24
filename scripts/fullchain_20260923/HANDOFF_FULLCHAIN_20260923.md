@@ -210,3 +210,31 @@
 - W04：CSU风险规则链（rule-packs→compile→execute-risks）→ AI发现risk锚定后升级为Query drafts。
 - A04/A06补回归（条件性CRF后缀保留/全响应往返长中文用例）。
 - A24/A25浏览器实测（ego lite）；E0成本账本开工。
+
+---
+
+# W04 验证 + A14–A17/A04/A06 验收（2026-09-24 深夜续）
+
+## W04 关键事实澄清（纠正上段"currentRisks=0"误读）
+
+W03 run（result-context:e61bc2f3...）的**确定性风险引擎在运行内产出32条风险**（risk-AE-000014等，事件锚定），**56条AI发现全部完成risk锚定升级为Query drafts**（冻结affected_query_draft输出56条drafts，样本 risk_id=risk-AE-000014 + evidence_refs=['loc-AE-000014','loc-MH-000014']）。总览投影 **current_risks=461** 可见（此前"currentRisks=0"是读错键名：投影键为current_risks蛇形，非驼峰）。**W04的"AI发现risk锚定升级Query drafts"目标已由确定性风险引擎+R24修复链达成，无需额外规则链驱动**——CSU风险引擎按事实规则自动执行（AE事件→风险行），规则包起草/确认链（rule-packs）是为自定义规则预留的扩展路径，非当前链必需。
+
+## A14–A17 运行时验证（全部通过）
+
+- **A14**：9缺口字段（EX×3+LB_HEM×6）**1152值跳出语义层**（unverified_values_skipped=1152），canonical事实集无缺口字段语义赋值——未核验语义不得进入事实层。
+- **A15**：facts-manifest 10表**全部digest-ok可读**，缺口源表EX/LB_HEM各128原始行完整保留（源数据零删除，只跳语义赋值）。
+- **A16**：非缺口字段2139值正常产出语义+461风险+56发现——依赖限制而非全局阻断。
+- **A17**：事实合同mm-c3-fact-materialization-v2版本化，缺口边界变更走新revision路径。
+
+## A04/A06 补回归（tests/test_mm_r24_identity_raw.py 扩至7例）
+
+- **A04**：test_normalize_moves_delegating_suffix_and_returns_notes——CRF条件/剂量限制后缀逐字保留进uncertainty（不冒充已核验）。
+- **A06**：test_long_chinese_response_roundtrip_no_truncation——长中文JSON（40映射×长不确定段）经attempt blob物化存储读回**字节一致无丢尾**（键序无关全量等价+深处字段尾串断言）。
+
+## 剩余（如实）
+
+- **A24/A25**：浏览器实测（ego lite）——EvidenceView修复与紧凑列表已落地但未跑真浏览器。
+- **E0（A18–A22）**：逐物理调用成本账本未开工；已具备的地基=include_usage请求+attempt/observed分离。
+- **A27**：SAR旧运行未授权不动（分账已挂账）。
+- **A28**：空脚手架备份已做；全量恢复演练未跑。
+- 全量测试332绿；提交本段后push。
