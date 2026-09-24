@@ -416,3 +416,88 @@ def test_call_ledger_query_and_usage_roundtrip(tmp_path):
     assert second["observed_model"] == ""  # 缺失身份保持空
     # call_seq自增
     assert second["call_seq"] > first["call_seq"]
+
+
+def test_call_ledger_failure_and_retry_accounting(tmp_path):
+    """0924V2-B06/B12：失败调用同样记账（outcome=provider_error）、
+    操作员重试各自成行、usage缺失unknown不填0、summary统计一致。"""
+    from services.api.app.monitoring_ai_repository import MonitoringAiRepository
+
+    repo = MonitoringAiRepository(tmp_path / "ledger2.sqlite3")
+    pid, jid = "p1", "job-y"
+    # 成功调用
+    repo.record_call(
+        project_id=pid, job_id=jid, attempt_id="att-1", call_seq=0,
+        owner="w1", provider="cms-router", requested_model="m1",
+        observed_model="m1",
+        diagnostics={"wire": "sse",
+                     "usage": {"prompt_tokens": 100, "completion_tokens": 30},
+                     "response_bytes": 800, "sse_read_seconds": 0.9},
+        outcome="success",
+    )
+    # 失败调用（无usage）
+    repo.record_call(
+        project_id=pid, job_id=jid, attempt_id="att-1", call_seq=1,
+        owner="w1", provider="cms-router", requested_model="m1",
+        observed_model="",
+        diagnostics={"wire": "sse", "response_bytes": 12},
+        outcome="provider_error", error_code="ConnectionReset",
+    )
+    # 重试成功
+    repo.record_call(
+        project_id=pid, job_id=jid, attempt_id="att-1", call_seq=2,
+        owner="w1", provider="cms-router", requested_model="m1",
+        observed_model="m1",
+        diagnostics={"wire": "sse",
+                     "usage": {"prompt_tokens": 90, "completion_tokens": 25},
+                     "response_bytes": 700, "sse_read_seconds": 0.8},
+        outcome="success",
+    )
+    rows = repo.call_ledger(pid)
+    assert len(rows) == 3
+    failed = rows[1]
+    assert failed["outcome"] == "provider_error"
+    assert failed["error_code"] == "ConnectionReset"
+    assert failed["usage_unknown"] == 1
+    assert failed["prompt_tokens"] is None  # 缺失不填0
+    summary = repo.call_ledger_summary(pid)
+    assert summary["total_calls"] == 3
+    assert summary["successful_calls"] == 2
+    assert summary["failed_calls"] == 1
+    assert summary["total_prompt_tokens"] == 190
+    assert summary["usage_unknown_count"] == 1
+
+    # job-scoped查询（B05统一合同：job_id可选）
+    assert len(repo.call_ledger(pid, jid)) == 3
+    assert repo.call_ledger(pid, "other-job") == []
+    # 分页
+    page = repo.call_ledger(pid, limit=1, offset=1)
+    assert len(page) == 1 and page[0]["outcome"] == "provider_error"
+
+
+def test_nested_usage_detail_normalization(tmp_path):
+    """0924V2-B06/B14：嵌套usage.detail（reasoning/cached）规范化读取；
+    平面键diagnostics也可读。"""
+    from services.api.app.monitoring_ai_repository import MonitoringAiRepository
+
+    repo = MonitoringAiRepository(tmp_path / "ledger3.sqlite3")
+    repo.record_call(
+        project_id="p1", job_id="j1", attempt_id="a", call_seq=0,
+        owner="w", provider="p", requested_model="m", observed_model="m",
+        diagnostics={"wire": "sse",
+                     "usage": {"prompt_tokens": 200, "completion_tokens": 80,
+                               "detail": {"reasoning_tokens": 50,
+                                          "cached_tokens": 20}}},
+        outcome="success",
+    )
+    # 平面键形态
+    repo.record_call(
+        project_id="p1", job_id="j2", attempt_id="a", call_seq=0,
+        owner="w", provider="p", requested_model="m", observed_model="",
+        diagnostics={"wire": "sse", "prompt_tokens": 30},
+        outcome="success",
+    )
+    rows = repo.call_ledger("p1")
+    assert rows[0]["reasoning_tokens"] == 50
+    assert rows[0]["cached_tokens"] == 20
+    assert rows[1]["prompt_tokens"] == 30

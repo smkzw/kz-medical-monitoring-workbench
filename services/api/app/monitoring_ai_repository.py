@@ -1014,10 +1014,15 @@ class MonitoringAiRepository:
             except (TypeError, ValueError):
                 return None
         usage = diagnostics.get("usage") if isinstance(diagnostics.get("usage"), dict) else {}
+        # B06：嵌套usage.detail规范化（提供方把细分放detail子字典时仍可读）
+        detail = usage.get("detail") if isinstance(usage.get("detail"), dict) else {}
+        if not usage and isinstance(diagnostics.get("prompt_tokens"), int):
+            # 平面键直接在diagnostics上的形态
+            usage = diagnostics
         prompt_tokens = _int(usage, "prompt_tokens")
         completion_tokens = _int(usage, "completion_tokens")
-        reasoning_tokens = _int(usage, "reasoning_tokens")
-        cached_tokens = _int(usage, "cached_tokens")
+        reasoning_tokens = _int(detail, "reasoning_tokens") or _int(usage, "reasoning_tokens")
+        cached_tokens = _int(detail, "cached_tokens") or _int(usage, "cached_tokens")
         total_tokens = _int(usage, "total_tokens")
         now = self.clock()
         with self._connect() as connection:
@@ -1065,15 +1070,26 @@ class MonitoringAiRepository:
     def call_ledger(
         self,
         project_id: str,
-        job_id: str,
+        job_id: str | None = None,
+        *,
+        limit: int = 500,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
+        """E0明细查询：project-wide或job-scoped，带分页（B05统一合同）。"""
+        conditions = "WHERE project_id = ?"
+        params: list[Any] = [project_id]
+        if job_id:
+            conditions += " AND job_id = ?"
+            params.append(job_id)
+        params.extend([max(0, int(limit)), max(0, int(offset))])
         rows = self._connect().execute(
-            """
+            f"""
             SELECT * FROM monitoring_ai_call_ledger
-            WHERE project_id = ? AND job_id = ?
-            ORDER BY call_seq
+            {conditions}
+            ORDER BY created_at, call_seq
+            LIMIT ? OFFSET ?
             """,
-            (project_id, job_id),
+            params,
         ).fetchall()
         return [dict(row) for row in rows]
 
@@ -1103,7 +1119,12 @@ class MonitoringAiRepository:
             **({"job_id": job_id} if job_id else {}),
             "total_calls": total,
             "successful_calls": sum(1 for r in calls if r.get("outcome") == "success"),
-            "failed_calls": sum(1 for r in calls if r.get("outcome") not in ("success", "")),
+            "failed_calls": sum(
+                1 for r in calls if r.get("outcome") not in ("success", "", None)
+            ),
+            "outcome_unknown_count": sum(
+                1 for r in calls if r.get("outcome") in ("", None)
+            ),
             "total_prompt_tokens": _sum("prompt_tokens") or 0,
             "total_completion_tokens": _sum("completion_tokens") or 0,
             "total_reasoning_tokens": _sum("reasoning_tokens") or 0,
