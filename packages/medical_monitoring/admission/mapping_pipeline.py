@@ -1563,10 +1563,12 @@ class AdmissionMappingPipeline:
                     "state": "running", "generation": generation,
                     "job_count": len(jobs), "mappings": [],
                 }
+            # R24-03A：恢复入口接受stale_input，其耗尽出口就必须保留该身份——
+            # 不可恢复的stale_input分片不得既不在成功集合也不在失败集合中消失。
             failed_jobs = [
                 (job.project_id, job.job_id)
                 for job in resumed
-                if str(_value(job.status)) in {"failed", "blocked"}
+                if str(_value(job.status)) in {"failed", "blocked", "stale_input"}
                 and not getattr(job, "contract_retirement_code", "")
             ]
             completed_jobs = [
@@ -1584,10 +1586,11 @@ class AdmissionMappingPipeline:
         # A legacy/non-generation terminal cohort cannot use the bounded
         # in-place generation recovery above. Keep its successful siblings
         # visible and report only the failed shards as coverage gaps.
+        # R24-03A：stale_input同样计入终态分区，不落出所有集合。
         failed_jobs = [
             (job.project_id, job.job_id)
             for job in jobs
-            if str(_value(job.status)) in {"failed", "blocked"}
+            if str(_value(job.status)) in {"failed", "blocked", "stale_input"}
             and not getattr(job, "contract_retirement_code", "")
         ]
         if failed_jobs:

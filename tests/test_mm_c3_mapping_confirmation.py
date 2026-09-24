@@ -579,6 +579,7 @@ def test_second_pass_only_clears_an_unchanged_evidence_supported_mapping() -> No
     assert payload["adjudication"] == {
         "state": "complete",
         "resolved_count": 1,
+        "unverifiable_gap_count": 0,
         "remaining_system_review_count": 0,
         "remaining_question_count": 0,
     }

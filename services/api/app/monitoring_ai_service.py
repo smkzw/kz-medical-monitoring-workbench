@@ -2508,6 +2508,29 @@ class MonitoringAiService:
                 input_payload=input_payload,
                 evidence_state=evidence_state,
             )
+            # R24-04：raw与normalized分开留痕。doc-auth机械包络会替换
+            # 对象形状——包络前先抓原始引用（包络不改写内容）；映射的
+            # 整理在parse内深拷贝副本上进行，outputs本身就是raw。
+            raw_outputs: List[Any] = []
+            if job.task_type in (
+                MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+                MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+            ):
+                raw_outputs.append(initial_output)
+            normalization_notes: List[Dict[str, Any]] = []
+
+            def _audit_payload() -> Dict[str, Any]:
+                payload: Dict[str, Any] = {"provider_outputs": outputs}
+                if raw_outputs:
+                    payload["provider_raw_outputs"] = raw_outputs
+                if normalization_notes:
+                    payload["server_normalizations"] = normalization_notes
+                if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS:
+                    payload["provider_response_diagnostics"] = (
+                        evidence_state.get("response_diagnostics", [])
+                    )
+                return payload
+
             initial_output = self._normalize_document_authority_provider_output(
                 job, initial_output
             )
@@ -2516,7 +2539,7 @@ class MonitoringAiService:
                 job,
                 owner=owner,
                 request_payload={"envelope": envelope.payload},
-                response_payload={"provider_outputs": outputs, **({"provider_response_diagnostics": evidence_state.get("response_diagnostics", [])} if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS else {})},
+                response_payload=_audit_payload(),
                 stage="after_initial_provider_call",
                 response_model=self._provider_response_model_without_assertion(
                     provider
@@ -2530,6 +2553,7 @@ class MonitoringAiService:
                     job,
                     initial_output,
                     input_payload,
+                    normalization_notes=normalization_notes,
                 )
             except (
                 MonitoringAiOutputValidationError,
@@ -2550,7 +2574,7 @@ class MonitoringAiService:
                         job,
                         owner=owner,
                         request_payload={"envelope": envelope.payload},
-                        response_payload={"provider_outputs": outputs, **({"provider_response_diagnostics": evidence_state.get("response_diagnostics", [])} if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS else {})},
+                        response_payload=_audit_payload(),
                         failure_code="invalid_ai_output",
                         failure_message=(
                             "document authority provider output failed its "
@@ -2583,6 +2607,11 @@ class MonitoringAiService:
                     input_payload=input_payload,
                     evidence_state=evidence_state,
                 )
+                if job.task_type in (
+                    MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+                    MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
+                ):
+                    raw_outputs.append(repaired_output)
                 repaired_output = (
                     self._normalize_document_authority_provider_output(
                         job, repaired_output
@@ -2596,7 +2625,7 @@ class MonitoringAiService:
                         "envelope": envelope.payload,
                         "repair_envelope": repair_envelope.payload,
                     },
-                    response_payload={"provider_outputs": outputs, **({"provider_response_diagnostics": evidence_state.get("response_diagnostics", [])} if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS else {})},
+                    response_payload=_audit_payload(),
                     stage="after_repair_provider_call",
                     response_model=(
                         self._provider_response_model_without_assertion(provider)
@@ -2618,6 +2647,7 @@ class MonitoringAiService:
                         job,
                         repaired_output,
                         input_payload,
+                        normalization_notes=normalization_notes,
                     )
                 except (
                     MonitoringAiOutputValidationError,
@@ -2673,7 +2703,7 @@ class MonitoringAiService:
                     "envelope": envelope.payload,
                     "repair_used": repaired,
                 },
-                response_payload={"provider_outputs": outputs, **({"provider_response_diagnostics": evidence_state.get("response_diagnostics", [])} if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS else {})},
+                response_payload=_audit_payload(),
                 stage="before_attempt_and_completion",
                 response_model=observed_response_model,
             )
@@ -2687,7 +2717,7 @@ class MonitoringAiService:
                     "envelope": envelope.payload,
                     "repair_used": repaired,
                 },
-                response_payload={"provider_outputs": outputs, **({"provider_response_diagnostics": evidence_state.get("response_diagnostics", [])} if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS else {})},
+                response_payload=_audit_payload(),
                 response_model=observed_response_model,
                 outcome="success_repaired" if repaired else "success",
             )
@@ -8299,7 +8329,8 @@ class MonitoringAiService:
 
         mappings = payload.get("field_mappings")
         if not isinstance(mappings, list):
-            return
+            return []
+        notes: List[Dict[str, Any]] = []
         for mapping in mappings:
             if not isinstance(mapping, Mapping):
                 continue
@@ -8339,6 +8370,14 @@ class MonitoringAiService:
             mapping["uncertainty"] = (
                 uncertainty + ("；" if uncertainty else "") + marker
             )
+            notes.append(
+                {
+                    "domain": str(mapping.get("domain") or ""),
+                    "source_field": str(mapping.get("source_field") or ""),
+                    "moved_to_uncertainty": "".join(dropped),
+                }
+            )
+        return notes
 
     @staticmethod
     def _normalize_document_authority_provider_output(
@@ -8394,6 +8433,7 @@ class MonitoringAiService:
         job: MonitoringAiJob,
         output: Any,
         input_payload: Dict[str, Any],
+        normalization_notes: Optional[List[Dict[str, Any]]] = None,
     ) -> Tuple[MonitoringAiCandidate, ...]:
         if (
             job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
@@ -8420,7 +8460,21 @@ class MonitoringAiService:
                 candidate.pop("system_generated_mapping_provenance", None)
                 structured = candidate.get("structured_payload")
                 if isinstance(structured, Mapping):
-                    self._normalize_mapping_user_actions(structured)
+                    # R24-04：整理只作用于深拷贝；调用方持有的原始输出
+                    # 对象不被就地改写，attempt 记录保持模型原话。
+                    structured = deepcopy(structured)
+                    notes = self._normalize_mapping_user_actions(structured)
+                    if notes and normalization_notes is not None:
+                        normalization_notes.extend(
+                            {
+                                **note,
+                                "candidate_title": str(
+                                    candidate.get("title") or ""
+                                ),
+                            }
+                            for note in notes
+                        )
+                    candidate["structured_payload"] = structured
                 candidates.append(candidate)
             output["candidates"] = candidates
         try:
@@ -8666,10 +8720,13 @@ class MonitoringAiService:
                 "does not match the job"
             )
         if not actual:
-            # 网关已对“响应缺失模型名”放行（诊断留痕
-            # response_model_missing_accepted）：请求发往配置端点，
-            # 观测身份记为空并按请求身份归一，不阻塞完成路径。
-            return job.requested_model
+            # R24-01：expected有值但上游整流未回显model名——观测身份
+            # 未知。返回空串让observed列保持unknown（诊断已留痕
+            # response_model_missing_accepted）；绝不把requested反填成
+            # observed，否则无法证明“哪个真实模型完成了独立核验”。
+            # 显式mismatch仍在下方硬失败。作业级身份由complete按
+            # requested登记，不受影响。
+            return ""
         if actual != expected:
             raise MonitoringAiResponseIdentityError(
                 "provider response model identity is missing or mismatched"

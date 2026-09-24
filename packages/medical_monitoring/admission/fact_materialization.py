@@ -348,6 +348,8 @@ class FactMaterializationService:
             fact_set_manifests = []
             skipped_unmapped = 0
             skipped_derived = 0
+            skipped_unverified = 0
+            unverified_pairs: set[tuple[str, str]] = set()
             value_count = 0
             row_count = 0
             for snapshot_id in snapshot_ids:
@@ -373,6 +375,19 @@ class FactMaterializationService:
                             continue
                         if field_kind == "deterministic_derived":
                             skipped_derived += 1
+                            continue
+                        # R24-02：机器可执行缺口边界——多轮双模型未闭合的
+                        # 字段语义不得作为已确认canonical_role进入事实层；
+                        # 原始值仍在listing可查，这里只跳过语义赋值并单独
+                        # 计数，依赖该语义的分析据此显示覆盖不足。
+                        if (
+                            str(field.get("semantic_availability") or "")
+                            == "unverifiable_gap"
+                        ):
+                            skipped_unverified += 1
+                            unverified_pairs.add(
+                                (str(field.get("domain") or ""), column)
+                            )
                             continue
                         locator = self._locator(index, row, row_index, column_index)
                         resolved = resolve_locator(
@@ -516,6 +531,13 @@ class FactMaterializationService:
                     "source_values_verified": value_count,
                     "unmapped_values_skipped": skipped_unmapped,
                     "derived_values_skipped": skipped_derived,
+                    # R24-02：缺口字段的值赋值跳过计数与字段清单——
+                    # confirmed-with-gaps的“gap”在此机器可查。
+                    "unverified_values_skipped": skipped_unverified,
+                    "unverified_semantic_fields": sorted(
+                        f"{domain}:{field}"
+                        for domain, field in unverified_pairs
+                    ),
                 },
                 "fact_set_ids": [item["fact_set_id"] for item in fact_set_manifests],
             }
