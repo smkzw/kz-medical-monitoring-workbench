@@ -159,6 +159,7 @@ export function layoutJourneyTimeline({
   windowStart = null,
   windowEnd = null,
   zoomLevel = 0,
+  containerWidth = null,
 } = {}) {
   const risksByAnchor = new Map(risks.map((risk) => [risk.riskAnchorRef || risk.risk_anchor_ref, risk]));
   const pendingRefSet = new Set(
@@ -200,6 +201,7 @@ export function layoutJourneyTimeline({
     visits: positionedVisits.map((item) => item.visit),
     events: datedEvents,
     zoomLevel,
+    containerWidth,
   });
 
   const _x = (v) => (typeof v === "object" && v !== null ? v.x : v);

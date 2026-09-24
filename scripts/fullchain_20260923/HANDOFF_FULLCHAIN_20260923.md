@@ -455,3 +455,31 @@ A01-A17 全过；A18-A20 单一来源派生已交付；A21 逐物理调用账本
 - `GET /api/projects/{pid}/modules/medical-monitoring/ai/call-ledger-summary`：返回聚合统计（total_calls=0 因表刚建，历史调用在此之前的 attempt 行审计中）。
 - `GET /api/projects/{pid}/modules/medical-monitoring/ai/call-ledger`：按明细返回调用列表。
 - 后续新 AI 调用将自动入账（record_call 在 _run_with_heartbeat 中无条件触发）。
+
+---
+
+# 0924V2 首批交付（2026-09-25，HEAD 至 ed3d896+fit修复）
+
+## 后台纠偏（R24V2-B01/B02/B05/B06）
+
+- **B01（P0）**：删除公开结果路径中"非空live finding覆盖frozen bundle"逻辑——发布结果只读冻结bundle；冻结读取失败或零发现如实呈现（meta带state），不借live顶替。旧result token不再随active工件漂移。
+- **B02**：`_add_event` 事件/风险分开——仅AE且AESEV**有源记录**时产生风险行（severity_source=recorded）；unknown严重度不再默认medium进风险图；非AE事件不再因"每事件=风险"推定。事件/锚点完整保留。
+- **B05**：`call_ledger(project_id, job_id=None, *, limit, offset)` 统一project-wide/job-scoped查询合同+分页；HTTP路由签名匹配（TypeError消除）。
+- **B06**：失败/异常路径同样记账（try/except/finally，outcome=provider_error+error_code）；计量写入失败显式warning（不静默消失）；嵌套usage.detail规范化（reasoning/cached从detail读取）；summary增加outcome_unknown_count。
+
+## 前端 J1/J2（R24V2-U01/U02/U03/U09/U10）
+
+- **U01 容器适配fit**：`buildTimelineScale` 接受 `containerWidth`——zoomLevel=0（默认）时绘图区宽度=容器宽度-标签列/边距，真实日期线性投影；px/day只作显式时间缩放密度。ResizeObserver绑定**滚动外壳**（非被scale撑大的canvas本身），标签列176px在观测侧扣除。
+- **U02/U03 视窗/密度拆分**：ZoomControls改为"全程（默认fit）/更密/更疏"——非零zoom=显式时间缩放（画布按px/day扩展），密度只影响标签详略不改时间窗。
+- **U09 无日期无假窗**：scale暴露 `hasValidDates`；全无有效日期时UI可显示"无有效日期"而非假2026窗口。
+- **U10 窗外不伪装同日**：`xFor` 返回 `{x, beyond: before|after}`，marks携带beyond标记（渲染继续符号的数据基础）；clamp只影响绘图位置不影响语义。
+
+## 浏览器实测验证
+
+- **Journey fit生效**：canvas 917px == 宿主917px（此前3592 vs 1047横溢），全程2025-06-24—2026-08-07一屏可见（截图 /tmp/v2_journey_fit2.png）。
+- **B01冻结回归**：overview API 56发现/461风险/16受试者不变（移除live覆盖后语义一致）。
+- **三视口**：1440/1920/2560 均56卡片无溢出。
+
+## 测试
+
+405 后端测试绿 + 11 例 R24 回归（新增B06失败记账、嵌套usage.detail两例）+ timeline几何测试 1 例通过。

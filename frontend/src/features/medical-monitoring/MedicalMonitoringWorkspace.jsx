@@ -616,15 +616,19 @@ export function DomainTracks({
   // R24V2-U01/U02：ResizeObserver绑定实际plot宿主——容器/侧栏/抽屉
   // 宽度变化都触发重测；零宽初始状态等待测量（containerWidth=null时
   // scale保持旧行为，不留永久兜底宽度）。卸载时断开观察。
-  const plotHostRef = useRef(null);
+  const scrollShellRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(null);
   useEffect(() => {
-    const host = plotHostRef.current;
+    // 观察滚动外壳（宿主宽度=可用宽度），不是被scale撑大的canvas本身。
+    const host = scrollShellRef.current;
     if (!host || typeof ResizeObserver === "undefined") return undefined;
     const observer = new ResizeObserver((entries) => {
       const width = entries?.[0]?.contentRect?.width;
       if (typeof width === "number" && width > 0) {
-        setContainerWidth(Math.floor(width));
+        // 减去标签列宽度（CSS变量176px），得到真实绘图可用宽
+        const labelW = 176;
+        const available = Math.floor(width) - labelW;
+        if (available > 200) setContainerWidth(available);
       }
     });
     observer.observe(host);
@@ -684,8 +688,8 @@ export function DomainTracks({
         ))}
       </div>
       <TimelineScrollShell>
+        <div ref={scrollShellRef} style={{ width: "100%", minWidth: 0 }}>
         <div
-          ref={plotHostRef}
           className="monitoring-timeline-canvas"
           style={{ "--timeline-plot-width": `${layout.scale.width}px`, width: `calc(${layout.scale.width}px + var(--timeline-label-width))` }}
           data-timeline-width={layout.scale.width}
@@ -800,6 +804,7 @@ export function DomainTracks({
               );
             })}
           </div>
+        </div>
         </div>
       </TimelineScrollShell>
       <div className="monitoring-pending-date-zone" aria-label="日期待确认记录">
