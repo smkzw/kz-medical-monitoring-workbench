@@ -10,6 +10,7 @@ import copy
 import hashlib
 import json
 import sqlite3
+import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -382,15 +383,43 @@ def _uri_for_readonly(path: Path) -> str:
 
 
 def _open_readonly(path: Path) -> sqlite3.Connection:
-    connection = sqlite3.connect(_uri_for_readonly(path), uri=True,
-                                  isolation_level=None, check_same_thread=False)
+    # R24：mode=ro URI在常驻WAL库上无其他进程持有-shm时，首查必然
+    # "unable to open database file"（只读连接不能创建-shm）。这是探测
+    # 可用性条件而非库损坏：重试后回退到读写驱动并用query_only钉死
+    # 只读（与graph store探针同一修复哲学）。
+    uri = _uri_for_readonly(path)
+    last_error: Optional[Exception] = None
+    for _attempt in range(3):
+        connection: Optional[sqlite3.Connection] = None
+        try:
+            connection = sqlite3.connect(uri, uri=True,
+                                         isolation_level=None,
+                                         check_same_thread=False)
+            connection.row_factory = sqlite3.Row
+            _enforce_query_only(connection)
+            # WAL库的-shm创建失败发生在首个真读而非connect：探针必须
+            # 触发一次真实读，否则失败会泄漏给调用方变成“库损坏”。
+            connection.execute("SELECT count(*) FROM sqlite_master").fetchone()
+            return connection
+        except sqlite3.OperationalError as exc:
+            last_error = exc
+            if connection is not None:
+                connection.close()
+            if "unable to open database file" not in str(exc):
+                raise
+            time.sleep(0.15 * (_attempt + 1))
+    connection = sqlite3.connect(str(path), isolation_level=None,
+                                 check_same_thread=False)
     connection.row_factory = sqlite3.Row
+    _enforce_query_only(connection)
+    return connection
+
+
+def _enforce_query_only(connection: sqlite3.Connection) -> None:
     connection.execute("PRAGMA query_only = ON")
     value = connection.execute("PRAGMA query_only").fetchone()[0]
     if int(value) != 1:
-        connection.close()
         raise sqlite3.DatabaseError("query_only was not enabled")
-    return connection
 
 
 def _quick_check(connection: sqlite3.Connection) -> Tuple[str, int]:

@@ -697,9 +697,57 @@ class AdmissionMappingConfirmationService:
                     if field.get("question_reconciliation_sha256") != reconciliation_sha256:
                         pending.append(field)
                         continue
-                    if (_decision_recorded(field)
-                            and field.get("decision_reconciliation_sha256") != reconciliation_sha256):
-                        pending.append(field)
+                    if _decision_recorded(field):
+                        if not field.get("decision_reconciliation_sha256"):
+                            # 用户答案只能经user_action（决策前缀）落库——
+                            # 编辑层禁止用户改provenance；系统在此为已作答
+                            # 字段盖决策修订章，随后按已决收敛。
+                            current = self.mapping_repository.get_draft(project_id, draft_id)
+                            self.mapping_repository.edit_field(
+                                project_id,
+                                draft_id,
+                                domain=str(field.get("domain") or ""),
+                                source_field=str(field.get("source_field") or ""),
+                                patch={
+                                    "decision_reconciliation_sha256": reconciliation_sha256,
+                                },
+                                expected_version=int(current.version),
+                                actor="system_harness",
+                                idempotency_key=(
+                                    "escalated-answer:"
+                                    f"{draft_id}:{reconciliation_sha256[:12]}:"
+                                    f"{field.get('domain')}:{field.get('source_field')}"
+                                ),
+                            )
+                            draft = self.mapping_repository.get_draft(project_id, draft_id)
+                            payload = (
+                                draft.model_dump(mode="json")
+                                if hasattr(draft, "model_dump")
+                                else dict(draft)
+                            )
+                            field = next(
+                                (
+                                    item
+                                    for item in payload.get("fields") or []
+                                    if (
+                                        str(item.get("domain") or ""),
+                                        str(item.get("source_field") or ""),
+                                    )
+                                    == (
+                                        str(field.get("domain") or ""),
+                                        str(field.get("source_field") or ""),
+                                    )
+                                ),
+                                field,
+                            )
+                            # 盖章即簿记完成；收敛计数由确认门按字段决策
+                            # 判定，不在此处混入。
+                            continue
+                        if field.get("decision_reconciliation_sha256") != reconciliation_sha256:
+                            # 旧修订下的答案：新修订重新提问（既有策略）。
+                            pending.append(field)
+                            continue
+                        previously_resolved += 1
                         continue
                     if (
                         classify_user_question(field) is None
@@ -708,6 +756,8 @@ class AdmissionMappingConfirmationService:
                         raise AdmissionMappingPipelineError(
                             "mapping_bridge_failed"
                         )
+                    # 未作答：问题保持开放（resolve投影可见、等待用户），
+                    # 不重发模型、不重复升级——稳定可解释状态。
                     continue
                 if receipt.resolution == "unverifiable_gap":
                     previously_resolved += 1
@@ -965,9 +1015,17 @@ class AdmissionMappingConfirmationService:
                 or "?" in rationale
                 or "？" in rationale
             )
+            second_pass_diverged = False
             if not agreed and not requires_user:
+                # 第二轮独立复核仍分歧且双方均未标用户问题：升级为用户裁决。
+                # 旧实现只递增计数并跳过——字段既无receipt也不成为用户问题，
+                # 永远停在"分歧无回执"，确认门因此永远差额（状态泄漏）。
+                # 第一轮映射+第二轮独立复核已构成有界复核；此后唯一诚实
+                # 出口是把两侧结论并列交给医学经理裁决（escalated），
+                # 不按主侧或多数票填齐。
+                requires_user = True
+                second_pass_diverged = True
                 remaining_system_review_count += 1
-                continue
             current = self.mapping_repository.get_draft(project_id, draft_id)
             current_payload = current.model_dump(mode="json")
             current_field = next(
@@ -983,6 +1041,9 @@ class AdmissionMappingConfirmationService:
                 None,
             )
             if current_field is None:
+                continue
+            if second_pass_diverged and _decision_recorded(current_field):
+                # 用户已就本对作出裁决：其答案优先，不再重复升级覆盖。
                 continue
             prior_answer = (
                 str(current_field.get("user_action") or "")
@@ -1012,6 +1073,16 @@ class AdmissionMappingConfirmationService:
                 question = questions[0] if questions else (
                     f"请确认「{pair[0]}·{pair[1]}」记录的实际医学含义。"
                 )
+                if second_pass_diverged:
+                    # 升级问题时并列呈现两侧结论，用户裁决有完整依据，
+                    # 不只给一句泛化提问。
+                    question = (
+                        f"系统两轮独立复核对本字段结论仍不一致，请裁决"
+                        f"「{pair[0]}·{pair[1]}」的实际语义：主分析判断为"
+                        f"「{item.get('recommended_role')}」，独立复核判断为"
+                        f"「{verifier_item.get('recommended_role')}」。"
+                        f"可采纳任一方或给出其他结论。"
+                    )
                 patch = {
                     "question_reconciliation_sha256": reconciliation_sha256,
                     "decision_reconciliation_sha256": "",
