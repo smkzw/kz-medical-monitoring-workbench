@@ -416,3 +416,7 @@ protocol docx上传 ✓ → protocol-version注册 ✓ → 方案事实提取（
 
 - **CSU 风险层当前已完整交付**：确定性引擎 32 风险 + 56 AI 发现全锚定 + current_risks=461 可见。
 - **规则包链**：写入权限已解锁 + 协议版本已注册，但需要先实现方案事实提取 lane 才能创建规则包。这是 **W04 真正的下一步工作项**（非当前交付的阻塞项）。
+
+## W04 前置依赖链最终确认
+
+`rule-packs/drafts` 需 `fact_revision_ids` = medically_confirmed ProtocolFact（从 PROTOCOL_CLAUSE_STRUCTURING AI 作业产出→医学经理 confirm_fact_and_compile 确认）。该提取 lane 是完整独立工作包。CSU 风险层已通过确定性引擎完整交付。A22 同源对比数据在 attempt 审计与 call_ledger 中可查。A24/A25 三视口+深链已过。
