@@ -341,3 +341,29 @@ EvidenceView修复（matchedRef精确匹配）已落地；本轮浏览器走查�
 ## A20（重启保留暂停/旧任务）— 运行时验证
 
 多次重启后W03 run与恢复run均保留（监控运行/事实/发布artifact全在monitoring_runtime.sqlite3）；scaffold DB重建后重启同样保留（A28演练step2验证initializer对已存在文件no-op）。
+
+---
+
+# E0 完整成本账本 + 恢复验证（2026-09-24 深夜四）
+
+## E0 完整账本（monitoring_ai_call_ledger表）— 已交付
+
+- **表结构**：call_id / project_id / job_id / attempt_id / call_seq(服务端自增) / owner / provider / requested_model / observed_model / wire / prompt_tokens / completion_tokens / reasoning_tokens / cached_tokens / total_tokens / usage_unknown / response_bytes / read_seconds / outcome / error_code / created_at。无FK（观测性数据先于job生命周期写入）。
+- **写入**：`record_call()` 从provider response_diagnostics提取usage（prompt/completion/reasoning/cached/total）与wire/时延/字节——usage缺失时token列保持NULL、usage_unknown=1（不填0不伪造）。
+- **查询**：`call_ledger(project_id, job_id)`按call_seq排序返回。
+- **回放验证**：API重启后call_ledger表自动创建；W03 run artifact/overview完好。
+- **回归**：test_call_ledger_query_and_usage_roundtrip——全量usage/缺失usage/call_seq自增/身份缺失保持空全覆盖。
+
+## W03 run 恢复验证 — 通过
+
+重启后 W03 run（r7-run-922797...）4 artifact 完好；overview API正常：qf=56/risks=461/subjects=16。
+
+## A22 同源对照 — 部分完成
+
+v19（主）vs v17（盲核）双队列在同一CSU事实输入上的对比数据已在attempt审计与call_ledger中可查。完整"质量分层"对照（正常/困难/空值字典/多日期/剂量单位）待风险规则链与更多轮次数据——当前单轮56发现(30+26)的分层已可从artifact counts提取。
+
+## A24/A25 剩余 — 已在本窗口完成（1440/2560+深链）
+
+## 累计台账
+
+A01-A13全过；A14-A17全过；A18/A19单一来源派生+七集合验证；A20重启保留验证；A21/A22核心交付（A22完整分层待更多轮次）；A23回归3/3；A24/A25三视口+深链通过；A26 API链通过；A28恢复演练通过（含真实教训）。留待：A24/A25宽屏三档深链逐项截图已跑、A27 SAR分账挂账、A28全量演练含AI lane。

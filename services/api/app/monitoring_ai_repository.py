@@ -279,6 +279,33 @@ class MonitoringAiRepository:
                     UNIQUE(job_id, attempt_number)
                 );
 
+                CREATE TABLE IF NOT EXISTS monitoring_ai_call_ledger (
+                    call_id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    job_id TEXT NOT NULL,
+                    attempt_id TEXT NOT NULL,
+                    call_seq INTEGER NOT NULL,
+                    owner TEXT NOT NULL,
+                    provider TEXT NOT NULL DEFAULT '',
+                    requested_model TEXT NOT NULL DEFAULT '',
+                    observed_model TEXT NOT NULL DEFAULT '',
+                    wire TEXT NOT NULL DEFAULT '',
+                    prompt_tokens INTEGER,
+                    completion_tokens INTEGER,
+                    reasoning_tokens INTEGER,
+                    cached_tokens INTEGER,
+                    total_tokens INTEGER,
+                    usage_unknown INTEGER NOT NULL DEFAULT 0,
+                    response_bytes INTEGER,
+                    read_seconds REAL,
+                    outcome TEXT NOT NULL DEFAULT '',
+                    error_code TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                    -- 无FK：成本账先于/独立于job生命周期写入（观测性数据）
+                );
+                CREATE INDEX IF NOT EXISTS idx_call_ledger_job
+                    ON monitoring_ai_call_ledger(project_id, job_id);
+
                 CREATE TABLE IF NOT EXISTS monitoring_ai_candidates (
                     candidate_id TEXT PRIMARY KEY,
                     job_id TEXT NOT NULL,
@@ -943,6 +970,112 @@ class MonitoringAiRepository:
             result.append({"receipt": receipt, "response_model": row["response_model"],
                            "attempt_number": row["attempt_number"], "read_id": row["read_id"]})
         return tuple(result)
+
+    def record_call(
+        self,
+        *,
+        project_id: str,
+        job_id: str,
+        attempt_id: str,
+        call_seq: int,
+        owner: str,
+        provider: str,
+        requested_model: str,
+        observed_model: str,
+        diagnostics: Mapping[str, Any],
+        outcome: str = "",
+        error_code: str = "",
+    ) -> str:
+        """E0：一次物理POST一条成本账（usage缺失记unknown不填0）。"""
+        if not project_id or not job_id:
+            raise ValueError("call ledger requires project_id and job_id")
+        call_id = "moncall_" + content_sha256({
+            "project_id": project_id,
+            "job_id": job_id,
+            "attempt_id": attempt_id,
+            "call_seq": call_seq,
+            "created_at": _iso(self.clock()),
+        })[:28]
+        def _float(source: Mapping[str, Any], key: str) -> float | None:
+            raw = source.get(key)
+            if raw is None or raw == "":
+                return None
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                return None
+
+        def _int(source: Mapping[str, Any], key: str) -> int | None:
+            raw = source.get(key)
+            if raw is None or raw == "":
+                return None
+            try:
+                return int(raw)
+            except (TypeError, ValueError):
+                return None
+        usage = diagnostics.get("usage") if isinstance(diagnostics.get("usage"), dict) else {}
+        prompt_tokens = _int(usage, "prompt_tokens")
+        completion_tokens = _int(usage, "completion_tokens")
+        reasoning_tokens = _int(usage, "reasoning_tokens")
+        cached_tokens = _int(usage, "cached_tokens")
+        total_tokens = _int(usage, "total_tokens")
+        now = self.clock()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            call_seq = int(
+                connection.execute(
+                    """
+                    SELECT COALESCE(MAX(call_seq), 0) + 1
+                    FROM monitoring_ai_call_ledger
+                    WHERE project_id = ? AND job_id = ?
+                    """,
+                    (project_id, job_id),
+                ).fetchone()[0]
+            )
+            connection.execute(
+                """
+                INSERT INTO monitoring_ai_call_ledger(
+                    call_id, project_id, job_id, attempt_id, call_seq,
+                    owner, provider, requested_model, observed_model,
+                    wire, prompt_tokens, completion_tokens,
+                    reasoning_tokens, cached_tokens, total_tokens,
+                    usage_unknown, response_bytes, read_seconds,
+                    outcome, error_code, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    call_id, project_id, job_id, attempt_id, call_seq,
+                    owner, provider, requested_model,
+                    str(observed_model or ""),
+                    str(diagnostics.get("wire") or ""),
+                    prompt_tokens,
+                    completion_tokens,
+                    reasoning_tokens,
+                    cached_tokens,
+                    total_tokens,
+                    1 if not any(isinstance(v, int) for v in usage.values()) else 0,
+                    _int(diagnostics, "response_bytes"),
+                    _float(diagnostics, "sse_read_seconds"),
+                    outcome, error_code, _iso(now),
+                ),
+            )
+            connection.commit()
+        return call_id
+
+    def call_ledger(
+        self,
+        project_id: str,
+        job_id: str,
+    ) -> list[dict[str, Any]]:
+        rows = self._connect().execute(
+            """
+            SELECT * FROM monitoring_ai_call_ledger
+            WHERE project_id = ? AND job_id = ?
+            ORDER BY call_seq
+            """,
+            (project_id, job_id),
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def attempts(
         self,

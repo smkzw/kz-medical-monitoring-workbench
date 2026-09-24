@@ -8762,6 +8762,26 @@ class MonitoringAiService:
                 f"monitoring AI lease heartbeat failed: {heartbeat_error[0]}"
             )
         self.repository.heartbeat(job.project_id, job.job_id, owner)
+        # E0：每物理POST一条成本账——diagnostics里有usage/wire/时延/字节/
+        # 身份缺失等全量观测；操作员重试经不同owner各自成行。usage缺失
+        # 记unknown不填0（None列）。
+        try:
+            diagnostics = deepcopy(
+                getattr(provider, "response_diagnostics", {}) or {}
+            )
+            self.repository.record_call(
+                project_id=job.project_id,
+                job_id=job.job_id,
+                attempt_id=owner,
+                call_seq=0,
+                owner=owner,
+                provider=job.provider,
+                requested_model=job.requested_model,
+                observed_model=str(getattr(provider, "response_model", "") or ""),
+                diagnostics=diagnostics,
+            )
+        except Exception:
+            pass  # 成本账写入失败不阻塞分析主链；attempt行仍留全量观测
         if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS and isinstance(output, str):
             # An invalid outer response remains a failed envelope, never a
             # salvaged inner mapping. The existing one-repair path sees it.
