@@ -369,3 +369,50 @@ def test_cost_ledger_records_every_physical_call(tmp_path):
 
     # usage缺失：诊断条目无usage键时不伪造（保持缺失原样）
     assert "usage" not in diag[0] or diag[0]["usage"] is None or diag[0]["usage"]
+
+
+def test_call_ledger_query_and_usage_roundtrip(tmp_path):
+    """0924V1-A18/A20/A21：call_ledger表记录每次物理调用明细（call_id/
+    usage/cache/wire/时延），查询接口按job聚合；usage缺失记unknown不填0。"""
+    from services.api.app.monitoring_ai_repository import MonitoringAiRepository
+
+    repo = MonitoringAiRepository(tmp_path / "ledger.sqlite3")
+    pid = "p1"
+    jid = "job-x"
+    owner = "owner-a"
+    # 第一次调用：全量usage
+    repo.record_call(
+        project_id=pid, job_id=jid, attempt_id="att-1", call_seq=0,
+        owner=owner, provider="cms-router", requested_model="glm-5.3-flash",
+        observed_model="glm-5.3-flash",
+        diagnostics={
+            "wire": "sse",
+            "usage": {"prompt_tokens": 100, "completion_tokens": 50},
+            "response_bytes": 4096,
+            "sse_read_seconds": 1.5,
+        },
+        outcome="success",
+    )
+    # 第二次调用（操作员重试）：usage缺失→unknown
+    repo.record_call(
+        project_id=pid, job_id=jid, attempt_id="att-1", call_seq=1,
+        owner="owner-a", provider="cms-router", requested_model="glm-5.3-flash",
+        observed_model="",
+        diagnostics={"wire": "sse", "response_bytes": 200},
+        outcome="success",
+    )
+    rows = repo.call_ledger(pid, jid)
+    assert len(rows) == 2
+    first, second = rows
+    # 全量usage正常记录
+    assert first["prompt_tokens"] == 100
+    assert first["completion_tokens"] == 50
+    assert first["total_tokens"] is None  # 上游未回报total则不伪造
+    assert first["usage_unknown"] == 0
+    assert first["outcome"] == "success"
+    # usage缺失：unknown=1，token列保持NULL不填0
+    assert second["usage_unknown"] == 1
+    assert second["prompt_tokens"] is None
+    assert second["observed_model"] == ""  # 缺失身份保持空
+    # call_seq自增
+    assert second["call_seq"] > first["call_seq"]
