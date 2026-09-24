@@ -35,8 +35,10 @@ from ..projections.facts_publication import (
 
 FACT_SET_KIND = "canonical_fact_set"
 FACT_MATERIALIZATION_KIND = "canonical_fact_materialization"
-FACT_SET_SCHEMA_VERSION = "mm-c3-canonical-fact-set-v1"
-FACT_MATERIALIZATION_SCHEMA_VERSION = "mm-c3-fact-materialization-v1"
+# v2：R24-02缺口边界——unverifiable_gap字段不再贡献canonical语义值
+# （跳过并计数进summary）。事实内容合同变更，版本推进使旧缓存失效。
+FACT_SET_SCHEMA_VERSION = "mm-c3-canonical-fact-set-v2"
+FACT_MATERIALIZATION_SCHEMA_VERSION = "mm-c3-fact-materialization-v2"
 
 
 class FactMaterializationError(RuntimeError):
@@ -202,6 +204,47 @@ def _advance(store: Store, snapshot_id: str, target: SnapshotAcceptanceState) ->
 class FactMaterializationService:
     mapping_repository: ConfirmedMappingRepository
 
+    def _unverified_gap_pairs(
+        self,
+        project_id: str,
+        draft_id: str,
+    ) -> set[tuple[str, str]]:
+        """Pairs whose latest durable adjudication outcome is a gap.
+
+        The receipts are the machine-readable source of truth for
+        "confirmed-with-gaps": a confirmed revision freezes availability,
+        and a field whose newest resolution is ``unverifiable_gap`` must
+        not contribute canonical semantics to facts, rules or clinical
+        analysis until a new revision resolves it.
+        """
+
+        receipts_reader = getattr(self.mapping_repository, "adjudication_receipts", None)
+        if not callable(receipts_reader):
+            return set()
+        try:
+            receipts = receipts_reader(project_id, draft_id)
+        except Exception as exc:
+            raise FactMaterializationError(
+                "facts_gap_receipts_unreadable"
+            ) from exc
+        latest: dict[tuple[str, str], str] = {}
+        for receipt in receipts or ():
+            item = _payload(receipt)
+            pair = (
+                str(item.get("domain") or "").casefold(),
+                str(item.get("source_field") or ""),
+            )
+            resolution = str(item.get("resolution") or "")
+            if not pair[0] or not pair[1] or not resolution:
+                continue
+            prior = latest.get(pair)
+            if prior is None or str(item.get("created_at") or "") >= prior[1]:
+                latest[pair] = (resolution, str(item.get("created_at") or ""))
+        return {
+            pair for pair, (resolution, _created) in latest.items()
+            if resolution == "unverifiable_gap"
+        }
+
     def _confirmed_revision(self, project_id: str, attempt_id: str) -> dict[str, Any]:
         draft = self.mapping_repository.find_draft_for_batch(project_id, attempt_id)
         if draft is None:
@@ -309,6 +352,10 @@ class FactMaterializationService:
                     existing_payload.get("project_id") == project_id
                     and existing_payload.get("mapping_revision") == mapping_revision
                     and existing_payload.get("state") == "ready"
+                    # 合同版本进幂等键：缺口边界等事实内容合同变更后，
+                    # 旧缓存不再代表当前合同下的物化结果。
+                    and existing_payload.get("schema_version")
+                    == FACT_MATERIALIZATION_SCHEMA_VERSION
                     and _fact_sets_available(store, workspace_dir, existing_payload)
                 ):
                     return self._public(existing_payload)
@@ -318,6 +365,13 @@ class FactMaterializationService:
                 fields_by_domain.setdefault(str(field["domain"]).casefold(), {})[
                     str(field["source_field"])
                 ] = field
+            # R24-02：机器可执行缺口边界以durable回执为准——每字段最新
+            # resolution为unverifiable_gap的，canonical语义不得进入事实层
+            # （旧修订冻结时可能尚无字段级semantic_availability标记）。
+            receipt_gap_pairs = self._unverified_gap_pairs(
+                project_id,
+                str(revision.get("draft_id") or ""),
+            )
 
             technical = dict(record.get("technical_details") or {})
             source_digests: dict[str, str] = {}
@@ -383,6 +437,8 @@ class FactMaterializationService:
                         if (
                             str(field.get("semantic_availability") or "")
                             == "unverifiable_gap"
+                            or (str(field.get("domain") or "").casefold(), column)
+                            in receipt_gap_pairs
                         ):
                             skipped_unverified += 1
                             unverified_pairs.add(

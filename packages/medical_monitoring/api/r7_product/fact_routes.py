@@ -13,7 +13,7 @@ from ...runtime import project_backup as pb
 from .admission_routes import _validated_attempt_id
 from .errors import _error_response, _run_entry_error_response
 
-FACT_ROUTE_SCHEMA_VERSION = "mm-c3-fact-materialization-v1"
+FACT_ROUTE_SCHEMA_VERSION = "mm-c3-fact-materialization-v2"
 
 _STATUS = {
     "facts_admission_not_found": 404,

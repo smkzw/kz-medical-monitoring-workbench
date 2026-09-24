@@ -4753,53 +4753,44 @@ def restore_project(project_id: str):
 
 
 def _init_monitoring_runtime_dbs(project_id: str) -> None:
-    """创建项目级运行时 DB 并写入 schema markers（0923V1 修复）。
+    """创建项目级运行时 DB 并写入 schema markers（0923V1修复，R24校正）。
 
-    这些 DB 是 `inspect_project_schema` 的 required members。没有它们，
-    project_open_blocked 会阻断 run-setup 和 execution/start。
+    这些 DB 是 `inspect_project_schema` 的 required members。R24对账发现
+    手搓DDL与schema_manifest权威定义存在空白/索引/变体标记漂移（如
+    launch_registry写成slice07c2-v4而现行是slice08b-v4、risk_rules缺
+    marker、profile缺索引），导致shape_mismatch/unsupported_schema_version
+    →project_future_version阻断execution/start。现一律取manifest权威DDL
+    与现行marker，只建新文件、不碰已存在文件（迁移归升级流程管）。
     """
     import sqlite3
+    from packages.medical_monitoring.runtime import schema_manifest as _sm
     ws = RUNTIME_DIR / "medical_monitoring_r7" / project_id
     ws.mkdir(parents=True, exist_ok=True)
-    ddls = [
-        ("execution_profiles.sqlite3",
-         "CREATE TABLE IF NOT EXISTS profile_store_meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);"
-         "CREATE TABLE IF NOT EXISTS profile_layer_versions (layer_kind TEXT NOT NULL, scope_key TEXT NOT NULL, "
-         "revision INTEGER NOT NULL, record_id TEXT NOT NULL UNIQUE, payload_json TEXT NOT NULL, "
-         "content_digest TEXT NOT NULL, PRIMARY KEY (layer_kind, scope_key, revision));",
-         "profile_store_meta", "schema_version", "mm-r7-profile-store-v1"),
-        ("monitoring_run_bindings.sqlite3",
-         "CREATE TABLE IF NOT EXISTS monitoring_run_bindings (run_id TEXT PRIMARY KEY NOT NULL, "
-         "binding_digest TEXT NOT NULL, project_id TEXT NOT NULL, mode TEXT NOT NULL, "
-         "execution_basis TEXT NOT NULL, data_cutoff TEXT NOT NULL, source_revision_id TEXT NOT NULL, "
-         "prior_accepted_snapshot_ref TEXT, execution_profile_id TEXT NOT NULL, "
-         "execution_profile_digest TEXT NOT NULL, profile_id TEXT NOT NULL, user_config_name TEXT NOT NULL, "
-         "effective_selector TEXT NOT NULL, adapter_id TEXT NOT NULL, adapter_version TEXT NOT NULL, "
-         "fallback_profile_ids_json TEXT NOT NULL, schema_version TEXT NOT NULL, "
-         "frozen_profile_json TEXT NOT NULL, record_json TEXT NOT NULL);",
-         None, None, None),
-        ("launch_registry.sqlite3",
-         "CREATE TABLE IF NOT EXISTS r7_launch_registry_meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);",
-         "r7_launch_registry_meta", "schema_version", "mm-r7-slice07c2-launch-registry-v4"),
-        ("risk_rules.sqlite3",
-         "CREATE TABLE IF NOT EXISTS r7_risk_rule_revisions (project_id TEXT NOT NULL, "
-         "revision INTEGER NOT NULL, revision_token TEXT NOT NULL, candidate_id TEXT NOT NULL, "
-         "subject TEXT NOT NULL, condition TEXT NOT NULL, applicable_scope TEXT NOT NULL, "
-         "starting_run TEXT NOT NULL, summary TEXT NOT NULL, created_at TEXT NOT NULL, "
-         "rule_digest TEXT NOT NULL, selectable INTEGER NOT NULL, idempotency_key TEXT, "
-         "idempotency_fingerprint TEXT, PRIMARY KEY(project_id, revision), "
-         "UNIQUE(project_id, revision_token), UNIQUE(project_id, idempotency_key));",
-         None, None, None),
+    jobs = [
+        ("execution_profiles.sqlite3", _sm._PROFILE_DDL,
+         "profile_store_meta", "mm-r7-profile-store-v1"),
+        ("monitoring_run_bindings.sqlite3", _sm._BINDING_DDL,
+         None, None),
+        ("launch_registry.sqlite3", _sm._LAUNCH_DDL,
+         "r7_launch_registry_meta", "mm-r7-slice08b-launch-registry-v4"),
+        ("risk_rules.sqlite3", _sm._RISK_DDL,
+         None, None),
     ]
-    for db_name, ddl, meta_table, meta_key, meta_val in ddls:
+    for db_name, ddl, meta_table, marker in jobs:
         db_path = ws / db_name
+        if db_path.exists():
+            continue
         conn = sqlite3.connect(str(db_path))
-        conn.executescript(ddl)
-        if meta_table and meta_key:
-            conn.execute(f"INSERT OR REPLACE INTO {meta_table} (key, value) VALUES (?, ?)",
-                         (meta_key, meta_val))
-        conn.commit()
-        conn.close()
+        try:
+            conn.executescript(ddl)
+            if meta_table and marker:
+                conn.execute(
+                    f"INSERT OR REPLACE INTO {meta_table} (key, value) VALUES (?, ?)",
+                    ("schema_version", marker),
+                )
+            conn.commit()
+        finally:
+            conn.close()
 
 
 @app.post("/api/projects", status_code=201)

@@ -1,10 +1,10 @@
 {
   "schema": "mm-delivery-status-v1",
-  "updated_at": "2026-09-23T06:32:00+08:00",
+  "updated_at": "2026-09-24T03:20:00+08:00",
   "planning_status": "complete",
   "product_status": "not_delivered",
-  "goal_status": "paused",
-  "source_head": "c00ee33c56a5ae32dba29a2db8b9a7dce787e996",
+  "goal_status": "active",
+  "source_head": "547f167",
   "next_work_package": "W02",
   "work_packages": [
     {
@@ -558,5 +558,36 @@
       "reason": "Current review probes are not the specified complete product acceptance."
     }
   ],
-  "next_action": "Keep 8911 stopped. After the opencode-go rate-limit window clears, restart the same isolated runtime with one worker per role; do not POST a new generation. Let the existing 30 queued and 5 leased verifier jobs settle, then use the bounded candidate-generation recovery only for same-revision terminal failures. Complete mapping, automatic low-burden confirmation and facts before moving to W03."
+  "next_action": "Keep 8911 stopped. After the opencode-go rate-limit window clears, restart the same isolated runtime with one worker per role; do not POST a new generation. Let the existing 30 queued and 5 leased verifier jobs settle, then use the bounded candidate-generation recovery only for same-revision terminal failures. Complete mapping, automatic low-burden confirmation and facts before moving to W03.",
+  "runs": {
+    "ledger_note": "按0924V1审阅包要求分研究记账；互不替代、不自动恢复",
+    "sar_1495_paused": {
+      "project": "proj_user_ddedac094408",
+      "fields": 1495,
+      "state": "paused_not_resumed",
+      "note": "旧SAR运行暂停中；不自动恢复、不重POST、删除需先备份授权"
+    },
+    "csu_60_active": {
+      "project": "proj_user_2f17492ac59b",
+      "study": "MG-K10 CSU III期（合成验证）",
+      "attempt": "stg-1b8dd8c423f84248bde9f942e640912b",
+      "draft": "monmapdraft_a6a97ff25ed36d2f35ce00c63d5a@v39",
+      "doc_authority": "promoted",
+      "mapping_candidates": "60字段双队列10/10 completed",
+      "adjudication": "46分歧=28 adjudicated + 10 unverifiable_gap + 8 采纳循环泄漏（R24已定位：二轮diverged且无用户标记的字段不记receipt）",
+      "facts": "not_generated",
+      "next": "修采纳循环泄漏→escalated出口→confirm→facts→首run"
+    }
+  },
+  "runtime": {
+    "api": "127.0.0.1:8910",
+    "ui": "127.0.0.1:5177",
+    "runtime_dir": "runs/phase_c_mgk10_authority_v2_20260905/runtime",
+    "route": "cms-router GLM + cms-router DeepSeek（别名路线，服务身份按R24-01记observed）"
+  },
+  "review_rounds": [
+    "0923V1",
+    "0924V1"
+  ],
+  "latest_handoff": "scripts/fullchain_20260923/HANDOFF_FULLCHAIN_20260923.md"
 }

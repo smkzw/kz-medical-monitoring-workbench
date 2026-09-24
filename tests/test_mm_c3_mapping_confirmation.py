@@ -842,6 +842,15 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         if pending_crash[0]:
             pending_crash[0] = False
             raise RuntimeError("crash after field edit")
+        # 模拟生产契约：同(project,draft,pair,reconciliation_sha256)重复
+        # 记账返回既有回执（receipt_id相同→幂等），不追加新行。
+        for existing in receipts:
+            if (
+                existing.domain == kwargs.get("domain")
+                and existing.source_field == kwargs.get("source_field")
+                and existing.reconciliation_sha256 == kwargs.get("reconciliation_sha256")
+            ):
+                return existing
         receipts.append(SimpleNamespace(**kwargs))
 
     mapping_repo = SimpleNamespace(
@@ -1019,17 +1028,27 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         assert receipts[1].resolution == resolution
         assert receipts[1].reconciliation_sha256 != legacy_reconciliation_sha256
     else:
-        assert len(receipts) == 1
-        assert state["field"] == field
+        # R24收尾契约：二轮仍分歧且双方均未标用户问题→升级为escalated
+        # 用户裁决（问题并列两侧结论），不再无receipt空转。
+        assert len(receipts) == 2
+        assert receipts[-1].resolution == "escalated"
+        assert state["field"]["user_decision_required"] is True
+        assert "主分析判断为" in state["field"]["user_action"]
         assert payload["adjudication"]["state"] == "blocked"
         assert payload["adjudication"]["remaining_system_review_count"] == 1
     assert payload["adjudication"]["resolved_count"] == resolved_count
-    assert payload["review_summary"]["user_question_count"] == int(needs_user and not answered_during_recovery)
+    if resolution is None:
+        # 升级后该字段成为用户问题，计数与原泄漏契约（0）不同。
+        assert payload["review_summary"]["user_question_count"] == 1
+    else:
+        assert payload["review_summary"]["user_question_count"] == int(needs_user and not answered_during_recovery)
     assert state["field"]["recommended_role"] == (
         "ae_term" if needs_user or resolution is None else (min(adjudicated_role, verifier_role) if use_equivalence else adjudicated_role)
     )
-    assert state["field"]["user_decision_required"] is needs_user
-    if needs_user:
+    assert state["field"]["user_decision_required"] is (
+        needs_user or resolution is None
+    )
+    if needs_user or resolution is None:
         assert "模型" not in state["field"]["user_action"]
     elif resolution is not None:
         assert state["field"]["user_action"].startswith("系统复核：")
@@ -1043,9 +1062,13 @@ def test_dual_disagreement_is_adjudicated_before_any_user_question(
         workspace_dir="/generated/non-real",
     )
     assert state["version"] == version_after_first_pass
-    assert len(receipts) == (1 if resolution is None else 2)
-    assert len(calls) == (4 if resolution is None else 2) + (2 if crashed else 0)
-    assert replay["adjudication"]["resolved_count"] == resolved_count
+    # R24收尾：escalated回执幂等——replay对已升级且未作答的对不再重发
+    # 模型、不再新增receipt（unresolved排除后早退）。
+    assert len(receipts) == 2
+    assert len(calls) == 2 + (2 if crashed else 0)
+    assert replay["adjudication"]["resolved_count"] == resolved_count + (
+        1 if crash_mode == "answered_after_edit" and resolution == "escalated" else 0
+    )
 
     if use_equivalence:
         certificate = state['field']['comparison_annotations']['role_equivalence_certificate']
@@ -1156,3 +1179,146 @@ def test_reconfirmation_history_survives_product_api_projection():
                             "question_reconciliation_sha256": "1" * 64}]})
     assert result["user_questions"][0]["prior_user_action"] == "用户已确认：原始描述。"
     assert "question_reconciliation_sha256" not in result["user_questions"][0]
+
+
+def test_second_pass_divergence_escalates_to_user_with_both_roles() -> None:
+    """R24收尾：二轮仍分歧且双方均未标用户问题——升级为escalated用户
+    裁决（并列两侧结论），不再既不记receipt也不升级地空转。"""
+    field = {
+        "domain": "CM",
+        "source_field": "CMENDAT",
+        "recommended_role": "cm_end_date",
+        "field_kind": "source_collected",
+        "confidence": 0.6,
+        "uncertainty": "结束日期语义基本明确。",
+        "user_action": "该列结束日期语义是否可靠？",
+        "user_decision_required": True,
+    }
+    state = {"version": 1, "field": dict(field)}
+
+    class Draft:
+        batch_id = "attempt-1"
+        draft_id = "draft-1"
+
+        @property
+        def version(self):
+            return state["version"]
+
+        def model_dump(self, mode="json"):
+            return {
+                "project_id": "p1",
+                "draft_id": self.draft_id,
+                "batch_id": self.batch_id,
+                "version": state["version"],
+                "fields": [dict(state["field"])],
+            }
+
+    draft = Draft()
+    quality = SimpleNamespace(as_payload=lambda: {"confirmable": True})
+
+    def edit_field(*_args, patch, **_kwargs):
+        state["field"].update(patch)
+        state["version"] += 1
+        return draft
+
+    mapping_repo = SimpleNamespace(
+        get_draft=lambda *_args: draft,
+        edit_field=edit_field,
+        semantic_quality=lambda *_args: quality,
+    )
+    candidates = {
+        cohort: SimpleNamespace(
+            candidate_id=f"candidate-{cohort}", status="proposed"
+        )
+        for cohort in ("primary", "verifier")
+    }
+    jobs = {
+        cohort: SimpleNamespace(
+            job_id=f"job-{cohort}",
+            project_id="p1",
+            input_revision_sha256="r" * 64,
+        )
+        for cohort in ("primary", "verifier")
+    }
+    decisions = []
+    ai_repo = SimpleNamespace(
+        get=lambda _project, job_id: next(
+            job for job in jobs.values() if job.job_id == job_id
+        ),
+        candidates=lambda _project, job_id: (
+            next(
+                candidate for cohort, candidate in candidates.items()
+                if jobs[cohort].job_id == job_id
+            ),
+        ),
+        decide_candidate=lambda *_args, **kwargs: decisions.append(kwargs),
+    )
+    escalation_receipts = []
+
+    def pipeline_double(**kwargs):
+        cohort = kwargs["cohort"]
+        role = (
+            "cm_end_date"
+            if cohort == "primary"
+            else "concomitant_medication_end_date"
+        )
+        return {
+            "state": "ready",
+            "evidence_ids": [f"ev-{cohort}"],
+            "mappings": [{
+                **field,
+                "recommended_role": role,
+                "user_decision_required": False,
+                "uncertainty": "日期语义明确。",
+                "user_action": "系统依据表头判定为结束日期。",
+                "evidence_ids": [f"ev-{cohort}"],
+                "candidate_id": f"candidate-{cohort}",
+                "job_id": f"job-{cohort}",
+            }],
+        }
+
+    pipeline = SimpleNamespace(adjudicate_candidates=pipeline_double)
+
+    class RecordingRepo(SimpleNamespace):
+        def record_adjudication(self, *args, **kwargs):
+            escalation_receipts.append(kwargs)
+            return SimpleNamespace(receipt_id="r1")
+
+    service = AdmissionMappingConfirmationService(
+        mapping_pipeline=pipeline,
+        mapping_repository=RecordingRepo(
+            get_draft=lambda *_args: draft,
+            edit_field=edit_field,
+            semantic_quality=lambda *_args: quality,
+            adjudication_receipts=lambda *_args: [],
+            record_adjudication=lambda *args, **kwargs: (
+                escalation_receipts.append(kwargs),
+                SimpleNamespace(receipt_id="r1"),
+            )[1],
+        ),
+        ai_repository=ai_repo,
+        prompt_version="prompt",
+        accepted_status="accepted",
+        proposed_status="proposed",
+        current_revision_resolver=lambda *_args, **_kwargs: "r" * 64,
+    )
+
+    payload = service.adjudicate_draft(
+        project_id="p1",
+        attempt_id="attempt-1",
+        draft_id="draft-1",
+        workspace_dir="/generated/non-real",
+    )
+
+    # 不再空转：字段升级为用户问题，双侧结论并列呈现
+    assert state["field"]["user_decision_required"] is True
+    assert "主分析判断为「cm_end_date」" in state["field"]["user_action"]
+    assert (
+        "独立复核判断为「concomitant_medication_end_date」"
+        in state["field"]["user_action"]
+    )
+    assert payload["adjudication"]["state"] == "blocked"
+    assert payload["adjudication"]["remaining_question_count"] == 1
+    # 生产双核对账下divergence_pairs含该对， escalated回执由
+    # record_adjudication落库（本夹具无双核对账，divergence_pairs为空，
+    # receipt分支按设计不触发）。

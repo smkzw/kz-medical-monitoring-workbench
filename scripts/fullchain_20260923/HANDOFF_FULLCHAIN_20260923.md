@@ -118,3 +118,30 @@
 1. **修采纳循环泄漏**：second_review 仍 diverged 且 requires_user=False 的字段，在已有两轮独立复核后应升级为 escalated 用户问题（或按包语义"等待外部事实"显式终态）并记 receipt——禁止继续无 receipt 空转；这正是审阅包四态不变量里"机器待核验"的合法出口。
 2. confirm（预期 46/46 收敛：28 adjudicated + 10 gap + 8 escalated）→ facts（预期 unverified_semantic_fields 含 gap 字段）→ 首次监查运行。
 3. SAR 旧运行台账分离（status.json 仍停旧状态）+ W02-E0 成本账本 + W05 紧凑列表（A24/A25）。
+
+---
+
+# 0924V1 收官：CSU 全链首次端到端交付（2026-09-24 晚）
+
+## 里程碑：医学监查全链首次真实贯通 ✅
+
+以正式 API（无手工改库、无伪造回执）完成：
+
+1. **采纳循环泄漏修复**：二轮复核仍分歧且双方均未标用户问题的字段，升级为 escalated 用户裁决（问题并列呈现两侧结论），不再"无 receipt 空转"。用户答案经正式字段编辑（决策前缀 user_action）落库，系统盖决策修订章（编辑层禁止用户改 provenance）。**46/46 分歧全部收敛**：28 双核裁决 + 10 如实证据缺口 + 8 医学经理裁决。
+2. **映射 confirmed**（revision monmaprev_f8677a0050c5af2b3a4894e5e23d）。
+3. **facts v2 物化**：schema 推进到 mm-c3-fact-materialization-v2（R24-02 缺口边界进幂等键）——10 表/573 行/2139 值 100% 源验证，**9 个缺口字段（EX×3+LB_HEM×6）的 1152 个值被跳过出语义层**，unverified_semantic_fields 机器可查。
+4. **首次监查运行**：workspace bootstrap（全局档种子）→ prepare-and-start → **10/10 工作单元完成**（通用检查 7 + 日常监查 3，含 Patient Journey）→ publication available。发布总览：**16 受试者**；受试者 21001 纵向旅程 27 个事件（AE/日期/定位符完整）；结果上下文 token=`result-context:c4f7a7e432404560b2f0c3737eb08465`。
+5. **项目级运行时 DB 权威化（execution/start 最后一断点关闭）**：手搓 DDL 与 schema_manifest 漂移（launch marker 写错变体 slice07c2-v4≠现行 slice08b-v4、risk 缺 marker、profile 缺索引、DDL 空白差异）导致 CORRUPT/future 阻断——初始化器改用 manifest 权威 DDL+现行 marker，旧空脚手架备份后重建（recovery/r24_scaffold_backup_20260924/），检查器 6 成员全 CURRENT。
+6. **检查器探针同伤修复**：schema_manifest 的 mode=ro 探测与 graph store 同一 WAL 病（connect 成功、首读失败）→ 同一修复（读探针纳入重试+query_only 回退）。
+
+## 状态
+
+- 活跃运行：`r7-run-515aa2cb4ef240b8bd9da1cdfe9aaa3c`（run:a3949c1ace950e0f38423647）completed+published；孤儿意图 r7-run-3bdaa... 已按注册表 API 标记 failed（既有审计保留）。
+- 测试：351+ 全绿（含 test_mm_r24_identity_raw 6 例、escalation 升级/幂等/作答回归）。
+- 推进中待办：AI 风险/线索层在 daily 全量运行的产出密度（本轮 currentRisks=0——结构单元全过、AI 分析层产出是 W03/W04 主题）；SAR 旧运行分账继续挂起；W05 紧凑列表/成本账本（E0）。
+
+## 关键工程事实（下窗口直接用）
+
+- 用户答案路径：PATCH mapping-draft/field 只能带 user_action（决策前缀"用户已确认："）；decision_reconciliation_sha256 由 adjudicate 的 escalated 分支系统盖章。
+- prepare-and-start 需 workspace/bootstrap 先种全局档；中途失败的 prepare 会留孤儿 waiting_start 注册（挡新运行、无法 cancel）——用 `LaunchRegistry.mark_failed(run_id, project_id=...)` 清理。
+- facts 幂等键含 schema 版本：事实内容合同变更必须推进 mm-c3-fact-materialization 版本。
