@@ -77,3 +77,44 @@
 - `packages/medical_monitoring/admission/mapping_pipeline.py`：adjudication v17/v15→v19/v17、current-set 修正、legacy 补齐、stale_input 恢复
 - `packages/medical_monitoring/admission/evidence_tool_contract.py`：六张 feature-set 补注册
 - `packages/medical_monitoring/admission/mapping_confirmation.py`：耗尽判断改用 recovery 预算
+
+---
+
+# 0924V1 增量执行记录（2026-09-24 凌晨窗口）
+
+审阅包：kz_review_0924V1（基线 b32a12f）。本窗口落地 R24-01/02/03/04 + A13 计数 + R24-07，A12 对账完成并定位 8 字段精确机制。
+
+## 已落地（341 测试全绿）
+
+- **R24-01**：`_response_model` 在 expected 有值、上游整流缺 model 名时返回空（observed=unknown），不再反填 requested；显式 mismatch 仍硬失败。作业级身份仍由 complete 按 requested 登记。
+- **R24-04**：`_normalize_mapping_user_actions` 返回变更清单；`_parse_provider_output` 对 structured_payload **深拷贝后**整理——调用方原始对象不再被就地改写（旧实现共享嵌套 dict，attempt 的 provider_outputs 已非模型原话）。run_next 响应载荷统一走 `_audit_payload()`：doc-auth 任务附 `provider_raw_outputs`（包络前原始引用），映射任务附 `server_normalizations`（逐字段 moved_to_uncertainty 留痕）。
+- **R24-03A**：adjudicate_candidates 两个终态出口的 failed_jobs 都纳入 stale_input——不可恢复分片不再落出所有集合。
+- **R24-03B**：`_gap_fields_for_failed_chunks` payload 读取失败显式抛 `mapping_adjudication_failed_payload_unreadable`（409+文案已注册），不再静默 continue 冒充无缺口。
+- **R24-03C/D**：`_mark_gap_fields` receipt 写入失败不再吞错（edit 已按幂等键落库、重放可恢复）；gap 幂等键绑定本轮 reconciliation sha；已持本 sha 有效 gap 回执且机器标记齐全的对幂等跳过。
+- **R24-02**：draft 字段新增机器可读 `semantic_availability`（""/unverifiable_gap），gap 打标时写入；物化层跳过 unverified 字段的语义赋值、单独计数（unverified_values_skipped/unverified_semantic_fields 进 fact summary）——confirmed-with-gaps 不再静默带 canonical_role 进事实层。
+- **A13**：adjudication 投影增加 `unverifiable_gap_count`，与 remaining_question_count（人工）/remaining_system_review_count（机器待核验）三分离。
+- **R24-07**：EvidenceView 取消 source_refs[0] 回退——定位不命中明确显示"未能精确匹配"，不再冒充成功。
+- 新回归 `tests/test_mm_r24_identity_raw.py`（6 例，真实函数）：A01/A02 身份、归一 notes、解析不改写调用方载荷、gap 机器标记+sha 绑定、receipt 失败传播。
+
+## A12：8 字段只读对账结论（真实 runtime 导出，脚本 /tmp/eight_field_ledger.py + /tmp/eight_answers2.py）
+
+固定锚：draft=monmapdraft_a6a97ff25ed36d2f35ce00c63d5a（v39），attempt=stg-1b8dd8c423f84248bde9f942e640912b。
+
+| 字段 | draft role | 双侧答案 | 证书 | receipt |
+|---|---|---|---|---|
+| CM/CMENDAT | cm_end_date | 双侧等价（个别轮 concomitant_* 变体） | equivalent | 无 |
+| CM/CMINDC | cm_indication | 同上 | equivalent | 无 |
+| CM/CMNUM | cm_record_number | 部分轮 distinct | distinct/equivalent 混合 | 无 |
+| CM/CMONGO | cm_ongoing_flag | 等价 | equivalent | 无 |
+| CM/CMSTDAT | cm_start_date | 等价 | equivalent | 无 |
+| CM/CMTRT | cm_treatment_name | 等价 | equivalent | 无 |
+| MH/MHONGO | medical_history_ongoing_flag | 等价 | equivalent | 无 |
+| MH/MHSTDAT | medical_history_start_date | 等价 | equivalent | 无 |
+
+**精确机制（推翻此前"gap 误标"猜测）**：8 字段语义上双队列一致（等价证书为主，仅 CMNUM 出现 distinct 判定）；分歧本质是**目录内角色命名变体**（cm_* 与 concomitant_medication_* 都是合法目录角色）。第二轮采纳循环中，"二轮仍 diverged 且双方均未标用户问题"的字段走 `remaining_system_review_count += 1; continue`——**既不记 receipt 也不升级为用户问题**，字段永远停在"分歧无回执"，确认门（receipts==divergences）因此永远差 8。这是采纳循环的状态泄漏，不是 EX/LB_HEM 失败波及（两失败分片只覆盖 EX×4+LB_HEM×6，与 CM/MH 无交集——审阅包判断正确）。
+
+## 下窗口第一优先
+
+1. **修采纳循环泄漏**：second_review 仍 diverged 且 requires_user=False 的字段，在已有两轮独立复核后应升级为 escalated 用户问题（或按包语义"等待外部事实"显式终态）并记 receipt——禁止继续无 receipt 空转；这正是审阅包四态不变量里"机器待核验"的合法出口。
+2. confirm（预期 46/46 收敛：28 adjudicated + 10 gap + 8 escalated）→ facts（预期 unverified_semantic_fields 含 gap 字段）→ 首次监查运行。
+3. SAR 旧运行台账分离（status.json 仍停旧状态）+ W02-E0 成本账本 + W05 紧凑列表（A24/A25）。

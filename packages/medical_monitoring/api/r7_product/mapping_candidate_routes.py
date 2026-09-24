@@ -31,6 +31,7 @@ _MAPPING_STATUS_CODES = {
     "mapping_cohort_legacy_route": 409,
     "mapping_verifier_incomplete": 409,
     "mapping_reconciliation_required": 409,
+    "mapping_adjudication_failed_payload_unreadable": 409,
     "mapping_draft_unconfigured": 503,
     "mapping_bridge_failed": 500,
     "mapping_document_evidence_resolver_unavailable": 503,
@@ -73,6 +74,10 @@ _MAPPING_MESSAGES = {
     "mapping_reconciliation_required": (
         "资料或核对结果已变化，系统会重新核实，不需要您逐项确认；"
         "您此前的回答已保留。"
+    ),
+    "mapping_adjudication_failed_payload_unreadable": (
+        "部分失败分片的输入清单暂不可读，相关字段已保留为待核验状态；"
+        "请重试或联系管理员。"
     ),
     "mapping_draft_unconfigured": "系统暂时无法保存识别结果，请稍后重试。",
     "mapping_bridge_failed": "生成字段对应建议时出现问题，本次结果未保存。请重试；如再次失败请联系管理员。",

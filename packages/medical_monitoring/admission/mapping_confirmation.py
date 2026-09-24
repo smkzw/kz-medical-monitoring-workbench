@@ -1115,9 +1115,24 @@ class AdmissionMappingConfirmationService:
                 resolved += 1
         refreshed = self.mapping_repository.get_draft(project_id, draft_id)
         projected = self._draft_payload(refreshed)
+        # A13：人工问题与机器待核验、技术缺口分开计数——
+        # remaining_question=0不代表机器核验完成，gap不计入resolved。
+        gap_count = 0
+        if hasattr(self.mapping_repository, "adjudication_receipts"):
+            gap_count = sum(
+                1
+                for receipt in _effective_adjudication_receipts(
+                    self.mapping_repository.adjudication_receipts(
+                        project_id, draft_id
+                    ),
+                    reconciliation_sha256,
+                ).values()
+                if str(getattr(receipt, "resolution", "")) == "unverifiable_gap"
+            )
         projected["adjudication"] = {
             "state": "blocked" if remaining_system_review_count else "complete",
             "resolved_count": resolved,
+            "unverifiable_gap_count": gap_count,
             "remaining_system_review_count": remaining_system_review_count,
             "remaining_question_count": projected["review_summary"][
                 "user_question_count"
@@ -1180,7 +1195,12 @@ class AdmissionMappingConfirmationService:
         cohort_results,
         known_pairs: set,
     ) -> list:
-        """Fields covered by failed chunks become visible unverifiable gaps."""
+        """Fields covered by failed chunks become visible unverifiable gaps.
+
+        R24-03B：failed分片的payload读取失败是显式错误——静默continue会把
+        “存储/覆盖未知”伪装成“没有缺口”。这里直接抛出，由调用方以
+        blocked状态呈现，操作员可诊断；绝不返回空gap冒充完整。
+        """
         gaps: list[dict[str, str]] = []
         seen: set = set()
         for result in cohort_results.values():
@@ -1189,8 +1209,10 @@ class AdmissionMappingConfirmationService:
                     payload = self.ai_repository.input_payload(
                         job_ref[0], job_ref[1]
                     )
-                except Exception:
-                    continue
+                except Exception as exc:
+                    raise AdmissionMappingPipelineError(
+                        "mapping_adjudication_failed_payload_unreadable"
+                    ) from exc
                 profile = payload.get("field_profile") or {}
                 for field in profile.get("fields") or []:
                     pair = (
@@ -1222,6 +1244,20 @@ class AdmissionMappingConfirmationService:
         """
         payload = draft.model_dump(mode="json") if hasattr(draft, "model_dump") else dict(draft)
         current = self.mapping_repository.get_draft(project_id, draft_id)
+        # A11：已存在本轮reconciliation有效gap回执的对直接跳过——幂等重入
+        # 不重复编辑、不重复记账。
+        already_gap = set()
+        if hasattr(self.mapping_repository, "adjudication_receipts"):
+            for receipt in self.mapping_repository.adjudication_receipts(
+                project_id, draft_id
+            ):
+                if (
+                    str(getattr(receipt, "resolution", "")) == "unverifiable_gap"
+                    and str(getattr(receipt, "reconciliation_sha256", "")) == reconciliation_sha256
+                ):
+                    already_gap.add(
+                        (str(getattr(receipt, "domain", "")), str(getattr(receipt, "source_field", "")))
+                    )
         for field in payload.get("fields") or []:
             pair = (
                 str(field.get("domain") or ""),
@@ -1229,6 +1265,17 @@ class AdmissionMappingConfirmationService:
             )
             if pair not in gap_pairs:
                 continue
+            if pair in already_gap:
+                current_field = next(
+                    (f for f in (current.model_dump(mode="json").get("fields") or [])
+                     if (str(f.get("domain") or ""), str(f.get("source_field") or "")) == pair),
+                    {},
+                )
+                if current_field.get("semantic_availability") == "unverifiable_gap":
+                    continue
+                # 旧策略gap回执缺机器标记：补写patch（键幂等）后照常记账
+                # 会被already-Gap receipt重复——记账按本轮sha幂等由存储层
+                # 唯一约束处理；这里继续执行edit以补齐机器标记。
             patch = {
                 "user_decision_required": False,
                 "user_action": (
@@ -1237,6 +1284,9 @@ class AdmissionMappingConfirmationService:
                 ),
                 "question_reconciliation_sha256": "",
                 "decision_reconciliation_sha256": "",
+                # R24-02：机器可执行边界——物化/下游据此跳过该字段的
+                # canonical语义消费，不依赖user_action文案。
+                "semantic_availability": "unverifiable_gap",
             }
             if any(current_field.get(key) != value for key, value in patch.items() for current_field in [
                 next(
@@ -1253,25 +1303,30 @@ class AdmissionMappingConfirmationService:
                     patch=patch,
                     expected_version=int(current.version),
                     actor="system_harness",
-                    idempotency_key=f"gap:{draft_id}:{pair[0]}:{pair[1]}",
+                    # A11：幂等键绑定本轮reconciliation——跨修订不复用旧键，
+                    # 修订重开时生成新的编辑身份。
+                    idempotency_key=(
+                        f"gap:{draft_id}:{reconciliation_sha256[:12]}:"
+                        f"{pair[0]}:{pair[1]}"
+                    ),
                 )
                 current = self.mapping_repository.get_draft(project_id, draft_id)
             if pair in divergence_pairs:
-                try:
-                    self.mapping_repository.record_adjudication(
-                        project_id,
-                        draft_id,
-                        domain=pair[0],
-                        source_field=pair[1],
-                        reconciliation_sha256=reconciliation_sha256,
-                        resolution="unverifiable_gap",
-                        job_id="",
-                        candidate_id="",
-                        evidence_ids=(),
-                        review_sources=(),
-                    )
-                except Exception:
-                    pass
+                # A10：receipt写入失败必须显式失败——edit已按幂等键落库，
+                # 重放本轮即可恢复；吞错会造成“页面已改、durable回执缺失”
+                # 的不一致，禁止。
+                self.mapping_repository.record_adjudication(
+                    project_id,
+                    draft_id,
+                    domain=pair[0],
+                    source_field=pair[1],
+                    reconciliation_sha256=reconciliation_sha256,
+                    resolution="unverifiable_gap",
+                    job_id="",
+                    candidate_id="",
+                    evidence_ids=(),
+                    review_sources=(),
+                )
 
     def reconcile_with_verifier(
         self,

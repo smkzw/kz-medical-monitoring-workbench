@@ -58,6 +58,10 @@ _EDITABLE_FIELD_KEYS = frozenset(
         "question_reconciliation_sha256",
         "decision_reconciliation_sha256",
         "prior_user_action",
+        # R24-02：机器可读语义可用性（""=未评估/正常；"unverifiable_gap"=
+        # 多轮双模型未闭合的技术缺口）——物化与下游分析据此限制用途，
+        # 不再只靠user_action文案。
+        "semantic_availability",
     }
 )
 _RECORDED_USER_DECISION_PREFIXES = ("用户已确认：", "用户已核对：")
@@ -152,6 +156,12 @@ class MonitoringMappingField(BaseModel):
     question_reconciliation_sha256: str = Field(default="", pattern=r"^(?:[0-9a-f]{64})?$")
     decision_reconciliation_sha256: str = Field(default="", pattern=r"^(?:[0-9a-f]{64})?$")
     prior_user_action: str = Field(default="", max_length=2_000)
+    # R24-02：机器可读语义可用性。空=正常路径；"unverifiable_gap"=
+    # 技术缺口，canonical语义不得被下游当作已确认使用。
+    semantic_availability: str = Field(
+        default="",
+        pattern=r"^(?:unverifiable_gap)?$",
+    )
     related_fields: tuple[str, ...] = Field(default_factory=tuple, max_length=100)
     dependency_fields: Optional[tuple[dict[str, str], ...]] = Field(default=None, max_length=100)
     comparison_annotations: Optional[dict[str, Any]] = None

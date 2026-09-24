@@ -1798,7 +1798,11 @@ export function SubjectWorkspaceView({
 function EvidenceView({ payload, route, onBack }) {
   const publicResult = payload?.publicResultContext === true;
   const evidence = payload.projection.sourceEvidence || {};
-  const sourceRef = (payload.source_refs || []).find((item) => item.locator_ref === evidence.sourceLocatorRef) || payload.source_refs?.[0] || {};
+  // R24-07：目标locator无法匹配时明确“不可定位”，绝不回退第一条来源
+  // 冒充定位成功；只有精确匹配的sourceRef才参与展示兜底。
+  const matchedRef = (payload.source_refs || []).find((item) => item.locator_ref === evidence.sourceLocatorRef);
+  const sourceRef = matchedRef || {};
+  const located = Boolean(matchedRef) || Boolean(evidence.canonical_location);
   const canonicalLocation = text(evidence.canonical_location || sourceRef.canonical_location, "当前定位无法确认");
   const recordRef = text(evidence.record_ref || sourceRef.record_ref, "记录号待确认");
   const excerpt = text(evidence.excerpt || sourceRef.excerpt, "来源片段暂不可读取。");
@@ -1807,7 +1811,7 @@ function EvidenceView({ payload, route, onBack }) {
     <div className="monitoring-view-stack">
       <section className="monitoring-panel monitoring-evidence-panel">
         <div className="monitoring-section-heading"><span className="monitoring-eyebrow">风险证据</span><h2>{text(evidence.title, publicResult ? "本次结果来源定位" : "精确来源定位")}</h2></div>
-        <div className="monitoring-evidence-locator" data-monitoring-evidence-field="canonical_location"><span>原始来源</span><strong title={canonicalLocation}>{canonicalLocation}</strong><small>已定位到具体 listing 行或方案条款</small></div>
+        <div className="monitoring-evidence-locator" data-monitoring-evidence-field="canonical_location"><span>原始来源</span><strong title={canonicalLocation}>{canonicalLocation}</strong><small>{located ? "已定位到具体 listing 行或方案条款" : "未能精确匹配目标来源定位，请返回后重试或直接查看原始数据"}</small></div>
         <blockquote className="monitoring-evidence-excerpt" data-monitoring-evidence-field="excerpt"><span>原始引文</span><p>{excerpt}</p></blockquote>
         <dl className="monitoring-evidence-meta">
           <div data-monitoring-evidence-field="record_ref"><dt>记录号</dt><dd>{recordRef}</dd></div>
@@ -1817,7 +1821,7 @@ function EvidenceView({ payload, route, onBack }) {
           <div><dt>来源链路</dt><dd>{Array.isArray(lineage) && lineage.length ? lineage.join(" → ") : "来源链路待确认"}</dd></div>
           <div><dt>来源版本</dt><dd>{publicResult ? "本次公开结果" : dataVersionLabel(route.snapshot_ref)}</dd></div>
           <div><dt>风险时间窗</dt><dd>{route.window_start && route.window_end ? `${route.window_start} — ${route.window_end}` : "与当前风险 / 事件时间窗一致"}</dd></div>
-          <div><dt>打开状态</dt><dd>已完成来源一跳定位</dd></div>
+          <div><dt>打开状态</dt><dd>{located ? "已完成来源一跳定位" : "来源定位未命中（未跳到其他来源冒充）"}</dd></div>
         </dl>
         <button type="button" className="monitoring-back-button" onClick={onBack}>返回受试者医学旅程</button>
       </section>
