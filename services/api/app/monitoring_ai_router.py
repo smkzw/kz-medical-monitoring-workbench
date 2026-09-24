@@ -1568,6 +1568,36 @@ def create_monitoring_ai_router(
                 except MonitoringMappingActivationSourceError as exc:
                     raise _mapping_conflict(exc) from exc
 
+    @router.get("/call-ledger")
+    def get_call_ledger(project_id: str, http_request: Request):
+        """E0：按项目查询物理调用成本账（usage/wire/时延/身份明细）。"""
+        authorize_route(
+            http_request,
+            project_id,
+            request_id=f"ai-call-ledger-read:{project_id}",
+            action=MonitoringAction.READ_AI_RUN,
+            require_write=False,
+        )
+        summary = repository.call_ledger_summary(project_id)
+        rows = repository.call_ledger(project_id)
+        return {
+            "project_id": project_id,
+            **summary,
+            "calls": rows,
+        }
+
+    @router.get("/call-ledger-summary")
+    def get_call_ledger_summary(project_id: str, http_request: Request):
+        """E0：按项目聚合物理调用成本（总调用/成功/失败/usage/缺失数）。"""
+        authorize_route(
+            http_request,
+            project_id,
+            request_id=f"ai-call-ledger-summary-read:{project_id}",
+            action=MonitoringAction.READ_AI_RUN,
+            require_write=False,
+        )
+        return repository.call_ledger_summary(project_id)
+
     return router
 
 
