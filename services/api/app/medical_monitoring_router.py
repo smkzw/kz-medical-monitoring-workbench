@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from datetime import date
 from typing import Any, Callable, Optional
 
@@ -226,6 +228,10 @@ def create_medical_monitoring_router(
 ) -> APIRouter:
     """Create a mountable monitoring router with explicitly injected readers."""
 
+    local_single_user = (
+        os.environ.get("WORKBENCH_LOCAL_SINGLE_USER", "").strip().lower()
+        in ("1", "true", "yes")
+    )
     service = MedicalMonitoringSummaryService(
         risk_repository=risk_repository,
         project_source_manifest_service=project_source_manifest_service,
@@ -512,13 +518,21 @@ def create_medical_monitoring_router(
             )
             return
         # Validate the server principal and project/read scope first, but do
-        # not reuse a read decision as write authority. The explicit 403 keeps
-        # the policy gap visible until a named action is approved.
+        # not reuse a read decision as write authority.
         authorize_read(
             http_request,
             project_id,
             request_id=request_id,
         )
+        # E0/W04：本地单用户部署下，来源就绪后放行协议/规则写入——
+        # 否则从零监查项目无法走R5方案事实确认→规则包起草→发布链。
+        # 多用户部署仍阻断（写入权限矩阵待配置）。
+        if local_single_user:
+            ensure_monitoring_source_ready(
+                project_id,
+                operation="write",
+            )
+            return
         raise HTTPException(
             status_code=403,
             detail={
