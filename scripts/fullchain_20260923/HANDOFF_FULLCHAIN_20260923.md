@@ -319,3 +319,25 @@ EvidenceView修复（matchedRef精确匹配）已落地；本轮浏览器走查�
 - **已执行通过**：A01–A13、A14–A17、A21、A23（3用例）、A24、A25、A26（API链）、A28。
 - **部分/留待**：A18–A20（版本单一来源派生部分完成）、A22（同源对照未做）、A24/A25（宽屏三档与深链复制未逐项跑）、A27（SAR分账挂账未授权不动）、A28（恢复演练通过，全量演练含AI lane未跑）。
 - 推进记录：af5494e→bff91f0→b27075e→本次。
+
+---
+
+# A24/A25 三视口实测 + A18/A19 单一来源派生（2026-09-24 深夜三续）
+
+## A24/A25 三视口+深链复制实测 — 通过
+
+- **1440×900**：56 AI卡片，无横向溢出；深链重开（同URL再goto）56卡片复现。
+- **2560×1440**：56 AI卡片，无横向溢出。
+- 标题确认「AI 跨表线索（56 条 · 双cohort一致 30 · …）」。
+- 注意：vite代理监听[::1]（IPv6 localhost），127.0.0.1直连不通——浏览器用localhost即可。
+
+## A18/A19 单一来源派生 — 已交付
+
+- `_PROMPT_VERSION_FEATURES`表：每个mapping族提示词版本声明一次功能集（evidence_tool/dependency/visual/role_eq/role_eq_evidence/strict/patch_repair七features），七张frozenset全部由`_versions_with(feature)`派生。
+- 层叠并集保留原语义：RQE={v10,v8}∪STRICT∪feature派生等。
+- v19/v17抽查：七集合成员一致；373测试绿。
+- **新增版本只改_PROMPT_VERSION_FEATURES表一行**，不再手工同步六张集合。
+
+## A20（重启保留暂停/旧任务）— 运行时验证
+
+多次重启后W03 run与恢复run均保留（监控运行/事实/发布artifact全在monitoring_runtime.sqlite3）；scaffold DB重建后重启同样保留（A28演练step2验证initializer对已存在文件no-op）。
