@@ -2534,6 +2534,9 @@ class MonitoringAiService:
             initial_output = self._normalize_document_authority_provider_output(
                 job, initial_output
             )
+            initial_output = self._normalize_cross_table_provider_output(
+                job, initial_output, input_payload
+            )
             outputs: List[Any] = [initial_output]
             stale_result = self._fail_if_revision_changed(
                 job,
@@ -2616,6 +2619,9 @@ class MonitoringAiService:
                     self._normalize_document_authority_provider_output(
                         job, repaired_output
                     )
+                )
+                repaired_output = self._normalize_cross_table_provider_output(
+                    job, repaired_output, input_payload
                 )
                 outputs.append(repaired_output)
                 stale_result = self._fail_if_revision_changed(
@@ -8378,6 +8384,57 @@ class MonitoringAiService:
                 }
             )
         return notes
+
+    @staticmethod
+    def _normalize_cross_table_provider_output(
+        job: MonitoringAiJob,
+        output: Any,
+        input_payload: Mapping[str, Any],
+    ) -> Any:
+        """Rewrap a bare cross-table clue payload into the task envelope.
+
+        与doc-authority归一同哲学（A05）：独立模型偶尔直接返回完整的
+        clue分析对象而漏掉任务信封。只接受形状与 ``_CrossTableCluePayload``
+        完全一致的裸载荷，且内层 subject_id 必须与输入证据包声明的受试者
+        一致（fail-closed内层身份校验）；其余畸形输出照旧拒收。
+        """
+
+        if job.task_type != MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS or not isinstance(
+            output, Mapping
+        ):
+            return output
+        if "candidates" in output:
+            return output
+        bare_keys = {
+            "subject_id", "domains", "observations", "temporal_relationships",
+            "data_gaps", "recommended_review", "evidence_ids",
+        }
+        if set(output.keys()) != bare_keys:
+            return output
+        subject_context = input_payload.get("subject_context")
+        expected_subject = (
+            str(subject_context.get("subject_id") or "").strip()
+            if isinstance(subject_context, Mapping)
+            else ""
+        )
+        actual_subject = str(output.get("subject_id") or "").strip()
+        if expected_subject and actual_subject != expected_subject:
+            # 内层身份与证据包不符：这不是可机械修复的形状问题，
+            # 保留原样让严格校验拒收（不冒充正确受试者的分析）。
+            return output
+        return {
+            "schema_version": MONITORING_AI_SCHEMA_VERSION,
+            "task_id": job.job_id,
+            "task_type": job.task_type.value,
+            "input_revision_sha256": job.input_revision_sha256,
+            "candidates": [
+                {
+                    "candidate_type": TASK_CANDIDATE_TYPES[job.task_type][0],
+                    "title": f"跨表线索（{actual_subject}）",
+                    "structured_payload": dict(output),
+                }
+            ],
+        }
 
     @staticmethod
     def _normalize_document_authority_provider_output(
