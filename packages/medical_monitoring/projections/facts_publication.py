@@ -696,36 +696,35 @@ class FactsPublicationAuthorityProvider:
                 source_record_id=record_id,
             )
             events.append(record)
-            # 初步风险：AE严重度取自源记录（AESEV），缺失时标记unknown
-            # 而非伪装"中度"；非AE表为系统按域推定（inferred）。
+            # R24V2-B02：风险与事件分开——只有AE且严重度**有源记录**时
+            # 产生风险行；unknown严重度不默认medium进风险图，非AE事件不
+            # 因"每事件=风险"推定产生风险行。事件/锚点保留（原始可导航
+            # 完整可查），风险工作列表只含有依据的疑点。
             if domain == "ae":
                 sev_raw = _clean(domains.get("AE", [{}])[index].get("AESEV") if index < len(domains.get("AE", [])) else "")
                 sev_map = {"重度": "critical", "严重": "critical", "中度": "medium", "轻度": "low"}
-                severity = sev_map.get(sev_raw, "medium")
-                severity_source = "recorded" if sev_raw in sev_map else "unknown"
-            else:
-                severity = severity_hint
-                severity_source = "inferred"
-            risks.append(
-                R5RiskRecord(
-                    risk_ref=f"risk-{table}-{index:06d}",
-                    risk_instance_ref=f"riski-{table}-{index:06d}",
-                    risk_key=f"{domain}:{table}:{index}",
-                    site_ref=site_ref,
-                    subject_ref=subj_ref,
-                    spine_ref=spine,
-                    domain=domain,
-                    severity=severity if severity in SEVERITIES else "medium",
-                    risk_type_zh=_risk_type_zh(domain, subtype),
-                    date_state=state,
-                    event_ref=record.event_ref,
-                    visit_ref=None,
-                    risk_anchor_ref=record.event_ref,
-                    source_locator_refs=record.source_locator_refs,
-                    change_kind="initial_current",
-                    severity_source=severity_source,
-                )
-            )
+                severity = sev_map.get(sev_raw)
+                if severity is not None:
+                    risks.append(
+                        R5RiskRecord(
+                            risk_ref=f"risk-{table}-{index:06d}",
+                            risk_instance_ref=f"riski-{table}-{index:06d}",
+                            risk_key=f"{domain}:{table}:{index}",
+                            site_ref=site_ref,
+                            subject_ref=subj_ref,
+                            spine_ref=spine,
+                            domain=domain,
+                            severity=severity if severity in SEVERITIES else "medium",
+                            risk_type_zh=_risk_type_zh(domain, subtype),
+                            date_state=state,
+                            event_ref=record.event_ref,
+                            visit_ref=None,
+                            risk_anchor_ref=record.event_ref,
+                            source_locator_refs=record.source_locator_refs,
+                            change_kind="initial_current",
+                            severity_source="recorded",
+                        )
+                    )
             return record
 
         # 访视（SV 为权威访视记录表；VS/HW/EG 补充覆盖）

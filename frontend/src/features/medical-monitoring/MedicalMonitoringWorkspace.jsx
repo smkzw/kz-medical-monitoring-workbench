@@ -529,15 +529,19 @@ function DomainLegend({ domains }) {
 
 function ZoomControls({ zoomLevel, onZoomChange }) {
   const setZoom = (nextZoom) => onZoomChange?.(Math.max(-1, Math.min(1, nextZoom)));
+  // R24V2-U02/U03：视窗（全程fit vs 显式时间缩放）与信息密度（文字详略）
+  // 在UI上分开呈现——非零zoom=显式时间缩放（画布按px/day扩展），默认0=
+  // 全程fit；密度只影响标签详略不改时间窗。old semanticZoomLabel文案
+  // 保留在时间缩放侧。
   return (
-    <div className="monitoring-zoom-controls" aria-label="语义缩放控制">
-      <span className="monitoring-zoom-label">语义缩放</span>
-      <div className="monitoring-zoom-buttons" role="group" aria-label="语义缩放级别">
-        <button type="button" aria-label="缩小到精简视图" aria-pressed={zoomLevel === -1} onClick={() => setZoom(zoomLevel - 1)}>-</button>
-        <button type="button" aria-label="还原标准视图" aria-pressed={zoomLevel === 0} onClick={() => setZoom(0)}>0</button>
-        <button type="button" aria-label="放大到详细视图" aria-pressed={zoomLevel === 1} onClick={() => setZoom(zoomLevel + 1)}>+</button>
+    <div className="monitoring-zoom-controls" aria-label="时间视窗与信息密度控制">
+      <span className="monitoring-zoom-label">时间视窗</span>
+      <div className="monitoring-zoom-buttons" role="group" aria-label="时间缩放级别">
+        <button type="button" aria-label="全程自适应（默认）" aria-pressed={zoomLevel === 0} onClick={() => setZoom(0)}>全程</button>
+        <button type="button" aria-label="压缩时间密度" aria-pressed={zoomLevel === -1} onClick={() => setZoom(-1)}>更密</button>
+        <button type="button" aria-label="扩展时间密度" aria-pressed={zoomLevel === 1} onClick={() => setZoom(1)}>更疏</button>
       </div>
-      <small>{semanticZoomLabel(zoomLevel)} · 按 - / 0 / + 调整</small>
+      <small>{zoomLevel === 0 ? "全程自适应容器宽度" : semanticZoomLabel(zoomLevel)} · 文字详略跟随选中详情</small>
     </div>
   );
 }
@@ -609,6 +613,23 @@ export function DomainTracks({
   journeyMarkerByEventRef = null,
   journeyTruncationText = "",
 }) {
+  // R24V2-U01/U02：ResizeObserver绑定实际plot宿主——容器/侧栏/抽屉
+  // 宽度变化都触发重测；零宽初始状态等待测量（containerWidth=null时
+  // scale保持旧行为，不留永久兜底宽度）。卸载时断开观察。
+  const plotHostRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(null);
+  useEffect(() => {
+    const host = plotHostRef.current;
+    if (!host || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries?.[0]?.contentRect?.width;
+      if (typeof width === "number" && width > 0) {
+        setContainerWidth(Math.floor(width));
+      }
+    });
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
   const layout = useMemo(() => layoutJourneyTimeline({
     domains: projection.domains || [],
     events: projection.events || [],
@@ -618,7 +639,11 @@ export function DomainTracks({
     windowStart: projection.temporalSpine?.windowStart,
     windowEnd: projection.temporalSpine?.windowEnd,
     zoomLevel,
-  }), [projection, zoomLevel]);
+    // 标签栏宽度在CSS侧计入；此处给的是canvas宿主的全宽，scale内部
+    // 会减去pad；标签列（--timeline-label-width）在fit模式下由调用方
+    // 宽度承担，fit结果=宿主全宽（含标签列），绘图区=减pad后。
+    containerWidth: zoomLevel === 0 && containerWidth ? containerWidth : null,
+  }), [projection, zoomLevel, containerWidth]);
   const journeyMarkerFor = (eventRef) => (journeyEnabled && journeyMarkerByEventRef ? journeyMarkerByEventRef[eventRef] || null : null);
   const riskCounts = (projection.currentRisks || []).reduce((counts, risk) => ({ ...counts, [risk.severity]: (counts[risk.severity] || 0) + 1 }), {});
   const axisMode = text(projection.temporalSpine?.axisMode, "calendar") === "study_day" ? "研究日" : "日历日期";
@@ -660,6 +685,7 @@ export function DomainTracks({
       </div>
       <TimelineScrollShell>
         <div
+          ref={plotHostRef}
           className="monitoring-timeline-canvas"
           style={{ "--timeline-plot-width": `${layout.scale.width}px`, width: `calc(${layout.scale.width}px + var(--timeline-label-width))` }}
           data-timeline-width={layout.scale.width}

@@ -740,29 +740,11 @@ def register_public_result_routes(router: APIRouter, context: PublicationRouteCo
                 site_ref=query.get("site_ref"),
             )
             # Facts lane: surface the dual-cohort AE/MH findings on the
-            # public overview. 两个lane分工：frozen query drafts（上面
-            # context.public_findings_envelope，Query草稿合同）承载已核对
-            # 事项；AI跨表线索卡片读活binding（V5-04当前指针，快照域限定
-            # +digest校验），使分析层工件在发布后仍按指针可见。
+            # public overview. R24V2-B01：发布结果只读**冻结**bundle——
+            # 活binding随active工件变化，会令旧result token显示"旧事实+
+            # 最新发现"，破坏结果不可变合同。冻结bundle读取失败或零发现
+            # 如实呈现（meta带state），不借live顶替。
             findings_bundle = context.public_findings_envelope()
-            live_findings_provider = getattr(
-                r6_provider, "public_findings_envelope", None
-            )
-            if callable(live_findings_provider):
-                try:
-                    live_bundle = live_findings_provider(
-                        project_ref=canonical,
-                        snapshot_ref=(
-                            publication.snapshot_ref
-                            or publication.snapshot_token
-                        ),
-                    )
-                except Exception:
-                    live_bundle = None
-                if isinstance(live_bundle, dict) and live_bundle.get(
-                    "findings"
-                ):
-                    findings_bundle = live_bundle
             projection = result.get("projection")
             if isinstance(projection, dict):
                 injected = findings_bundle.get("findings") or []

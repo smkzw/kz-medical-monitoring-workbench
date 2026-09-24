@@ -52,7 +52,7 @@ function pxPerDayForZoom(zoomLevel) {
   return 8;
 }
 
-export function buildTimelineScale({ windowStart, windowEnd, visits = [], events = [], zoomLevel = 0 } = {}) {
+export function buildTimelineScale({ windowStart, windowEnd, visits = [], events = [], zoomLevel = 0, containerWidth = null } = {}) {
   const dated = [];
   for (const visit of visits) {
     const iso = visitAxisDate(visit);
@@ -70,20 +70,35 @@ export function buildTimelineScale({ windowStart, windowEnd, visits = [], events
   let endMs = parseTimelineDate(windowEnd);
   if (startMs == null && dated.length) startMs = Math.min(...dated);
   if (endMs == null && dated.length) endMs = Math.max(...dated);
+  // R24V2-U09：全无有效日期时不制造假2026时间窗——hasValidDates=false
+  // 供UI显示“无有效日期”，不进入假轴。
+  const hasValidDates = startMs != null && endMs != null;
   if (startMs == null) startMs = Date.UTC(2026, 0, 1);
   if (endMs == null || endMs <= startMs) endMs = startMs + 30 * DAY_MS;
   const spanMs = Math.max(endMs - startMs, DAY_MS);
-  const pxPerDay = pxPerDayForZoom(zoomLevel);
   const pad = 72;
-  const rawContentWidth = Math.ceil(spanMs / DAY_MS) * pxPerDay;
-  const width = Math.max(640, rawContentWidth + pad * 2);
+  // R24V2-U01：默认fit——绘图区宽度=容器宽度-标签/边距，真实日期线性
+  // 投影到可用宽度；px/day只作为显式时间缩放（zoomLevel≠0）时的密度，
+  // 不再作为默认无限画布的来源。containerWidth缺失时保持旧行为。
+  let pxPerDay = pxPerDayForZoom(zoomLevel);
+  let rawContentWidth = Math.ceil(spanMs / DAY_MS) * pxPerDay;
+  let width = Math.max(640, rawContentWidth + pad * 2);
+  if (zoomLevel === 0 && typeof containerWidth === "number" && containerWidth > pad * 2 + 200) {
+    width = Math.max(640, Math.floor(containerWidth));
+    rawContentWidth = width - pad * 2;
+    pxPerDay = rawContentWidth / Math.ceil(spanMs / DAY_MS);
+  }
   const contentWidth = width - pad * 2;
 
   function xFor(iso) {
     const ms = parseTimelineDate(iso);
     if (ms == null) return null;
+    // R24V2-U10：窗口外不伪装同日——返回位置+超出标记，调用方渲染
+    // 继续符号；clamp只影响绘图位置，不影响语义。
     const clamped = Math.min(Math.max(ms, startMs), endMs);
-    return pad + ((clamped - startMs) / spanMs) * contentWidth;
+    const beyond = ms < startMs ? "before" : ms > endMs ? "after" : null;
+    const x = pad + ((clamped - startMs) / spanMs) * contentWidth;
+    return beyond ? { x, beyond } : x;
   }
 
   return Object.freeze({
@@ -96,6 +111,7 @@ export function buildTimelineScale({ windowStart, windowEnd, visits = [], events
     pad,
     contentWidth,
     pxPerDay,
+    hasValidDates,
     xFor,
   });
 }
@@ -186,12 +202,18 @@ export function layoutJourneyTimeline({
     zoomLevel,
   });
 
-  const visitMarks = positionedVisits.map(({ visit, iso }) => ({
-    visitRef: visit.visit_ref || visit.visitRef,
-    iso,
-    x: scale.xFor(iso),
-    visit,
-  })).filter((mark) => mark.x != null);
+  const _x = (v) => (typeof v === "object" && v !== null ? v.x : v);
+  const _beyond = (v) => (typeof v === "object" && v !== null ? v.beyond : null);
+  const visitMarks = positionedVisits.map(({ visit, iso }) => {
+    const raw = scale.xFor(iso);
+    return {
+      visitRef: visit.visit_ref || visit.visitRef,
+      iso,
+      x: _x(raw),
+      beyond: _beyond(raw),
+      visit,
+    };
+  }).filter((mark) => mark.x != null);
 
   const lanes = domains.map((domain) => {
     const domainKey = domain.domain;
@@ -231,9 +253,11 @@ export function layoutJourneyTimeline({
     for (const event of visible) {
       const startIso = event.start || event.start_date;
       const endIso = event.end || event.end_date || startIso;
-      const x0 = scale.xFor(startIso);
+      const rawX0 = scale.xFor(startIso);
+      const x0 = _x(rawX0);
       if (x0 == null) continue;
-      const x1 = scale.xFor(endIso);
+      const x1 = _x(scale.xFor(endIso));
+      const beyond = _beyond(rawX0);
       const geometry = event.geometry;
       const width = geometry === "interval" ? Math.max(10, (x1 ?? x0) - x0) : 0;
       marks.push({
@@ -241,6 +265,7 @@ export function layoutJourneyTimeline({
         domain: domainKey,
         geometry,
         x: x0,
+        beyond,
         width,
         collisionWidth: event.risk ? (zoomLevel === 1 ? 220 : zoomLevel === 0 ? 90 : 40) : (zoomLevel === 1 ? 150 : 24),
         event,
