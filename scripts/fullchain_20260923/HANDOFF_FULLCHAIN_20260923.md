@@ -145,3 +145,27 @@
 - 用户答案路径：PATCH mapping-draft/field 只能带 user_action（决策前缀"用户已确认："）；decision_reconciliation_sha256 由 adjudicate 的 escalated 分支系统盖章。
 - prepare-and-start 需 workspace/bootstrap 先种全局档；中途失败的 prepare 会留孤儿 waiting_start 注册（挡新运行、无法 cancel）——用 `LaunchRegistry.mark_failed(run_id, project_id=...)` 清理。
 - facts 幂等键含 schema 版本：事实内容合同变更必须推进 mm-c3-fact-materialization 版本。
+
+---
+
+# W03 执行计划（已盘清机器清单，下窗口直接开工）
+
+目标：为 run:a3949c1ace950e0f38423647（snapshot_ref=facts:bd2f0ab9938e0cec7ca27c86）的16受试者产出真实AI风险/发现并溯源。
+
+## 机器清单（全部现成、项目无关）
+
+1. **证据包**：`build_subject_evidence(domains, subject_label)`（ae_mh_cross_analysis.py）——通用，按 `_ANALYSIS_TABLES`+SUBJID 切片，源摘要走 facts_table_source_digest。canonical facts 内容从 `canonical_fact_set` domain_objects 读出后按表组装。
+2. **双队列线索**：`MonitoringAiService` 任务 `CROSS_TABLE_CLUE_SYNTHESIS`（主 glm + 盲核 deepseek，16受试者×2队列=32作业）；合同/修复/身份全走现有 frozen contract。
+3. **裁决合并**：`_clues_agree`/`merge_focused_verifications` 同源比较器（SAR 已验证）。
+4. **产物落位**：findings artifact 命名/读取契约=`facts_mode_outputs.py::_read_ai_findings`（`_AI_FINDINGS_ARTIFACT` 模式，按 project+snapshot_ref 键控，content_sha256 完整性）；写好即被 R7 发布读取（`_daily_findings`→`completed_with_findings`）。
+5. **风险层**：currentRisks 来自 r5_packet.risks（风险快照）——需要规则机器（rule-packs→compile→execute-risks）或 AI 线索升级为风险行；两者都接 medical_risk_repository。
+
+## 顺序
+
+16×2 作业提交（并行8）→ 终态巡检（invalid按既有retry_terminal）→裁决合并→写findings artifact（schema对照public_findings读取端）→重发布→ai_findings可见→溯源抽验（A25）。
+
+## 注意
+
+- gap字段（EX×3+LB_HEM×6）不在canonical facts语义层——证据包构建时这些列的缺失是**按设计**，finding不得引用其语义值（R24-02边界）。
+- 成本记账：32作业按物理调用入账（E0最低要求：job/attempt/用量入audit）。
+- 零发现合法：若双队列一致认为无跨表线索，completed_no_findings如实落盘（V4-05）。
