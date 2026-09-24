@@ -8653,7 +8653,12 @@ class MonitoringAiService:
             EVIDENCE_TOOL_PROMPT_VERSIONS, EvidenceToolLoopError, run_evidence_tool_loop,
         )
         if job.prompt_version not in EVIDENCE_TOOL_PROMPT_VERSIONS:
-            return self._run_with_heartbeat(job, owner, provider, envelope)
+            output = self._run_with_heartbeat(job, owner, provider, envelope)
+            # E0：非工具循环路径同样逐调用记账（物理POST一条不漏）。
+            evidence_state.setdefault("response_diagnostics", []).append(
+                deepcopy(getattr(provider, "response_diagnostics", {}))
+            )
+            return output
         if self.evidence_tool_factory is None:
             raise MonitoringAiRuntimeUnavailableError("frozen evidence tools are not configured")
         remaining_turns = 8 - evidence_state["model_turns"]
@@ -8690,9 +8695,14 @@ class MonitoringAiService:
                     images.update(getattr(toolkit, "visual_inputs", {}))
                     current = attach_visual_inputs(current, images)
                 output = self._run_with_heartbeat(job, owner, provider, current)
-                if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS:
-                    evidence_state.setdefault("response_diagnostics", []).append(
-                        deepcopy(getattr(provider, "strict_response_diagnostics", {})))
+                # E0：每物理调用一条账（不限strict合同）——usage/wire/时延/
+                # 身份缺失等诊断全部入attempt审计，操作员重试各自成行。
+                evidence_state.setdefault("response_diagnostics", []).append(
+                    deepcopy(
+                        getattr(provider, "response_diagnostics", {})
+                        or getattr(provider, "strict_response_diagnostics", {})
+                    )
+                )
                 return output
 
             result = run_evidence_tool_loop(

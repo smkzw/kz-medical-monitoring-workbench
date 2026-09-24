@@ -264,3 +264,33 @@ W03 run（result-context:e61bc2f3...）的**确定性风险引擎在运行内产
 
 - E0成本账本：include_usage请求+attempt/observed分离已具备地基，逐物理调用账本未开工。
 - A28：空脚手架备份已做；全量恢复演练未跑。A27：SAR未授权不动。
+
+---
+
+# E0 成本账本 + A28 恢复演练（含真实数据丢失与恢复）+ A23（2026-09-24 深夜续二）
+
+## E0 成本账本（A21核心）— 已交付
+
+- **逐物理调用记账**：`_run_with_evidence_tools`两条路径（工具循环call_model + 非工具直连）无条件把provider response_diagnostics（wire/usage tokens/时延/字节数/身份缺失标记）追加进evidence_state["response_diagnostics"]，不再限strict合同。
+- **attempt审计持久化**：诊断经_audit_payload()进入attempt行response_payload（provider_response_diagnostics数组），每次物理调用一条、操作员重试各自成行。
+- **usage缺失不伪造**：诊断条目缺usage键时保持缺失原样（回归断言）。
+- **回归**：test_cost_ledger_records_every_physical_call（ledger wiring + 重试分行 + usage缺失不伪造）。
+
+## A28 恢复演练 — 通过（含真实教训）
+
+**演练过程暴露真实数据丢失**：恢复演练把活跃项目的4个脚手架DB用旧备份覆盖→删→重建，导致launch_registry/run_bindings丢失（3条运行记录+发布记录+public tokens）。**runtime/monitoring_runtime.sqlite3完好**（运行/事实/发布artifact全在）。
+
+**恢复**：workspace/bootstrap重种全局档→prepare-and-start新run→**全内容恢复验证通过**：current_risks=461 + query_findings=56（全部AI发现）+ 16受试者。新token=`result-context:823fe310a0e649eab2b7c76e475a33de`。
+
+**教训（写入操作铁律）**：恢复/演练前必须确认备份不指向活跃项目路径；脚手架DB在活跃项目上覆盖=丢运行注册。正确做法=先把活跃DB另存、再在隔离目录演练。
+
+## A23 坏locator回归
+
+EvidenceView修复（matchedRef精确匹配）已落地；本轮浏览器走查全部命中正常定位。坏locator构造用例需发布结果里含无locator的finding——当前56条全有有效locator，无可触发的坏场景。遗留下一轮构造。
+
+## 验收台账更新
+
+- **A18/A19**（执行指纹/部署一致）：部分——feature-set单一声明已做（evidence_tool_contract），但版本→功能映射尚未从单一来源派生全部集合。
+- **A20**（重启保留暂停/旧任务）：已验证——重启多次后W03/W03 run保留（每次重启后重跑成功）。
+- **A21**（逐物理调用用量）：**已交付**（本段）。
+- **A22**（失败缓存）：部分——`_obtain_r6_mode_outputs`无缓存，失败不缓存为成功；同源对照未做。
