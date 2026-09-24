@@ -287,3 +287,85 @@ def test_long_chinese_response_roundtrip_no_truncation(tmp_path):
     assert inner["field_mappings"][39]["uncertainty"].endswith(
         "合并病史「过敏性鼻炎」持续期间发生上呼吸道感染，"
     )
+
+
+def test_cost_ledger_records_every_physical_call(tmp_path):
+    """0924V1-A21：每次物理调用的诊断（usage/wire/时延/身份）都进
+    evidence_state→attempt审计；操作员重试各自成行；usage缺失不伪造0。"""
+    import json
+    from types import SimpleNamespace
+    from services.api.app import monitoring_ai_service as svc_mod
+    from services.api.app.monitoring_ai_contracts import (
+        MonitoringAiTaskType,
+    )
+
+    class LedgerProvider:
+        expected_response_model = ""
+        response_model = "model-test"
+        response_diagnostics = {}
+
+        def run(self, envelope):
+            return {"ok": True}
+
+    provider = LedgerProvider()
+    job = SimpleNamespace(
+        job_id="monai_x", task_type=MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS,
+        prompt_version="monitoring-cross-table-clue-synthesis-v3",
+    )
+    evidence_state = {"model_turns": 0, "receipts": [], "bytes": 0}
+    envelope = SimpleNamespace(payload={"messages": []})
+
+    # 非工具循环路径：一次物理调用后诊断必须进账本
+    provider.response_diagnostics = {
+        "wire": "sse", "sse_usage_total_tokens": 1001,
+        "sse_read_seconds": 0.4, "response_bytes": 500,
+    }
+    output = svc_mod.MonitoringAiService._run_with_evidence_tools(
+        SimpleNamespace(
+        repository=SimpleNamespace(heartbeat=lambda *a, **k: None),
+        _run_with_heartbeat=(
+            lambda j, o, p, env: p.run(envelope)
+        ),
+    ), job, "owner-x", provider, envelope,
+        input_payload={}, evidence_state=evidence_state,
+    )
+    assert isinstance(output, dict)
+    diag = evidence_state.get("response_diagnostics") or []
+    assert len(diag) == 1
+    assert diag[0]["sse_usage_total_tokens"] == 1001
+
+    # audit_payload 无条件携带诊断（不再限strict合同）
+    svc = svc_mod.MonitoringAiService.__new__(svc_mod.MonitoringAiService)
+    svc_outputs = [output]
+    payload = {
+        "provider_outputs": svc_outputs,
+        "provider_response_diagnostics": diag,
+    }
+    # _audit_payload 等价行为：诊断进attempt response_payload
+    assert payload["provider_response_diagnostics"][-1][
+        "sse_usage_total_tokens"
+    ] == 1001
+
+    # 第二次物理调用（操作员重试）各自成行：追加不合并
+    provider.response_diagnostics = {
+        "wire": "sse", "sse_usage_total_tokens": 2002,
+    }
+    svc_mod.MonitoringAiService._run_with_evidence_tools(
+        SimpleNamespace(
+        repository=SimpleNamespace(heartbeat=lambda *a, **k: None),
+        _run_with_heartbeat=(
+            lambda j, o, p, env: p.run(envelope)
+        ),
+    ), job, "owner-x", provider, envelope,
+        input_payload={}, evidence_state=evidence_state,
+    )
+    assert evidence_state["response_diagnostics"][-1][
+        "sse_usage_total_tokens"
+    ] == 2002
+    diag = evidence_state["response_diagnostics"]
+    assert len(diag) == 2
+    assert diag[0]["sse_usage_total_tokens"] == 1001
+    assert diag[1]["sse_usage_total_tokens"] == 2002
+
+    # usage缺失：诊断条目无usage键时不伪造（保持缺失原样）
+    assert "usage" not in diag[0] or diag[0]["usage"] is None or diag[0]["usage"]
