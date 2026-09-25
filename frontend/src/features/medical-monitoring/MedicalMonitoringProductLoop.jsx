@@ -601,16 +601,22 @@ function MonitoringAdmissionCard({ open = false, onToggle }) {
 
 export { MonitoringAdmissionCard };
 
-function ProductRouteTabs({ route, resultLoaded, onOverview }) {
+function ProductRouteTabs({ route, resultLoaded, onOverview, onQueries }) {
   const resultToken = clean(route?.result_context_token);
   // URL may keep view=overview with site_ref; treat that as site_overview for chrome.
   const onSiteOverview = route?.view === "site_overview" || (route?.view === "overview" && Boolean(clean(route?.site_ref)));
   const onProjectOverview = route?.view === "overview" && !clean(route?.site_ref);
+  // R24V2-A25/U18收尾：journey提供直达"返回查询工作区"（replaceState
+  // 路由下浏览器back会退出应用）。若此前从queries进入（U18锚点存在），
+  // 回到queries时由restoreReturnAnchor恢复滚动/焦点；无锚点则落列表
+  // 顶部，同为正确行为。
+  const onJourney = route?.view === "journey" && Boolean(clean(route?.result_context_token));
   return (
     <nav className="monitoring-product-route-tabs" aria-label="医学监查结果导航">
       {resultLoaded && onProjectOverview ? <button type="button" className="is-active" onClick={onOverview}>项目风险概览</button> : null}
       {resultLoaded && onSiteOverview ? <button type="button" className="is-back" onClick={onOverview}>返回项目风险概览</button> : null}
       {resultToken && !["overview", "site_overview"].includes(route.view) ? <button type="button" className="is-back" onClick={onOverview}>返回项目风险概览</button> : null}
+      {onJourney && onQueries ? <button type="button" className="is-back" onClick={onQueries}>返回查询工作区</button> : null}
     </nav>
   );
 }
@@ -1372,7 +1378,7 @@ export function MedicalMonitoringProductLoop({
       </header>
       <MonitoringProductWorkbar state={displayState} onAction={onWorkbarAction} omitComparisonClaim={suppressVersionClaim} />
       {resultLoaded ? <MonitoringPublicResultIdentityStrip identity={resultContext.identity} siteScopeText={resultSiteScopeText} /> : null}
-      <ProductRouteTabs route={route} resultLoaded={resultLoaded} onOverview={() => navigate("overview")} />
+      <ProductRouteTabs route={route} resultLoaded={resultLoaded} onOverview={() => navigate("overview")} onQueries={() => navigate("queries")} />
       {wizardOpen && wizard ? <MonitoringWizardView wizard={{ ...wizard, dataBatches: setup?.dataBatches || [], serverSummary: setup?.serverSummary || {}, errorText: wizardError || wizard.errorText }} previewText={previewText} previewBusy={previewBusy} previewOpen={previewOpen} onClose={closeWizard} onSelect={changeWizard} onAdvance={(direction) => direction > 0 && wizard.step === 4 ? submitWizard() : advanceWizard(direction)} onPreviewTextChange={setPreviewText} onPreview={requestPreview} onClosePreview={() => { setPreviewOpen(false); changeWizard("preview", null); changeWizard("previewCandidateId", ""); }} onConfirmPreview={confirmPreview} canConfirmPreview={Boolean(wizard.previewCandidateId)} /> : null}
       {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button></section> : null}
       {!loadingBody && !resultError && !setupHistoryError && publicRunToken && !resultToken ? <MonitoringPublicProgressSurface progress={progress} error={progressError} loading={progressLoading} onRefresh={() => setRefreshEpoch((value) => value + 1)} onBack={() => navigate("overview", { public_run_token: "" })} onOpenResult={() => openResult(publicRunToken)} /> : null}
