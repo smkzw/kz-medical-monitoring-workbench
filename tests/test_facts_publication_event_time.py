@@ -188,3 +188,78 @@ def test_event_carries_original_record_id(tmp_path: Path) -> None:
     diarrhea = next(e for e in packet.events if "腹泻" in (e.label_zh or ""))
     assert headache.source_record_id == "A-0042"
     assert diarrhea.source_record_id == ""
+
+
+def test_severity_ctc_grades_and_honest_placeholders(tmp_path: Path) -> None:
+    # R24V2-B02收尾：CTC分级（"1级"/"G3"/纯数字）是有源严重度，必须
+    # 识别为recorded（0925回归：CSU真实数据为"1级/3级"，只认中文分级
+    # 导致risks=0、包完整性校验失败）；AE无severity=unknown占位low不
+    # 得伪造medium；非AE=inferred；每事件保留风险锚点行（包合同）。
+    workspace = _workspace(
+        tmp_path,
+        {
+            "AE": [
+                {
+                    "SUBJID": "01001",
+                    "AETERM": "头痛",
+                    "AESEV": "1级",
+                    "AESTDAT": "2026-01-05",
+                },
+                {
+                    "SUBJID": "01001",
+                    "AETERM": "腹泻",
+                    "AESEV": "3级",
+                    "AESTDAT": "2026-01-06",
+                },
+                {
+                    "SUBJID": "01001",
+                    "AETERM": "皮疹",
+                    "AESEV": "G4",
+                    "AESTDAT": "2026-01-07",
+                },
+                {
+                    "SUBJID": "01001",
+                    "AETERM": "乏力",
+                    "AESEV": "5",
+                    "AESTDAT": "2026-01-08",
+                },
+                {
+                    "SUBJID": "01001",
+                    "AETERM": "恶心",
+                    # 无AESEV：严重度未知，占位不得伪装分级
+                    "AESTDAT": "2026-01-09",
+                },
+            ],
+            "CM": [
+                {
+                    "SUBJID": "01001",
+                    "CMTRT": "阿司匹林",
+                    "CMSTDAT": "2026-03-01",
+                }
+            ],
+        },
+    )
+    provider = FactsPublicationAuthorityProvider(workspace)
+    packet = provider.get_packet("proj-test", snapshot_ref="facts-snapshot-001")
+
+    def _risk_for(term: str):
+        event = next(e for e in packet.events if term in (e.label_zh or ""))
+        return next(r for r in packet.risks if r.event_ref == event.event_ref)
+
+    assert _risk_for("头痛").severity == "low"
+    assert _risk_for("头痛").severity_source == "recorded"
+    assert _risk_for("腹泻").severity == "high"
+    assert _risk_for("腹泻").severity_source == "recorded"
+    assert _risk_for("皮疹").severity == "critical"
+    assert _risk_for("皮疹").severity_source == "recorded"
+    assert _risk_for("乏力").severity == "critical"
+    assert _risk_for("乏力").severity_source == "recorded"
+    unknown = _risk_for("恶心")
+    assert unknown.severity_source == "unknown"
+    # unknown占位不得是medium/高中——"未知不得当中风险"
+    assert unknown.severity not in ("critical", "high", "medium")
+    inferred = _risk_for("阿司匹林")
+    assert inferred.severity_source == "inferred"
+    assert inferred.severity not in ("critical", "high", "medium")
+    # 每条事件都有风险锚点行（包完整性合同）
+    assert len(packet.risks) == len(packet.events) == 6
