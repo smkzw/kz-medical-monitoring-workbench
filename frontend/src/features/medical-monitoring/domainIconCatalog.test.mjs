@@ -7,10 +7,11 @@ import {
   isKnownMedicalDomain,
 } from "./domainIconCatalog.mjs";
 
-test("maps all eight medical domains to distinct lucide icon names", () => {
-  assert.equal(MEDICAL_DOMAIN_KEYS.length, 8);
+test("maps all nine medical domains to distinct lucide icon names", () => {
+  // WP1 切片1 新增 uncategorized 语义域（未知表≠方案偏离），目录为 9 键。
+  assert.equal(MEDICAL_DOMAIN_KEYS.length, 9);
   const iconNames = MEDICAL_DOMAIN_KEYS.map((domain) => domainIconName(domain));
-  assert.equal(new Set(iconNames).size, 8, "each domain should have a unique icon");
+  assert.equal(new Set(iconNames).size, 9, "each domain should have a unique icon");
 });
 
 test("preserves canonical domain-to-icon mapping", () => {
@@ -23,6 +24,7 @@ test("preserves canonical domain-to-icon mapping", () => {
     hospital_procedure: "Hospital",
     symptom_efficacy: "TrendingUp",
     protocol_compliance: "ClipboardCheck",
+    uncategorized: "CircleHelp",
   });
 });
 

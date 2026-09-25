@@ -8485,6 +8485,134 @@ class MonitoringAiService:
             ],
         }
 
+    @staticmethod
+    def _normalize_rule_template_provider_output(
+        job: MonitoringAiJob,
+        output: Any,
+        normalization_notes: Optional[List[Dict[str, Any]]] = None,
+    ) -> Any:
+        """确定性整理 rule_template_recommendation 的两类已证实漂移形态。
+
+        20260925 W04-S2：独立模型对该任务的输出在真实方案事实上 5/5 被
+        确定性校验拒收，漂移形态只有两类：
+        1) 裸载荷：输出只有单个候选 payload（fact_type/rule_family/
+           rationale/tradeoffs/deterministic_template/evidence_ids），
+           没有任务信封与 candidates 包裹——按 0923 文档权威先例
+           （_normalize_document_authority_provider_output），用服务端
+           作业身份补齐信封与中立候选脚手架，模型内容原样进入
+           structured_payload；
+        2) 键位漂移：信封顶层多出 claims/system_generated_evidence 等
+           非契约键；候选级 evidence_ids 放在 structured_payload 之外
+           （output_schema 模板自身把 evidence_ids 画在候选级所致）。
+           归一把 evidence_ids 迁回 structured_payload 契约位、剥离非
+           契约键、补齐缺失的中立候选脚手架，全部动作写入
+           server_normalizations 留痕；模型原话在 attempt 记录原样保留，
+           调用方持有的原始输出不被就地改写。
+        其它任何形态照旧 fail-closed，不做猜测式宽容。
+        """
+
+        if job.task_type is not MonitoringAiTaskType.RULE_TEMPLATE_RECOMMENDATION:
+            return output
+        notes = (
+            normalization_notes if normalization_notes is not None else []
+        )
+        if not isinstance(output, Mapping):
+            return output
+        bare_payload_keys = {"fact_type", "rule_family", "deterministic_template"}
+        if "candidates" not in output:
+            if not bare_payload_keys.issubset(set(output.keys())):
+                return output
+            payload = deepcopy(dict(output))
+            template = payload.get("deterministic_template")
+            template_title = (
+                str(template.get("title") or "").strip()
+                if isinstance(template, Mapping)
+                else ""
+            )
+            notes.append(
+                {
+                    "normalization": "bare_payload_envelope_completed",
+                    "payload_keys": sorted(payload.keys()),
+                }
+            )
+            return {
+                "schema_version": MONITORING_AI_SCHEMA_VERSION,
+                "task_id": job.job_id,
+                "task_type": job.task_type.value,
+                "input_revision_sha256": job.input_revision_sha256,
+                "candidates": [
+                    {
+                        "candidate_type": "deterministic_rule_template",
+                        "title": template_title or "确定性规则模板建议",
+                        "text": "",
+                        "structured_payload": payload,
+                    }
+                ],
+            }
+        normalized = dict(output)
+        for helper_key in ("claims", "system_generated_evidence"):
+            if helper_key in normalized:
+                normalized.pop(helper_key, None)
+                notes.append(
+                    {
+                        "normalization": "non_contract_key_stripped",
+                        "key": helper_key,
+                    }
+                )
+        raw_candidates = normalized.get("candidates")
+        if not isinstance(raw_candidates, list):
+            return normalized
+        candidates: List[Any] = []
+        for index, item in enumerate(raw_candidates):
+            if not isinstance(item, Mapping):
+                candidates.append(item)
+                continue
+            candidate = dict(item)
+            structured = candidate.get("structured_payload")
+            structured = deepcopy(structured) if isinstance(structured, Mapping) else {}
+            if isinstance(candidate.get("evidence_ids"), list):
+                moved_ids = candidate.pop("evidence_ids")
+                if "evidence_ids" in structured:
+                    notes.append(
+                        {
+                            "normalization": (
+                                "duplicate_candidate_level_evidence_ids_dropped"
+                            ),
+                            "candidate_index": index,
+                            "evidence_ids": moved_ids,
+                        }
+                    )
+                else:
+                    structured["evidence_ids"] = moved_ids
+                    notes.append(
+                        {
+                            "normalization": (
+                                "evidence_ids_relocated_into_structured_payload"
+                            ),
+                            "candidate_index": index,
+                            "evidence_ids": moved_ids,
+                        }
+                    )
+            template = structured.get("deterministic_template")
+            template_title = (
+                str(template.get("title") or "").strip()
+                if isinstance(template, Mapping)
+                else ""
+            )
+            if not str(candidate.get("title") or "").strip():
+                candidate["title"] = template_title or "确定性规则模板建议"
+                notes.append(
+                    {
+                        "normalization": "neutral_candidate_title_supplied",
+                        "candidate_index": index,
+                    }
+                )
+            candidate.setdefault("text", "")
+            candidate["structured_payload"] = structured
+            candidates.append(candidate)
+        normalized["candidates"] = candidates
+        return normalized
+
     def _parse_provider_output(
         self,
         job: MonitoringAiJob,
@@ -8492,6 +8620,12 @@ class MonitoringAiService:
         input_payload: Dict[str, Any],
         normalization_notes: Optional[List[Dict[str, Any]]] = None,
     ) -> Tuple[MonitoringAiCandidate, ...]:
+        if job.task_type == MonitoringAiTaskType.RULE_TEMPLATE_RECOMMENDATION:
+            output = self._normalize_rule_template_provider_output(
+                job,
+                output,
+                normalization_notes,
+            )
         if (
             job.task_type == MonitoringAiTaskType.LISTING_FIELD_MAPPING
             and isinstance(output, Mapping)

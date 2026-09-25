@@ -174,6 +174,10 @@ const confirmWizardHtml = render(element("MonitoringWizardView", {
 }));
 check(confirmWizardHtml.includes("确认并开始监查") && confirmWizardHtml.includes("工作项总数"), "wizard confirmation step renders the start action and server-owned work-item placeholder");
 
+const factsEntryHtml = render(element("MonitoringFactsRuleEntry", { onOpen: () => {} }));
+check(factsEntryHtml.includes("方案事实与规则发布"), "overview work strip exposes the facts/rule release entry");
+check(factsEntryHtml.includes("data-monitoring-facts-rule-entry"), "facts entry is wired to open the restored panels");
+
 const historyHtml = render(element("MonitoringHistoryDrawer", { history: { rows: [{ publicRunToken: "run:1", modeText: "日常监查", dataCutoffText: "2026-08-20", comparisonRangeText: "当前完整数据", statusText: "本次监查已完成", resultAvailable: true, mainAction: "查看本次结果" }] }, selectedPublicRunToken: "run:1", onSelect: () => {}, onClose: () => {} }));
 check(historyHtml.includes("历史") && historyHtml.includes("本次监查已完成"), "history drawer renders server status text");
 check(historyHtml.includes("查看本次结果"), "history action uses server-owned main action");

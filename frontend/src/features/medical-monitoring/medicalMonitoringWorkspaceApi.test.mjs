@@ -91,7 +91,7 @@ check(overview.projection.currentRisks.length === 2, "preserves current high and
 check(overview.projection.centers.length === 2, "normalizes the canonical center_map.cells object");
 check(overview.counts.currentRisk.high === 1 && overview.counts.currentRisk.medium === 1, "consumes authoritative separate risk counts");
 check(overview.counts.changeBand === 2, "consumes the backend authoritative change-band count");
-check(overview.projection.domains.length === 8, "preserves all eight domain encodings");
+check(overview.projection.domains.length === 9, "preserves all nine domain encodings (WP1 切片1 新增 uncategorized 语义域)");
 check(overview.projection.currentRisks[0].severityLabel === "紧急" || overview.projection.currentRisks[0].severityLabel === "高" || overview.projection.currentRisks[0].severityLabel === "中", "maps severity to the Chinese projection");
 check(overview.projection.currentRisks[0].domainEncoding.shape, "maps an event shape without calculating a risk");
 

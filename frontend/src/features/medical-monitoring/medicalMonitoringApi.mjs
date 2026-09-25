@@ -981,6 +981,24 @@ export function createMedicalMonitoringApi({
       );
     },
 
+    confirmRulePackRule(
+      projectId,
+      rulePackId,
+      ruleRevisionId,
+      payload,
+      options = {},
+    ) {
+      return post(
+        `${MEDICAL_MONITORING_QUERY_PATHS.rulePack(
+          requireId(projectId, "projectId"),
+          requireId(rulePackId, "rulePackId"),
+        )}/rules/${encodeSegment(
+          requireId(ruleRevisionId, "ruleRevisionId"),
+        )}/confirm`,
+        { ...options, body: payload },
+      );
+    },
+
     publishRulePack(projectId, rulePackId, payload, options = {}) {
       return post(
         `${MEDICAL_MONITORING_QUERY_PATHS.rulePack(
