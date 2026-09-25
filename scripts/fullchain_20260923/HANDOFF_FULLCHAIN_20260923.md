@@ -652,3 +652,38 @@ tests/test_project_backup_real_workspace.py（roundtrip+fail-closed）；
 可在CSU 56条上先行验证并如实标注规模边界。今日B02前端severity_source
 呈现的浏览器端到端验证同样依赖新发布（DTO已验证：severity_source/_zh
 已入overview信封的risks行）。
+
+# 0925续：新发布+A24/A25浏览器实测（bada92a）
+
+## 新发布链路端到端打通
+
+prepare-and-start（幂等重放：10/10工作单元秒级复用confirmed映射与既有
+工作单元产出，**零新模型作业**）→POST publication（新端点语义：仅需
+idempotency_key）→**available**。新token=result-context:e52b05ea83f
+64b4b817c31a0c046c2c3（run:91da2b82c2384ea1b9759dc7，daily）。
+
+## 浏览器实测（ego，1728宽，56发现）
+
+- **B02诚实呈现已在线上生效**：旅程密度摘要"高风险 2 · 中风险 0；…
+  另有 26 条事件严重度未知或为系统推定锚点，不作分级展示"——unknown/
+  inferred不再冒充分级。
+- **旅程/事件/选择链可用**：22个enabled旅程入口；subject-22002旅程
+  28事件/4聚合/9泳道；事件选中is-selected+详情面板。
+- **A25零模型调用达标**：浏览全程call_ledger保持0行。
+- **U18三处补齐**（实测驱动）：①锚点保存扩展到subject/risk/finding
+  三条进入路径（此前仅subject）；②焦点锚点扩展data-event-ref；
+  ③恢复改有界rAF重试（异步内容挂载后落位）。
+
+## 如实记录的边界
+
+1. **浏览器back退出应用**：视图导航为replaceState（history长度不变），
+   back落到about:blank。journey→queries无应用内直达返回控件（现有
+   "返回项目风险概览"去overview）——U18锚点恢复依赖再次进入queries时
+   触发；直达返回控件缺位=产品IA缺口，待产品确认。
+2. **A24规模边界**：CSU项目56条发现三视口（1440/1920/2560）无横向
+   溢出、卡宽自适应（1190/1670/2310px）；"800+发现"分母需SAR项目
+   （846条）重跑，本轮未做。重页面PNG截图管线超时（工具侧），以
+   DOM metrics为证据。
+3. 查询工作区发现卡为查询草稿形态（无subject_ref），卡片旅程按钮
+   disabled属呈现层现状（审阅"查询草稿是呈现"一致）；旅程入口经
+   风险工作列表可达。
