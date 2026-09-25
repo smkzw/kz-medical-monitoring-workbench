@@ -718,3 +718,15 @@ lane未重触发（零新模型作业）→补publication available。结论如�
 新盲核组合的传输/身份/思考档已直连实测；产品lane将在下次真实数据
 修订触发新分析作业时首次实战（job_id含provider/model，届时绑定变化
 自然产生新作业），不为验证人为烧调用。
+
+# 0925续4：A25闭环收尾——journey直达返回控件（浏览器实测PASS）
+
+产品IA缺口已用最小方案关闭：journey视图新增"返回查询工作区"按钮
+（ProductRouteTabs，恒显于journey+result存在时）。replaceState路由下
+浏览器back退出应用的问题由此绕开——返回走应用内导航，回到queries时
+restoreReturnAnchor按U18锚点恢复滚动/焦点。
+
+**浏览器实测（ego）**：queries滚动至900→风险列表进入旅程（锚点保存）
+→journey出现返回按钮→点击→queries视图scrollY精确恢复900、56条发现
+完整渲染。A25"finding→subject→event→back+滚动焦点恢复，浏览0调用"
+闭环达成（全程call_ledger 0行）。jsx 6/6、mjs 68/71（3项基线旧债）。
