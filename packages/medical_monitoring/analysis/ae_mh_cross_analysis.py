@@ -464,6 +464,16 @@ def _clues_agree(primary: Any, verifier: Any) -> bool:
         primary_temporal & verifier_temporal
     ):
         return False
+    # R24V2-B04/B09命题核验（方向极性维度）：双方均有明确的方向词
+    # （升高/下降等）且归一后无交集时不得判一致——"血红蛋白较基线下
+    # 降"与"该指标升高"引用同一证据也属不同命题。单侧无方向词不做
+    # 否决（信息不足保守升级，与时序否决同构）。
+    primary_direction = _direction_set(primary)
+    verifier_direction = _direction_set(verifier)
+    if primary_direction and verifier_direction and not (
+        primary_direction & verifier_direction
+    ):
+        return False
     return True
 
 
@@ -479,6 +489,56 @@ _TEMPORAL_CANONICAL = {
     "用药后": "post_administration",
     "治疗后": "post_administration",
 }
+
+# R24V2-B04/B09：方向极性token（升高/下降族）。含同义归一；不含
+# "变化/波动"类中性词，避免把无方向表述误判成方向冲突。
+_DIRECTION_TOKEN_RE = re.compile(
+    r"(升高|上升|增高|增多|偏高|高于正常|超出正常|"
+    r"降低|下降|减低|减少|偏低|低于正常|"
+    r"转阳性|转阴性)"
+)
+_DIRECTION_CANONICAL = {
+    "升高": "elevated",
+    "上升": "elevated",
+    "增高": "elevated",
+    "增多": "elevated",
+    "偏高": "elevated",
+    "高于正常": "elevated",
+    "超出正常": "elevated",
+    "降低": "decreased",
+    "下降": "decreased",
+    "减低": "decreased",
+    "减少": "decreased",
+    "偏低": "decreased",
+    "低于正常": "decreased",
+    "转阳性": "turned_positive",
+    "转阴性": "turned_negative",
+}
+
+
+def _direction_set(candidate: Any) -> frozenset[str]:
+    """Direction-polarity tokens from a clue (title/text/observations/claims)."""
+
+    payload = getattr(candidate, "structured_payload", {}) or {}
+    parts: list[str] = [
+        str(getattr(candidate, "title", "") or ""),
+        str(getattr(candidate, "text", "") or ""),
+    ]
+    observations = payload.get("observations")
+    if isinstance(observations, (list, tuple)):
+        parts.extend(str(item) for item in observations)
+    claims = payload.get("claims")
+    if isinstance(claims, (list, tuple)):
+        for claim in claims:
+            parts.append(
+                str(claim.get("text", ""))
+                if isinstance(claim, Mapping)
+                else str(claim)
+            )
+    return frozenset(
+        _DIRECTION_CANONICAL.get(token, token)
+        for token in _DIRECTION_TOKEN_RE.findall(" ".join(parts))
+    )
 
 
 _GRADE_RE = re.compile(r"(?:^|[^0-9])([1-5])\s*级|grade\s*([1-5])", re.IGNORECASE)
