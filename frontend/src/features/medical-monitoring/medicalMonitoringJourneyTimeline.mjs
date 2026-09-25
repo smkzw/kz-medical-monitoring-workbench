@@ -9,6 +9,9 @@ const PRIORITY = Object.freeze({ critical: 0, high: 1, medium: 2, low: 3 });
 export function parseTimelineDate(value) {
   if (value === null || value === undefined || value === "") return null;
   const raw = String(value).trim();
+  // R24V2-U07：UK/UNK/XX等未知日token不入前缀解析——返回null交给
+  // 待确认集合，绝不补成01日。
+  if (/[^\d-]/.test(raw)) return null;
   const match = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(raw);
   if (!match) return null;
   const year = Number(match[1]);
@@ -35,7 +38,12 @@ export function eventIsPendingDate(event) {
   const dateState = event.dateState || event.date_state;
   if (dateState === "missing" || dateState === "conflicted") return true;
   const start = event.start ?? event.start_date ?? null;
-  return !start;
+  if (!start) return true;
+  // R24V2-U07/U08：部分精度（2025-09-UK/2025-09）与无效日期（2025-02-30）
+  // 进入待确认集合——不前缀宽松解析成01日，不静默跳过。
+  if (event.date_precision === "partial") return true;
+  if (parseTimelineDate(start) == null) return true;
+  return false;
 }
 
 export function eventGeometry(event) {
@@ -43,6 +51,10 @@ export function eventGeometry(event) {
   const start = event.start ?? event.start_date ?? null;
   const end = event.end ?? event.end_date ?? null;
   if (end && start && String(end) !== String(start)) return "interval";
+  // R24V2-U11：ongoing（明确持续，如"目前仍持续"标志或end_state=ongoing）
+  // 与end_unknown（结束未知）不坍缩成point——几何分类保真。
+  if (event.ongoing === true || event.end_state === "ongoing") return "ongoing";
+  if (event.end_state === "unknown" || event.end_unknown === true) return "end_unknown";
   return "point";
 }
 

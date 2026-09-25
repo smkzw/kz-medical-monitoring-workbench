@@ -2470,3 +2470,35 @@ g[data-flow-link]:focus-visible .monitoring-flow-ribbon {
 .monitoring-query-state-escalated { background: #FFF3E0; color: #A85F34; border: 1px solid #A85F34; }
 .monitoring-query-state-unverifiable_gap { background: #F2F0EB; color: #595959; border: 1px solid #AAA6A1; }
 .monitoring-query-state-coverage_gap { background: #EEF3F8; color: #33566E; border: 1px solid #407AAA; }
+
+/* R24V2-U04/U14: aggregate member entry — in-place expandable, keyboard reachable */
+.monitoring-domain-track-aggregate .monitoring-aggregate-toggle {
+  border: 1px solid var(--monitoring-border, #d0d5dd);
+  background: #fff;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.monitoring-domain-track-aggregate .monitoring-aggregate-toggle:hover,
+.monitoring-domain-track-aggregate .monitoring-aggregate-toggle:focus-visible {
+  border-color: var(--monitoring-accent, #d46a2e);
+}
+.monitoring-aggregate-members {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+.monitoring-aggregate-member {
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  font-size: 11px;
+  padding: 1px 4px;
+  cursor: pointer;
+}
+.monitoring-aggregate-member[aria-pressed="true"] {
+  border-color: var(--monitoring-accent, #d46a2e);
+  font-weight: 600;
+}

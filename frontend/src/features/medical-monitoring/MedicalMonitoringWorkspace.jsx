@@ -616,6 +616,7 @@ export function DomainTracks({
   // R24V2-U01/U02：ResizeObserver绑定实际plot宿主——容器/侧栏/抽屉
   // 宽度变化都触发重测；零宽初始状态等待测量（containerWidth=null时
   // scale保持旧行为，不留永久兜底宽度）。卸载时断开观察。
+  const [expandedAggregates, setExpandedAggregates] = useState(() => new Set());
   const scrollShellRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(null);
   useEffect(() => {
@@ -788,17 +789,54 @@ export function DomainTracks({
                       </button>
                     );
                   })}
-                  {lane.aggregates.map((aggregate) => (
-                    <span
-                      className="monitoring-domain-track-aggregate monitoring-timeline-aggregate"
-                      data-aggregate-key={aggregate.aggregateKey}
-                      key={aggregate.aggregateKey}
-                      style={{ left: `${aggregate.x}px` }}
-                      title={`${aggregate.label}已聚合，使用右上角“+”查看全部。`}
-                    >
-                      {`另有 ${aggregate.count} 条`}
-                    </span>
-                  ))}
+                  {lane.aggregates.map((aggregate) => {
+                    // R24V2-U04/U14：聚合是显示组织不是黑箱——toggle用
+                    // React state展开成员列表（就地可点/键盘可达）；选中
+                    // 事件在本聚合内时自动展开。
+                    const containsSelected = aggregate.eventRefs.includes(selectedRef);
+                    const expanded = containsSelected || expandedAggregates.has(aggregate.aggregateKey);
+                    return (
+                      <span
+                        className={`monitoring-domain-track-aggregate monitoring-timeline-aggregate${expanded ? " is-expanded" : ""}`}
+                        data-aggregate-key={aggregate.aggregateKey}
+                        key={aggregate.aggregateKey}
+                        style={{ left: `${aggregate.x}px` }}
+                      >
+                        {expanded ? (
+                          <span className="monitoring-aggregate-members" role="list">
+                            {aggregate.eventRefs.map((ref) => (
+                              <button
+                                key={ref}
+                                type="button"
+                                role="listitem"
+                                className="monitoring-aggregate-member"
+                                data-event-ref={ref}
+                                aria-pressed={ref === selectedRef}
+                                onClick={() => onEventSelect?.({ event_ref: ref })}
+                              >
+                                {ref}
+                              </button>
+                            ))}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="monitoring-aggregate-toggle"
+                            aria-expanded={expanded}
+                            aria-label={`展开本组 ${aggregate.count} 条记录`}
+                            title={aggregate.label}
+                            onClick={() => setExpandedAggregates((prev) => {
+                              const next = new Set(prev);
+                              next.add(aggregate.aggregateKey);
+                              return next;
+                            })}
+                          >
+                            {`另有 ${aggregate.count} 条`}
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
                 </div>
               </article>
               );
