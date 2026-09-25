@@ -130,6 +130,12 @@ def build(profile: Profile, out_dir: Path) -> Path:
             ongoing = rnd.choice(["是", "否"])
             mh_rows.append([subj, f"M{len(mh_rows) + 1:03d}", term, start, ongoing, "既往病史"])
             mh_records.setdefault(subj, []).append(term)
+    # W04植入（20260926）：空MHTERM→mh_verbatim_term_completeness正例；
+    # 空SUBJID→同规则负例（前置不满足且未触发）
+    mh_rows.append([subjects[7], f"M{len(mh_rows) + 1:03d}", "",
+                    _rand_date(base - timedelta(days=100), 0, 30), "否", "既往病史"])
+    mh_rows.append(["", f"M{len(mh_rows) + 1:03d}", "过敏性鼻炎",
+                    _rand_date(base - timedelta(days=50), 0, 20), "否", "既往病史"])
     _sheet(wb, "MH", ["受试者编号", "病史记录号", "病史名称", "开始日期", "目前是否持续", "病史类型"],
            ["SUBJID", "MHNUM", "MHTERM", "MHSTDAT", "MHONGO", "MHCAT"], mh_rows)
 
@@ -165,6 +171,13 @@ def build(profile: Profile, out_dir: Path) -> Path:
                             _rand_date(base, -30, -1), rnd.choice(["是", "否"])])
     cm_rows.append([cm_planted_subject, f"C{len(cm_rows) + 1:03d}", "孟鲁司特钠片", "哮喘病史长期用药",
                     _rand_date(base - timedelta(days=300), 0, 60), "", "是"])
+    # W04植入（20260926）：空CMSTDAT→cm_non_ip_medication_date_completeness
+    # 正例；空CMINDC+日期齐全→同规则负例（前置不满足且未触发）
+    cm_rows.append([subjects[7], f"C{len(cm_rows) + 1:03d}", "孟鲁司特钠片", "既往用药",
+                    "", (base + timedelta(days=10)).isoformat(), "否"])
+    cm_rows.append([subjects[7], f"C{len(cm_rows) + 1:03d}", "孟鲁司特钠片", "",
+                    _rand_date(base - timedelta(days=180), 0, 60),
+                    _rand_date(base - timedelta(days=30), 0, 10), "否"])
     _sheet(wb, "CM", ["受试者编号", "合并用药记录号", "药物名称", "用药目的", "开始日期", "结束日期", "目前是否持续"],
            ["SUBJID", "CMNUM", "CMTRT", "CMINDC", "CMSTDAT", "CMENDAT", "CMONGO"], cm_rows)
 
@@ -188,6 +201,21 @@ def build(profile: Profile, out_dir: Path) -> Path:
         rand_dt = date.fromisoformat(dm_rows[i][5])
         for code, offset in profile.visits[1:]:
             sv_rows.append([subj, code, (rand_dt + timedelta(days=offset - 1)).isoformat(), rnd.choice(["已访视", "已访视", "已访视", "失约"])])
+    # W04（20260926）：按已确认方案符合性规则植入违规行——影子验证需要
+    # 正例/负例/边界/不可判定四类样本桶；"干净"数据无法展示区分案例
+    # （20260925收敛：4规则逐一422 buckets_incomplete）。
+    if isinstance(profile, CsuProfile):
+        w04_subject = subjects[7]
+        # SV：空VISIT → baseline_visit_name_missing 正例
+        sv_rows.append([w04_subject, "", (base + timedelta(days=3)).isoformat(), "已访视"])
+        # SV：空SUBJID+VISIT在 → 同规则负例
+        sv_rows.append(["", "FU", (base + timedelta(days=140)).isoformat(), "已访视"])
+        # SV：同受试者W2行入册后改名 → sv_visit_name_post_entry_change 正例（changed）
+        for row in sv_rows:
+            if row[0] == w04_subject and row[1] == "W2":
+                sv_rows.append([w04_subject, "W2-改名", row[2], "已访视"])
+                break
+
     _sheet(wb, "SV", ["受试者编号", "访视名称", "实际访视日期", "访视状态"],
            ["SUBJID", "VISIT", "VISDAT", "SVSTATE"], sv_rows)
 

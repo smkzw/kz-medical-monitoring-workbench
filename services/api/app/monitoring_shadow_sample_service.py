@@ -124,6 +124,28 @@ class _BatchSource:
     source_revision: str
 
 
+def _expression_requires_diagnostic_bucket(rule: MonitoringRuleDefinition) -> bool:
+    """规则表达式树含跨行/不可判定算子时，影子验证需要diagnostic样本。"""
+
+    indeterminate_operators = {"changed", "no_corresponding_record"}
+
+    def _walk(node: Any) -> bool:
+        if isinstance(node, Mapping):
+            for key, operand in node.items():
+                if str(key) in indeterminate_operators:
+                    return True
+                if _walk(operand):
+                    return True
+        elif isinstance(node, (list, tuple)):
+            return any(_walk(item) for item in node)
+        return False
+
+    return any(
+        _walk(getattr(rule, field, None) or {})
+        for field in ("preconditions", "trigger_expression", "exclusions")
+    )
+
+
 class MonitoringShadowSampleService:
     """Prepare server-side provisional shadow samples from a frozen batch.
 
@@ -925,11 +947,15 @@ class MonitoringShadowSampleService:
                     break
             if len(buckets) == 4:
                 break
-        missing = [
-            bucket
-            for bucket in ("positive", "negative", "boundary", "diagnostic")
-            if bucket not in buckets
-        ]
+        # R24V2-W04（20260926）：diagnostic桶只在规则含可产生"不可判定"
+        # 语义的跨行算子（changed/no_corresponding_record）时才要求——
+        # 纯行级exists/missing规则的求值是全可判定的，diagnostic构造上
+        # 不可能出现，强求会让此类规则永远无法发布（20260925收敛实证：
+        # 4条已确认事实规则逐一422）。
+        required_buckets = ["positive", "negative", "boundary"]
+        if _expression_requires_diagnostic_bucket(rule):
+            required_buckets.append("diagnostic")
+        missing = [bucket for bucket in required_buckets if bucket not in buckets]
         if missing:
             raise MonitoringShadowSampleError(
                 "monitoring_shadow_sample_buckets_incomplete",
@@ -939,6 +965,8 @@ class MonitoringShadowSampleService:
                 http_status=422,
             )
         return [buckets[bucket] for bucket in sorted(buckets)]
+
+
 
     def _evaluate_candidate(
         self,

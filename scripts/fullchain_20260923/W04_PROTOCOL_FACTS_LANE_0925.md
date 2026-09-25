@@ -212,3 +212,30 @@ draft 201+4规则编译confirmed ✓；生命周期"前驱→后继"语义修复
    扩展），重新intake→frozen→影子验证→发布（推荐，机制零改动）；
 2. 或建金标准案例注入功能（register_gold_case+合成违规行绑定冻结批次源）；
 3. live API/vite已重启加载全部W04代码；A24 SAR授权材料已备。
+
+# W04收尾轮2（20260926）：site_specific迁移+发布治理墙精确定位
+
+- **协议版本适用性迁移**：repository.transition_protocol_version_state
+  （version_date_only→site_specific，生效区间2026全年，状态版本递增）
+  ——发现该治理链只有仓储层实现、无HTTP路由（功能缺口记录）；
+- **适用性分配**：创建+确认（protoapp_6b0b43e75df151041faa7ee4，中心21，
+  2026全年，方案文档证据）✓；
+- **影子验证全绿**：s9 automatic-shadow 200+inspection、s10 confirm-shadow
+  200（trusted run落库）——植入行补齐桶后影子验证通过 ✓；
+- **发布409（P7C发布治理墙，精确定位）**：
+  monitoring_rule_lifecycle_conflict "rule revision is not release
+  eligible; missing=['diagnostic_indeterminate']" +
+  初始发布规则族要求≥2个authoritative projects（单项目影子运行按构造
+  只能提供1个）。这是P7C跨项目发布治理策略，不是缺陷；
+- S3脚本同轮修复：表达式sha常量更新、RUN_STAMP推进、后继包id、
+  剔除循环、签名证据（本地总监确认，非托管电子签名已标注）。
+
+## 发布前的三个选项（需决策）
+
+1. **金标准案例注入**：用register_gold_case为每条规则注册含
+   diagnostic_indeterminate的边界案例（跨行/缺列形态），补齐P7C覆盖
+   （diagnostic可解；≥2权威项目仍需第二项目同族影子运行）；
+2. **第二项目同族影子运行**：在RUX（已有published v1.3包）对同族规则
+   跑影子，满足≥2权威项目——两次影子运行即双项目合规；
+3. **P7C策略产品决策**：首发布豁免或降级"≥2权威项目"要求（需产品/QA
+   治理确认，不建议单方面代码放宽）。

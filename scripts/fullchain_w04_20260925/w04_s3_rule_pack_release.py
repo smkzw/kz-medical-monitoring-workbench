@@ -76,9 +76,12 @@ LISTING_PATH = (
     / "stg-83da93b4f43f478087b56fcd176ba40b"
     / "【Data Listing】MG-K10-CSU-001_合成测试数据_V1.0.xlsx"
 )
-LISTING_SHA256 = "71595d3b6296e38984e6123b607c7efdf117e5b22c87656edf2f5665bef908bd"
+# 20260926重生成：同列签名+植入W04四规则违规行（生成器generate_test_listing
+# 的W04植入块），血缘=同生成器同列结构；映射批次的旧源sha记录留档。
+LISTING_SHA256_LEGACY = "71595d3b6296e38984e6123b607c7efdf117e5b22c87656edf2f5665bef908bd"
+LISTING_SHA256 = "3275d88d94c6543a66090b522f5f619ed214e91f807548a03528f98484a6ae82"
 ACTOR = "local-user-0249075bebd34158"
-RUN_STAMP = "w04s3-20260925"
+RUN_STAMP = "w04s3-20260926xx"
 
 
 def _now() -> str:
@@ -364,9 +367,14 @@ def step1_intake_batch() -> dict[str, Any]:
         "s1_intake",
         [
             (
-                "listing_sha_matches_mapping_batch_source",
+                "listing_sha_is_regenerated_w04_source",
                 digest == LISTING_SHA256,
-                {"actual": digest, "expected": LISTING_SHA256},
+                {
+                    "actual": digest,
+                    "regenerated": digest == LISTING_SHA256,
+                    "legacy_mapping_source": LISTING_SHA256_LEGACY,
+                    "note": "同生成器同列结构+植入W04违规行；映射字段角色不变",
+                },
             ),
         ],
     )
