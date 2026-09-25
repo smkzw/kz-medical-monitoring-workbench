@@ -734,9 +734,13 @@ def test_first_pass_never_silently_demotes_a_malformed_question(
     assert len(provider.envelopes) == 2
 
 
-def test_mapping_repair_keeps_field_and_rechecks_supplied_evidence(
+def test_mapping_delegating_suffix_normalized_not_failed_closed(
     tmp_path: Path,
 ) -> None:
+    # R24-04/B09后合同：委派用户自行翻阅已提供文件的句子（"请依据CRF
+    # 确认。"）在服务端被整理进uncertainty（带审计marker），真正的
+    # 医学问题保留在user_action；不再触发fail-closed修复循环（技术
+    # 失败是系统责任，不交用户代做），作业正常完成且模型原话留审计。
     def delegated_question(envelope: AiPromptEnvelope) -> Dict[str, Any]:
         output = _valid_output(envelope)
         mapping = output["candidates"][0]["structured_payload"][
@@ -746,7 +750,7 @@ def test_mapping_repair_keeps_field_and_rechecks_supplied_evidence(
         mapping["user_action"] = "这是计划剂量还是实际剂量？请依据CRF确认。"
         return output
 
-    provider = FakeProvider([delegated_question, delegated_question])
+    provider = FakeProvider([delegated_question])
     service = _service(tmp_path, provider)
     service.submit_listing_field_mapping(
         project_id="project-alpha",
@@ -757,13 +761,17 @@ def test_mapping_repair_keeps_field_and_rechecks_supplied_evidence(
     result = service.run_next("worker-a")
 
     assert result.job is not None
-    assert result.job.status == MonitoringAiJobStatus.FAILED
-    instruction = provider.envelopes[1].payload["repair_contract"][
-        "instruction"
-    ]
-    assert "重新读取本次已授权的字段画像和证据工具回执" in instruction
-    assert "不得删除违规字段" in instruction
-    assert "未解决映射写成已确认" in instruction
+    assert result.job.status == MonitoringAiJobStatus.COMPLETED
+    # 只有一次物理调用：整理代替了修复循环
+    assert len(provider.envelopes) == 1
+    candidates = service.repository.candidates(
+        "project-alpha", result.job.job_id
+    )
+    mapping = candidates[0].structured_payload["field_mappings"][0]
+    assert mapping["user_decision_required"] is True
+    assert mapping["user_action"] == "这是计划剂量还是实际剂量？"
+    assert "【系统确定性整理】" in (mapping.get("uncertainty") or "")
+    assert "请依据CRF确认。" in (mapping.get("uncertainty") or "")
 
 
 def test_adjudication_never_silently_demotes_a_malformed_question(
@@ -1482,7 +1490,13 @@ def test_response_model_identity_mismatch_fails_closed(tmp_path: Path) -> None:
     assert result.job.failure_code == "response_model_identity"
 
 
-def test_missing_response_model_identity_fails_closed(tmp_path: Path) -> None:
+def test_missing_response_model_observed_stays_unknown_and_completes(
+    tmp_path: Path,
+) -> None:
+    # R24-01后合同：expected有值但上游未回显model名时，observed保持
+    # 空串（unknown）——绝不把requested反填成observed；作业完成，
+    # 身份不完整是计量/审计问题而非失败。显式mismatch仍硬失败
+    # （见test_provider_expected_response_model_is_verified_before_call）。
     provider = FakeProvider([_valid_output], response_model="")
     service = _service(tmp_path, provider)
     service.submit_listing_field_mapping(
@@ -1494,8 +1508,9 @@ def test_missing_response_model_identity_fails_closed(tmp_path: Path) -> None:
     result = service.run_next("worker-a")
 
     assert result.job is not None
-    assert result.job.status == MonitoringAiJobStatus.FAILED
-    assert result.job.failure_code == "response_model_identity"
+    assert result.job.status == MonitoringAiJobStatus.COMPLETED
+    assert result.job.response_model == "test-model"
+    assert result.job.observed_response_model == ""
     assert len(provider.envelopes) == 1
 
 
@@ -11370,7 +11385,7 @@ def test_role_declaration_is_bound_to_exact_anonymous_input_before_persistence(t
                 mapping['recommended_role']='reading.code'
                 mapping['role_equivalence']={
                     'judgment':'equivalent','option_ids':[o['option_id'] for o in rows[0]['candidate_options']],
-                    'dimensions':{axis:{'relation':'equivalent','evidence_ids':([envelope.payload['role_equivalence_evidence'][0]['evidence_id']] if use_published_ref else mapping['evidence_ids']),
+                    'dimensions':{axis:{'relation':'equivalent','evidence_ids':([envelope.payload['role_equivalence_evidence'][0]['evidence_id']] if use_published_ref else ['ev-unclosable-fabricated']),
                                         'rationale':'合成来源对照，不代表真实医学等价。'} for axis in DIMENSIONS},
                     'counterevidence_summary':'合成测试检查了各维可能差异。'}
         return result
@@ -11382,8 +11397,13 @@ def test_role_declaration_is_bound_to_exact_anonymous_input_before_persistence(t
         prompt_version='monitoring-listing-field-mapping-adjudication-v10-tools-v5')
     result=service.run_next('role-proof-test')
     if not use_published_ref:
-        assert result.job.status==MonitoringAiJobStatus.FAILED
-        assert not service.repository.candidates(job.project_id,job.job_id)
+        # 等价证书引用闭不到冻结证据的伪造编号：证书不成立→整份声明
+        # 删除+uncertainty留痕，字段保持未决（不硬失败整作业，但也
+        # 绝不伪造等价结论——fail-closed收窄为"不伪造"而非"拒绝作业"）。
+        assert result.job.status==MonitoringAiJobStatus.COMPLETED, result.job.failure_message
+        item=service.repository.candidates(job.project_id,job.job_id)[0].structured_payload['field_mappings'][0]
+        assert item['role_equivalence'] is None
+        assert '等价声明引用了无法闭合到冻结证据的证据编号' in (item.get('uncertainty') or '')
         return
     assert result.job.status==MonitoringAiJobStatus.COMPLETED,result.job.failure_message
     item=service.repository.candidates(job.project_id,job.job_id)[0].structured_payload['field_mappings'][0]
