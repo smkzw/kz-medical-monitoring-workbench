@@ -919,6 +919,12 @@
   background: #eef5ff;
 }
 
+/* R24V2-B02：严重度未知=中性锚点，不得借用任何医学分级配色 */
+.monitoring-track-risk-unknown {
+  color: var(--monitoring-muted);
+  background: #f1f2f4;
+}
+
 .monitoring-track-event-detail,
 .monitoring-track-event-source {
   display: none;
@@ -2498,6 +2504,20 @@ g[data-flow-link]:focus-visible .monitoring-flow-ribbon {
 .monitoring-aggregate-member[aria-pressed="true"] {
   border-color: var(--monitoring-accent, #d46a2e);
   font-weight: 600;
+}
+
+/* R24V2-U13: 收起开关与展开开关同形态，键盘可达（focus-visible描边） */
+.monitoring-domain-track-aggregate .monitoring-aggregate-collapse {
+  border: 1px solid var(--monitoring-border, #d0d5dd);
+  background: #fff;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.monitoring-domain-track-aggregate .monitoring-aggregate-collapse:hover,
+.monitoring-domain-track-aggregate .monitoring-aggregate-collapse:focus-visible {
+  border-color: var(--monitoring-accent, #d46a2e);
 }
 
 /* R24V2-U06: zero-event lane chips collapse to explicit empty state */
