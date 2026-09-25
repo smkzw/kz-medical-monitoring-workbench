@@ -210,7 +210,9 @@ class ProjectBackupArchiveMixin:
             name = str(info.filename)
             if not name or "\x00" in name or "\\" in name:
                 raise ProjectBackupError("package_corrupt")
-            if not name.isascii():
+            # R24V2-B16：真实上传件含中文名（如"【Data Listing】….xlsx"），
+            # 不再要求ASCII；仍禁止控制字符与其余路径卫生约束。
+            if any(ord(ch) < 32 or ch == "\x7f" for ch in name):
                 raise ProjectBackupError("package_corrupt")
             pure = PurePosixPath(name)
             if pure.is_absolute() or ".." in pure.parts or "." in pure.parts:
@@ -374,9 +376,11 @@ class ProjectBackupArchiveMixin:
             for child in artifact_dir.iterdir():
                 if _is_ignorable(child):
                     continue
+                # R24V2-B16：辅助成员（命名manifest/子目录集）不属于DB
+                # 内容哈希闭包，其完整性由manifest逐成员哈希承担。
+                if not (child.is_file() and _is_hex64_artifact_name(child.name)):
+                    continue
                 _assert_regular(child)
-                if child.suffix != ".json" or not _HEX64.match(child.stem):
-                    raise ProjectBackupError("artifact_closure_invalid")
                 actual_files.add(child.stem)
                 if sha256_hex(child.read_bytes()) != child.stem:
                     raise ProjectBackupError("artifact_closure_invalid")
@@ -710,8 +714,11 @@ class ProjectBackupArchiveMixin:
         )
         # Opening each database again after the verification pass makes the
         # close/reopen invariant explicit rather than relying on one connection.
+        # R24V2-B16：只reopen五个SQLite成员；辅助成员（json/gz/上传件）
+        # 不是数据库，由manifest哈希校验承担。
+        db_members = set(_ALLOWED_ROOT_FILES) | {RUNTIME_DIR_NAME + "/" + RUNTIME_DB_NAME}
         for relative in _member_rel_paths(self.workspace_dir):
-            if relative.endswith(".json"):
+            if relative not in db_members:
                 continue
             conn = _open_ro(self.workspace_dir / Path(relative))
             conn.close()
@@ -757,8 +764,10 @@ class ProjectBackupArchiveMixin:
         fingerprint = self._fingerprint(members)
         summary = self._summarize_workspace(workspace, project_name_override=self.project_name)
         self._verify_artifact_closure(workspace, summary)
+        # R24V2-B16：reopen只针对SQLite成员（同_verify_live_workspace）。
+        db_members = set(_ALLOWED_ROOT_FILES) | {RUNTIME_DIR_NAME + "/" + RUNTIME_DB_NAME}
         for relative in _member_rel_paths(workspace):
-            if relative.endswith(".json"):
+            if relative not in db_members:
                 continue
             conn = _open_ro(workspace / Path(relative))
             conn.close()

@@ -1,0 +1,17 @@
+{
+  "project": "proj_user_2f17492ac59b",
+  "file_count": 60,
+  "runs": 3,
+  "checks": {
+    "every_non_db_file_byte_identical": true,
+    "db_members_present": true,
+    "file_count_matches": true,
+    "run_rows_identical": true,
+    "launch_rows_identical": true,
+    "aux:runtime/artifacts/facts-manifest.json": true,
+    "aux:runtime/artifacts/aemh-findings.active.json": true,
+    "aux:admissions/staging": true,
+    "aux:document_authority_candidates/files": true
+  },
+  "pass": true
+}
