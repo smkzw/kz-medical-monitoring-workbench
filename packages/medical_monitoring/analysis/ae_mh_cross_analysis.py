@@ -35,6 +35,14 @@ _DOMAIN_ROLE = {
 }
 _ANALYSIS_TABLES = ("AE", "MH", "CM", "EX2", "EX4", "EX5", "EX7")
 _TABLE_DOMAIN = {"AE": "AE", "MH": "MH", "CM": "CM", "EX2": "EX", "EX4": "EX", "EX5": "EX", "EX7": "EX"}
+# R24V2-B04：本清单是**本lane的合同范围**，不是全研究分析覆盖。未列入
+# 的域（如本例标准EX、实验室LB_*、疗效量表、PK/PD/ADA）为 not-assessed，
+# 在分析覆盖口径中如实单列——不以"已分析7表"冒充全域覆盖；扩展域分析
+# 属独立工作包。
+_NOT_ASSESSED_DOMAIN_NOTE = (
+    "本lane仅覆盖AE/MH/CM/EX（试验用药子表）跨表线索；实验室、疗效量表、"
+    "PK/PD、ADA等域尚未纳入本分析，覆盖口径中如实标记为未评估。"
+)
 # N5：去除截断限制——全部行/全部字段/完整值纳入证据包。
 # 管理列仍排除（不承载临床语义）。
 _ADMIN_COLUMNS = frozenset({"Block顺序号", "RECREP", "PAGELMDT", "FORMOID", "FORMNM", "FORMNM__2"})
