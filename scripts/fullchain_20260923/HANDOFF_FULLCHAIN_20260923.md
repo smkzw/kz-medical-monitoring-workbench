@@ -703,3 +703,18 @@ title/text/observations/claims自有文本池，不改共享的_direction_text
 回归：test_mm_r24v2_proposition.py新增3例（方向冲突不判一致/同义
 归一仍一致/单侧方向不否决）6/6过；监测子集820过/1失败（基线翻译债）
 /1 deselected（基线hang）；分析消费方测试24/24过。
+
+# 0925续3：盲核模型切换（用户指示）+方向否决后的运行验证
+
+**模型切换**：监查盲核+文档权威盲核 → ollama-cloud/deepseek-v4.1-flash
+（thinking=enabled，reasoning_effort=high，profile=medical_monitoring_
+verifier_ai__ollama_cloud_dsv41），走store.upsert正式通道，resolver
+即时生效无需重启。验证：role_env全项核对+真实最小探针HTTP 200
+（served model与expected一致、reasoning present）。主分析不变。
+
+**切换后的运行验证**：新prepare-and-start（idempotency=aemh-daily-
+0925-verifier-ollama）→10/10工作单元幂等重放（同快照输入），AI线索
+lane未重触发（零新模型作业）→补publication available。结论如实记录：
+新盲核组合的传输/身份/思考档已直连实测；产品lane将在下次真实数据
+修订触发新分析作业时首次实战（job_id含provider/model，届时绑定变化
+自然产生新作业），不为验证人为烧调用。
