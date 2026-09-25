@@ -444,7 +444,41 @@ def _clues_agree(primary: Any, verifier: Any) -> bool:
     ):
         # "3级"vs"1级"类分级矛盾：词频同向也不能判一致
         return False
+    # R24V2-B09命题反例（时序维度）：双方temporal_relationships均有内容
+    # 且方向相同的情况下，时序关系冲突（"给药前"vs"给药后"、"既往"vs
+    # "近期新发"）不得判一致。空/单侧有时序不做否决（信息不足保守升级）。
+    def _temporal_set(candidate: Any) -> frozenset[str]:
+        payload = getattr(candidate, "structured_payload", {}) or {}
+        rels = payload.get("temporal_relationships") or []
+        if not isinstance(rels, (list, tuple)):
+            return frozenset()
+        tokens = frozenset(
+            _TEMPORAL_CANONICAL.get(token, token)
+            for rel in rels
+            for token in _TEMPORAL_TOKEN_RE.findall(str(rel))
+        )
+        return tokens
+    primary_temporal = _temporal_set(primary)
+    verifier_temporal = _temporal_set(verifier)
+    if primary_temporal and verifier_temporal and not (
+        primary_temporal & verifier_temporal
+    ):
+        return False
     return True
+
+
+_TEMPORAL_TOKEN_RE = re.compile(
+    r"(给药前|给药后|用药前|用药后|治疗前|治疗后|既往|近期|新发|持续|一过性)"
+)
+# 同义归一：字面不同但医学时序语义相同的token合并，避免假冲突
+_TEMPORAL_CANONICAL = {
+    "给药前": "pre_administration",
+    "用药前": "pre_administration",
+    "治疗前": "pre_administration",
+    "给药后": "post_administration",
+    "用药后": "post_administration",
+    "治疗后": "post_administration",
+}
 
 
 _GRADE_RE = re.compile(r"(?:^|[^0-9])([1-5])\s*级|grade\s*([1-5])", re.IGNORECASE)
