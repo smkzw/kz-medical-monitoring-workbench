@@ -156,7 +156,9 @@ check(flowCss.includes(".monitoring-flow-node-counts") && flowCss.includes("font
 check(flowCss.includes(".monitoring-flow-table-wrap") && flowCss.includes("overflow-x: auto"), "detail table scrolls internally instead of the page");
 check(css.includes(".monitoring-flow-table-hrail") && css.includes(".monitoring-timeline-vrail"), "painted scroll rails remain visible when OS overlay scrollbars hide");
 check(css.includes(".monitoring-flow-table-scroll.is-overflow .monitoring-flow-table-wrap") && css.includes("scrollbar-width: none"), "overflow table hides native bar when custom hrail paints");
-check(css.includes(".monitoring-timeline-scroll-shell.is-overflow-y .monitoring-timeline-scroll") && /is-overflow-y[\s\S]{0,180}scrollbar-width:\s*none/.test(css), "overflow timeline hides native bar when custom vrail paints");
+// R24V2-U05：时间轴滚动owner归原生——溢出时原生Y条必须可见（scrollbar-width:auto），
+// 不得再走"自定义rail绘制时隐藏原生条"的旧分支（X滚动曾因此不可见）。
+check(css.includes(".monitoring-timeline-scroll-shell.is-overflow-y .monitoring-timeline-scroll") && /is-overflow-y \.monitoring-timeline-scroll \{[\s\S]{0,120}scrollbar-width:\s*auto/.test(css), "overflow timeline keeps the native bar visible (single scroll owner)");
 check(pageSource.includes("左右滑动查看完整明细"), "table overflow cue uses Chinese-native monitor wording");
 check(pageSource.includes("FlowTableScroll") || pageSource.includes("data-monitoring-table-hrail"), "homologous table paints a linked horizontal scroll affordance");
 check(pageSource.includes('aria-label="左右滑动查看完整明细"'), "table hrail exposes a Chinese accessible label");

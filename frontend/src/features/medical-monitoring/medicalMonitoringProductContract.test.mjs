@@ -57,7 +57,10 @@ assert.equal(pageSource.includes('data-timeline-geometry'), true, "events expose
 assert.equal(pageSource.includes("日期待确认记录"), true, "missing dates are isolated from the dated axis with user-facing copy");
 assert.equal(pageSource.includes("EventDetailPanel"), true, "clicking an event opens inspector detail");
 assert.equal(pageSource.includes("eventVisitContext"), true, "event detail derives visit context from actual event and visit dates");
-assert.equal(pageSource.includes("八类医学事件泳道概览"), true, "all eight lanes are visible in the first-screen journey summary");
+// R24V2-U06：泳道概览保留八域chip（零事件域折叠为“无记录”chip仍可见），
+// 可访问名同步更新——“首屏八域可见”语义不变。
+assert.equal(pageSource.includes("医学事件泳道概览"), true, "all eight lanes are visible in the first-screen journey summary");
+assert.equal(pageSource.includes('className={empty ? "monitoring-lane-chip is-empty" : "monitoring-lane-chip"}'), true, "zero-event lanes collapse to an explicit empty chip, not a blank box");
 assert.equal(pageSource.includes('sourceLocatorRefs.join("、")'), false, "timeline detail does not expose internal source locator ids");
 assert.equal(pageSource.includes('data-monitoring-zoom={zoomLevel}'), true, "page exposes the semantic zoom state to the presentation layer");
 assert.equal(pageSource.includes('event.key === "-"'), true, "semantic zoom accepts the minus keyboard shortcut");

@@ -1130,13 +1130,16 @@ export function MedicalMonitoringProductLoop({
           : null,
       }));
     } catch {}
-    const window = selectedSubjectWindow(resultPayload, subject, route);
+    // 局部不得命名window遮蔽全局：上方U18锚点要读window.scrollY
+    // （0925回归：同名const造成TDZ ReferenceError被catch吞掉，锚点
+    // 静默失效）。
+    const subjectWindow = selectedSubjectWindow(resultPayload, subject, route);
     navigate("journey", {
       site_ref: subject.site_ref || subject.site_id,
       subject_ref: subject.subject_ref || subject.subject_id,
       spine_ref: subject.spine_ref || subject.spineRef,
-      window_start: window.start,
-      window_end: window.end,
+      window_start: subjectWindow.start,
+      window_end: subjectWindow.end,
     });
   }, [navigate, resultPayload, route]);
   // R24V2-U18：从journey返回queries视图时恢复来源视图锚点（滚动/焦点）。
@@ -1156,6 +1159,14 @@ export function MedicalMonitoringProductLoop({
       });
     } catch {}
   }, [navigate, normalizedProjectId, publicRunToken, resultToken]);
+  // R24V2-U18：回到queries/site_overview视图时恢复来源锚点。此effect
+  // 必须在组件内（0925回归：误落在default export之后成模块顶层悬空
+  // 代码，routeView未定义导致任何import本模块即ReferenceError）。
+  useEffect(() => {
+    if (routeView === "queries" || routeView === "site_overview") {
+      restoreReturnAnchor();
+    }
+  }, [routeView, restoreReturnAnchor]);
   const selectResultRisk = useCallback((risk) => {
     if (risk?.__view) {
       navigate(risk.__view);
@@ -1389,8 +1400,3 @@ export function MedicalMonitoringProductLoop({
 }
 
 export default MedicalMonitoringProductLoop;
-  useEffect(() => {
-    if (routeView === "queries" || routeView === "site_overview") {
-      restoreReturnAnchor();
-    }
-  }, [routeView, restoreReturnAnchor]);

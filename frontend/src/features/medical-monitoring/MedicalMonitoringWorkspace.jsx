@@ -546,11 +546,18 @@ function ZoomControls({ zoomLevel, onZoomChange }) {
   );
 }
 
-function riskSeverityLabel(severity) {
-  if (severity === "high" || severity === "critical") return "高风险";
-  if (severity === "medium") return "中风险";
-  if (severity === "low") return "低风险";
-  return "风险待确认";
+// R24V2-B02：风险徽章按severity_source诚实呈现——recorded才有
+// 高/中/低风险着色；unknown显示"严重度未知"（severity字段只是占位，
+// 不得当医学分级）；inferred（非AE推定锚点）不作为医学风险徽章呈现。
+function riskSeverityInfo(risk) {
+  if (!risk) return null;
+  const source = risk.severity_source || risk.severitySource || "recorded";
+  if (source === "inferred") return null;
+  if (source === "unknown") return { label: "严重度未知", css: "unknown", chip: "未" };
+  if (risk.severity === "high" || risk.severity === "critical") return { label: "高风险", css: risk.severity, chip: "高" };
+  if (risk.severity === "medium") return { label: "中风险", css: "medium", chip: "中" };
+  if (risk.severity === "low") return { label: "低风险", css: "low", chip: "低" };
+  return null;
 }
 
 function eventVisitContext(event, visits = []) {
@@ -617,6 +624,11 @@ export function DomainTracks({
   // 宽度变化都触发重测；零宽初始状态等待测量（containerWidth=null时
   // scale保持旧行为，不留永久兜底宽度）。卸载时断开观察。
   const [expandedAggregates, setExpandedAggregates] = useState(() => new Set());
+  // R24V2-U13：聚合键盘路径——展开时焦点进入首个成员，收起时焦点
+  // 回到组开关（keyboard user不因按钮卸载而丢失位置）。autoFocus只在
+  // 用户显式展开的那次mount生效（选择联动自动展开不抢焦点）。
+  const aggregateToggleRefs = useRef(new Map());
+  const aggregateUserToggleKey = useRef(null);
   const scrollShellRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(null);
   useEffect(() => {
@@ -650,7 +662,18 @@ export function DomainTracks({
     containerWidth: zoomLevel === 0 && containerWidth ? containerWidth : null,
   }), [projection, zoomLevel, containerWidth]);
   const journeyMarkerFor = (eventRef) => (journeyEnabled && journeyMarkerByEventRef ? journeyMarkerByEventRef[eventRef] || null : null);
-  const riskCounts = (projection.currentRisks || []).reduce((counts, risk) => ({ ...counts, [risk.severity]: (counts[risk.severity] || 0) + 1 }), {});
+  // R24V2-B02：中/高风险计数只统计severity_source=recorded的行；
+  // unknown/inferred锚点不进风险分级统计（另有N条单独标示）。
+  const recordedRiskCounts = (projection.currentRisks || []).reduce(
+    (counts, risk) => {
+      const source = risk.severity_source || risk.severitySource || "recorded";
+      if (source === "recorded") counts[risk.severity] = (counts[risk.severity] || 0) + 1;
+      return counts;
+    },
+    {},
+  );
+  const unrecordedRiskCount = (projection.currentRisks || []).length
+    - Object.values(recordedRiskCounts).reduce((sum, n) => sum + n, 0);
   const axisMode = text(projection.temporalSpine?.axisMode, "calendar") === "study_day" ? "研究日" : "日历日期";
   const selectedRef = selectedEventRef || "";
   const monthTicks = timelineMonthTicks(layout.scale);
@@ -674,9 +697,9 @@ export function DomainTracks({
       <div className="monitoring-density-summary" aria-label="高密度医学旅程摘要">
         <strong>{(projection.events || []).length} 条事件 · {(projection.temporalSpine?.visits || []).length} 次访视 · {(projection.currentRisks || []).length} 个风险锚点</strong>
         <span>
-          高风险 {riskCounts.high || 0} · 中风险 {riskCounts.medium || 0}；中高风险逐项显示，低风险与常规记录
+          高风险 {recordedRiskCounts.high || 0} · 中风险 {recordedRiskCounts.medium || 0}；中高风险逐项显示，低风险与常规记录
           <span className="monitoring-phrase-keep">按缩放级别聚合</span>
-          。
+          {unrecordedRiskCount > 0 ? `；另有 ${unrecordedRiskCount} 条事件严重度未知或为系统推定锚点，不作分级展示` : ""}。
         </span>
       </div>
       <div className="monitoring-lane-index" aria-label="医学事件泳道概览（零事件域已折叠）">
@@ -753,16 +776,17 @@ export function DomainTracks({
                     const event = mark.event;
                     const selected = event.eventRef === selectedRef || (selectedRiskAnchorRef && event.riskAnchorRefs?.includes(selectedRiskAnchorRef));
                     const marker = journeyMarkerFor(event.eventRef);
-                    const riskLabel = event.risk
-                      ? `${DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel}·${riskSeverityLabel(event.risk.severity)}`
+                    const riskInfo = riskSeverityInfo(event.risk);
+                    const riskLabel = riskInfo
+                      ? `${DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel}·${riskInfo.label}`
                       : "";
                     const commonProps = {
                       type: "button",
-                      className: `monitoring-track-event monitoring-track-event-${mark.geometry}${mark.x > layout.scale.width - 170 ? " is-near-end" : ""}${selected ? " is-selected" : ""}${event.risk ? ` has-risk monitoring-track-risk-${event.risk.severity}` : ""}`,
+                      className: `monitoring-track-event monitoring-track-event-${mark.geometry}${mark.x > layout.scale.width - 170 ? " is-near-end" : ""}${selected ? " is-selected" : ""}${riskInfo ? ` has-risk monitoring-track-risk-${riskInfo.css}` : ""}`,
                       "data-event-ref": event.eventRef,
                       "data-timeline-geometry": mark.geometry,
                       "data-stack-row": mark.stackRow,
-                      "aria-label": `${DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel}：${event.eventLabel}${event.risk ? `，${riskSeverityLabel(event.risk.severity)}` : ""}${marker ? `，本轮变化：${marker.changeText}${marker.countSuffix}` : ""}`,
+                      "aria-label": `${DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel}：${event.eventLabel}${riskInfo ? `，${riskInfo.label}` : ""}${marker ? `，本轮变化：${marker.changeText}${marker.countSuffix}` : ""}`,
                       onClick: () => onEventSelect?.(event),
                       onKeyDown: focusAdjacentTimelineEvent,
                       title: `${event.eventLabel} · ${event.dateState === "exact" ? text(event.start, "实际日期待确认") : event.dateLabel}${event.end && event.end !== event.start ? ` — ${event.end}` : ""}`,
@@ -775,8 +799,8 @@ export function DomainTracks({
                           style={{ left: `${mark.x}px`, width: `${mark.width}px`, top: `${8 + (mark.stackRow + eventRowOffset) * 22}px` }}
                         >
                           <DomainIcon domain={event.domain} encoding={event.domainEncoding} size="track" title={DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel} />
-                          {event.risk ? <span className={`monitoring-compact-risk-label monitoring-track-risk-${event.risk.severity}`}>{riskSeverityLabel(event.risk.severity).slice(0, 1)}</span> : null}
-                          <span className="monitoring-track-event-title">{event.risk && <span className={`monitoring-track-risk monitoring-track-risk-${event.risk.severity}`}>{riskLabel}</span>}{event.eventLabel}</span>
+                          {riskInfo ? <span className={`monitoring-compact-risk-label monitoring-track-risk-${riskInfo.css}`}>{riskInfo.chip}</span> : null}
+                          <span className="monitoring-track-event-title">{riskInfo && <span className={`monitoring-track-risk monitoring-track-risk-${riskInfo.css}`}>{riskLabel}</span>}{event.eventLabel}</span>
                           {marker ? <MonitoringJourneyChangeMarker marker={marker} /> : null}
                           <small className="monitoring-track-event-detail">{text(event.start)} — {text(event.end)}</small>
                           <small className="monitoring-track-event-source">来源定位：{event.sourceLocatorRefs.length ? `已定位到 ${event.sourceLocatorRefs.length} 条原始记录` : "待确认"}</small>
@@ -790,8 +814,8 @@ export function DomainTracks({
                         style={{ left: `${mark.x}px`, top: `${8 + (mark.stackRow + eventRowOffset) * 22}px` }}
                       >
                         <DomainIcon domain={event.domain} encoding={event.domainEncoding} size="track" title={DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel} />
-                        {event.risk ? <span className={`monitoring-compact-risk-label monitoring-track-risk-${event.risk.severity}`}>{riskSeverityLabel(event.risk.severity).slice(0, 1)}</span> : null}
-                        <span className="monitoring-track-event-title">{event.risk && <span className={`monitoring-track-risk monitoring-track-risk-${event.risk.severity}`}>{riskLabel}</span>}{zoomLevel === 1 ? event.eventLabel : ""}</span>
+                        {riskInfo ? <span className={`monitoring-compact-risk-label monitoring-track-risk-${riskInfo.css}`}>{riskInfo.chip}</span> : null}
+                        <span className="monitoring-track-event-title">{riskInfo && <span className={`monitoring-track-risk monitoring-track-risk-${riskInfo.css}`}>{riskLabel}</span>}{zoomLevel === 1 ? event.eventLabel : ""}</span>
                         {marker ? <MonitoringJourneyChangeMarker marker={marker} /> : null}
                         <small className="monitoring-track-event-detail">{event.dateState === "exact" ? text(event.start, "实际日期待确认") : event.dateLabel}</small>
                         <small className="monitoring-track-event-source">来源定位：{event.sourceLocatorRefs.length ? `已定位到 ${event.sourceLocatorRefs.length} 条原始记录` : "待确认"}</small>
@@ -812,8 +836,8 @@ export function DomainTracks({
                         style={{ left: `${aggregate.x}px` }}
                       >
                         {expanded ? (
-                          <span className="monitoring-aggregate-members" role="list">
-                            {aggregate.eventRefs.map((ref) => (
+                          <span className="monitoring-aggregate-members" role="list" aria-label={`本组 ${aggregate.count} 条记录`}>
+                            {aggregate.eventRefs.map((ref, memberIndex) => (
                               <button
                                 key={ref}
                                 type="button"
@@ -821,11 +845,37 @@ export function DomainTracks({
                                 className="monitoring-aggregate-member"
                                 data-event-ref={ref}
                                 aria-pressed={ref === selectedRef}
+                                autoFocus={
+                                  memberIndex === 0
+                                  && aggregateUserToggleKey.current === aggregate.aggregateKey
+                                }
                                 onClick={() => onEventSelect?.({ event_ref: ref })}
                               >
                                 {ref}
                               </button>
                             ))}
+                            <button
+                              type="button"
+                              className="monitoring-aggregate-collapse"
+                              aria-expanded="true"
+                              aria-label={`收起本组 ${aggregate.count} 条记录`}
+                              onClick={() => {
+                                aggregateUserToggleKey.current = aggregate.aggregateKey;
+                                setExpandedAggregates((prev) => {
+                                  const next = new Set(prev);
+                                  next.delete(aggregate.aggregateKey);
+                                  return next;
+                                });
+                                requestAnimationFrame(() => {
+                                  aggregateToggleRefs.current.get(aggregate.aggregateKey)?.focus?.();
+                                  if (aggregateUserToggleKey.current === aggregate.aggregateKey) {
+                                    aggregateUserToggleKey.current = null;
+                                  }
+                                });
+                              }}
+                            >
+                              收起
+                            </button>
                           </span>
                         ) : (
                           <button
@@ -834,11 +884,23 @@ export function DomainTracks({
                             aria-expanded={expanded}
                             aria-label={`展开本组 ${aggregate.count} 条记录`}
                             title={aggregate.label}
-                            onClick={() => setExpandedAggregates((prev) => {
-                              const next = new Set(prev);
-                              next.add(aggregate.aggregateKey);
-                              return next;
-                            })}
+                            ref={(el) => {
+                              if (el) aggregateToggleRefs.current.set(aggregate.aggregateKey, el);
+                              else aggregateToggleRefs.current.delete(aggregate.aggregateKey);
+                            }}
+                            onClick={() => {
+                              aggregateUserToggleKey.current = aggregate.aggregateKey;
+                              setExpandedAggregates((prev) => {
+                                const next = new Set(prev);
+                                next.add(aggregate.aggregateKey);
+                                return next;
+                              });
+                              requestAnimationFrame(() => {
+                                if (aggregateUserToggleKey.current === aggregate.aggregateKey) {
+                                  aggregateUserToggleKey.current = null;
+                                }
+                              });
+                            }}
                           >
                             {`另有 ${aggregate.count} 条`}
                           </button>
