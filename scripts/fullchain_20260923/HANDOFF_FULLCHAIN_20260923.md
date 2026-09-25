@@ -483,3 +483,30 @@ A01-A17 全过；A18-A20 单一来源派生已交付；A21 逐物理调用账本
 ## 测试
 
 405 后端测试绿 + 11 例 R24 回归（新增B06失败记账、嵌套usage.detail两例）+ timeline几何测试 1 例通过。
+
+---
+
+# 0924V2 第二批（2026-09-25，HEAD 66a0595+）
+
+## U04/U14 聚合成员入口 — 浏览器实测通过
+
+- 聚合徽章从纯文本span变为**可点button**（React state展开，非DOM class hack——首次实现用classList.toggle但members是React条件渲染所以点击无效，已修正）。
+- 展开后成员列表逐条可点选中（event-LB_HEM-000000等实测可见）；选中事件在聚合内时自动展开。
+- 首次坑：`e.currentTarget.parentElement.classList.toggle` 对 React 条件渲染无效——必须用 state。
+
+## U07/U08 部分与无效日期 — 已落地
+
+- `parseTimelineDate` 拒绝含非`[\d-]`字符的输入（UK/UNK/XX不入前缀解析→null）；
+- `eventIsPendingDate` 增加：`date_precision === "partial"` 或 `parseTimelineDate(start) == null` → 进入待确认集合。不补01日、不静默跳过。
+
+## U11 ongoing/end_unknown 几何分类
+
+`eventGeometry` 新增 `ongoing`（event.ongoing===true或end_state=ongoing）与 `end_unknown` 分类——持续/结束未知不再坍缩成 point。
+
+## B04 分析覆盖边界 — 已声明
+
+`_ANALYSIS_TABLES` 是本lane合同范围（AE/MH/CM/EX子表），实验室/疗效/PK/PD/ADA为 not-assessed 如实单列——扩展域分析属独立工作包，不以"已分析7表"冒充全域覆盖。
+
+## 累计 0924V2
+
+B01（P0）/B02/B05/B06 + U01–U04/U07/U08/U09/U10/U11/U14 已落地并验证；405后端+11例R24回归+timeline几何全绿；浏览器实测：三视口56卡片、journey fit 917==宿主、聚合展开成员可见、待确认区可达。
