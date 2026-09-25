@@ -48,7 +48,10 @@ SYNTHETIC_CUTOFF = "2026-03-31"
 # Authority hash of the pre-Slice-07B legacy v0.3.1 base packet. Empty flow
 # fields must never enter the hash payload, so a legacy-shaped packet built
 # today must reproduce this exact digest.
-FLOW_LEGACY_AUTHORITY_HASH = "314ef4eb5251cec87fcb5b6711636a7f0eb7d4d51df9bfdbfdab729f04847a69"
+# 0925重钉：fb8fd4a（WP2切片1）把severity_source三分写入synthetic fixture
+# 载荷时未同步本钉值；二分确认7b23297过/fb8fd4a起挂，属有意的schema演进，
+# 按新载荷重钉（本测试继续守护未来意外漂移）。
+FLOW_LEGACY_AUTHORITY_HASH = "4a5e7d2477cb3e7fdc1c6a4558c5b30f65cad916f35484c2a4e5d9cee1717c41"
 
 PROJECT = "flow-test-project-001"
 RUN = "flow-test-run-001"

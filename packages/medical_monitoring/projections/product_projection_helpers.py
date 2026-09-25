@@ -120,6 +120,14 @@ def _risk_payload(
         "domain": risk.domain,
         "severity": risk.severity,
         "severity_zh": {"critical": "紧急", "high": "高", "medium": "中", "low": "低"}[risk.severity],
+        # R24V2-B02：recorded=源记录载明；unknown=源缺失（severity仅占位，
+        # 不得当中风险呈现）；inferred=非AE系统按域推定。
+        "severity_source": risk.severity_source,
+        "severity_source_zh": {
+            "recorded": "源记录载明",
+            "unknown": "严重度未知",
+            "inferred": "系统推定",
+        }[risk.severity_source],
         "risk_type_zh": risk.risk_type_zh,
         "subject_label": subject_label,
         "date_state": risk.date_state,

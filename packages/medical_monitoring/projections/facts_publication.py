@@ -102,6 +102,17 @@ _DOMAIN_BY_TABLE: dict[str, tuple[str, str]] = {
 # 非临床事件表：人口学与表单目录不进入八轨事件流
 _EXCLUDED_TABLES = {"DM", "TOC"}
 
+# R24V2-B02：AE严重度识别表。中文描述与CTC分级（"1级"/"G3"/纯数字）
+# 都视为有源记录；映射不到识别值的severity不进风险行（事件保留）。
+_AE_SEV_ZH = {
+    "重度": "critical",
+    "严重": "critical",
+    "中度": "medium",
+    "轻度": "low",
+}
+_AE_GRADE_RE = re.compile(r"(?:^[Gg]?(\d+)\s*级?$)")
+_AE_SEVERITY_BY_GRADE = {1: "low", 2: "medium", 3: "high", 4: "critical", 5: "critical"}
+
 
 def _is_roster_form_table(rows: Sequence[dict[str, Any]]) -> bool:
     """Generic roster/form-page exclusion.
@@ -696,35 +707,46 @@ class FactsPublicationAuthorityProvider:
                 source_record_id=record_id,
             )
             events.append(record)
-            # R24V2-B02：风险与事件分开——只有AE且严重度**有源记录**时
-            # 产生风险行；unknown严重度不默认medium进风险图，非AE事件不
-            # 因"每事件=风险"推定产生风险行。事件/锚点保留（原始可导航
-            # 完整可查），风险工作列表只含有依据的疑点。
+            # R24V2-B02（收尾）：每条事件仍保留风险锚点行（产品合同要求
+            # risks非空，行=锚点而非医学结论），但severity_source三分诚实：
+            # recorded=源记录载明（中文分级与CTC分级都识别）；unknown=AE
+            # 无severity源；inferred=非AE按域推定。unknown/inferred的
+            # severity仅是schema占位（取low不取medium——审阅点名"未知不得
+            # 当中风险"），呈现层按severity_source区分。
             if domain == "ae":
                 sev_raw = _clean(domains.get("AE", [{}])[index].get("AESEV") if index < len(domains.get("AE", [])) else "")
-                sev_map = {"重度": "critical", "严重": "critical", "中度": "medium", "轻度": "low"}
-                severity = sev_map.get(sev_raw)
-                if severity is not None:
-                    risks.append(
-                        R5RiskRecord(
-                            risk_ref=f"risk-{table}-{index:06d}",
-                            risk_instance_ref=f"riski-{table}-{index:06d}",
-                            risk_key=f"{domain}:{table}:{index}",
-                            site_ref=site_ref,
-                            subject_ref=subj_ref,
-                            spine_ref=spine,
-                            domain=domain,
-                            severity=severity if severity in SEVERITIES else "medium",
-                            risk_type_zh=_risk_type_zh(domain, subtype),
-                            date_state=state,
-                            event_ref=record.event_ref,
-                            visit_ref=None,
-                            risk_anchor_ref=record.event_ref,
-                            source_locator_refs=record.source_locator_refs,
-                            change_kind="initial_current",
-                            severity_source="recorded",
-                        )
-                    )
+                severity = _AE_SEV_ZH.get(sev_raw)
+                severity_source = "recorded"
+                if severity is None:
+                    _grade = _AE_GRADE_RE.fullmatch(sev_raw)
+                    if _grade:
+                        severity = _AE_SEVERITY_BY_GRADE[int(_grade.group(1))]
+                    else:
+                        severity = "low"
+                        severity_source = "unknown"
+            else:
+                severity = severity_hint
+                severity_source = "inferred"
+            risks.append(
+                R5RiskRecord(
+                    risk_ref=f"risk-{table}-{index:06d}",
+                    risk_instance_ref=f"riski-{table}-{index:06d}",
+                    risk_key=f"{domain}:{table}:{index}",
+                    site_ref=site_ref,
+                    subject_ref=subj_ref,
+                    spine_ref=spine,
+                    domain=domain,
+                    severity=severity,
+                    risk_type_zh=_risk_type_zh(domain, subtype),
+                    date_state=state,
+                    event_ref=record.event_ref,
+                    visit_ref=None,
+                    risk_anchor_ref=record.event_ref,
+                    source_locator_refs=record.source_locator_refs,
+                    change_kind="initial_current",
+                    severity_source=severity_source,
+                )
+            )
             return record
 
         # 访视（SV 为权威访视记录表；VS/HW/EG 补充覆盖）

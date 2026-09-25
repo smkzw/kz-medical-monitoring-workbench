@@ -268,3 +268,91 @@ def test_publication_dispatcher_registers_late_project_without_fallback() -> Non
 
     with pytest.raises(KeyError, match="proj-unknown"):
         dispatcher.get_packet("proj-unknown")
+
+
+def test_gap_domain_rows_stay_navigable_without_recorded_semantics(
+    tmp_path: Path,
+) -> None:
+    """R24V2-B07（0925核验）：canonical层排除的缺口域（EX/LB_HEM等），
+    其原始行在publication层仍可导航（原始可查），但不得获得recorded
+    医学语义——风险行只能是inferred锚点，且不能伪造分级。0925回归补钉：
+    此前"只有AE有源严重度才生成风险行"的实现使无AE项目risks=0触发
+    AUTHORITY_PACKET_INCOMPLETE，真实CSU项目公开包500。"""
+    workspace = tmp_path / "proj-gap"
+    artifacts = workspace / "runtime" / "artifacts"
+    artifacts.mkdir(parents=True)
+    # CSU真实缺口域形态：EX/LB_HEM整域9字段未获可用语义
+    _write_table_artifact(
+        artifacts,
+        "EX",
+        [
+            {
+                "SUBJID": "01001",
+                "EXTRT": "试验药A",
+                "EXDOSE": 300,
+                "EXDOSU": "mg",
+                "EXSTDAT": "2026-01-05",
+                "VISIT": "C1D1",
+            },
+            {
+                "SUBJID": "01002",
+                "EXTRT": "试验药A",
+                "EXDOSE": 0,
+                "EXDOSU": "mg",
+                "EXSTDAT": "2026-01-12",
+                "VISIT": "C1D8",
+            },
+        ],
+    )
+    _write_table_artifact(
+        artifacts,
+        "LB_HEM",
+        [
+            {
+                "SUBJID": "01001",
+                "LBTEST": "血红蛋白",
+                "LBORRES": 92,
+                "LBUNIT": "g/L",
+                "LBDAT": "2026-01-06",
+            },
+        ],
+    )
+    # 同包AE带源严重度：边界是按域/字段语义，不是全包降级
+    _write_table_artifact(
+        artifacts,
+        "AE",
+        [
+            {
+                "SUBJID": "01001",
+                "AETERM": "头痛",
+                "AESEV": "3级",
+                "AESTDAT": "2026-01-08",
+            },
+        ],
+    )
+    _atomic_write_json(
+        artifacts / "facts-manifest.json",
+        _build_facts_manifest(
+            artifacts,
+            project_id="proj-gap-test",
+            attempt_id="attempt-test",
+            mapping_version="map-test",
+            snapshot_ref="facts-snapshot-001",
+        ),
+    )
+    provider = FactsPublicationAuthorityProvider(workspace)
+    packet = provider.get_packet("proj-gap-test", snapshot_ref="facts-snapshot-001")
+
+    # 1) 缺口域原始行保留为可导航事件（EX→ip、LB_HEM→lab_exam）
+    event_domains = {e.domain for e in packet.events}
+    assert "ip" in event_domains and "lab_exam" in event_domains
+    # 2) 缺口域风险行只能是inferred锚点，severity不得是recorded中高分级
+    for risk in packet.risks:
+        if risk.domain in ("ip", "lab_exam"):
+            assert risk.severity_source == "inferred"
+            assert risk.severity not in ("critical", "high", "medium")
+    # 3) AE源严重度语义不受缺口域影响（1级=low, 3级=high, recorded）
+    ae_risk = next(r for r in packet.risks if r.domain == "ae")
+    assert ae_risk.severity == "high" and ae_risk.severity_source == "recorded"
+    # 4) 包完整性：每事件有锚点行，无AUTHORITY_PACKET_INCOMPLETE
+    assert len(packet.risks) == len(packet.events) == 4
