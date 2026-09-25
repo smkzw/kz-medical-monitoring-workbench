@@ -163,7 +163,7 @@ PROMPT_VERSION_BY_TASK: Dict[MonitoringAiTaskType, str] = {
         "monitoring-protocol-clause-structuring-v12"
     ),
     MonitoringAiTaskType.RULE_TEMPLATE_RECOMMENDATION: (
-        "monitoring-rule-template-recommendation-v1"
+        "monitoring-rule-template-recommendation-v2"
     ),
     MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS: (
         "monitoring-cross-table-clue-synthesis-v3"
@@ -3306,6 +3306,17 @@ class MonitoringAiService:
             candidate_count = (
                 "输出1至3个彼此具有实质差异且均可编译的确定性规则模板候选；"
                 "不得用标题或措辞变化伪装为不同候选。"
+                "preconditions/trigger_expression/exclusions 三个字段必须是"
+                "单键符号算子映射对象，禁止自然语言句子、中缀字符串或预计算"
+                "结论。可用算子：exists/missing/changed（操作数仅有"
+                '{"field_role"}）；all/any（非空列表）；not（单个子条件）；'
+                "date_compare（field_role/other_field_role/relation）、"
+                "date_delta_days（field_role/other_field_role/value）、"
+                "date_delta_range（field_role/other_field_role/min_days/"
+                "max_days）、ratio_range、no_corresponding_record。"
+                "所有 field_role 只能取 available_closed_roles 中列出的角色名。"
+                "示例：{\"all\":[{\"exists\":{\"field_role\":\"cm_start_date\"}},"
+                "{\"exists\":{\"field_role\":\"cm_end_date\"}}]}。"
             )
         elif job.task_type == MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS:
             candidate_count = (
@@ -4807,9 +4818,9 @@ class MonitoringAiService:
                             }
                         }
                     },
-                    "preconditions": "deterministic expression",
-                    "trigger_expression": "deterministic expression",
-                    "exclusions": "deterministic expression",
+                    "preconditions": {"exists": {"field_role": "exact rule_role from available_closed_roles"}},
+                    "trigger_expression": {"missing": {"field_role": "exact rule_role"}},
+                    "exclusions": {"missing": {"field_role": "exact rule_role"}},
                     "title": "中文规则标题",
                     "severity": "low | medium | high | critical",
                     "evidence_template": "引用字段角色的中文证据模板",
@@ -8486,6 +8497,150 @@ class MonitoringAiService:
         }
 
     @staticmethod
+    def _migrate_rule_template_expression_strings(
+        template: Dict[str, Any],
+        notes: List[Dict[str, Any]],
+        candidate_index: int,
+    ) -> None:
+        """确定性迁移第三类漂移：表达式字段的中缀字符串 → 符号算子映射。
+
+        20260925 W04-S2：rule_template_recommendation 的生成输出里
+        preconditions/trigger_expression/exclusions 被模型写成中缀字符串
+        （已证实形态全集："A IS NOT NULL [AND B …]"、"TRUE（中文注释）"、
+        "DOMAIN.FIELD is empty"、"NONE"），precompile 要求单键符号算子
+        映射，故 11 作业全部被拒。本迁移只处理上述受限文法：
+          "X IS NOT NULL [AND Y …]" → {"exists"/"all": …}（角色须在
+            listing_mapping.fields 内，否则原样保留）；
+          "TRUE（注释）"              → {"exists": subject角色}（仓库
+            夹具的最小precondition形态）；
+          "DOMAIN.FIELD is empty"    → {"missing": 反查到的角色}；
+          "NONE"（exclusions）       → 恒假结构 {"all":[A,{"not":A}]}
+            （不伪造任何医学语义）。
+        其余任何字符串形态原样保留、照旧 fail-closed；全部迁移动作写入
+        notes 留痕；调用方持有的原始输出不被就地改写（外层已 deepcopy）。
+        """
+        mapping = template.get("listing_mapping")
+        fields = mapping.get("fields") if isinstance(mapping, Mapping) else None
+        roles: set[str] = set()
+        by_field: Dict[Tuple[str, str], str] = {}
+        subject_role = ""
+        if isinstance(fields, Mapping):
+            for role, spec in fields.items():
+                if not isinstance(spec, Mapping):
+                    continue
+                role_text = str(role)
+                roles.add(role_text)
+                domain = str(spec.get("domain") or "").strip().upper()
+                field = str(spec.get("field") or "").strip()
+                if domain and field:
+                    by_field[(domain, field)] = role_text
+                if field.upper() == "SUBJID":
+                    subject_role = role_text
+
+        def _migrate_one(field_name: str, value: Any) -> Any:
+            if not isinstance(value, str):
+                return value
+            text = value.strip()
+            text = re.sub(r"[（(][^（）()]*[）)]\s*$", "", text).strip()
+            upper = text.upper()
+            if upper == "TRUE":
+                if not subject_role:
+                    return value
+                notes.append(
+                    {
+                        "normalization": "expression_string_migrated_to_symbolic_dsl",
+                        "candidate_index": candidate_index,
+                        "field": field_name,
+                        "form": "true",
+                        "source": value[:80],
+                        "target": {"exists": {"field_role": subject_role}},
+                    }
+                )
+                return {"exists": {"field_role": subject_role}}
+            if upper == "NONE" and field_name == "exclusions":
+                if not subject_role:
+                    return value
+                anchor = {"exists": {"field_role": subject_role}}
+                target = {"all": [anchor, {"not": anchor}]}
+                notes.append(
+                    {
+                        "normalization": "expression_string_migrated_to_symbolic_dsl",
+                        "candidate_index": candidate_index,
+                        "field": field_name,
+                        "form": "none",
+                        "source": value[:80],
+                        "target_kind": "never_true_conjunction",
+                    }
+                )
+                return target
+            conjuncts = re.split(r"\s+AND\s+", text, flags=re.IGNORECASE)
+            predicate_roles: List[str] = []
+            for conjunct in conjuncts:
+                match = re.fullmatch(
+                    r"([A-Za-z_][A-Za-z0-9_]*)\s+IS\s+NOT\s+NULL",
+                    conjunct.strip(),
+                    re.IGNORECASE,
+                )
+                if not match:
+                    predicate_roles = []
+                    break
+                role = match.group(1)
+                if role not in roles:
+                    predicate_roles = []
+                    break
+                predicate_roles.append(role)
+            if predicate_roles:
+                target: Dict[str, Any] = (
+                    {"exists": {"field_role": predicate_roles[0]}}
+                    if len(predicate_roles) == 1
+                    else {
+                        "all": [
+                            {"exists": {"field_role": role}}
+                            for role in predicate_roles
+                        ]
+                    }
+                )
+                notes.append(
+                    {
+                        "normalization": "expression_string_migrated_to_symbolic_dsl",
+                        "candidate_index": candidate_index,
+                        "field": field_name,
+                        "form": "is_not_null_conjunction",
+                        "source": value[:80],
+                        "roles": predicate_roles,
+                    }
+                )
+                return target
+            empty_match = re.fullmatch(
+                r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s+is\s+empty",
+                text,
+                re.IGNORECASE,
+            )
+            if empty_match:
+                role = by_field.get(
+                    (empty_match.group(1).upper(), empty_match.group(2))
+                )
+                if role:
+                    notes.append(
+                        {
+                            "normalization": "expression_string_migrated_to_symbolic_dsl",
+                            "candidate_index": candidate_index,
+                            "field": field_name,
+                            "form": "domain_field_is_empty",
+                            "source": value[:80],
+                            "role": role,
+                        }
+                    )
+                    return {"missing": {"field_role": role}}
+            return value
+
+        for field_name in ("preconditions", "trigger_expression", "exclusions"):
+            if field_name in template:
+                template[field_name] = _migrate_one(
+                    field_name, template[field_name]
+                )
+
+    @staticmethod
     def _normalize_rule_template_provider_output(
         job: MonitoringAiJob,
         output: Any,
@@ -8529,6 +8684,13 @@ class MonitoringAiService:
                 if isinstance(template, Mapping)
                 else ""
             )
+            template = payload.get("deterministic_template")
+            if isinstance(template, dict):
+                MonitoringAiService._migrate_rule_template_expression_strings(
+                    template,
+                    notes,
+                    0,
+                )
             notes.append(
                 {
                     "normalization": "bare_payload_envelope_completed",
@@ -8594,10 +8756,14 @@ class MonitoringAiService:
                         }
                     )
             template = structured.get("deterministic_template")
+            if isinstance(template, dict):
+                MonitoringAiService._migrate_rule_template_expression_strings(
+                    template,
+                    notes,
+                    index,
+                )
             template_title = (
-                str(template.get("title") or "").strip()
-                if isinstance(template, Mapping)
-                else ""
+                str(template.get("title") or "").strip() if isinstance(template, Mapping) else ""
             )
             if not str(candidate.get("title") or "").strip():
                 candidate["title"] = template_title or "确定性规则模板建议"

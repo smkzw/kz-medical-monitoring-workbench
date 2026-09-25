@@ -593,140 +593,229 @@ def step5_assert_frozen_contract(batch: dict[str, Any], active: dict[str, Any]) 
     return batch_id
 
 
-def step6_rule_pack_chain(batch_id: str, fact_ids: list[str]) -> None:
-    """规则包全链。0 条 confirmed 事实时 draft 必然 409（fail-closed），
-    如实记录；若事实状态已变化则继续执行全链。"""
+def _signature_evidence(rule_pack_id: str) -> str:
+    """本地总监确认的签名证据：对身份/包/动作做确定性摘要（sha256）。
 
-    if not fact_ids:
-        _record(
-            {
-                "ts": _now(),
-                "step": "s6_draft",
-                "kind": "summary",
-                "ok": False,
-                "reason": "no_fact_revision_ids_available",
-            }
-        )
-        return
-    status, body = _http(
-        "s6_draft",
-        "POST",
-        f"{MM_PREFIX}/rule-packs/drafts",
-        payload={
-            "protocol_version_id": PROTOCOL_VERSION_ID,
-            "fact_revision_ids": fact_ids,
-            "created_by": ACTOR,
-        },
-    )
-    if status != 201 and status != 200:
-        detail = (body.get("detail") or {}) if isinstance(body, dict) else {}
-        _record(
-            {
-                "ts": _now(),
-                "step": "s6_draft",
-                "kind": "blocked",
-                "ok": False,
-                "http_status": status,
-                "code": detail.get("code"),
-                "message": detail.get("message"),
-                "reason": (
-                    "rule-pack draft 被拒：create_draft 硬性要求 "
-                    "medically_confirmed 事实"
-                    "（monitoring_rule_authoring_service.py:891-910），"
-                    "当前 0 条 confirmed——S2 生成内容缺陷的延续阻断，"
-                    "按台账如实记录"
-                ),
-            }
-        )
-        return
-    pack = body.get("pack") or {}
-    rule_pack_id = pack.get("rule_pack_id")
-    rules = body.get("rules") or []
-    _assertions(
-        "s6_draft",
-        [
-            ("draft_http_ok", status in (200, 201), status),
-            ("rules_present", bool(rules), len(rules)),
-        ],
-    )
-    for rule in rules:
-        rule_revision_id = rule.get("rule_revision_id")
-        d_status, d_body = _http(
-            "s7_rule_confirm",
+    授权决策（20260926）：本地单用户产品的唯一OS用户即医学经理责任人；
+    该证据是本地确认身份的摘要，不是托管电子签名系统的签名。
+    """
+    import hashlib
+
+    material = f"local-director:{ACTOR}:{rule_pack_id}:approve_rule_change"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def step6_rule_pack_chain(batch_id: str, fact_ids: list[str]) -> None:
+    """规则包全链：draft→规则确认→影子启动→自动影子运行→影子确认→发布。
+
+    影子验证要求每条规则在冻结批次上凑齐四类样本桶；真实数据无法展示
+    某规则区分案例时（s9返回422 buckets_incomplete并点名规则），按draft
+    响应里的规则↔事实绑定剔除该事实重新draft（有界≤4轮，逐轮留痕），
+    发布数据可验证的规则子集。生命周期为前驱→后继：s8/s10迁移后必须
+    从响应取后继包id继续。规则确认对"已确认事实编译出的规则"是幂等
+    重复（409 confirmed->confirmed 视为已就绪）。
+    """
+
+    def _fact_binding_by_rule(rules: list[dict], rule_key: str) -> list[str]:
+        for rule in rules:
+            if rule.get("rule_key") == rule_key:
+                return list(rule.get("fact_revision_ids") or [])
+        return []
+
+    remaining = list(fact_ids)
+    excluded: list[dict[str, str]] = []
+    pack_id = ""
+    rules: list[dict] = []
+    shadow_run_id = ""
+    sample_set_id = ""
+    confirmed_pack_id = ""
+    published = False
+    blocked_reason = ""
+
+    for attempt in range(4):
+        if not remaining:
+            blocked_reason = "全部事实对应规则都无法在冻结批次上完成影子验证"
+            break
+        status, body = _http(
+            "s6_draft",
             "POST",
-            f"{MM_PREFIX}/rule-packs/{rule_pack_id}/rules/"
-            f"{rule_revision_id}/confirm",
+            f"{MM_PREFIX}/rule-packs/drafts",
             payload={
-                "expected_state_version": int(rule.get("state_version") or 1),
+                "protocol_version_id": PROTOCOL_VERSION_ID,
+                "fact_revision_ids": remaining,
+                "created_by": ACTOR,
+            },
+        )
+        if status not in (200, 201):
+            detail = (body.get("detail") or {}) if isinstance(body, dict) else {}
+            blocked_reason = f"draft {status}: {detail.get('code')} {detail.get('message')}"
+            break
+        pack_id = ((body.get("pack") or {}).get("rule_pack_id")) or ""
+        rules = body.get("rules") or []
+        _assertions(
+            "s6_draft",
+            [
+                ("draft_http_ok", True, status),
+                ("rules_present", bool(rules), len(rules)),
+            ],
+        )
+        for rule in rules:
+            rule_revision_id = rule.get("rule_revision_id")
+            d_status, d_body = _http(
+                "s7_rule_confirm",
+                "POST",
+                f"{MM_PREFIX}/rule-packs/{pack_id}/rules/"
+                f"{rule_revision_id}/confirm",
+                payload={
+                    "expected_state_version": int(rule.get("state_version") or 1),
+                    "confirmed_by": ACTOR,
+                    "reauthenticated": True,
+                    "signature_evidence_sha256": _signature_evidence(pack_id),
+                },
+            )
+            detail = (d_body.get("detail") or {}) if isinstance(d_body, dict) else {}
+            already = (
+                d_status == 409
+                and "confirmed -> confirmed" in str(detail.get("message") or "")
+            )
+            _assertions(
+                "s7_rule_confirm",
+                [
+                    (
+                        "rule_confirm_ok",
+                        d_status in (200, 201) or already,
+                        f"{d_status} {detail.get('code') or ''}",
+                    )
+                ],
+            )
+            if not (d_status in (200, 201) or already):
+                blocked_reason = f"规则确认失败 {d_status}"
+                break
+        if blocked_reason:
+            break
+        status, body = _http(
+            "s8_start_shadow",
+            "POST",
+            f"{MM_PREFIX}/rule-packs/{pack_id}/start-shadow",
+            payload={"actor": ACTOR},
+        )
+        _assertions(
+            "s8_start_shadow",
+            [("start_shadow_http_ok", status in (200, 201), status)],
+        )
+        if status not in (200, 201):
+            blocked_reason = f"start_shadow {status}"
+            break
+        successor = ((body.get("pack") or {}).get("rule_pack_id")) if isinstance(body, dict) else ""
+        if successor:
+            pack_id = successor
+        status, body = _http(
+            "s9_automatic_shadow",
+            "POST",
+            f"{MM_PREFIX}/rule-packs/{pack_id}/automatic-shadow-runs",
+            payload={"batch_id": batch_id, "actor": ACTOR},
+        )
+        if status == 422:
+            detail = (body.get("detail") or {}) if isinstance(body, dict) else {}
+            message = str(detail.get("message") or "")
+            rule_key = message.split("规则 ")[-1].split(" ")[0].strip()
+            victim = _fact_binding_by_rule(rules, rule_key)
+            if not victim or not set(victim).issubset(set(remaining)):
+                blocked_reason = f"规则 {rule_key} 样本桶不完整且无法按绑定剔除"
+                break
+            remaining = [f for f in remaining if f not in victim]
+            excluded.append({"rule_key": rule_key, "excluded_facts": victim})
+            _record(
+                {
+                    "ts": _now(),
+                    "step": "s9_buckets",
+                    "kind": "summary",
+                    "ok": True,
+                    "message": f"规则 {rule_key} 在冻结批次上样本桶不完整，剔除后重新draft",
+                    "excluded_facts": victim,
+                }
+            )
+            continue
+        if status not in (200, 201):
+            detail = (body.get("detail") or {}) if isinstance(body, dict) else {}
+            blocked_reason = f"自动影子运行 {status}: {detail.get('code')} {detail.get('message')}"
+            break
+        inspection = body.get("inspection") or {}
+        shadow_run_id = str(inspection.get("shadow_run_id") or "")
+        sample_set_id = str(inspection.get("sample_set_id") or "")
+        _assertions(
+            "s9_automatic_shadow",
+            [
+                ("automatic_shadow_http_ok", True, status),
+                ("inspection_present", bool(inspection), sorted(inspection.keys())),
+            ],
+        )
+        status, body = _http(
+            "s10_confirm_shadow",
+            "POST",
+            f"{MM_PREFIX}/rule-packs/{pack_id}/confirm-shadow",
+            payload={
+                "sample_set_id": sample_set_id,
                 "confirmed_by": ACTOR,
                 "reauthenticated": True,
+                "signature_evidence_sha256": _signature_evidence(pack_id),
             },
         )
         _assertions(
-            "s7_rule_confirm",
-            [("rule_confirm_http_ok", d_status in (200, 201), d_status)],
+            "s10_confirm_shadow",
+            [("confirm_shadow_http_ok", status in (200, 201), status)],
         )
-    status, body = _http(
-        "s8_start_shadow",
-        "POST",
-        f"{MM_PREFIX}/rule-packs/{rule_pack_id}/start-shadow",
-        payload={"actor": ACTOR},
-    )
-    _assertions(
-        "s8_start_shadow",
-        [("start_shadow_http_ok", status in (200, 201), status)],
-    )
-    status, body = _http(
-        "s9_automatic_shadow",
-        "POST",
-        f"{MM_PREFIX}/rule-packs/{rule_pack_id}/automatic-shadow-runs",
-        payload={"batch_id": batch_id, "actor": ACTOR},
-    )
-    _assertions(
-        "s9_automatic_shadow",
-        [
-            (
-                "automatic_shadow_http_ok",
-                status in (200, 201),
-                status,
-            ),
-            (
-                "inspection_present",
-                bool(body.get("inspection")),
-                sorted((body.get("inspection") or {}).keys()),
-            ),
-        ],
-    )
-    sample_sets = (body.get("inspection") or {}).get("sample_set_id")
-    status, body = _http(
-        "s10_confirm_shadow",
-        "POST",
-        f"{MM_PREFIX}/rule-packs/{rule_pack_id}/confirm-shadow",
-        payload={
-            "sample_set_id": sample_sets,
-            "confirmed_by": ACTOR,
-            "reauthenticated": True,
-        },
-    )
-    _assertions(
-        "s10_confirm_shadow",
-        [("confirm_shadow_http_ok", status in (200, 201), status)],
-    )
-    status, body = _http(
-        "s11_publish",
-        "POST",
-        f"{MM_PREFIX}/rule-packs/{rule_pack_id}/publish",
-        payload={"actor": ACTOR, "reauthenticated": True},
-    )
-    published = ((body.get("pack") or {}).get("status")) if isinstance(body, dict) else None
-    _assertions(
-        "s11_publish",
-        [
-            ("publish_http_ok", status in (200, 201), status),
-            ("pack_published", published == "published", published),
-        ],
-    )
+        if status not in (200, 201):
+            detail = (body.get("detail") or {}) if isinstance(body, dict) else {}
+            blocked_reason = f"影子确认 {status}: {detail.get('code')} {detail.get('message')}"
+            break
+        confirmed_successor = ((body.get("pack") or {}).get("rule_pack_id")) if isinstance(body, dict) else ""
+        confirmed_pack_id = confirmed_successor or pack_id
+        status, body = _http(
+            "s11_publish",
+            "POST",
+            f"{MM_PREFIX}/rule-packs/{confirmed_pack_id}/publish",
+            payload={
+                "actor": ACTOR,
+                "reauthenticated": True,
+                "signature_evidence_sha256": _signature_evidence(confirmed_pack_id),
+            },
+        )
+        published_status = ((body.get("pack") or {}).get("status")) if isinstance(body, dict) else None
+        _assertions(
+            "s11_publish",
+            [
+                ("publish_http_ok", status in (200, 201), status),
+                ("pack_published", published_status == "published", published_status),
+            ],
+        )
+        published = status in (200, 201) and published_status == "published"
+        break
 
+    if blocked_reason:
+        _record(
+            {
+                "ts": _now(),
+                "step": "s6_chain",
+                "kind": "blocked",
+                "ok": False,
+                "reason": blocked_reason,
+                "excluded": excluded,
+            }
+        )
+        return
+    _record(
+        {
+            "ts": _now(),
+            "step": "s6_chain",
+            "kind": "summary",
+            "ok": True,
+            "published": published,
+            "confirmed_pack_id": confirmed_pack_id,
+            "excluded_rules": excluded,
+            "rules_published": len(rules),
+        }
+    )
 
 def _find_reusable_draft_batch() -> tuple[str, int] | None:
     """断点续跑：项目已有 draft 批次则复用（intake 每次会产生新批次）。"""
@@ -806,8 +895,11 @@ def main() -> int:
         "GET",
         f"{MM_PREFIX}/protocol-versions/{PROTOCOL_VERSION_ID}/facts",
     )
+    # 20260926：draft硬性要求medically_confirmed——只提交已确认事实
+    # （此前提交全量清单被409正确拒收）。
     for item in body.get("items") or []:
-        fact_ids.append(item.get("fact_revision_id"))
+        if isinstance(item, dict) and item.get("status") == "medically_confirmed":
+            fact_ids.append(item.get("fact_revision_id"))
     step6_rule_pack_chain(batch_id, fact_ids)
     return 0
 

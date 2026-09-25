@@ -124,16 +124,26 @@ def test_bare_payload_envelope_completed_and_parses() -> None:
     assert normalized["input_revision_sha256"] == PROJECT_INPUT_REVISION_SHA
     candidate = normalized["candidates"][0]
     assert candidate["structured_payload"]["fact_type"] == "visit_window"
-    assert candidate["structured_payload"]["deterministic_template"] == (
-        output["deterministic_template"]
-    )
+    migrated = dict(output["deterministic_template"])
+    # R24V2-B04第三类形态迁移（20260926）：触发表达式中缀字符串按受限
+    # 文法迁为符号映射（SV.VISIT is empty → missing(反查角色)）。
+    migrated["trigger_expression"] = {
+        "missing": {"field_role": "metadata_visit_name"}
+    }
+    assert candidate["structured_payload"]["deterministic_template"] == migrated
     # 信封补齐动作可查。
-    assert notes == [
-        {
-            "normalization": "bare_payload_envelope_completed",
-            "payload_keys": sorted(output.keys()),
-        }
-    ]
+    migrated_note = {
+        "normalization": "expression_string_migrated_to_symbolic_dsl",
+        "candidate_index": 0,
+        "field": "trigger_expression",
+        "form": "domain_field_is_empty",
+        "source": "SV.VISIT is empty",
+        "role": "metadata_visit_name",
+    }
+    assert migrated_note in notes
+    assert any(
+        n.get("normalization") == "bare_payload_envelope_completed" for n in notes
+    )
     # 生产中失败的就是这一层校验：归一后必须通过。
     parsed = _ProviderOutput.model_validate(normalized)
     assert parsed.candidates[0].structured_payload["fact_type"] == "visit_window"
@@ -185,3 +195,125 @@ def json_copy(value: object) -> object:
     import json
 
     return json.loads(json.dumps(value, ensure_ascii=False))
+
+
+# --- 20260926 第三类漂移：表达式字符串 → 符号算子映射 ---
+
+
+def _expression_template(preconditions, trigger, exclusions) -> dict:
+    template = _template()
+    template["preconditions"] = preconditions
+    template["trigger_expression"] = trigger
+    template["exclusions"] = exclusions
+    template["listing_mapping"]["fields"]["subject_id"] = {
+        "domain": "SV",
+        "field": "SUBJID",
+    }
+    template["listing_mapping"]["fields"]["cm_start_date"] = {
+        "domain": "CM",
+        "field": "CMSTDAT",
+    }
+    template["listing_mapping"]["fields"]["cm_end_date"] = {
+        "domain": "CM",
+        "field": "CMENDAT",
+    }
+    return template
+
+
+def _drifted_with(preconditions, trigger, exclusions) -> dict:
+    payload = _bare_payload()
+    payload["deterministic_template"] = _expression_template(
+        preconditions, trigger, exclusions
+    )
+    return payload
+
+
+def _normalize_with(expressions) -> tuple:
+    notes: list = []
+    output = MonitoringAiService._normalize_rule_template_provider_output(
+        _job(), _drifted_with(*expressions), notes
+    )
+    template = output["candidates"][0]["structured_payload"][
+        "deterministic_template"
+    ]
+    return template, notes
+
+
+def test_infix_conjunction_migrates_to_all_of_exists():
+    template, notes = _normalize_with(
+        (
+            "cm_start_date IS NOT NULL AND cm_end_date IS NOT NULL",
+            "SV.VISIT is empty",
+            "NONE",
+        )
+    )
+    assert template["preconditions"] == {
+        "all": [
+            {"exists": {"field_role": "cm_start_date"}},
+            {"exists": {"field_role": "cm_end_date"}},
+        ]
+    }
+    forms = {n.get("form") for n in notes}
+    assert {
+        "is_not_null_conjunction",
+        "domain_field_is_empty",
+        "none",
+    } <= forms
+
+
+def test_single_conjunct_migrates_to_exists_without_all():
+    template, _ = _normalize_with(
+        ("cm_start_date IS NOT NULL", "SV.VISIT is empty", "NONE")
+    )
+    assert template["preconditions"] == {
+        "exists": {"field_role": "cm_start_date"}
+    }
+
+
+def test_true_with_comment_migrates_to_subject_exists():
+    template, notes = _normalize_with(
+        ("TRUE（对SV域每条记录逐条评估）", "SV.VISIT is empty", "NONE")
+    )
+    assert template["preconditions"] == {"exists": {"field_role": "subject_id"}}
+    assert any(n.get("form") == "true" for n in notes)
+
+
+def test_none_exclusions_migrates_to_never_true_conjunction():
+    template, _ = _normalize_with(
+        ("TRUE", "SV.VISIT is empty", "NONE")
+    )
+    exclusions = template["exclusions"]
+    assert exclusions["all"][0] == {"exists": {"field_role": "subject_id"}}
+    assert exclusions["all"][1] == {
+        "not": {"exists": {"field_role": "subject_id"}}
+    }
+
+
+def test_domain_field_is_empty_migrates_via_reverse_lookup():
+    template, _ = _normalize_with(
+        ("TRUE", "SV.VISIT is empty", "NONE")
+    )
+    assert template["trigger_expression"] == {
+        "missing": {"field_role": "metadata_visit_name"}
+    }
+
+
+def test_unknown_string_form_stays_fail_closed():
+    original = "cm_start_date > 3"
+    template, notes = _normalize_with(
+        (original, "SV.VISIT is empty", "NONE")
+    )
+    assert template["preconditions"] == original
+    assert not any(
+        n.get("field") == "preconditions"
+        and n.get("normalization") == "expression_string_migrated_to_symbolic_dsl"
+        for n in notes
+    )
+
+
+def test_unknown_role_stays_fail_closed():
+    original = "unknown_role_x IS NOT NULL"
+    template, _ = _normalize_with(
+        (original, "SV.VISIT is empty", "NONE")
+    )
+    assert template["preconditions"] == original

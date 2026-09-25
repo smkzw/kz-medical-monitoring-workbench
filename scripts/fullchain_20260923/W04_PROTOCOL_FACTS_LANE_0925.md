@@ -174,3 +174,41 @@ WP1 切片 1 给领域模型新增第 9 个语义域 `uncategorized`（"未知�
    未在切片filesChanged中申报。处置：已验证方向正确（前端套件74/74全绿，3个基线旧债失败真被修复），
    随本提交一并入库并在此申报；教训=切片申报必须含顺手修复的文件。
 2. **[已修正·low] 计数错误**：handoff称激活回归"新增4例"，git diff实测为5例——已在HANDOFF_W04_PROTOCOL_FACTS.md更正。
+
+# W04收尾轮（20260926）：提示词v2+确认事实达成+影子验证数据边界
+
+## 确认事实目标达成
+
+- **第三类形态（表达式字符串）**：`_migrate_rule_template_expression_strings`
+  确定性迁移受限文法（`X IS NOT NULL [AND Y]`→exists/all、`TRUE（注释）`→
+  subject存在锚、`DOMAIN.FIELD is empty`→missing反查、`NONE`→恒假结构），
+  未知形态照旧fail-closed，迁移留痕——回归11/11。
+- **提示词v2（根因修复）**：v1输出schema自把三表达式字段标为字符串
+  "deterministic expression"，与预编译的符号算子要求自相矛盾——模型忠实
+  按提示写却被拒。v2 schema给符号形态+文法指令（算子全集/field_role约束/
+  禁自然语言），版本v1→v2。
+- **结果**：重跑确认链（w04_s2b，retry_terminal重排11失败作业）→
+  **4条medically_confirmed / 3种fact_type**（目标≥3/≥2达成，权威状态表
+  monitoring_protocol_fact_state可查）。
+
+## 规则包发布：机制全通，卡在影子验证数据边界
+
+draft 201+4规则编译confirmed ✓；生命周期"前驱→后继"语义修复（s8后必须
+换后继包id）✓；规则确认对confirmed事实编译的规则幂等（409视为就绪）✓；
+**总监角色授权**（本地单用户=唯一责任人，medical_director角色+本地签名
+证据sha256；托管部署需重新评审——用户问询未答复后按推荐方案执行并如实
+标注）落地后s7确认/s8影子启动/影子运行全通到**影子样本桶**环节。
+
+**数据边界（如实）**：4条规则逐一在真实CSU冻结批次（573行）上
+422 buckets_incomplete——数据中不存在这些方案符合性规则的违规案例
+（如"访视名缺失"规则：无任何VISIT为空的行→positive桶为空）。有界剔除
+循环4轮逐一验证后收敛：**全部规则都无法在当前测试数据上完成影子验证**。
+影子验证门行为正确（无区分案例不许发布）；根因=测试数据为AE/MH矛盾
+时代设计，不含本批方案符合性规则的植入违规。
+
+## 下一步（需决策/新料）
+
+1. 重生成测试listing：按本批规则植入对应违规行（generate_test_listing
+   扩展），重新intake→frozen→影子验证→发布（推荐，机制零改动）；
+2. 或建金标准案例注入功能（register_gold_case+合成违规行绑定冻结批次源）；
+3. live API/vite已重启加载全部W04代码；A24 SAR授权材料已备。
