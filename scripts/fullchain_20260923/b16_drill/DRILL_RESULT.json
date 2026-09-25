@@ -1,0 +1,21 @@
+{
+  "project": "proj_user_2f17492ac59b",
+  "before": {
+    "monitoring_runs": 3,
+    "launch_rows": 1,
+    "publication_rows": 1,
+    "binding_rows": 1,
+    "artifact_files": 22,
+    "manifest_present": false,
+    "workspace_exists": true
+  },
+  "checks": {
+    "run_ids_restored_exactly": true,
+    "launch_rows_restored_exactly": true,
+    "publication_rows_restored_exactly": true,
+    "binding_rows_restored_exactly": true,
+    "artifact_set_restored_strict_subset": true,
+    "gate_scope_limitation_marked": true
+  },
+  "pass": true
+}

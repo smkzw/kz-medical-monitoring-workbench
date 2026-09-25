@@ -530,3 +530,76 @@ B01（P0）/B02/B05/B06 + U01–U04/U07/U08/U09/U10/U11/U14 已落地并验证�
 ## 测试
 
 250+ 测试绿；esbuild语法检查全过。
+
+# 0925 修复批（B02收尾/B07/B03/B16/U13/U18）
+
+## P0：真实项目公开包500 — 已修复（B02批次1的遗留）
+
+首批B02"只有AE有源严重度才生成风险行"与产品合同冲突：任何无AE严重度
+的项目risks=0触发AUTHORITY_PACKET_INCOMPLETE；真实CSU项目AESEV为CTC
+分级（"1级/3级"），中文映射不识别，故live包构建500。且该批提交破坏了
+WP2四测试（未跑）。修复：恢复每事件风险锚点行（行=锚点非医学结论），
+severity_source三分诚实（recorded/unknown/inferred），中文+CTC分级都识
+别（1级→low…5级→critical），unknown/inferred的severity占位取low不取
+medium。回归：test_severity_ctc_grades_and_honest_placeholders。
+
+## B07/B03：gap边界到publication消费层 — 已核验+用例钉住
+
+live探针（proj_user_2f17492ac59b）：461事件/461风险锚点行/16受试者；
+AE 32行全部recorded；unknown/inferred零占中高分级；gap域EX/LB_HEM映射
+为ip/lab_exam保持原始可导航，其风险行只能inferred。合成回归：
+test_gap_domain_rows_stay_navigable_without_recorded_semantics。
+
+## U18第三批遗留的两处致命错误 — 已修复
+
+1) useEffect误落在default export之后的模块顶层（routeView未定义→任何
+import ProductLoop即ReferenceError，3个jsx渲染测试在HEAD全挂=第三批
+"250绿"声明不实）；2) selectResultSubject新增的window.scrollY引用落在
+既有`const window =`遮蔽声明之后→TDZ ReferenceError被catch{}吞掉，返
+回锚点保存静默100%失效。effect移入组件内、局部改名subjectWindow。
+
+## U13聚合键盘路径 — 已落地
+
+展开焦点入首个成员（仅用户显式展开时）、新增"收起"开关、焦点回归组
+开关；选择联动自动展开不抢焦点。
+
+## B02前端呈现 — 已落地
+
+风险徽章按severity_source：recorded才有着色高/中/低；unknown中性
+"严重度未知"；inferred（非AE推定锚点）不呈现为医学风险。密度摘要的
+高/中计数只统计recorded，另有N条未知单独标示。DTO新增severity_source
+/_zh。
+
+## B16隔离恢复演练 — PASS（含三项缺口证据）
+
+全程隔离目录（/tmp副本，live零接触）。门内多库一致备份→整项目目录
+删除→官方restore：runs=3/launch=1/publication=1/binding=1/artifacts=22
+逐行一致恢复（run_ids/launch_rows/publications/bindings/artifacts全
+true），非"重跑同数量"。缺口如实记录（runs/mm_b16_drill_0925/）：
+①真实项目根的monitoring_ai.sqlite3（AI作业+call_ledger）、admissions/、
+document_authority_candidates/等触发workspace_unknown_member；
+②artifacts内facts-manifest.json、aemh-findings*、canonical_fact_sets/
+触发artifact_closure_invalid；③projects.is_synthetic=0被
+package_identity_mismatch拒绝——官方备份路径对真实CSU项目当前整体
+不可用，需门合同扩展工作包。半残布局（非整体删除）会在预检报
+workspace_member_missing，需先清场。
+
+## 旧债重钉/更新（均基线b32a12f2既有，非本批引入，已溯源）
+
+- flow legacy哈希重钉：fb8fd4a（severity三分入包）漂移未重钉，二分
+  7b23297过/fb8fd4a起挂，按新载荷重钉并注明。
+- monitoring_ai_service三测试按R24-01/B09后合同更新：observed缺失保持
+  空且作业完成（显式mismatch仍硬失败）；CRF委派句服务端整理入
+  uncertainty而非fail-closed修复循环（一次物理调用）；伪造证据编号的
+  等价证书删除+字段未决（不硬失败整作业但绝不伪造等价结论）。
+- 基线既有未修（台账在案，非监查范围或环境性）：
+  test_reference_translation_status_separates_flash_support_from_hy_body
+  （翻译子系统）、domainIconCatalog×2+workspaceApi（图标/契约旧债）、
+  test_late_project_dispatchers_keep_two_actual_api_results_isolated
+  （独立跑即挂，等待型环境依赖）。
+
+## 验证口径
+
+后端监测子集 815 passed / 1 failed（基线既有翻译债）/ 1 deselected
+（基线既有hang）；前端 jsx 6/6、mjs 68/71（3项基线旧债）；esbuild过。
+B16演练DRILL_RESULT.json入库。
