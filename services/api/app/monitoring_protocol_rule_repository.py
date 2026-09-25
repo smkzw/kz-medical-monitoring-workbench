@@ -4109,8 +4109,34 @@ class MonitoringProtocolRuleRepository:
             raise RulePackLifecycleError(
                 "confirmed pack shadow evidence is missing"
             )
+        release_run = self._shadow_run_from_row(release_run_row)
+        rule_shapes: dict[str, bool] = {}
+        for coverage in release_run.rule_coverages:
+            rid = coverage.rule_revision_id
+            defs_row = connection.execute(
+                """
+                SELECT preconditions_json, trigger_expression_json,
+                       exclusions_json
+                FROM monitoring_rule_definitions
+                WHERE rule_revision_id = ?
+                """,
+                (rid,),
+            ).fetchone()
+            if defs_row is None:
+                rule_shapes[rid] = True
+                continue
+            from services.api.app.monitoring_protocol_rules import (
+                expression_requires_diagnostic_coverage,
+            )
+
+            rule_shapes[rid] = expression_requires_diagnostic_coverage(
+                json.loads(defs_row["preconditions_json"] or "{}"),
+                json.loads(defs_row["trigger_expression_json"] or "{}"),
+                json.loads(defs_row["exclusions_json"] or "{}"),
+            )
         self._assert_release_coverage(
-            self._shadow_run_from_row(release_run_row)
+            release_run,
+            rule_requires_diagnostic=rule_shapes,
         )
         return str(lifecycle["shadow_run_id"])
 
@@ -4510,7 +4536,11 @@ class MonitoringProtocolRuleRepository:
         return tuple(sorted(projects))
 
     @staticmethod
-    def _assert_release_coverage(run: RuleShadowRun) -> None:
+    def _assert_release_coverage(
+        run: RuleShadowRun,
+        *,
+        rule_requires_diagnostic: dict[str, bool],
+    ) -> None:
         if not run.rule_coverages or not run.coverage_content_sha256:
             raise RulePackLifecycleError(
                 "legacy shadow run lacks P7C release coverage"
@@ -4523,7 +4553,13 @@ class MonitoringProtocolRuleRepository:
                 missing.append("negative")
             if coverage.boundary_count < 1:
                 missing.append("boundary")
-            if coverage.diagnostic_indeterminate_count < 1:
+            # R24V2-W04（20260926治理决策）：diagnostic_indeterminate
+            # 覆盖只要求含跨行算子（changed/no_corresponding_record）的
+            # 规则——纯行级exists/missing规则全可判定，构造上不可能产生
+            # 不可判定案例，强求即永久无法发布。
+            if rule_requires_diagnostic.get(
+                coverage.rule_revision_id, True
+            ) and coverage.diagnostic_indeterminate_count < 1:
                 missing.append("diagnostic_indeterminate")
             if len(coverage.authoritative_projects) < 1:
                 missing.append("authoritative_project")

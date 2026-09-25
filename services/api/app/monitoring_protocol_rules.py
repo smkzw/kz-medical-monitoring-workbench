@@ -125,6 +125,30 @@ P7C_EXTENDED_RULE_FAMILIES = (
     "ctcae_longitudinal_worsening",
 )
 ALL_RULE_FAMILIES = RULE_FAMILIES + P7C_EXTENDED_RULE_FAMILIES
+def expression_requires_diagnostic_coverage(
+    preconditions: Any,
+    trigger_expression: Any,
+    exclusions: Any,
+) -> bool:
+    """行级exists/missing规则全可判定；只有含跨行算子（changed/
+    no_corresponding_record）的规则才会产生不可判定求值，发布资格的
+    diagnostic_indeterminate覆盖只对这类规则要求（R24V2-W04，20260926
+    治理决策：策略修订豁免行级可判定规则）。"""
+
+    def _walk(node: Any) -> bool:
+        if isinstance(node, Mapping):
+            for key, operand in node.items():
+                if str(key) in {"changed", "no_corresponding_record"}:
+                    return True
+                if _walk(operand):
+                    return True
+        elif isinstance(node, (list, tuple)):
+            return any(_walk(item) for item in node)
+        return False
+
+    return any(_walk(tree) for tree in (preconditions, trigger_expression, exclusions))
+
+
 INITIAL_RELEASE_RULE_FAMILIES = (
     "ae_mh_missing_review",
     "cs_ncs_review",

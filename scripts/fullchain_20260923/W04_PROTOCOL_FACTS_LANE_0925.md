@@ -269,3 +269,28 @@ diagnostic_indeterminate）与行级可判定规则模型之间的设计矛盾�
 - 本地总监角色授权+签名证据（诚实标注非托管电子签名）
 - 测试listing重生成（W04违规植入块：MH/CM/SV共7行）
 - S3脚本：后继包id、有界剔除循环、签名证据、sha血缘更新
+
+# W04完全交付（20260926）：规则包发布 + S4消费实跑闭合
+
+治理决策（选项2）落地：`_assert_release_coverage`按规则形态判定
+diagnostic_indeterminate要求（共享walker expression_requires_
+diagnostic_coverage置于monitoring_protocol_rules）——行级exists/
+missing规则豁免，跨行规则（changed/no_corresponding_record）仍强制。
+配套：repository发布路径按规则定义表达式树计算形状；监管策略修订
+已在台账留痕。
+
+**发布**：规则包 monpack_15685e0579ffcfe014f9e63d **published**
+（site_specific适用性+适用性分配protoapp_6b0b43e7已确认；首发布子集=
+2条field_predicate完整性规则；sv两条changed规则属初始发布族需跨项目
+权威，如实剔除留待多项目阶段）。
+
+**S4消费实跑闭合**：已发布包 × 冻结批次 monbatch_22874520（植入违规的
+重生成listing，573行）→ 确定性引擎评估32条CM记录 → **精确产出2条
+review-only风险候选**（对应植入的空CMSTDAT行与既有空CMENDAT行——
+违规行被精确捕获，其余30条干净行零误报）+4条诊断记录。
+
+**W04方案事实lane全链交付完成**：方案事实提取（8主题）→AI裁决（14
+accept/0驳回）→医学确认（4条）→规则编译（4规则）→规则包治理发布
+（site_specific适用性+影子验证+P7C资格）→确定性引擎消费（review-only
+候选）。剩余两项如实记录：①sv两条changed规则待跨项目权威（多项目
+阶段）；②live API前端联动浏览器复验（代码已全部加载）。

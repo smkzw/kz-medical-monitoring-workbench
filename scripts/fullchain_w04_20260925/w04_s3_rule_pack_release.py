@@ -81,7 +81,7 @@ LISTING_PATH = (
 LISTING_SHA256_LEGACY = "71595d3b6296e38984e6123b607c7efdf117e5b22c87656edf2f5665bef908bd"
 LISTING_SHA256 = "3275d88d94c6543a66090b522f5f619ed214e91f807548a03528f98484a6ae82"
 ACTOR = "local-user-0249075bebd34158"
-RUN_STAMP = "w04s3-20260926xx"
+RUN_STAMP = "w04s3-20260926xxx"
 
 
 def _now() -> str:
@@ -905,9 +905,18 @@ def main() -> int:
     )
     # 20260926：draft硬性要求medically_confirmed——只提交已确认事实
     # （此前提交全量清单被409正确拒收）。
+    # 20260926治理决策：首发布子集=两条field_predicate完整性规则
+    # （cm/mh）；sv两条规则属visit_window_and_order初始发布族，发布资格
+    # 要求跨项目权威（≥2权威项目），本轮单项目如实剔除留待多项目阶段。
+    initial_family_facts = {"protfact_94bab98220015d2de5af0cac",
+                            "protfact_38bfcf3887913bfa014b645a"}
     for item in body.get("items") or []:
-        if isinstance(item, dict) and item.get("status") == "medically_confirmed":
-            fact_ids.append(item.get("fact_revision_id"))
+        if not isinstance(item, dict) or item.get("status") != "medically_confirmed":
+            continue
+        fid = item.get("fact_revision_id")
+        if fid in initial_family_facts:
+            continue
+        fact_ids.append(fid)
     step6_rule_pack_chain(batch_id, fact_ids)
     return 0
 
