@@ -239,3 +239,33 @@ draft 201+4规则编译confirmed ✓；生命周期"前驱→后继"语义修复
    跑影子，满足≥2权威项目——两次影子运行即双项目合规；
 3. **P7C策略产品决策**：首发布豁免或降级"≥2权威项目"要求（需产品/QA
    治理确认，不建议单方面代码放宽）。
+
+## 发布门最终定位（20260926）：P7C策略与行级规则模型的设计矛盾
+
+逐层打通后到达最后一段：发布资格（_assert_release_coverage）要求每条
+规则的影子覆盖含diagnostic_indeterminate案例。但：
+- 引擎语义（monitoring_protocol_rule_service:1307-1335）：exists/missing
+  对任何记录值都是可判定的（""=missing）；indeterminate仅来自
+  changed（缺previous）与跨行算子；
+- 因此纯行级规则（本包4条中的3条：cm/mh/visit_window的missing类规则）
+  **构造上不可能**产生diagnostic_indeterminate案例；注册假indeterminate
+  案例会被案例校验（actual≠expected）拒绝；
+- sv_visit_name_post_entry_change（changed算子）**可以**产生
+  diagnostic_indeterminate（单行受试者缺previous→indeterminate），已由
+  植入数据覆盖。
+
+结论：发布被阻塞不是数据或实现问题，而是P7C发布策略（每规则强制
+diagnostic_indeterminate）与行级可判定规则模型之间的设计矛盾。三个
+治理选项已列（金标准注入只解决changed类；行级规则需策略修订/豁免或
+重设计为含跨行条件）。当前状态：规则包monpack_2c30fd38处于confirmed
+（trusted shadow run已落库），距发布只差治理决策。
+
+## 本轮全部交付物（commit 16daef9 + 本次）
+
+- 提示词v2（符号文法）+表达式迁移（第三类形态，回归11/11）
+- 4条medically_confirmed事实/3种fact_type（权威状态表）
+- 规则包draft→4规则confirmed→影子启动→自动影子运行→trusted run
+- site_specific适用性迁移+分配确认（protoapp_6b0b43e7）
+- 本地总监角色授权+签名证据（诚实标注非托管电子签名）
+- 测试listing重生成（W04违规植入块：MH/CM/SV共7行）
+- S3脚本：后继包id、有界剔除循环、签名证据、sha血缘更新
