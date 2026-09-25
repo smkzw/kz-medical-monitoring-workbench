@@ -106,6 +106,18 @@ _ALLOWED_ROOT_FILES = frozenset(
     }
 )
 _IGNORABLE_NAMES = frozenset({".DS_Store", "Thumbs.db"})
+# R24V2-B16（0925门合同扩展）：真实项目工作区含两类官方门此前不认可的
+# 成员——①runtime/artifacts内DB内容哈希闭包之外的**辅助成员**（命名
+# manifest如facts-manifest.json、AI发现工件aemh-findings*.json、
+# canonical_fact_sets/压缩集、facts-manifests/等）；②项目根的**派生
+# 目录**（admissions/接入staging、document_authority_candidates/文档
+# 权威候选）。辅助成员不进DB寻址的artifact_closure（hex64合同原样），
+# 但作为普通package member打包（逐成员sha256入manifest，恢复原样写回）。
+# 派生目录不限制后缀（docx/xlsx是合法上传件），只禁符号链接、非常规
+# 文件与进行中临时件（.tmp/.part）。
+_DERIVED_ROOT_DIRS = ("admissions", "document_authority_candidates")
+_AUX_ARTIFACT_SUFFIXES = frozenset({".json", ".gz"})
+_IN_PROGRESS_SUFFIXES = frozenset({".tmp", ".part"})
 _SUPPORTED_PROFILE_SCHEMA = "mm-r7-profile-store-v1"
 _SUPPORTED_BINDING_SCHEMA = "r7-slice01-run-binding-v1"
 _SUPPORTED_RUNTIME_SCHEMAS = frozenset({"6", "5", "4"})
@@ -750,6 +762,72 @@ def _is_ignorable(path: Path) -> bool:
     return path.name in _IGNORABLE_NAMES or path.name.startswith("._")
 
 
+def _is_hex64_artifact_name(name: str) -> bool:
+    return Path(name).suffix == ".json" and bool(_HEX64.match(Path(name).stem))
+
+
+def _assert_member_file(path: Path, *, in_artifacts: bool) -> None:
+    """One auxiliary member file: regular, non-symlink, not in-progress."""
+    _assert_regular(path)
+    if path.suffix.lower() in _IN_PROGRESS_SUFFIXES:
+        raise ProjectBackupError("artifact_closure_invalid")
+    if in_artifacts and path.suffix.lower() not in _AUX_ARTIFACT_SUFFIXES:
+        raise ProjectBackupError("artifact_closure_invalid")
+
+
+def _iter_auxiliary_member_paths(workspace: Path) -> List[Path]:
+    """Enumerate auxiliary (derived) members outside the DB content-hash closure.
+
+    Shared by layout validation, member enumeration, and snapshot copying so
+    the acceptance rules live in exactly one place.  Paths are returned
+    workspace-relative and deterministically sorted.
+    """
+    paths: List[Path] = []
+
+    def _walk(directory: Path, prefix: str, *, in_artifacts: bool) -> None:
+        for child in sorted(directory.iterdir(), key=lambda p: p.name.encode("utf-8")):
+            if _is_ignorable(child):
+                continue
+            mode = child.lstat().st_mode
+            if stat.S_ISLNK(mode):
+                raise ProjectBackupError("workspace_member_symlink")
+            if stat.S_ISDIR(mode):
+                _walk(child, prefix + child.name + "/", in_artifacts=in_artifacts)
+                continue
+            if not stat.S_ISREG(mode):
+                raise ProjectBackupError("workspace_unknown_member")
+            _assert_member_file(child, in_artifacts=in_artifacts)
+            paths.append(Path(prefix + child.name))
+
+    artifacts = workspace / RUNTIME_DIR_NAME / ARTIFACT_DIR_NAME
+    if artifacts.exists():
+        _assert_directory(artifacts)
+        for child in sorted(artifacts.iterdir(), key=lambda p: p.name.encode("utf-8")):
+            if _is_ignorable(child):
+                continue
+            if child.is_file() and _is_hex64_artifact_name(child.name):
+                continue  # DB-referenced closure; governed by the artifact contract
+            mode = child.lstat().st_mode
+            if stat.S_ISLNK(mode):
+                raise ProjectBackupError("workspace_member_symlink")
+            if stat.S_ISDIR(mode):
+                _walk(child, RUNTIME_DIR_NAME + "/" + ARTIFACT_DIR_NAME + "/" + child.name + "/", in_artifacts=True)
+                continue
+            if not stat.S_ISREG(mode):
+                raise ProjectBackupError("workspace_unknown_member")
+            _assert_member_file(child, in_artifacts=True)
+            paths.append(
+                Path(RUNTIME_DIR_NAME) / ARTIFACT_DIR_NAME / child.name
+            )
+    for dirname in _DERIVED_ROOT_DIRS:
+        directory = workspace / dirname
+        if not directory.exists():
+            continue
+        _assert_directory(directory)
+        _walk(directory, dirname + "/", in_artifacts=False)
+    return paths
+
+
 def _is_sqlite_sidecar(name: str) -> bool:
     bases = set(_ALLOWED_ROOT_FILES) | {RUNTIME_DB_NAME}
     return any(
@@ -843,12 +921,15 @@ def _member_rel_paths(workspace: Path) -> List[str]:
             for child in sorted(artifacts.iterdir(), key=lambda p: p.name.encode("utf-8")):
                 if _is_ignorable(child):
                     continue
+                if not (child.is_file() and _is_hex64_artifact_name(child.name)):
+                    continue  # 辅助成员（命名manifest/子目录）由辅助遍历器枚举
                 _assert_regular(child)
-                if child.suffix != ".json" or not _HEX64.match(child.stem):
-                    raise ProjectBackupError("artifact_closure_invalid")
                 paths.append(
                     RUNTIME_DIR_NAME + "/" + ARTIFACT_DIR_NAME + "/" + child.name
                 )
+    paths.extend(
+        path.as_posix() for path in _iter_auxiliary_member_paths(workspace)
+    )
     return sorted(paths, key=lambda value: value.encode("utf-8"))
 
 

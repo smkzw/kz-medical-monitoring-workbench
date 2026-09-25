@@ -603,3 +603,35 @@ workspace_member_missing，需先清场。
 后端监测子集 815 passed / 1 failed（基线既有翻译债）/ 1 deselected
 （基线既有hang）；前端 jsx 6/6、mjs 68/71（3项基线旧债）；esbuild过。
 B16演练DRILL_RESULT.json入库。
+
+# 0925 B16门合同扩展 — 已落地（真实项目可备份恢复）
+
+v1演练的三项拒绝证据即需求清单，逐项落地（packages/medical_monitoring/
+runtime/project_backup_{support,base,archive}.py）：
+
+1. **辅助成员**：runtime/artifacts内DB内容哈希闭包之外的成员（命名
+   manifest如facts-manifest.json、AI发现aemh-findings*、canonical_
+   fact_sets/压缩集、facts-manifests/）与派生根目录（admissions/、
+   document_authority_candidates/）作为普通package member打包——
+   manifest逐成员sha256，恢复原样写回。hex64闭包合同不变（仍由
+   runtime DB登记驱动）。规则单一来源_iter_auxiliary_member_paths
+   （布局校验/成员枚举/快照复制三处共用）。
+2. **中文文件名**：包成员名不再要求ASCII（真实上传件
+   "【Data Listing】….xlsx"此前触发package_corrupt），禁控制字符与
+   其余路径卫生约束保留（zip UTF-8标志本就开启）。
+3. **is_synthetic**：不再拒绝真实项目（备份/恢复是同机数据安全机制，
+   备份包留在本机runtime_root下；跨项目身份强校验project_ids==目标
+   项目保留）。
+4. 恢复后reopen只针对5个SQLite成员（此前会把.gz等辅助成员当sqlite
+   打开）；sqlite主文件字节布局允许WAL checkpoint合法差异，内容
+   一致性由审计链/schema/闭包校验+行级核验承担。
+
+**隔离复测（drill_v2，PASS）**：真实形态整项目60文件（3运行/1launch/
+辅助成员/派生目录/中文上传件）→备份→整项目目录删除→官方恢复→
+非DB成员全部字节一致+DB行级一致+辅助成员逐项点名通过。fail-closed
+路径（临时件/符号链接/半残布局/必需库缺失）仍拒绝。回归：
+tests/test_project_backup_real_workspace.py（roundtrip+fail-closed）；
+监测子集817过/1失败（基线翻译债）/1 deselected（基线hang）。
+
+**边界声明**：备份包留在本机runtime_root/backups下，不外传；数据
+治理边界（患者数据不进git/不外发）不变。

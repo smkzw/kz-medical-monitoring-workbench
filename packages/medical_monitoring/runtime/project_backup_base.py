@@ -138,6 +138,11 @@ class ProjectBackupBase:
             if child.name in _ALLOWED_ROOT_FILES:
                 _assert_regular(child)
                 continue
+            # R24V2-B16：派生根目录（admissions/document_authority_
+            # candidates）的成员资格与闭包规则由辅助遍历器统一裁决。
+            if child.name in _DERIVED_ROOT_DIRS:
+                _assert_directory(child)
+                continue
             if child.name != RUNTIME_DIR_NAME:
                 raise ProjectBackupError("workspace_unknown_member")
             _assert_directory(child)
@@ -149,21 +154,18 @@ class ProjectBackupBase:
                 if nested.name == RUNTIME_DB_NAME:
                     _assert_regular(nested)
                 elif nested.name == ARTIFACT_DIR_NAME:
+                    # hex64闭包与辅助成员（命名json/子目录）的逐文件
+                    # 规则统一由辅助遍历器裁决；这里只确认目录形态。
                     _assert_directory(nested)
-                    for artifact in sorted(nested.iterdir(), key=lambda p: p.name.encode("utf-8")):
-                        if _is_ignorable(artifact):
-                            continue
-                        _assert_regular(artifact)
-                        if artifact.suffix == ".tmp":
-                            raise ProjectBackupError("artifact_closure_invalid")
-                        if artifact.suffix != ".json" or not _HEX64.match(artifact.stem):
-                            raise ProjectBackupError("artifact_closure_invalid")
                 else:
                     raise ProjectBackupError("workspace_unknown_member")
         if not (root / PROFILE_DB_NAME).exists():
             raise ProjectBackupError("workspace_member_missing")
         if not (root / RUN_BINDING_DB_NAME).exists():
             raise ProjectBackupError("workspace_member_missing")
+        # 辅助成员的逐文件规则（符号链接/临时件/闭包外后缀）在此显式执行，
+        # 使布局校验与打包枚举对同一输入产出同一裁决。
+        _iter_auxiliary_member_paths(root)
 
     @staticmethod
     def _schema_version(conn: sqlite3.Connection, relative_path: str) -> str:
@@ -369,8 +371,11 @@ class ProjectBackupBase:
                             project_ids.add(pid)
                             if pid == self.canonical_project_id and row[1]:
                                 project_name = str(row[1])
-                            if not bool(row[2]):
-                                raise ProjectBackupError("package_identity_mismatch")
+                            # R24V2-B16：不再以is_synthetic拒绝真实项目——
+                            # 备份/恢复是同机数据安全机制（备份包留在本机
+                            # runtime_root下），真实CSU项目恰恰是最需要
+                            # 可恢复的对象。身份边界仍由project_ids==该
+                            # 项目的强校验承担。
                     if "source_revisions" in tables:
                         project_ids.update(
                             str(row[0])
@@ -632,9 +637,11 @@ class ProjectBackupBase:
                 for child in source_artifact_dir.iterdir():
                     if _is_ignorable(child):
                         continue
+                    # 辅助成员（命名manifest/子目录）不属于DB内容哈希
+                    # 闭包，由下方辅助成员复制承担；闭包集合只统计hex64。
+                    if not (child.is_file() and _is_hex64_artifact_name(child.name)):
+                        continue
                     _assert_regular(child)
-                    if child.suffix != ".json" or not _HEX64.match(child.stem):
-                        raise ProjectBackupError("artifact_closure_invalid")
                     actual_artifact_files.add(child.stem)
             if actual_artifact_files != set(artifact_hashes):
                 raise ProjectBackupError("artifact_closure_invalid")
@@ -660,6 +667,14 @@ class ProjectBackupBase:
                 raise ProjectBackupError("artifact_closure_invalid")
             if emit_hooks:
                 self._hook("backup.artifact_closure_verification.after")
+        # R24V2-B16：辅助成员（DB闭包外的命名manifest/AI发现/压缩集与
+        # 派生根目录）逐文件字节复制进快照——与其它member一样经manifest
+        # 哈希与恢复校验，保证真实项目工作区1:1打包。
+        for relative in _iter_auxiliary_member_paths(source_workspace):
+            source = source_workspace / relative
+            target = destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
         members = self._member_bytes(destination)
         fingerprint = self._fingerprint(members)
         summary = self._summarize_workspace(
