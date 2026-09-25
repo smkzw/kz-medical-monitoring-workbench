@@ -64,12 +64,16 @@ def build_local_single_user_principal(
     if not user or not device or not projects:
         raise ValueError("local single-user identity requires user, device and project scope")
     identity_hash = sha256(f"{user}\0{device}\0cms-medical-workbench".encode("utf-8")).hexdigest()
+    # R24V2-W04（20260926授权决策）：本地单用户产品的唯一OS用户即本机
+    # 医学经理责任人，规则确认/发布（APPROVE_RULE_CHANGE，总监专属+
+    # 电子签名级）由其承担。注意：这是本地确认身份，不是托管电子签名
+    # 系统——托管多用户部署时必须重新评审该角色映射（附于台账）。
     return MonitoringAuthenticatedPrincipal.from_server_verified_claims(
         {
             "server_verified": True,
             "principal_id": f"local-user-{identity_hash[:16]}",
             "tenant_id": f"local-workbench-{identity_hash[16:32]}",
-            "roles": ["medical_manager", "system_admin"],
+            "roles": ["medical_manager", "system_admin", "medical_director"],
             "project_scope": list(projects),
             "issued_at": current.isoformat(),
             "expires_at": (current + timedelta(hours=12)).isoformat(),
