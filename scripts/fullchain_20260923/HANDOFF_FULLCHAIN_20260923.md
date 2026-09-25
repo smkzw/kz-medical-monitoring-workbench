@@ -635,3 +635,20 @@ tests/test_project_backup_real_workspace.py（roundtrip+fail-closed）；
 
 **边界声明**：备份包留在本机runtime_root/backups下，不外传；数据
 治理边界（患者数据不进git/不外发）不变。
+
+## B16后续发现：旧发布token按fail-closed如实失效（含刷新程序）
+
+重启API/vite后浏览器验收A24/A25时发现：CSU项目旧发布token
+（result-context:823fe310…）返回result_context_unavailable。根因已
+取证：今日B02收尾修复改变了R5包内容（severity语义+CTC识别+锚点行），
+重建包authority_hash=5659f5b3…≠发布时冻结digest=4f74931b…，resolver
+按fail-closed合同拒resolve——这是发布完整性机制的正确行为（同
+0915名册排除后的authority_identity_mismatch先例），非回归。
+
+刷新程序：对CSU项目重新prepare-and-start→新run→新发布token→
+浏览器验收。成本提示：daily lane含76映射+32线索+文档权威AI作业
+（0924首轮数小时）。**A24/A25浏览器级验收待新发布后执行**；A24的
+"800+发现"分母需SAR项目（846条）重跑，机制级（紧凑列表/宽屏三档）
+可在CSU 56条上先行验证并如实标注规模边界。今日B02前端severity_source
+呈现的浏览器端到端验证同样依赖新发布（DTO已验证：severity_source/_zh
+已入overview信封的risks行）。
