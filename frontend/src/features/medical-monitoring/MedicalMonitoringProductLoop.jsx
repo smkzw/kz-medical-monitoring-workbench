@@ -1120,6 +1120,16 @@ export function MedicalMonitoringProductLoop({
   }, [goToProgress, openResult]);
   const selectResultSubject = useCallback((subject) => {
     if (!resultPayload) return;
+    // R24V2-U18：进入journey前记住来源视图/滚动/焦点锚点，返回时恢复。
+    try {
+      sessionStorage.setItem(`mm-return-anchor:${normalizedProjectId}:${resultToken || publicRunToken || ""}`, JSON.stringify({
+        view: route.view || "queries",
+        scrollY: window.scrollY,
+        focusSelector: document.activeElement?.getAttribute("data-query-finding")
+          ? `[data-query-finding="${document.activeElement.getAttribute("data-query-finding")}"]`
+          : null,
+      }));
+    } catch {}
     const window = selectedSubjectWindow(resultPayload, subject, route);
     navigate("journey", {
       site_ref: subject.site_ref || subject.site_id,
@@ -1129,6 +1139,23 @@ export function MedicalMonitoringProductLoop({
       window_end: window.end,
     });
   }, [navigate, resultPayload, route]);
+  // R24V2-U18：从journey返回queries视图时恢复来源视图锚点（滚动/焦点）。
+  const restoreReturnAnchor = useCallback(() => {
+    try {
+      const raw = sessionStorage.getItem(`mm-return-anchor:${normalizedProjectId}:${resultToken || publicRunToken || ""}`);
+      if (!raw) return;
+      sessionStorage.removeItem(`mm-return-anchor:${normalizedProjectId}:${resultToken || publicRunToken || ""}`);
+      const anchor = JSON.parse(raw);
+      if (anchor.view && anchor.view !== "journey") navigate(anchor.view);
+      requestAnimationFrame(() => {
+        if (typeof anchor.scrollY === "number") window.scrollTo(0, anchor.scrollY);
+        if (anchor.focusSelector) {
+          const el = document.querySelector(anchor.focusSelector);
+          el?.focus?.();
+        }
+      });
+    } catch {}
+  }, [navigate, normalizedProjectId, publicRunToken, resultToken]);
   const selectResultRisk = useCallback((risk) => {
     if (risk?.__view) {
       navigate(risk.__view);
@@ -1362,3 +1389,8 @@ export function MedicalMonitoringProductLoop({
 }
 
 export default MedicalMonitoringProductLoop;
+  useEffect(() => {
+    if (routeView === "queries" || routeView === "site_overview") {
+      restoreReturnAnchor();
+    }
+  }, [routeView, restoreReturnAnchor]);
