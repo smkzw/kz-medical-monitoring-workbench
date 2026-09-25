@@ -225,8 +225,8 @@ check(
     "result entry navigation patch is unchanged",
   );
   check(
-    src.includes(needle(`<ProductRouteTabs route={route} resultLoaded={resultLoaded} onOverview={() => navigate("overview")} />`)),
-    "result route tabs render unchanged",
+    src.includes(needle(`<ProductRouteTabs route={route} resultLoaded={resultLoaded} onOverview={() => navigate("overview")} onQueries={() => navigate("queries")} />`)),
+    "result route tabs render with the journey back-to-queries control (A25/U18)",
   );
   check(
     src.includes(needle(`const onWorkbarAction = useCallback((target) => {\n    if (target === "wizard") openWizard();\n    else if (target === "history") setHistoryOpen(true);\n    else if (target === "progress") goToProgress();\n    else if (target === "result") openResult();\n    else if (target === "overview") navigate("overview", { public_run_token: "", result_context_token: "" });\n  }, [goToProgress, navigate, openResult, openWizard]);`)),
