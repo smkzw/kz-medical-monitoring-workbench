@@ -1118,18 +1118,30 @@ export function MedicalMonitoringProductLoop({
     if (row.resultAvailable === true) openResult(row.publicRunToken);
     else goToProgress(row.publicRunToken);
   }, [goToProgress, openResult]);
-  const selectResultSubject = useCallback((subject) => {
-    if (!resultPayload) return;
-    // R24V2-U18：进入journey前记住来源视图/滚动/焦点锚点，返回时恢复。
+  // R24V2-U18：进入journey前记住来源视图/滚动/焦点锚点，返回时恢复。
+  // 0925补齐：受试者/风险/发现三条进入路径共用本保存器（此前只有
+  // subject路径保存，风险/发现进入后返回无锚点可恢复）。
+  const saveReturnAnchor = useCallback(() => {
     try {
+      // 焦点锚点：发现卡用data-query-finding，事件/来源入口用
+      // data-event-ref；都没有则只恢复滚动。
+      const active = document.activeElement;
+      const findingId = active?.getAttribute?.("data-query-finding");
+      const eventRef = active?.getAttribute?.("data-event-ref");
       sessionStorage.setItem(`mm-return-anchor:${normalizedProjectId}:${resultToken || publicRunToken || ""}`, JSON.stringify({
         view: route.view || "queries",
         scrollY: window.scrollY,
-        focusSelector: document.activeElement?.getAttribute("data-query-finding")
-          ? `[data-query-finding="${document.activeElement.getAttribute("data-query-finding")}"]`
-          : null,
+        focusSelector: findingId
+          ? `[data-query-finding="${findingId}"]`
+          : eventRef
+            ? `[data-event-ref="${eventRef}"]`
+            : null,
       }));
     } catch {}
+  }, [normalizedProjectId, publicRunToken, resultToken, route.view]);
+  const selectResultSubject = useCallback((subject) => {
+    if (!resultPayload) return;
+    saveReturnAnchor();
     // 局部不得命名window遮蔽全局：上方U18锚点要读window.scrollY
     // （0925回归：同名const造成TDZ ReferenceError被catch吞掉，锚点
     // 静默失效）。
@@ -1141,7 +1153,7 @@ export function MedicalMonitoringProductLoop({
       window_start: subjectWindow.start,
       window_end: subjectWindow.end,
     });
-  }, [navigate, resultPayload, route]);
+  }, [navigate, resultPayload, route, saveReturnAnchor]);
   // R24V2-U18：从journey返回queries视图时恢复来源视图锚点（滚动/焦点）。
   const restoreReturnAnchor = useCallback(() => {
     try {
@@ -1150,13 +1162,21 @@ export function MedicalMonitoringProductLoop({
       sessionStorage.removeItem(`mm-return-anchor:${normalizedProjectId}:${resultToken || publicRunToken || ""}`);
       const anchor = JSON.parse(raw);
       if (anchor.view && anchor.view !== "journey") navigate(anchor.view);
-      requestAnimationFrame(() => {
+      // 查询列表是异步渲染：单次rAF恢复会被随后挂载的内容重置滚动，
+      // 有界重试直到滚动落位或次数耗尽（焦点同理）。
+      let attempts = 0;
+      const restore = () => {
+        attempts += 1;
         if (typeof anchor.scrollY === "number") window.scrollTo(0, anchor.scrollY);
         if (anchor.focusSelector) {
-          const el = document.querySelector(anchor.focusSelector);
-          el?.focus?.();
+          document.querySelector(anchor.focusSelector)?.focus?.();
         }
-      });
+        const settled = attempts >= 12
+          || typeof anchor.scrollY !== "number"
+          || Math.abs(window.scrollY - anchor.scrollY) < 4;
+        if (!settled) requestAnimationFrame(restore);
+      };
+      requestAnimationFrame(restore);
     } catch {}
   }, [navigate, normalizedProjectId, publicRunToken, resultToken]);
   // R24V2-U18：回到queries/site_overview视图时恢复来源锚点。此effect
@@ -1173,6 +1193,7 @@ export function MedicalMonitoringProductLoop({
       return;
     }
     if (!resultPayload || !risk) return;
+    saveReturnAnchor();
     const subject = (resultPayload.projection.subjects || []).find((item) => clean(item.subject_ref || item.subject_id) === clean(risk.subjectRef || risk.subject_ref)) || {
       subject_ref: risk.subjectRef,
       site_ref: risk.siteRef,
@@ -1190,11 +1211,12 @@ export function MedicalMonitoringProductLoop({
       event_ref: risk.eventRef || risk.event_ref,
       visit_ref: risk.visitRef || risk.visit_ref,
     });
-  }, [navigate, resultPayload, route]);
+  }, [navigate, resultPayload, route, saveReturnAnchor]);
   // N4：finding锚点事件精确定位——从AI线索卡片进入受试者旅程并聚焦
   // 该线索真实关联的事件（不默认选第一条AE）。
   const selectResultFinding = useCallback((finding) => {
     if (!resultPayload || !finding) return;
+    saveReturnAnchor();
     const subject = (resultPayload.projection.subjects || []).find((row) => clean(row.subject_ref || row.subject_id) === clean(finding.subject_ref)) || {
       subject_ref: finding.subject_ref,
       site_ref: finding.site_ref,
@@ -1214,7 +1236,7 @@ export function MedicalMonitoringProductLoop({
       risk_instance_ref: "",
       risk_anchor_ref: "",
     });
-  }, [navigate, resultPayload, route]);
+  }, [navigate, resultPayload, route, saveReturnAnchor]);
   const selectResultCenter = useCallback((center) => navigate("site_overview", { site_ref: center.siteRef || center.site_ref }), [navigate]);
   const selectResultEvent = useCallback((event) => navigate(routeView, {
     event_ref: event.eventRef || event.event_ref,
