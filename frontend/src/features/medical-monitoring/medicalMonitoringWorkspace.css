@@ -662,15 +662,12 @@
   background: transparent;
 }
 
-/* One painted vrail only: hide native bar when custom rail is shown (Round 5 P3). */
+/* R24V2-U05：单一滚动owner=时间轴滚动窗格本身。纵向自定义rail保留，
+   但不再隐藏原生滚动条（此前X滚动存在却不可见=隐藏滚动路径）。X/Y
+   原生条均可见、可键盘操作；webhook rail仅作为Y向辅助定位不改owner。 */
 .monitoring-timeline-scroll-shell.is-overflow-y .monitoring-timeline-scroll {
-  scrollbar-width: none;
-  scrollbar-gutter: auto;
-}
-
-.monitoring-timeline-scroll-shell.is-overflow-y .monitoring-timeline-scroll::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+  scrollbar-width: auto;
+  scrollbar-gutter: stable;
 }
 
 .monitoring-timeline-scroll::-webkit-scrollbar {
@@ -2501,4 +2498,13 @@ g[data-flow-link]:focus-visible .monitoring-flow-ribbon {
 .monitoring-aggregate-member[aria-pressed="true"] {
   border-color: var(--monitoring-accent, #d46a2e);
   font-weight: 600;
+}
+
+/* R24V2-U06: zero-event lane chips collapse to explicit empty state */
+.monitoring-lane-chip.is-empty {
+  opacity: 0.55;
+}
+.monitoring-lane-chip.is-empty small {
+  font-style: normal;
+  color: var(--monitoring-muted, #667085);
 }

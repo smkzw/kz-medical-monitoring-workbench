@@ -679,14 +679,23 @@ export function DomainTracks({
           。
         </span>
       </div>
-      <div className="monitoring-lane-index" aria-label="八类医学事件泳道概览">
-        {layout.lanes.map((lane) => (
-          <span key={lane.domain}>
-            <DomainIcon domain={lane.domain} size="summary" />
-            <strong>{laneChipLabel(DOMAIN_LABELS[lane.domain] || lane.encoding.shortLabel)}</strong>
-            <small>{lane.eventCount} 条</small>
-          </span>
-        ))}
+      <div className="monitoring-lane-index" aria-label="医学事件泳道概览（零事件域已折叠）">
+        {layout.lanes.map((lane) => {
+          // R24V2-U06：零事件域折叠为明确的“无记录”chip而非大空框；
+          // 计数即筛选入口的语义标签（点击滚动到对应泳道由既有锚点承担）。
+          const empty = lane.eventCount === 0;
+          return (
+            <span
+              key={lane.domain}
+              className={empty ? "monitoring-lane-chip is-empty" : "monitoring-lane-chip"}
+              aria-label={empty ? `${DOMAIN_LABELS[lane.domain] || lane.encoding.shortLabel}：无记录` : undefined}
+            >
+              <DomainIcon domain={lane.domain} size="summary" />
+              <strong>{laneChipLabel(DOMAIN_LABELS[lane.domain] || lane.encoding.shortLabel)}</strong>
+              <small>{empty ? "无记录" : `${lane.eventCount} 条`}</small>
+            </span>
+          );
+        })}
       </div>
       <TimelineScrollShell>
         <div ref={scrollShellRef} style={{ width: "100%", minWidth: 0 }}>
