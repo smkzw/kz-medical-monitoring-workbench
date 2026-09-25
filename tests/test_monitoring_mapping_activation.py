@@ -34,6 +34,7 @@ from services.api.app.monitoring_mapping_activation import (
 )
 from services.api.app.monitoring_mapping_draft_repository import (
     MonitoringMappingDraftRepository,
+    MonitoringMappingFieldSource,
 )
 
 
@@ -900,3 +901,441 @@ def test_duplicate_profile_field_fails_closed(activated) -> None:
         match="duplicate",
     ):
         service.compare_new_batch(PROJECT_ID, profile)
+
+
+def _complete_accepted_mapping_job(
+    ai_repository: MonitoringAiRepository,
+    *,
+    business_key: str,
+    input_revision: MonitoringAiInputRevision,
+    candidate_id: str,
+    accepted: bool = True,
+) -> tuple[str, str, str, str]:
+    """Create, complete and accept one mapping chunk job.
+
+    Returns ``(job_id, candidate_id, prompt_version, input_revision_sha256)``.
+    """
+
+    fields = [
+        {
+            "domain": "AE",
+            "field": "AETERM",
+            "total_rows": 100,
+            "non_empty_count": 100,
+            "null_rate": 0.0,
+            "inferred_type": "string",
+            "unique_value_count": 20,
+            "top_values": [],
+            "representative_values": [],
+            "anomaly_examples": [],
+        },
+        {
+            "domain": "AE",
+            "field": "AESTDTC",
+            "total_rows": 100,
+            "non_empty_count": 100,
+            "null_rate": 0.0,
+            "inferred_type": "date",
+            "unique_value_count": 30,
+            "top_values": [],
+            "representative_values": [],
+            "anomaly_examples": [],
+        },
+    ]
+    payload = {
+        "schema_version": "monitoring_ai_v1",
+        "field_profile": {
+            "schema_version": "monitoring_ai_field_profile_v2",
+            "scope": "complete_profile_chunk",
+            "project_id": PROJECT_ID,
+            "batch_id": "batch-source",
+            "batch_revision": 1,
+            "expected_domains": ["AE"],
+            "full_profile_sha256": PROFILE_HASH,
+            "full_input_sha256": INPUT_HASH,
+            "full_field_count": 2,
+            "domain": "AE",
+            "domain_field_count": 2,
+            "chunk_index": 1,
+            "chunk_total": 1,
+            "chunk_size_limit": 12,
+            "fields": fields,
+        },
+    }
+    request = MonitoringAiJobCreate(
+        project_id=PROJECT_ID,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+        input_revision=input_revision,
+        input_payload=payload,
+        prompt_version="monitoring-listing-field-mapping-v6",
+        profile_id="activation-test",
+        provider="test-provider",
+        requested_model="test-model",
+        max_attempts=2,
+        business_key=business_key,
+    )
+    job = ai_repository.create_or_get(request)
+    running = ai_repository.claim_next("worker-activation")
+    assert running is not None and running.job_id == job.job_id
+    evidence = tuple(
+        MonitoringAiEvidence(
+            evidence_id=f"evidence-{index}",
+            source_entry_id="source-listing",
+            source_content_sha256=SOURCE_HASH,
+            locator=f"profile://AE/{field['field']}",
+            raw_fields={
+                "domain": "AE",
+                "field": field["field"],
+                "inferred_type": field["inferred_type"],
+            },
+            input_revision_sha256=running.input_revision_sha256,
+        )
+        for index, field in enumerate(fields, start=1)
+    )
+    candidate = MonitoringAiCandidate(
+        candidate_id=candidate_id,
+        job_id=running.job_id,
+        project_id=PROJECT_ID,
+        task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING,
+        candidate_type="listing_field_mapping_set",
+        title="字段映射建议",
+        structured_payload={
+            "field_mappings": [
+                _mapping("AE", field["field"], evidence[index].evidence_id)
+                for index, field in enumerate(fields)
+            ]
+        },
+        claims=(
+            MonitoringAiClaim(
+                claim_id=f"claim-{candidate_id}",
+                kind=MonitoringAiClaimKind.RECOMMENDATION,
+                text="建议采用项目中立的字段语义映射。",
+                confidence=0.91,
+                uncertainty="仍需当前医学用户确认。",
+                user_action="校对字段角色后确认。",
+                evidence_ids=(evidence[0].evidence_id,),
+            ),
+        ),
+        evidence=evidence,
+        input_revision_sha256=running.input_revision_sha256,
+        prompt_version=running.prompt_version,
+        created_at=NOW,
+    )
+    ai_repository.complete(
+        running,
+        owner="worker-activation",
+        response_model="test-model",
+        raw_output={"candidate_count": 1},
+        candidates=(candidate,),
+    )
+    ai_repository.decide_candidate(
+        PROJECT_ID,
+        candidate.candidate_id,
+        decision=(
+            MonitoringAiCandidateStatus.ACCEPTED
+            if accepted
+            else MonitoringAiCandidateStatus.REJECTED
+        ),
+        actor="medical-manager",
+        reason="字段映射已逐项校对。" if accepted else "候选未通过医学复核。",
+        current_input_revision_sha256=running.input_revision_sha256,
+    )
+    return (
+        running.job_id,
+        candidate.candidate_id,
+        running.prompt_version,
+        running.input_revision_sha256,
+    )
+
+
+def _seed_dual_queue_confirmed_mapping(
+    tmp_path: Path,
+) -> tuple[
+    MonitoringMappingDraftRepository,
+    MonitoringAiRepository,
+    object,
+    dict[str, str],
+]:
+    """First-cycle chunk plus a second-cycle primary/verifier pair with one
+    adjudicated field, mirroring the production dual-review confirm flow.
+    """
+
+    database = tmp_path / "mapping-dual-queue.sqlite3"
+    ai_repository = MonitoringAiRepository(
+        database,
+        clock=lambda: NOW,
+        lease_seconds=300,
+    )
+    mapping_repository = MonitoringMappingDraftRepository(
+        database,
+        clock=lambda: NOW,
+    )
+    revision_v1 = MonitoringAiInputRevision(
+        project_id=PROJECT_ID,
+        batch_revision="batch-source-v1",
+        mapping_revision="pre-mapping-v1",
+        sources=(
+            MonitoringAiSourceBinding(
+                source_entry_id="source-listing",
+                source_content_sha256=SOURCE_HASH,
+            ),
+        ),
+    )
+    revision_v2 = revision_v1.model_copy(
+        update={
+            "batch_revision": "batch-source-v2",
+            "mapping_revision": "pre-mapping-v2",
+        }
+    )
+    job_a, candidate_a, prompt_a, revision_a_sha = _complete_accepted_mapping_job(
+        ai_repository,
+        business_key="listing-field-mapping:batch-source:AE:0001-of-0001",
+        input_revision=revision_v1,
+        candidate_id="candidate-first-cycle",
+    )
+    job_b, candidate_b, prompt_b, revision_b_sha = _complete_accepted_mapping_job(
+        ai_repository,
+        business_key=(
+            "listing-field-mapping:batch-source:AE:0001-of-0001:cycle2-primary"
+        ),
+        input_revision=revision_v2,
+        candidate_id="candidate-cycle2-primary",
+    )
+    job_c, candidate_c, _prompt_c, revision_c_sha = _complete_accepted_mapping_job(
+        ai_repository,
+        business_key=(
+            "listing-field-mapping:batch-source:AE:0001-of-0001:cycle2-verifier"
+        ),
+        input_revision=revision_v2,
+        candidate_id="candidate-cycle2-verifier",
+    )
+    assert revision_a_sha != revision_b_sha
+    assert revision_b_sha == revision_c_sha
+    draft = mapping_repository.assemble(
+        PROJECT_ID,
+        "batch-source",
+        PROFILE_HASH,
+        prompt_version="monitoring-listing-field-mapping-v6",
+        expected_job_ids=(job_a,),
+    )
+    mapping_repository.record_adjudication(
+        PROJECT_ID,
+        draft.draft_id,
+        domain="AE",
+        source_field="AETERM",
+        reconciliation_sha256=content_sha256(
+            {"domain": "AE", "source_field": "AETERM"}
+        ),
+        resolution="adjudicated_mapping",
+        job_id=job_b,
+        candidate_id=candidate_b,
+        evidence_ids=("evidence-1",),
+        review_sources=(
+            {
+                "cohort": "primary",
+                "job_id": job_b,
+                "candidate_id": candidate_b,
+                "evidence_ids": ("evidence-1",),
+            },
+            {
+                "cohort": "verifier",
+                "job_id": job_c,
+                "candidate_id": candidate_c,
+                "evidence_ids": ("evidence-1",),
+            },
+        ),
+    )
+    confirmed = mapping_repository.confirm(
+        PROJECT_ID,
+        draft.draft_id,
+        expected_version=draft.version,
+        confirmed_by="medical-manager",
+        confirmation_reason="双队列裁决收敛后确认字段映射。",
+        idempotency_key="confirm-dual-queue-test",
+    )
+    return (
+        mapping_repository,
+        ai_repository,
+        confirmed,
+        {
+            "job_a": job_a,
+            "job_b": job_b,
+            "job_c": job_c,
+            "candidate_a": candidate_a,
+            "candidate_b": candidate_b,
+            "candidate_c": candidate_c,
+            "prompt_a": prompt_a,
+            "prompt_b": prompt_b,
+            "revision_a_sha": revision_a_sha,
+            "revision_b_sha": revision_b_sha,
+            "database": str(database),
+        },
+    )
+
+
+def test_dual_queue_adjudicated_mapping_activates(tmp_path: Path) -> None:
+    repository, _ai_repository, confirmed, _ids = (
+        _seed_dual_queue_confirmed_mapping(tmp_path)
+    )
+    service = MonitoringMappingActivationService(repository, clock=lambda: NOW)
+    result = service.activate_confirmed_revision(
+        PROJECT_ID,
+        confirmed.mapping_revision,
+        expected_project_version=0,
+        activated_by="medical-manager",
+        activation_reason="启用双队列裁决收敛的映射。",
+        idempotency_key="activate-dual-queue-test",
+    )
+    assert result.replayed is False
+    active = service.get_active_mapping(PROJECT_ID)
+    assert active.mapping_revision == confirmed.mapping_revision
+
+
+def test_activation_rejects_receipt_less_extra_source_job(
+    tmp_path: Path,
+) -> None:
+    repository, _ai_repository, confirmed, ids = (
+        _seed_dual_queue_confirmed_mapping(tmp_path)
+    )
+    service = MonitoringMappingActivationService(repository, clock=lambda: NOW)
+    revision = repository.get_revision(PROJECT_ID, confirmed.mapping_revision)
+    # 无收据背书的第二轮作业是杂散来源：即便作业本身完成且候选已接受，
+    # 不在合法来源集合内就必须拒收。
+    with pytest.raises(
+        MonitoringMappingActivationSourceError,
+        match="job set changed",
+    ):
+        service._validate_source_chain(
+            revision,
+            expected_job_ids=(ids["job_a"],),
+        )
+
+
+def test_activation_rejects_rejected_candidate_declared_as_receipt(
+    tmp_path: Path,
+) -> None:
+    repository, ai_repository, confirmed, ids = (
+        _seed_dual_queue_confirmed_mapping(tmp_path)
+    )
+    revision_v2_revision_sha = ids["revision_b_sha"]
+    database = ids["database"]
+    service = MonitoringMappingActivationService(repository, clock=lambda: NOW)
+    revision = repository.get_revision(PROJECT_ID, confirmed.mapping_revision)
+    # 构造一个被驳回候选的作业，并把伪造成收据来源：来源集合一致，
+    # 但作业级校验必须 fail-closed。
+    revision_rejected = MonitoringAiInputRevision(
+        project_id=PROJECT_ID,
+        batch_revision="batch-source-v3",
+        mapping_revision="pre-mapping-v3",
+        sources=(
+            MonitoringAiSourceBinding(
+                source_entry_id="source-listing",
+                source_content_sha256=SOURCE_HASH,
+            ),
+        ),
+    )
+    job_d, candidate_d, prompt_d, revision_d_sha = _complete_accepted_mapping_job(
+        ai_repository,
+        business_key=(
+            "listing-field-mapping:batch-source:AE:0001-of-0001:stray"
+        ),
+        input_revision=revision_rejected,
+        candidate_id="candidate-stray",
+        accepted=False,
+    )
+    assert revision_d_sha != revision_v2_revision_sha
+    with sqlite3.connect(database) as connection:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            """
+            SELECT candidate_json FROM monitoring_ai_candidates
+            WHERE project_id = ? AND candidate_id = ?
+            """,
+            (PROJECT_ID, candidate_d),
+        ).fetchone()
+    candidate_hash = content_sha256(json.loads(row["candidate_json"]))
+    stray_source = MonitoringMappingFieldSource(
+        domain="AE",
+        source_field="AESTDTC",
+        job_id=job_d,
+        candidate_id=candidate_d,
+        candidate_content_sha256=candidate_hash,
+        input_revision_sha256=revision_d_sha,
+        prompt_version=prompt_d,
+        evidence_ids=("evidence-2",),
+    )
+    tampered = revision.model_copy(
+        update={"field_sources": revision.field_sources + (stray_source,)}
+    )
+    with pytest.raises(
+        MonitoringMappingActivationSourceError,
+        match="no longer accepted",
+    ):
+        service._validate_source_chain(
+            tampered,
+            expected_job_ids=(ids["job_a"],),
+            receipt_job_ids=(ids["job_b"], job_d),
+        )
+
+
+def test_activation_preserves_receipt_source_lineage(tmp_path: Path) -> None:
+    repository, _ai_repository, confirmed, ids = (
+        _seed_dual_queue_confirmed_mapping(tmp_path)
+    )
+    service = MonitoringMappingActivationService(repository, clock=lambda: NOW)
+    service.activate_confirmed_revision(
+        PROJECT_ID,
+        confirmed.mapping_revision,
+        expected_project_version=0,
+        activated_by="medical-manager",
+        activation_reason="启用双队列裁决收敛的映射。",
+        idempotency_key="activate-dual-queue-test",
+    )
+    revision = repository.get_revision(PROJECT_ID, confirmed.mapping_revision)
+    by_field = {
+        (source.domain, source.source_field): source
+        for source in revision.field_sources
+    }
+    adjudicated = by_field[("AE", "AETERM")]
+    retained = by_field[("AE", "AESTDTC")]
+    # 收据来源保留其第二轮输入修订（溯源不被改写为首轮主修订）。
+    assert adjudicated.job_id == ids["job_b"]
+    assert adjudicated.source_origin == "adjudication_receipt"
+    assert (
+        adjudicated.input_revision_sha256
+        == ids["revision_b_sha"]
+        != revision.input_revision_sha256
+    )
+    assert retained.input_revision_sha256 == revision.input_revision_sha256
+    with sqlite3.connect(ids["database"]) as connection:
+        row = connection.execute(
+            """
+            SELECT input_revision_sha256 FROM monitoring_ai_jobs
+            WHERE job_id = ?
+            """,
+            (ids["job_b"],),
+        ).fetchone()
+    assert row[0] == ids["revision_b_sha"]
+
+
+def test_confirmed_draft_immutability_trigger_blocks_tampering(
+    tmp_path: Path,
+) -> None:
+    repository, confirmed = _seed_confirmed_mapping(tmp_path)
+    draft = repository.find_draft_for_batch(
+        PROJECT_ID,
+        "batch-source",
+        full_profile_sha256=PROFILE_HASH,
+    )
+    assert draft is not None
+    database = tmp_path / "mapping.sqlite3"
+    with sqlite3.connect(database) as connection:
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+            connection.execute(
+                """
+                UPDATE monitoring_mapping_drafts
+                SET expected_job_ids_json = '[]'
+                WHERE project_id = ? AND draft_id = ?
+                """,
+                (PROJECT_ID, draft.draft_id),
+            )

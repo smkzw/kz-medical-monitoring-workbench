@@ -559,12 +559,17 @@ await rulePackApi.confirmRulePackShadow("p/1", "monpack 1", {
   confirmed_by: "medical_manager",
   expected_pack_revision: 2,
 });
+await rulePackApi.confirmRulePackRule("p/1", "monpack 1", "monrulerev 1", {
+  expected_state_version: 2,
+  confirmed_by: "medical_manager",
+  reauthenticated: true,
+});
 await rulePackApi.publishRulePack("p/1", "monpack 1", {
   actor: "medical_manager",
   expected_pack_revision: 2,
 });
 await rulePackApi.getRulePackShadowLineageEvidence("p/1", "monpack 1");
-check(rulePackCalls.length === 11, "performs the complete rule release chain calls");
+check(rulePackCalls.length === 12, "performs the complete rule release chain calls");
 check(
   rulePackCalls[0].url.endsWith("/api/projects/p%2F1/modules/medical-monitoring/rule-packs"),
   "lists project rule packs",
@@ -628,17 +633,31 @@ check(
   "confirmation submits the exact frozen sample set only",
 );
 check(
-  rulePackCalls[9].url.endsWith("/rule-packs/monpack%201/publish")
+  rulePackCalls[9].url.endsWith(
+    "/rule-packs/monpack%201/rules/monrulerev%201/confirm",
+  )
     && rulePackCalls[9].options.method === "POST",
+  "confirms a single pack rule through the per-rule confirm endpoint",
+);
+const confirmRuleBody = JSON.parse(rulePackCalls[9].options.body);
+check(
+  confirmRuleBody.expected_state_version === 2
+    && confirmRuleBody.reauthenticated === true
+    && confirmRuleBody.confirmed_by === "medical_manager",
+  "per-rule confirm submits CAS version with the reauthenticated medical manager",
+);
+check(
+  rulePackCalls[10].url.endsWith("/rule-packs/monpack%201/publish")
+    && rulePackCalls[10].options.method === "POST",
   "publishes the confirmed pack explicitly",
 );
 check(
-  rulePackCalls[10].url.endsWith("/rule-packs/monpack%201/shadow-lineage-evidence")
-    && rulePackCalls[10].options.method === "GET",
+  rulePackCalls[11].url.endsWith("/rule-packs/monpack%201/shadow-lineage-evidence")
+    && rulePackCalls[11].options.method === "GET",
   "restores lineage-bound shadow evidence read-only",
 );
 check(
-  rulePackCalls[10].options.body === undefined,
+  rulePackCalls[11].options.body === undefined,
   "lineage evidence request carries no body",
 );
 

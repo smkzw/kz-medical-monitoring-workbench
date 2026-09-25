@@ -28,7 +28,7 @@ export const WORKSPACE_SYNTHETIC_IDENTITY = Object.freeze({
   return_context_key: "synthetic-return-overview",
   authority_hash: HASH_2,
   source_snapshot_sha256: HASH,
-  response_snapshot_sha256: "042f4a87b875047f22bea82a6bf5d3fa5037a9c00f64b9e9add20cfad631a72c",
+  response_snapshot_sha256: "fbbb7b89456674e5680601fd068a6648a6bc98c898e2ff4388b5508eba52c2b3",
   principal_identity_hash: HASH,
   authorization_decision_sha256: HASH_2,
   audit_id: "synthetic-audit-r5-overview",
@@ -43,6 +43,7 @@ const DOMAIN_ENCODINGS = Object.freeze([
   { domain: "hospital_procedure", event_shape: "doorframe", line_style: "solid", short_label_zh: "住院/操作" },
   { domain: "symptom_efficacy", event_shape: "circle", line_style: "trend", short_label_zh: "症状/疗效" },
   { domain: "protocol_compliance", event_shape: "single_flag", line_style: "bracket", short_label_zh: "方案符合" },
+  { domain: "uncategorized", event_shape: "circle", line_style: "dot_dash", short_label_zh: "未分类" },
 ]);
 
 function domainEncoding(domain) {
@@ -253,12 +254,12 @@ export const WORKSPACE_SYNTHETIC_SITE_OVERVIEW = Object.freeze({
   identity: {
     ...WORKSPACE_SYNTHETIC_OVERVIEW.identity,
     site_ref: "synthetic-site-01",
-    response_snapshot_sha256: "880691fabcca8bfb2fae4a88efac2691ce6d302f513e5ae027349ead93836095",
+    response_snapshot_sha256: "06aec51700bc7d19c78bdf1573c1f32c15260a339c5ff37ca426549ad840cbe7",
   },
-  response_snapshot_sha256: "880691fabcca8bfb2fae4a88efac2691ce6d302f513e5ae027349ead93836095",
+  response_snapshot_sha256: "06aec51700bc7d19c78bdf1573c1f32c15260a339c5ff37ca426549ad840cbe7",
   read_handoff: {
     ...WORKSPACE_SYNTHETIC_OVERVIEW.read_handoff,
-    response_snapshot_sha256: "880691fabcca8bfb2fae4a88efac2691ce6d302f513e5ae027349ead93836095",
+    response_snapshot_sha256: "06aec51700bc7d19c78bdf1573c1f32c15260a339c5ff37ca426549ad840cbe7",
   },
 });
 
@@ -272,7 +273,7 @@ const SUBJECT_IDENTITY = Object.freeze({
   window_end: "2026-08-20",
   return_context_key: "synthetic-return-subject-001",
   target_projection_content_hash: HASH_2,
-  response_snapshot_sha256: "d4fa49debfdadcb004544243bb05ceb31dc8de97fb4d78e6b6ba8163acd05ef8",
+  response_snapshot_sha256: "b91d56fc038aa8b67af57e3a7aa97024d97b07bd379e0635de8552433e44c8a5",
   risk_ref: "synthetic-risk-ae-01",
   risk_instance_ref: "synthetic-risk-instance-ae-01",
   risk_anchor_ref: "synthetic-anchor-ae-01",
@@ -366,12 +367,12 @@ export const WORKSPACE_SYNTHETIC_IDENTITY_NEGATIVE = Object.freeze({
   identity: {
     ...WORKSPACE_SYNTHETIC_OVERVIEW.identity,
     project_ref: "synthetic-project-other",
-    response_snapshot_sha256: "a9713e91397bb650fa04bbb43817b330c7f35b8ef206d5a6e267b5d01faaee39",
+    response_snapshot_sha256: "f04ab0dd28d45dc2fbc5fe5bf6739be51bf2f6929692fc483ed40503936cdda3",
   },
-  response_snapshot_sha256: "a9713e91397bb650fa04bbb43817b330c7f35b8ef206d5a6e267b5d01faaee39",
+  response_snapshot_sha256: "f04ab0dd28d45dc2fbc5fe5bf6739be51bf2f6929692fc483ed40503936cdda3",
   read_handoff: {
     ...WORKSPACE_SYNTHETIC_OVERVIEW.read_handoff,
-    response_snapshot_sha256: "a9713e91397bb650fa04bbb43817b330c7f35b8ef206d5a6e267b5d01faaee39",
+    response_snapshot_sha256: "f04ab0dd28d45dc2fbc5fe5bf6739be51bf2f6929692fc483ed40503936cdda3",
   },
 });
 
@@ -505,10 +506,10 @@ function flowOverviewEnvelope(subjectFlow) {
     read_handoff: { ...WORKSPACE_SYNTHETIC_OVERVIEW.read_handoff },
   };
   const digest = {
-    ready: "bc9b6daefe8914194c77a9aa00062fed7c7cb9d43e12fbac3eb1b38f4f97083c",
-    not_provided: "3dde1152353c6d70b3617dfbe3076c035c8446b97a8ddc1f3c4052ab6456b1b9",
-    blocked: "21e03ecf98d422d62d4ec5912779a96c16eb8eeefbed290f83445d7c5ce1b140",
-    empty: "50e24a7f1ed7c4ff3b31823075e636ed4b17ea4ed1e6b0bfde40350232259004",
+    ready: "3edf3f9a45928c92ab7a7f25f2fa9cea5bcb6e25507d901a79ef830ce2bb5a04",
+    not_provided: "41b34911fd3c1d919aa86f17a8d9202630c79a2199ee5b71e121be41b879dcf0",
+    blocked: "ea6e09c6526f10742c0e61b0ab244bd095d07954e3bdb144a8f01bcabaaf040d",
+    empty: "93f82f42a52b11d9752b881fab46d2c181e402d24992c063012fa352d5d1209e",
   }[subjectFlow.availability === "available" ? (subjectFlow.reconciliation?.state === "matched" ? (subjectFlow.subjects.length ? "ready" : "empty") : "blocked") : "not_provided"];
   envelope.response_snapshot_sha256 = digest;
   envelope.identity.response_snapshot_sha256 = digest;

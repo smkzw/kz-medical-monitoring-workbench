@@ -10,6 +10,7 @@ import sqlite3
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from .monitoring_ai_contracts import canonical_json, content_sha256
+from .monitoring_ai_repository import MonitoringAiRepositoryError, _materialize_payload
 from .monitoring_mapping_draft_repository import (
     MonitoringMappingDraftRepository,
     MonitoringMappingDraftStatus,
@@ -1149,7 +1150,28 @@ class MonitoringMappingActivationService:
             raise MonitoringMappingActivationSourceError(
                 "confirmed mapping revision no longer matches its immutable draft"
             )
-        baseline = self._validate_source_chain(revision, draft.expected_job_ids)
+        try:
+            receipts = self.mapping_repository.adjudication_receipts(
+                revision.project_id, revision.draft_id
+            )
+        except Exception as exc:
+            raise MonitoringMappingActivationSourceError(
+                "mapping adjudication receipts could not be validated"
+            ) from exc
+        # 双队列裁决收据选中的来源作业是合法来源：它们随源记录各自的
+        # input_revision_sha256/prompt_version（MonitoringMappingFieldSource
+        # .source_origin="adjudication_receipt"），不要求等于首轮主输入修订。
+        receipt_job_ids = tuple(
+            receipt.job_id
+            for receipt in receipts
+            if receipt.resolution == "adjudicated_mapping"
+            and receipt.job_id != "system"
+        )
+        baseline = self._validate_source_chain(
+            revision,
+            draft.expected_job_ids,
+            receipt_job_ids=receipt_job_ids,
+        )
         revision_pairs = {
             (field.domain, field.source_field) for field in revision.fields
         }
@@ -1312,10 +1334,31 @@ class MonitoringMappingActivationService:
             tuple(snapshots),
         )
 
+    def _materialize_job_payload(
+        self,
+        connection: sqlite3.Connection,
+        stored_text: str,
+    ) -> dict[str, Any]:
+        """Materialize a stored job payload ($section_blob aware).
+
+        Large input sections are spilled into ``monitoring_ai_payload_blobs``
+        by the AI repository; the persisted ``input_payload_sha256`` covers the
+        materialized document, so validation must hash the same view.
+        """
+
+        try:
+            return _materialize_payload(connection, stored_text)
+        except MonitoringAiRepositoryError as exc:
+            raise MonitoringMappingActivationSourceError(
+                "mapping source job payload could not be materialized"
+            ) from exc
+
     def _validate_source_chain(
         self,
         revision: MonitoringMappingRevision,
         expected_job_ids: Sequence[str],
+        *,
+        receipt_job_ids: Sequence[str] = (),
     ) -> tuple[_FieldSignature, ...]:
         source_path = Path(self.mapping_repository.path)
         try:
@@ -1343,9 +1386,13 @@ class MonitoringMappingActivationService:
             source_by_job: dict[str, list[Any]] = {}
             for source in revision.field_sources:
                 source_by_job.setdefault(source.job_id, []).append(source)
+            # 合法来源集合 = 首轮装配作业 ∪ 裁决收据选中的来源作业。
+            # 收据来源随源携带各自的输入修订（source_origin=
+            # "adjudication_receipt"）；任何与两者无关的作业仍在拒收之列。
+            legitimate_job_ids = set(expected_job_ids) | set(receipt_job_ids)
             if (
                 len(expected_job_ids) != len(set(expected_job_ids))
-                or set(source_by_job) != set(expected_job_ids)
+                or set(source_by_job) != legitimate_job_ids
             ):
                 raise MonitoringMappingActivationSourceError(
                     "mapping source job set changed after confirmation"
@@ -1368,11 +1415,17 @@ class MonitoringMappingActivationService:
                     raise MonitoringMappingActivationSourceError(
                         "mapping source job is unavailable or incomplete"
                     )
-                payload = json.loads(job["input_payload_json"])
+                payload = self._materialize_job_payload(
+                    connection,
+                    job["input_payload_json"],
+                )
+                # 溯源以来源自带记录为准：首轮来源记录首轮主输入修订，
+                # 裁决收据来源记录其所在轮次的输入修订；两者都不允许
+                # 与作业实际输入脱钩。
+                source_revision = field_sources[0].input_revision_sha256
                 if (
                     content_sha256(payload) != job["input_payload_sha256"]
-                    or job["input_revision_sha256"]
-                    != revision.input_revision_sha256
+                    or job["input_revision_sha256"] != source_revision
                 ):
                     raise MonitoringMappingActivationSourceError(
                         "mapping source job input hash changed"
@@ -1416,7 +1469,7 @@ class MonitoringMappingActivationService:
                     or candidate["project_id"] != revision.project_id
                     or candidate["task_type"] != "listing_field_mapping"
                     or candidate["input_revision_sha256"]
-                    != revision.input_revision_sha256
+                    != source_revision
                 ):
                     raise MonitoringMappingActivationSourceError(
                         "mapping source candidate is no longer accepted"
@@ -1427,10 +1480,8 @@ class MonitoringMappingActivationService:
                     if (
                         source.candidate_content_sha256 != candidate_hash
                         or source.input_revision_sha256
-                        != revision.input_revision_sha256
+                        != job["input_revision_sha256"]
                         or source.prompt_version != job["prompt_version"]
-                        or candidate["input_revision_sha256"]
-                        != revision.input_revision_sha256
                     ):
                         raise MonitoringMappingActivationSourceError(
                             "mapping source candidate hash or revision changed"

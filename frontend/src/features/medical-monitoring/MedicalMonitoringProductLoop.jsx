@@ -24,6 +24,8 @@ import {
 import { monitoringJourneyDrawerClosePatch } from "./medicalMonitoringJourneyChanges.mjs";
 import { MedicalMonitoringContinuityPanel } from "./MedicalMonitoringContinuityPanel.jsx";
 import { MedicalMonitoringAdmissionWizard } from "./MedicalMonitoringAdmissionWizard.jsx";
+import MedicalMonitoringProtocolPreparationPanel from "./MedicalMonitoringProtocolPreparationPanel.jsx";
+import MedicalMonitoringRuleReleasePanel from "./MedicalMonitoringRuleReleasePanel.jsx";
 import {
   MONITORING_RESULT_ACTION_TEXT,
   MONITORING_WIZARD_STEPS,
@@ -438,6 +440,21 @@ export function MonitoringPublicResultIdentityStrip({ identity = {}, siteScopeTe
   );
 }
 
+export function MonitoringFactsRuleEntry({ onOpen }) {
+  return (
+    <div className="monitoring-product-workbar-extra">
+      <button
+        type="button"
+        className="monitoring-product-button is-small"
+        data-monitoring-facts-rule-entry
+        onClick={onOpen}
+      >
+        方案事实与规则发布
+      </button>
+    </div>
+  );
+}
+
 export function MonitoringHistoryDrawer({ history, selectedPublicRunToken = "", onSelect, onClose }) {
   const rows = Array.isArray(history?.rows) ? history.rows : [];
   return (
@@ -641,6 +658,9 @@ export function MedicalMonitoringProductLoop({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [admissionOpen, setAdmissionOpen] = useState(false);
+  // W04-S5：方案事实与规则发布入口（恢复的冻结基线双面板）。
+  // ""=关闭；"preparation"=方案准备面板；"release"=规则发布面板。
+  const [factsRulePanel, setFactsRulePanel] = useState("");
   const [wizard, setWizard] = useState(null);
   const [wizardError, setWizardError] = useState("");
   const [previewText, setPreviewText] = useState("");
@@ -1377,6 +1397,9 @@ export function MedicalMonitoringProductLoop({
         <div className="monitoring-page-actions"><button type="button" className="monitoring-back-button" onClick={onReturn}>医学监查首页</button></div>
       </header>
       <MonitoringProductWorkbar state={displayState} onAction={onWorkbarAction} omitComparisonClaim={suppressVersionClaim} />
+      {routeView === "overview" ? (
+        <MonitoringFactsRuleEntry onOpen={() => setFactsRulePanel("preparation")} />
+      ) : null}
       {resultLoaded ? <MonitoringPublicResultIdentityStrip identity={resultContext.identity} siteScopeText={resultSiteScopeText} /> : null}
       <ProductRouteTabs route={route} resultLoaded={resultLoaded} onOverview={() => navigate("overview")} onQueries={() => navigate("queries")} />
       {wizardOpen && wizard ? <MonitoringWizardView wizard={{ ...wizard, dataBatches: setup?.dataBatches || [], serverSummary: setup?.serverSummary || {}, errorText: wizardError || wizard.errorText }} previewText={previewText} previewBusy={previewBusy} previewOpen={previewOpen} onClose={closeWizard} onSelect={changeWizard} onAdvance={(direction) => direction > 0 && wizard.step === 4 ? submitWizard() : advanceWizard(direction)} onPreviewTextChange={setPreviewText} onPreview={requestPreview} onClosePreview={() => { setPreviewOpen(false); changeWizard("preview", null); changeWizard("previewCandidateId", ""); }} onConfirmPreview={confirmPreview} canConfirmPreview={Boolean(wizard.previewCandidateId)} /> : null}
@@ -1422,6 +1445,20 @@ export function MedicalMonitoringProductLoop({
         </>
       ) : null}
       {historyOpen ? <MonitoringHistoryDrawer history={history} selectedPublicRunToken={productState.selectedPublicRunToken} onSelect={selectHistoryRow} onClose={() => setHistoryOpen(false)} /> : null}
+      {factsRulePanel === "preparation" ? (
+        <MedicalMonitoringProtocolPreparationPanel
+          projectId={normalizedProjectId}
+          onClose={() => setFactsRulePanel("")}
+          onOpenRuleRelease={() => setFactsRulePanel("release")}
+        />
+      ) : null}
+      {factsRulePanel === "release" ? (
+        <MedicalMonitoringRuleReleasePanel
+          projectId={normalizedProjectId}
+          onClose={() => setFactsRulePanel("")}
+          onOpenProtocolPreparation={() => setFactsRulePanel("preparation")}
+        />
+      ) : null}
       {ruleConfirmOpen ? <div className="monitoring-product-overlay" role="presentation"><section className="monitoring-rule-confirm-dialog" role="dialog" aria-modal="true" aria-label="确认保存特殊关注"><span className="monitoring-eyebrow">再次确认</span><h2>确认后将保存为本项目规则</h2><p>即使关闭本次向导，该规则也会保留。确认后返回第 3 步并默认勾选。</p><div className="monitoring-dialog-foot"><button type="button" className="monitoring-product-button is-quiet" disabled={ruleConfirmBusy} onClick={() => setRuleConfirmOpen(false)}>取消</button><button type="button" className="monitoring-product-button is-primary" disabled={ruleConfirmBusy} onClick={confirmRule}>{ruleConfirmBusy ? "保存中" : "再次确认并保存"}</button></div></section></div> : null}
     </main>
   );
