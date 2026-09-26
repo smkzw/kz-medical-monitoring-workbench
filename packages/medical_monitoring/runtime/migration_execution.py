@@ -367,7 +367,7 @@ class MigrationExecutionMixin:
         report = inspect_member(path, step.member)
         if step.member == RUNTIME_MEMBER:
             return report.classification is SchemaClassification.CURRENT and report.schema_version == RUNTIME_V6
-        return report.classification is SchemaClassification.CURRENT and report.schema_version == LAUNCH_V4
+        return report.classification is SchemaClassification.CURRENT and report.schema_version == LAUNCH_V5
 
     @staticmethod
     def _member_path(workspace: Path, member: str) -> Optional[Path]:

@@ -1207,8 +1207,56 @@ def _build_one_query_draft(
     return draft
 
 
+def _build_one_finding_record(
+    run: Mapping[str, Any],
+    finding: Mapping[str, Any],
+    draft: Mapping[str, Any],
+) -> dict:
+    """W01-R26 A12：从同一条structured finding构建冻结Finding DTO。
+
+    Finding与QueryDraft分离：Finding携带稳定ID、subject/site、事件与时间
+    窗、状态、分类型claims与逐条source refs，供公开结果卡直接导航；
+    QueryDraft保留自身query_draft_id并以finding_id引用该Finding。
+    """
+
+    def _optional_text(value: Any) -> str:
+        return str(value).strip() if _non_empty_str(value) else ""
+
+    finding_state = _optional_text(finding.get("finding_state")) or "open"
+    record = {
+        "finding_id": draft["finding_id"],
+        "risk_id": draft["risk_id"],
+        "issue_id": draft["issue_id"],
+        "project_id": draft["project_id"],
+        "run_id": draft["run_id"],
+        "subject_id": draft["subject_id"],
+        "site_id": draft["site_id"],
+        "scope_kind": draft["scope_kind"],
+        "event_ref": _optional_text(finding.get("event_ref")),
+        "window_start": _optional_text(finding.get("window_start")),
+        "window_end": _optional_text(finding.get("window_end")),
+        "finding_state": finding_state,
+        "claims": [
+            {"kind": "basis", "text": draft["basis"]},
+            {"kind": "finding", "text": draft["finding"]},
+            {"kind": "action", "text": draft["action"]},
+        ],
+        "source_refs": _copy_mapping({"refs": draft["evidence_refs"]})["refs"],
+        "locator": _copy_mapping(draft["locator"]),
+        "data_cutoff": draft["data_cutoff"],
+        "source_revision_id": draft["source_revision_id"],
+    }
+    finding_kind = finding.get("finding_kind")
+    if _non_empty_str(finding_kind):
+        record["finding_kind"] = str(finding_kind)
+    pd_wording = finding.get("pd_wording_state")
+    if _non_empty_str(pd_wording):
+        record["pd_wording_state"] = str(pd_wording)
+    return record
+
+
 def build_affected_query_draft(
-    run_binding: Mapping[str, Any],
+    run: Mapping[str, Any],
     findings: Sequence[Mapping[str, Any]],
 ) -> dict:
     """Build the daily ``affected_query_draft`` payload from structured findings.
@@ -1216,11 +1264,16 @@ def build_affected_query_draft(
     Each draft keeps 依据/发现/行动项, a deterministic Chinese ``display_text``,
     evidence/locator/cutoff/revision/risk identity, and draft-only unsent/
     unclosed flags. PD-class findings may appear as wording only — never as
-    registered/closed PD. Does not mutate inputs.
+    registered/closed PD.
+
+    W01-R26 A12：payload同时携带平行的冻结``findings``数组（Finding DTO，
+    含稳定ID/subject/site/事件与时间窗/状态/分类型claims/逐条source refs），
+    空集也显式写``findings: []``；QueryDraft保留自身ID并以finding_id引用。
+    Does not mutate inputs.
     """
-    if not isinstance(run_binding, Mapping):
+    if not isinstance(run, Mapping):
         raise ModeOutputError(IDENTITY_MISMATCH, "run_binding must be a mapping")
-    run = _copy_mapping(run_binding)
+    run = _copy_mapping(run)
     for field in (
         "project_id",
         "run_id",
@@ -1237,9 +1290,23 @@ def build_affected_query_draft(
     if not isinstance(findings, Sequence) or isinstance(findings, (str, bytes)):
         raise ModeOutputError(OUTPUT_NOT_ELIGIBLE, "findings must be a sequence")
 
-    drafts = [_build_one_query_draft(run, item) for item in findings]
-    # Stable order by query_draft_id for byte-stable payloads.
+    drafts = []
+    finding_records = []
+    seen_finding_ids: set = set()
+    for item in findings:
+        draft = _build_one_query_draft(run, item)
+        finding_id = draft["finding_id"]
+        if finding_id in seen_finding_ids:
+            raise ModeOutputError(
+                OUTPUT_NOT_ELIGIBLE,
+                f"duplicate finding_id {finding_id} in daily findings",
+            )
+        seen_finding_ids.add(finding_id)
+        drafts.append(draft)
+        finding_records.append(_build_one_finding_record(run, item, draft))
+    # Stable order by query_draft_id / finding_id for byte-stable payloads.
     drafts.sort(key=lambda d: d["query_draft_id"])
+    finding_records.sort(key=lambda item: item["finding_id"])
     return {
         "output_kind": "affected_query_draft",
         "project_id": run["project_id"],
@@ -1249,6 +1316,8 @@ def build_affected_query_draft(
         "source_revision_id": run["source_revision_id"],
         "query_drafts": drafts,
         "draft_count": len(drafts),
+        "findings": finding_records,
+        "finding_count": len(finding_records),
         "is_sent": False,
         "is_closed": False,
         "is_user_confirmed": False,

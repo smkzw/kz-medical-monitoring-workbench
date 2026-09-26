@@ -65,6 +65,7 @@ from .schema_manifest import (
     LAUNCH_V2,
     LAUNCH_V3,
     LAUNCH_V4,
+    LAUNCH_V5,
     MEMBER_ORDER,
     PROFILE_MEMBER,
     RISK_MEMBER,
@@ -349,7 +350,7 @@ class MigrationPlan:
                 )
             )
         launch_version = inspection.members[LAUNCH_MEMBER].schema_version
-        if launch_version in (LAUNCH_V1, LAUNCH_V2, LAUNCH_V3):
+        if launch_version in (LAUNCH_V1, LAUNCH_V2, LAUNCH_V3, LAUNCH_V4):
             actions_by_version = {
                 LAUNCH_V1: (
                     "create_publication_tables",
@@ -371,8 +372,15 @@ class MigrationPlan:
                     "verify_exact_target_shape",
                     "update_marker_last",
                 ),
+                # W01-R26（20260926）：v4→v5仅新增两个可空引用列，守卫式
+                # ALTER原地补列，不重建表、不改写既有行数据。
+                LAUNCH_V4: (
+                    "add_v5_publication_columns",
+                    "verify_exact_target_shape",
+                    "update_marker_last",
+                ),
             }
-            steps.append(MigrationStep(LAUNCH_MEMBER, launch_version, LAUNCH_V4, actions_by_version[launch_version]))
+            steps.append(MigrationStep(LAUNCH_MEMBER, launch_version, LAUNCH_V5, actions_by_version[launch_version]))
         return cls(
             schema_manifest_digest=SCHEMA_MANIFEST_DIGEST,
             source_schema_set={key: source[key] for key in MEMBER_ORDER},

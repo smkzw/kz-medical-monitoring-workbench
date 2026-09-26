@@ -9096,6 +9096,19 @@ class MonitoringAiService:
                     "metering incomplete for this physical call",
                     job.job_id,
                 )
+        if heartbeat_error:
+            # W02-E0b A30（20260926）：后台心跳失败=租约已失守——失租后的
+            # provider输出不得冒充有效完成被消费/返回（上层昂贵提交按失败
+            # 处理；repository侧owner CAS仍是不依赖本信号的第二道防线）。
+            # 计量finally已在上方照记本次物理调用的真实账，不受影响。
+            # 复用repository的失租冲突类型（与首次获取/续租失败同族），
+            # 并携带job_id/owner供上层与账本对账。
+            lease_lost = MonitoringAiStateConflictError(
+                f"heartbeat lost lease for job {job.job_id} (owner {owner})"
+            )
+            lease_lost.job_id = job.job_id
+            lease_lost.owner = owner
+            raise lease_lost from heartbeat_error[0]
         if job.prompt_version in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS and isinstance(output, str):
             # An invalid outer response remains a failed envelope, never a
             # salvaged inner mapping. The existing one-repair path sees it.

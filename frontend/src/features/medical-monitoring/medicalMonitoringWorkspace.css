@@ -848,6 +848,29 @@
 
 .monitoring-track-event-point.is-near-end { transform: translateX(-100%); }
 
+/* W05-J2 A22：ongoing/end_unknown开放条形——右端开口视觉（虚线收边），
+ * 与point/interval明确区分：持续中的记录不伪装成有结束日期。 */
+.monitoring-track-event-open-end {
+  border-right: 2px dashed currentColor;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* W05-J2：窗外事件继续符号——文本前缀箭头 + 虚线边提示方向，
+ * 原始日期与方向经title/aria携带（不伪装同日）。 */
+.monitoring-track-event-beyond {
+  opacity: 0.92;
+}
+.monitoring-track-event-beyond[data-finding-beyond="before"]::before,
+.monitoring-track-event-beyond[data-finding-beyond="after"]::before {
+  content: "◂ 继续 ";
+  font-size: 10px;
+  opacity: 0.85;
+}
+.monitoring-track-event-beyond[data-finding-beyond="after"]::before {
+  content: "继续 ▸";
+}
+
 .monitoring-track-event .monitoring-event-mark {
   width: 18px;
   min-width: 18px;
@@ -1000,33 +1023,33 @@
   border-bottom: 1px solid var(--monitoring-line);
 }
 
-.monitoring-page[data-monitoring-zoom="-1"] .monitoring-domain-track-grid {
+.monitoring-page[data-monitoring-density="compact"] .monitoring-domain-track-grid {
   gap: 0;
 }
 
-.monitoring-page[data-monitoring-zoom="-1"] .monitoring-domain-track {
+.monitoring-page[data-monitoring-density="compact"] .monitoring-domain-track {
   padding: 4px 0;
   min-height: 40px;
 }
 
-.monitoring-page[data-monitoring-zoom="-1"] .monitoring-track-event {
+.monitoring-page[data-monitoring-density="compact"] .monitoring-track-event {
   max-width: 24px;
   padding: 0 3px;
 }
 
-.monitoring-page[data-monitoring-zoom="-1"] .monitoring-track-event.has-risk { max-width: 40px; }
+.monitoring-page[data-monitoring-density="compact"] .monitoring-track-event.has-risk { max-width: 40px; }
 
-.monitoring-page[data-monitoring-zoom="-1"] .monitoring-track-event > :not(.monitoring-domain-icon):not(.monitoring-compact-risk-label) {
+.monitoring-page[data-monitoring-density="compact"] .monitoring-track-event > :not(.monitoring-domain-icon):not(.monitoring-compact-risk-label) {
   display: none;
 }
 
-.monitoring-page[data-monitoring-zoom="-1"] .monitoring-track-event-title,
-.monitoring-page[data-monitoring-zoom="-1"] .monitoring-track-event-detail,
-.monitoring-page[data-monitoring-zoom="-1"] .monitoring-track-event-source {
+.monitoring-page[data-monitoring-density="compact"] .monitoring-track-event-title,
+.monitoring-page[data-monitoring-density="compact"] .monitoring-track-event-detail,
+.monitoring-page[data-monitoring-density="compact"] .monitoring-track-event-source {
   display: none;
 }
 
-.monitoring-page[data-monitoring-zoom="-1"] .monitoring-compact-risk-label {
+.monitoring-page[data-monitoring-density="compact"] .monitoring-compact-risk-label {
   display: inline-grid;
   place-items: center;
   min-width: 15px;
@@ -1037,24 +1060,24 @@
   font-weight: 900;
 }
 
-.monitoring-page[data-monitoring-zoom="1"] .monitoring-domain-track-grid {
+.monitoring-page[data-monitoring-density="detailed"] .monitoring-domain-track-grid {
   gap: 0;
 }
 
-.monitoring-page[data-monitoring-zoom="1"] .monitoring-domain-track {
+.monitoring-page[data-monitoring-density="detailed"] .monitoring-domain-track {
   padding: 10px 12px;
   min-height: calc(56px + (var(--lane-stack-rows, 1) * 24px));
 }
 
-.monitoring-page[data-monitoring-zoom="1"] .monitoring-track-event {
+.monitoring-page[data-monitoring-density="detailed"] .monitoring-track-event {
   max-width: 260px;
   height: auto;
   min-height: 22px;
   padding: 3px 8px;
 }
 
-.monitoring-page[data-monitoring-zoom="1"] .monitoring-track-event-detail,
-.monitoring-page[data-monitoring-zoom="1"] .monitoring-track-event-source {
+.monitoring-page[data-monitoring-density="detailed"] .monitoring-track-event-detail,
+.monitoring-page[data-monitoring-density="detailed"] .monitoring-track-event-source {
   display: block;
 }
 

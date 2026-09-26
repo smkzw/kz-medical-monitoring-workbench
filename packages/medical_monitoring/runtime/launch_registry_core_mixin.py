@@ -170,6 +170,31 @@ class LaunchRegistryCoreMixin:
                         "INSERT INTO r7_launch_registry_meta(key, value) VALUES (?, ?)",
                         ("schema_version", SCHEMA_VERSION),
                     )
+                elif version == SCHEMA_VERSION_V4:
+                    # W01-R26（20260926）：v4→v5仅新增两个可空冻结read
+                    # model引用列。守卫式ALTER原地升级：先查PRAGMA再ADD
+                    # COLUMN，不重建表、不改写任何既有行数据；同一事务内
+                    # 推进marker，保证打开即达当前schema。
+                    existing_columns = {
+                        str(row["name"])
+                        for row in connection.execute(
+                            "PRAGMA table_info(r7_result_publications)"
+                        )
+                    }
+                    for column in (
+                        "frozen_read_model_artifact_id",
+                        "frozen_read_model_sha256",
+                    ):
+                        if column not in existing_columns:
+                            connection.execute(
+                                "ALTER TABLE r7_result_publications "
+                                f"ADD COLUMN {column} TEXT"
+                            )
+                    connection.execute(
+                        "UPDATE r7_launch_registry_meta SET value = ? "
+                        "WHERE key = 'schema_version'",
+                        (SCHEMA_VERSION,),
+                    )
                 elif version != SCHEMA_VERSION:
                     raise LaunchRegistryError("unsupported_schema_version")
                 connection.commit()
@@ -404,6 +429,18 @@ class LaunchRegistryCoreMixin:
             and row["artifact_member_set_digest"] is not None
             else None
         )
+        frozen_read_model_artifact_id = (
+            str(row["frozen_read_model_artifact_id"])
+            if "frozen_read_model_artifact_id" in row.keys()
+            and row["frozen_read_model_artifact_id"] is not None
+            else None
+        )
+        frozen_read_model_sha256 = (
+            str(row["frozen_read_model_sha256"])
+            if "frozen_read_model_sha256" in row.keys()
+            and row["frozen_read_model_sha256"] is not None
+            else None
+        )
         has_v4_closure = bool(
             r6_output_set_digest or artifact_member_ids or artifact_member_set_digest
         )
@@ -474,6 +511,8 @@ class LaunchRegistryCoreMixin:
             r6_output_set_digest=r6_output_set_digest,
             artifact_member_ids=artifact_member_ids,
             artifact_member_set_digest=artifact_member_set_digest,
+            frozen_read_model_artifact_id=frozen_read_model_artifact_id,
+            frozen_read_model_sha256=frozen_read_model_sha256,
             publication_state=state,
             failure_code=(
                 str(row["failure_code"]) if row["failure_code"] is not None else None

@@ -474,6 +474,66 @@ def _clues_agree(primary: Any, verifier: Any) -> bool:
         primary_direction & verifier_direction
     ):
         return False
+    # W03/W04命题归属（B08/B09/B11）：方向/分级/时序token必须绑定其
+    # 所属属性（指标/分期/事件锚）比对——同一属性上双方给出不同值即
+    # 命题冲突（"ALT升高"vs"ALT降低"不得被无关"AST降低"掩蔽；
+    # "本次3级/既往1级"vs"本次1级"不得判一致；两事件前后互换不得判
+    # 一致）。单侧缺属性不做否决（信息不足保守升级）。
+    def _proposition_pairs(candidate: Any) -> frozenset:
+        # W03/W04命题归属：把方向/分级/时序token绑定到其所属属性——
+        # (指标名, 方向) / (分期, 级别) / (事件锚, 时序)。按分句（；。换行）
+        # 与payload.temporal_relationships逐条提取，避免把不同指标的相反
+        # 方向、本次/既往的不同级别、两个事件互换的前后关系摊平成无归属
+        # 集合后被交集掩蔽（B08/B09/B11）。嵌套定义使探针AST提取自足。
+        payload = getattr(candidate, "structured_payload", {}) or {}
+        parts = [
+            str(getattr(candidate, "title", "") or ""),
+            str(getattr(candidate, "text", "") or ""),
+        ]
+        for claim in payload.get("claims", []) or []:
+            if isinstance(claim, Mapping):
+                parts.append(str(claim.get("text", "")))
+        rels = payload.get("temporal_relationships") or []
+        if isinstance(rels, (list, tuple)):
+            parts.extend(str(rel) for rel in rels)
+        segment_split = re.compile(r"[；;。\n]+")
+        metric_token = re.compile(r"[A-Za-z][A-Za-z0-9-]{1,14}")
+        phase_token = re.compile(r"(既往|本次|近期|当前)")
+        anchor_token = re.compile(r"(?:事件|访视|记录)([A-Za-z0-9]{1,8})")
+        pairs = set()
+        for part in parts:
+            for clause in segment_split.split(part):
+                metric = metric_token.search(clause)
+                phase = phase_token.search(clause)
+                anchor = anchor_token.search(clause)
+                for token in _DIRECTION_TOKEN_RE.findall(clause):
+                    if metric:
+                        pairs.add((
+                            "metric:" + metric.group(0).lower(),
+                            "dir:" + _DIRECTION_CANONICAL.get(token, token),
+                        ))
+                grade = _GRADE_RE.search(clause)
+                if grade and phase:
+                    value = grade.group(1) or grade.group(2)
+                    pairs.add(("phase:" + phase.group(0), "grade:" + value))
+                for token in _TEMPORAL_TOKEN_RE.findall(clause):
+                    if anchor:
+                        pairs.add((
+                            "anchor:" + anchor.group(0).lower(),
+                            "time:" + _TEMPORAL_CANONICAL.get(token, token),
+                        ))
+        return frozenset(pairs)
+
+    primary_propositions = _proposition_pairs(primary)
+    verifier_propositions = _proposition_pairs(verifier)
+    if primary_propositions and verifier_propositions:
+        primary_by_attribute: dict[str, set[str]] = {}
+        for attribute, value in primary_propositions:
+            primary_by_attribute.setdefault(attribute, set()).add(value)
+        for attribute, value in verifier_propositions:
+            bound_values = primary_by_attribute.get(attribute)
+            if bound_values and value not in bound_values:
+                return False
     return True
 
 

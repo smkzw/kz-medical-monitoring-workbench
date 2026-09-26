@@ -23,6 +23,12 @@ from ...runtime.runtime_progress import (
     RuntimeProgressError,
 )
 from .contracts import ProductPublicationError, ProductPublicationRequest
+from .frozen_read_model import (
+    freeze_read_model_document,
+    load_frozen_read_model_document,
+    restore_frozen_packet,
+    store_frozen_read_model,
+)
 from .errors import (
     _error_response,
     _launch_error_response,
@@ -414,6 +420,8 @@ def register_publication_routes(router: APIRouter, context: PublicationRouteCont
             r6_output_set_digest: Optional[str] = None
             artifact_member_ids: Optional[tuple[str, ...]] = None
             artifact_member_set_digest: Optional[str] = None
+            frozen_read_model_artifact_id: Optional[str] = None
+            frozen_read_model_sha256: Optional[str] = None
 
             if r6_provider is not None:
                 _, cb = _r6_publication_types()
@@ -468,6 +476,24 @@ def register_publication_routes(router: APIRouter, context: PublicationRouteCont
                         run_binding=run_binding,
                         r5_packet=packet,
                     )
+                    # W01-R26（20260926）：把当次构建的R5 publication
+                    # packet快照为冻结read model（Store artifact+CAS）。
+                    # 引用写入发布行专列，不进入artifact_member_ids——
+                    # member集合=4的合同保持不变。
+                    frozen_document = freeze_read_model_document(
+                        packet,
+                        projection_version=str(
+                            publication.manifest_digest or ""
+                        ),
+                    )
+                    (
+                        frozen_read_model_artifact_id,
+                        frozen_read_model_sha256,
+                    ) = store_frozen_read_model(
+                        r1_store,
+                        run_id=launch.run_id,
+                        document=frozen_document,
+                    )
                 except cb.R5AuthorityVerificationError as exc:
                     raise ProductPublicationError(
                         "authority_identity_mismatch", recoverable=False
@@ -498,6 +524,10 @@ def register_publication_routes(router: APIRouter, context: PublicationRouteCont
                     r6_output_set_digest=r6_output_set_digest,
                     artifact_member_ids=artifact_member_ids,
                     artifact_member_set_digest=artifact_member_set_digest,
+                    frozen_read_model_artifact_id=(
+                        frozen_read_model_artifact_id
+                    ),
+                    frozen_read_model_sha256=frozen_read_model_sha256,
                 )
             except lr.LaunchRegistryError as exc:
                 publication = _record_publication_failure(
@@ -747,12 +777,16 @@ def register_public_result_routes(router: APIRouter, context: PublicationRouteCo
             findings_bundle = context.public_findings_envelope()
             projection = result.get("projection")
             if isinstance(projection, dict):
-                injected = findings_bundle.get("findings") or []
-                if injected:
-                    projection["query_findings"] = injected
-                projection["query_findings_meta"] = dict(
-                    findings_bundle.get("meta") or {}
+                # W01-R26 A13：零发现也显式写query_findings空数组（去truthy
+                # 省略）；legacy形态的drafts以自身身份随meta如实携带。
+                projection["query_findings"] = list(
+                    findings_bundle.get("findings") or []
                 )
+                findings_meta = dict(findings_bundle.get("meta") or {})
+                findings_meta["query_drafts"] = list(
+                    findings_bundle.get("query_drafts") or []
+                )
+                projection["query_findings_meta"] = findings_meta
             return _public_result_envelope(
                 result,
                 launch=launch,
@@ -1119,13 +1153,44 @@ def register_public_result_routes(router: APIRouter, context: PublicationRouteCo
                 site_refs=publication.site_coverage,
                 snapshot_token=publication.snapshot_token,
             )
-            packet = _build_r5_publication_packet(
-                publication_provider,
-                authority_identity,
-                attempts=gate["receipt_attempts"],
-                bridge=publication_bridge,
-                product_packet_factory=r5_product_packet_factory,
-            )
+            if (
+                publication.frozen_read_model_artifact_id
+                and publication.frozen_read_model_sha256
+            ):
+                # W01-R26（20260926）：冻结read model优先，digest校验对象
+                # 是发布时快照；损坏fail-closed，不回退live或重建。
+                runtime_dir = (
+                    _workspace_dir(root, canonical) / RUNTIME_DIR_NAME
+                )
+                frozen_store = Store(
+                    runtime_dir / RUNTIME_DB_NAME,
+                    runtime_dir / ARTIFACT_DIR_NAME,
+                )
+                try:
+                    document = load_frozen_read_model_document(
+                        frozen_store, publication
+                    )
+                    packet = restore_frozen_packet(document)
+                    if packet.product_packet is None:
+                        # product-less发布：结果入口的锚点比对仍用冻结
+                        # 快照，公开视图保持既有读取侧重建行为。
+                        packet = _build_r5_publication_packet(
+                            publication_provider,
+                            authority_identity,
+                            attempts=gate["receipt_attempts"],
+                            bridge=publication_bridge,
+                            product_packet_factory=r5_product_packet_factory,
+                        )
+                finally:
+                    frozen_store.close()
+            else:
+                packet = _build_r5_publication_packet(
+                    publication_provider,
+                    authority_identity,
+                    attempts=gate["receipt_attempts"],
+                    bridge=publication_bridge,
+                    product_packet_factory=r5_product_packet_factory,
+                )
             if (
                 packet.packet_identity != publication.r5_authority_packet_id
                 or packet.packet_digest

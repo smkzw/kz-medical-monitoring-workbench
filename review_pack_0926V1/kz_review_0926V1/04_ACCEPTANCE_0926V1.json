@@ -1,0 +1,554 @@
+{
+  "round": "0926V1",
+  "head": "872a451489840338a6020903d05f95cc16046151",
+  "status": "ALL_PENDING_PRODUCT_EXECUTION",
+  "not_evidence_of_product_pass": true,
+  "criteria": [
+    {
+      "id": "R26-A01",
+      "work_package": "W00-R26",
+      "title": "状态总账分开",
+      "criterion": "CSU/SAR/规则合成批次有独立运行root、输入版本、暂停状态；根HANDOFF指向当前记录。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A02",
+      "work_package": "W00-R26",
+      "title": "主题覆盖对账",
+      "criterion": "8主题逐项给出作业及可用候选；5失败主题没有新成功证据时维持未覆盖。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A03",
+      "work_package": "W00-R26",
+      "title": "医学核验来源",
+      "criterion": "自动结构/来源校验不记录为人类或独立模型医学确认；两种执行类型均有真实证据。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A04",
+      "work_package": "W00-R26",
+      "title": "授权与签名",
+      "criterion": "本地director/代确认/策略豁免有可核查的明确授权；未答复不生成批准；旧历史不抹除。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A05",
+      "work_package": "W04-VAL",
+      "title": "missing可判定例外",
+      "criterion": "证明纯missing/exists覆盖boolean，不编造不可达indeterminate样本。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A06",
+      "work_package": "W04-VAL",
+      "title": "行级比较诊断",
+      "criterion": "gt/eq/regex/date_compare分别以非法或缺失输入产生indeterminate，并被发布分类正确要求覆盖。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A07",
+      "work_package": "W04-VAL",
+      "title": "嵌套与未知算子",
+      "criterion": "all/any/not中任一可indeterminate算子及未知算子采用保守分类。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A08",
+      "work_package": "W04-VAL",
+      "title": "三棵树共同检查",
+      "criterion": "preconditions/trigger/exclusions的诊断能力均纳入资格判定。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A09",
+      "work_package": "W04-VAL",
+      "title": "既有包策略变更",
+      "criterion": "新策略出具影响清单，不写旧摘要、不伪造旧gold case；两条现有missing规则单独复核。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A10",
+      "work_package": "W01-R26",
+      "title": "相同facts两次分析",
+      "criterion": "A/B分析同一facts，打开A结果仍是A且身份与证据冻结。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A11",
+      "work_package": "W01-R26",
+      "title": "投影实现升级",
+      "criterion": "严重度/布局代码更新后旧token可读原正确历史或明确历史撤回状态，不靠新run替代。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A12",
+      "work_package": "W01-R26",
+      "title": "不同DTO",
+      "criterion": "Finding与QueryDraft均有独立schema/身份关联；Finding subject/event/source入口完整。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A13",
+      "work_package": "W01-R26",
+      "title": "0发现与坏工件",
+      "criterion": "0finding保持空，坏工件fail明确；不借live或别的草稿数组顶替。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A14",
+      "work_package": "W01-R26",
+      "title": "项目隔离",
+      "criterion": "两个项目同subject label、同文件名，不混来源、结果或模型回执。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A15",
+      "work_package": "W05-J1",
+      "title": "三档默认fit",
+      "criterion": "1440/1920/2560下body和Journey内部均默认无需横滚；主要字体保持可读。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A16",
+      "work_package": "W05-J1",
+      "title": "窄绘图区与重测",
+      "criterion": "实际plot=500px/侧栏或抽屉开关，宽度真实适配；零宽恢复可正常测量。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A17",
+      "work_package": "W05-J1",
+      "title": "独立密度",
+      "criterion": "更改detailDensity不改变时间范围/像素域；更改timeViewport不丢明细。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A18",
+      "work_package": "W05-J1",
+      "title": "全程与局部聚焦",
+      "criterion": "完整观察窗可见，问题附近聚焦后保留总览和返回全程。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A19",
+      "work_package": "W05-J2",
+      "title": "部分日期合同",
+      "criterion": "YYYY-MM、UK/UNK和公开dateState=partial不产生实际01日；允许区间呈现但有精度标注。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A20",
+      "work_package": "W05-J2",
+      "title": "非法日期与访视",
+      "criterion": "数字后缀/不合法日期拒绝，非法访视仍有可访问未定位入口。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A21",
+      "work_package": "W05-J2",
+      "title": "窗外聚合",
+      "criterion": "窗外聚合坐标类型一致、有限数值，有before/after语义且成员全部可访问。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A22",
+      "work_package": "W05-J2",
+      "title": "持续与结束未知",
+      "criterion": "ongoing与end_unknown渲染不同于point；跨窗首尾有独立继续标志。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A23",
+      "work_package": "W05-J2",
+      "title": "全无日期",
+      "criterion": "没有虚构2026日期窗、月份刻度或实际访视；原始记录完整可读。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A24",
+      "work_package": "W05-J2",
+      "title": "集合守恒",
+      "criterion": "输入事件/访视ID等于直接项+聚合成员+未定位+窗外集合，无消失/无身份替换。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A25",
+      "work_package": "W05-J3",
+      "title": "选中聚合收起",
+      "criterion": "选中成员组仍能显式收起，焦点回有效开关，自动展开不覆盖用户意图。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A26",
+      "work_package": "W05-J3",
+      "title": "成员可读",
+      "criterion": "显示日期/名称/原始记录号，点成员到该事件；内部ID不作唯一标签。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A27",
+      "work_package": "W05-J3",
+      "title": "千级列表",
+      "criterion": "1000+合成合法Finding筛选排序/分页/选中详情可用，不默认铺满长卡；不拿此证明医学质量。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A28",
+      "work_package": "W05-J3",
+      "title": "三跳来源",
+      "criterion": "Finding→对应subject→正确事件窗→真正source，坏locator不跳他条。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A29",
+      "work_package": "W05-J3",
+      "title": "返回与0调用",
+      "criterion": "返回恢复筛选排序分页时间密度选择焦点滚动，浏览网络与call trace均无新模型请求。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A30",
+      "work_package": "W02-E0b",
+      "title": "丢租约传播",
+      "criterion": "后台心跳失败后停止后续工具/候选提交；仍保留已经发生调用的真实账。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A31",
+      "work_package": "W02-E0b",
+      "title": "异常尝试计量",
+      "criterion": "超时/断流/HTTP重试每个真实请求尝试有call_id、父层级和终态。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A32",
+      "work_package": "W02-E0b",
+      "title": "显式0用量",
+      "criterion": "嵌套/平面reasoning/cached=0保留0，缺失保持unknown，布尔及不合法计数不能冒充token数。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A33",
+      "work_package": "W02-E0b",
+      "title": "断电与重放",
+      "criterion": "请求开始写账、异常中断为unknown/started，重放相同call_id不重复累计。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A34",
+      "work_package": "W02-E0b",
+      "title": "分页与已知小计",
+      "criterion": "HTTP project/job分页正确；未知小计不宣称0实耗，reasoning/cached不双算total。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A35",
+      "work_package": "W02-E0b",
+      "title": "模型变化与缓存",
+      "criterion": "结果保留实际执行模型身份，旧结果不标成新profile核验；语义策略变更与浏览重放区分。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A36",
+      "work_package": "W03/W04",
+      "title": "对象方向归属",
+      "criterion": "ALT/AST方向互换不一致；同指标升高/上升可一致。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A37",
+      "work_package": "W03/W04",
+      "title": "事件等级时序归属",
+      "criterion": "本次/既往等级互换、A/B给药前后互换不一致，不靠额外关键词特例。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A38",
+      "work_package": "W03/W04",
+      "title": "合法零发现与覆盖",
+      "criterion": "未分析不当无风险；无发现可完成；各适用域和主题有明确覆盖与来源。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A39",
+      "work_package": "W05-J2",
+      "title": "仅pending的域",
+      "criterion": "有未定位记录不显示无记录；筛选仍能到达这些成员。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A40",
+      "work_package": "W03/W04",
+      "title": "gap端到端",
+      "criterion": "语义不可用贯穿analysis/规则/投影；raw完整保留；AE分级与监查优先级分开。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A41",
+      "work_package": "W07",
+      "title": "隔离恢复完整闭包",
+      "criterion": "在隔离目录恢复项目及必要全局AI/来源/决策/规则依赖，不覆盖live。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    },
+    {
+      "id": "R26-A42",
+      "work_package": "W07",
+      "title": "历史身份同一",
+      "criterion": "恢复前后旧result token、Finding、source、决策、暂停状态对应，非创建新run模拟恢复。",
+      "status": "pending",
+      "evidence_required": [
+        "input_and_code_version",
+        "actual_entrypoint",
+        "assertions_and_output",
+        "scope_and_limits"
+      ]
+    }
+  ]
+}

@@ -129,22 +129,44 @@ def expression_requires_diagnostic_coverage(
     preconditions: Any,
     trigger_expression: Any,
     exclusions: Any,
+    *,
+    # W04-VAL：能力判据以默认值随函数自足携带（纯函数可被AST级探针独立
+    # 提取执行，不依赖模块级注册表解析顺序）；与OPERATOR_CAPABILITIES
+    # ["total_boolean"]的一致性由tests/test_monitoring_rule_diagnostic_
+    # coverage_0926.py防漂移断言钉住。
+    _total_boolean: frozenset = frozenset({"all", "any", "not", "exists", "missing"}),
 ) -> bool:
-    """行级exists/missing规则全可判定；只有含跨行算子（changed/
-    no_corresponding_record）的规则才会产生不可判定求值，发布资格的
-    diagnostic_indeterminate覆盖只对这类规则要求（R24V2-W04，20260926
-    治理决策：策略修订豁免行级可判定规则）。"""
+    """发布资格的diagnostic_indeterminate覆盖按算子能力分类（W04-VAL
+    20260926策略修订：收紧R24V2-W04对行级算子的豁免）。只有
+    OPERATOR_CAPABILITIES.total_boolean中的算子（行级exists/missing及其
+    布尔组合all/any/not）构造上可判定，可豁免该诊断样本；其余词表算子
+    （行级比较eq/ne/in/not_in/gt/gte/lt/lte/regex、日期date_compare/
+    date_delta_days/date_delta_range、ratio_range、跨行changed/
+    no_corresponding_record）在缺失、非法/非有限数值、部分日期或跨行
+    输入下会产生不可判定求值（求值器
+    monitoring_protocol_rule_service._evaluate_predicate_with_trace对应
+    分支），一律要求覆盖；词表内未注册能力或词表外的未知算子保守同样
+    要求。preconditions/trigger/exclusions三棵树共同检查。编译期
+    _validate_predicate_node先行拦截词表外算子，分类器保守是第二道
+    防线。"""
 
     def _walk(node: Any) -> bool:
-        if isinstance(node, Mapping):
-            for key, operand in node.items():
-                if str(key) in {"changed", "no_corresponding_record"}:
-                    return True
-                if _walk(operand):
-                    return True
-        elif isinstance(node, (list, tuple)):
-            return any(_walk(item) for item in node)
-        return False
+        # 谓词表达式编译期契约：算子节点恰有一个键
+        # （_validate_predicate_node）。只遍历算子位、不进入operand，
+        # 因此operand键（field/value/...）不会被误判为算子；空树或
+        # 畸形片段与旧walker同样不产生信号（存储前已被编译期拦截）。
+        if not isinstance(node, Mapping) or len(node) != 1:
+            return False
+        operator, operand = next(iter(node.items()))
+        if str(operator) in _total_boolean:
+            if operator in {"all", "any"}:
+                if not isinstance(operand, (list, tuple)):
+                    return False
+                return any(_walk(item) for item in operand)
+            if operator == "not":
+                return _walk(operand)
+            return False
+        return True
 
     return any(_walk(tree) for tree in (preconditions, trigger_expression, exclusions))
 
@@ -276,6 +298,37 @@ _ALLOWED_PREDICATE_OPERATORS = {
     "date_delta_range",
     "ratio_range",
     "no_corresponding_record",
+}
+# W04-VAL（20260926策略修订）：算子能力注册表，与_ALLOWED_PREDICATE_OPERATORS
+# 同址同源。total_boolean=可证明总布尔：行级exists/missing及其布尔组合
+# all/any/not，构造上不可能产生indeterminate，可豁免diagnostic_indeterminate
+# 覆盖。can_indeterminate=在缺失、非法/非有限数值、部分日期或跨行输入下可
+# 产生indeterminate的算子（求值器分支见
+# monitoring_protocol_rule_service._evaluate_predicate_with_trace）。
+# 词表内未列入任一集合、或词表外的算子键一律保守要求覆盖；注册表与词表
+# 的集合相等由tests/test_monitoring_rule_diagnostic_coverage_0926.py的
+# 防漂移断言钉住。不放monitoring_rule_templates.py，避免第三份算子名单。
+OPERATOR_CAPABILITIES = {
+    "total_boolean": frozenset({"all", "any", "not", "exists", "missing"}),
+    "can_indeterminate": frozenset(
+        {
+            "changed",
+            "no_corresponding_record",
+            "eq",
+            "ne",
+            "in",
+            "not_in",
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "regex",
+            "date_compare",
+            "date_delta_days",
+            "date_delta_range",
+            "ratio_range",
+        }
+    ),
 }
 _KEY_RE = re.compile(r"^[a-z][a-z0-9_.:-]{2,159}$")
 

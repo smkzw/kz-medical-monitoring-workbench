@@ -397,11 +397,35 @@ class _StepRunner:
         _rebuild_launch_publication_v3(connection)
         _rebuild_launch_continuity_v3(connection)
 
+    @staticmethod
+    def _add_v5_publication_columns(connection: sqlite3.Connection) -> None:
+        """W01-R26（20260926）：v4→v5仅新增两个可空冻结read model引用列。
+
+        守卫式ALTER：先读PRAGMA table_info，缺列才ADD COLUMN。不重建表、
+        不改写既有行数据，ADD-if-absent使已提交步骤可安全重放。
+        """
+        existing_columns = {
+            str(row["name"])
+            for row in connection.execute(
+                "PRAGMA table_info(r7_result_publications)"
+            )
+        }
+        for column in (
+            "frozen_read_model_artifact_id",
+            "frozen_read_model_sha256",
+        ):
+            if column not in existing_columns:
+                connection.execute(
+                    "ALTER TABLE r7_result_publications "
+                    f"ADD COLUMN {column} TEXT"
+                )
+
     def _launch_ddl(self, connection: sqlite3.Connection) -> None:
         version = self.step.source_version
         # v1 has no publication or continuity tables, v2 has no continuity,
-        # and v3 has the tables but lacks four v4 columns.  CREATE IF NOT EXISTS
-        # and ADD-if-absent make a committed step replay-safe.
+        # v3 has the tables but lacks four v4 columns, and v4 only lacks the
+        # two nullable frozen-read-model reference columns.  CREATE IF NOT
+        # EXISTS and ADD-if-absent make a committed step replay-safe.
         if version == LAUNCH_V1:
             self._execute_statements(connection, _PUBLICATION_DDL)
             self._execute_statements(connection, _RESULT_CONTEXT_INDEX_DDL)
@@ -417,6 +441,8 @@ class _StepRunner:
             self._rebuild_launch_v4_columns(connection)
             self._execute_statements(connection, _RESULT_CONTEXT_INDEX_DDL)
             self._execute_statements(connection, _CONTINUITY_INDEX_DDL)
+        elif version == LAUNCH_V4:
+            self._add_v5_publication_columns(connection)
         else:
             raise MigrationError("migration_operation_conflict")
 

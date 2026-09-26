@@ -494,6 +494,11 @@ function normalizeEvent(value = {}) {
   if (value.source_locator_refs !== undefined && !Array.isArray(value.source_locator_refs)) {
     throw new MedicalMonitoringWorkspaceApiError("EVENT_SOURCE_REFS_INVALID", "医学事件 source locator refs must be an array.");
   }
+  // W05-J2 A19：DTO边界归一精度表达——datePrecision（partial=部分精度）
+  // 与dateState同源透传，月精度（YYYY-MM）在注册表外显式携带，供时间轴
+  // pending集合与精度标注消费；不在此补01日。
+  const datePrecision = value.date_precision ?? value.datePrecision
+    ?? (dateState === "partial" ? "partial" : null);
   return {
     ...value,
     eventRef,
@@ -503,6 +508,8 @@ function normalizeEvent(value = {}) {
     start: value.start ?? value.start_date ?? null,
     end: value.end ?? value.end_date ?? null,
     dateState,
+    datePrecision,
+    date_state: dateState,
     dateLabel: dateLabel(dateState),
     riskAnchorRefs: Array.isArray(value.risk_anchor_refs) ? value.risk_anchor_refs : [],
     sourceLocatorRefs: Array.isArray(value.source_locator_refs) ? value.source_locator_refs : [],

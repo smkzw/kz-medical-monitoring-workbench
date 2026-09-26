@@ -44,6 +44,10 @@ LAUNCH_V1 = "mm-r7-slice07c2-launch-registry-v1"
 LAUNCH_V2 = "mm-r7-slice07c3-launch-registry-v2"
 LAUNCH_V3 = "mm-r7-slice08a-launch-registry-v3"
 LAUNCH_V4 = "mm-r7-slice08b-launch-registry-v4"
+# W01-R26（20260926）：v5在v4之上仅新增两个可空冻结read model引用列
+# （frozen_read_model_artifact_id/frozen_read_model_sha256），与
+# launch_registry_contracts.SCHEMA_VERSION_V5同串。
+LAUNCH_V5 = "mm-r7-w01r26-launch-registry-v5"
 PROFILE_V1 = "mm-r7-profile-store-v1"
 BINDING_V1 = "r7-slice01-run-binding-v1"
 RISK_V1 = "mm-r7-risk-rule-v1"
@@ -222,7 +226,11 @@ _LAUNCH_VARIANT_TRANSFORMS = {
         "ALTER TABLE r7_result_publications DROP COLUMN artifact_member_set_digest",
         "ALTER TABLE r7_continuity_plans DROP COLUMN r6_output_set_digest",
     ),
-    LAUNCH_V4: (),
+    LAUNCH_V4: (
+        "ALTER TABLE r7_result_publications DROP COLUMN frozen_read_model_artifact_id",
+        "ALTER TABLE r7_result_publications DROP COLUMN frozen_read_model_sha256",
+    ),
+    LAUNCH_V5: (),
 }
 
 
@@ -248,7 +256,7 @@ def _build_manifest() -> Dict[str, Any]:
     }
     launch_variants = {
         version: _variant(LAUNCH_MEMBER, version,
-                          "current" if version == LAUNCH_V4 else "legacy",
+                          "current" if version == LAUNCH_V5 else "legacy",
                           _LAUNCH_DDL, transforms)
         for version, transforms in _LAUNCH_VARIANT_TRANSFORMS.items()
     }
@@ -709,6 +717,7 @@ def inspect_project_schema(workspace: Any) -> ProjectSchemaInspection:
 __all__ = [
     "BINDING_MEMBER", "BINDING_V1", "EXECUTION_CONTROL_MEMBER",
     "LAUNCH_MEMBER", "LAUNCH_V1", "LAUNCH_V2", "LAUNCH_V3", "LAUNCH_V4",
+    "LAUNCH_V5",
     "MANIFEST_VERSION", "MEMBER_ORDER", "PROFILE_MEMBER", "PROFILE_V1",
     "ProjectSchemaInspection", "ProjectSchemaInspector", "REQUIRED_PROJECT_MEMBERS",
     "RISK_MEMBER", "RISK_V1", "RUNTIME_MEMBER", "RUNTIME_V4", "RUNTIME_V5", "RUNTIME_V6",

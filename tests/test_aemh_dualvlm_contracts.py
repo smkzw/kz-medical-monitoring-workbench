@@ -369,3 +369,93 @@ def test_clues_agree_rejects_opposite_direction_on_same_evidence():
     assert not _clues_agree(positive, neutral), (
         "neutral方向不得确认（V5-06）"
     )
+
+
+def test_clues_agree_binds_directions_to_their_metric():
+    """W03/W04命题归属（B08）：方向必须绑定指标——主分析"ALT升高；
+    AST降低"与盲核"ALT降低"引用同一证据，但ALT方向相反不得被无关的
+    AST降低掩蔽判一致。"""
+    from packages.medical_monitoring.analysis.ae_mh_cross_analysis import (
+        _clues_agree,
+    )
+
+    class E:
+        def __init__(self, eid):
+            self.evidence_id = eid
+
+    class Clue:
+        def __init__(self, title, text, eids):
+            self.title = title
+            self.text = text
+            self.evidence = tuple(E(eid) for eid in eids)
+            self.structured_payload = {
+                "domains": ["AE", "CM"],
+                "claims": [],
+            }
+
+    shared = ["ev-001"]
+    primary = Clue("肝酶两向变化", "存在异常 ALT 升高；AST 降低", shared)
+    verifier = Clue("肝酶复盘认定", "存在异常 ALT 降低", shared)
+    assert not _clues_agree(primary, verifier), (
+        "ALT方向相反不得被无关AST方向的交集掩蔽"
+    )
+
+
+def test_clues_agree_binds_grades_to_their_phase():
+    """W03/W04命题归属（B09）：本次/既往分级对调不得判一致——分级必须
+    绑定其分期，词集交集不能掩盖本次事件3级与本次1级的矛盾。"""
+    from packages.medical_monitoring.analysis.ae_mh_cross_analysis import (
+        _clues_agree,
+    )
+
+    class E:
+        def __init__(self, eid):
+            self.evidence_id = eid
+
+    class Clue:
+        def __init__(self, title, temporal):
+            self.title = title
+            self.text = ""
+            self.evidence = tuple(E(eid) for eid in ("ev-001", "ev-002"))
+            self.structured_payload = {
+                "domains": ["AE", "MH"],
+                "claims": [],
+                "temporal_relationships": list(temporal),
+            }
+
+    primary = Clue(
+        "双事件分级主张", ["本次事件3级", "既往事件1级"]
+    )
+    verifier = Clue("本次事件1级", ["本次事件1级"])
+    assert not _clues_agree(primary, verifier), (
+        "本次事件3级与本次1级是分级矛盾，词集交集不得判一致"
+    )
+
+
+def test_clues_agree_binds_temporal_order_to_their_event():
+    """W03/W04命题归属（B11）：两事件前后关系互换不得判一致——时序
+    token必须绑定事件锚，集合交集不能掩盖同一事件前后互换。"""
+    from packages.medical_monitoring.analysis.ae_mh_cross_analysis import (
+        _clues_agree,
+    )
+
+    class E:
+        def __init__(self, eid):
+            self.evidence_id = eid
+
+    class Clue:
+        def __init__(self, title, temporal):
+            self.title = title
+            self.text = ""
+            self.evidence = tuple(E(eid) for eid in ("ev-001", "ev-002"))
+            self.structured_payload = {
+                "domains": ["AE", "MH"],
+                "claims": [],
+                "temporal_relationships": list(temporal),
+            }
+
+    primary = Clue("事件顺序主张A", ["事件A给药前", "事件B给药后"])
+    verifier = Clue("事件顺序主张B", ["事件A给药后", "事件B给药前"])
+    assert not _clues_agree(primary, verifier), (
+        "同一事件锚的前后互换是时序矛盾，不得判一致"
+    )

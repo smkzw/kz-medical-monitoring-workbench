@@ -2747,14 +2747,24 @@ def test_late_project_dispatchers_keep_two_actual_api_results_isolated(
         meta = payload["projection"]["query_findings_meta"]
         rows = payload["projection"]["query_findings"]
         assert meta["total"] == len(rows)
-        assert meta["artifact"] == meta["content_sha256"]
+        # W01-R26（20260926）：content_sha256改为实际载荷内容的确定性哈希，
+        # 不再等于artifact_id（S2冻结read model与载荷解耦）；此处校验
+        # 24次并发读取的内容身份逐次一致且为64位hex。
+        assert meta["artifact"]
+        assert len(meta["content_sha256"]) == 64
+        seen_digests.add(meta["content_sha256"])
         return payload
 
+    seen_digests: set[str] = set()
     with ThreadPoolExecutor(max_workers=8) as executor:
         writer = executor.submit(churn_active_pointer)
-        concurrent_overviews = list(executor.map(read_frozen_overview, range(24)))
-        stop_pointer_churn.set()
+        try:
+            concurrent_overviews = list(executor.map(read_frozen_overview, range(24)))
+        finally:
+            # 任一读取断言失败也必须停掉churn线程，避免join永久挂起。
+            stop_pointer_churn.set()
         assert writer.result(timeout=5) > 0
+    assert len(seen_digests) == 1
     assert concurrent_overviews == [overviews[PROJECT_A]] * 24
 
     cross_project = client.get(
@@ -3346,6 +3356,9 @@ def test_slice07c3_product_route_uses_actual_typed_r5_bridge_and_refetches(
         f"{_base(project_id)}/runs/{public_token}/result-entry"
     )
     assert result_entry.status_code == 200, result_entry.text
+    # W01-R26（20260926）：本fixture的provider无product factory，发布包
+    # 本身无product视图（product-less发布）；此类发布行的公开视图保持
+    # 既有读取侧重建行为，因此仍发生第二次refetch。
     assert provider.calls == 2
     assert builder.call_count == 2
     assert validator.call_count == 2

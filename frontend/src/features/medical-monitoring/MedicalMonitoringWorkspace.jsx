@@ -9,7 +9,7 @@ import {
   normalizeMedicalMonitoringWorkspaceRouteState,
   routeStateForMedicalMonitoringWorkspaceView,
 } from "./medicalMonitoringWorkspaceRouteState.mjs";
-import { layoutJourneyTimeline, parseTimelineDate, visitAxisDate } from "./medicalMonitoringJourneyTimeline.mjs";
+import { layoutJourneyTimeline, parseTimelineDate, timelineDatePrecision, visitAxisDate } from "./medicalMonitoringJourneyTimeline.mjs";
 import { DomainIcon } from "./DomainIcon.jsx";
 import { KzSubjectFlowSankey, KzRiskTypeBars, KzCenterDomainHeatmap } from "./medicalMonitoringKzChart.jsx";
 import { MedicalMonitoringProgressPanel } from "./MedicalMonitoringProgressPanel.jsx";
@@ -527,21 +527,56 @@ function DomainLegend({ domains }) {
   );
 }
 
-function ZoomControls({ zoomLevel, onZoomChange }) {
-  const setZoom = (nextZoom) => onZoomChange?.(Math.max(-1, Math.min(1, nextZoom)));
-  // R24V2-U02/U03：视窗（全程fit vs 显式时间缩放）与信息密度（文字详略）
-  // 在UI上分开呈现——非零zoom=显式时间缩放（画布按px/day扩展），默认0=
-  // 全程fit；密度只影响标签详略不改时间窗。old semanticZoomLabel文案
-  // 保留在时间缩放侧。
+const DETAIL_DENSITY_LABELS = { compact: "精简", standard: "标准", detailed: "详细" };
+
+function ZoomControls({
+  timeViewport,
+  timeZoom,
+  detailDensity,
+  onViewportChange,
+  onDensityChange,
+  focusAvailable = false,
+}) {
+  // W05-J1 §3②：时间视窗（全程/自选/聚焦）与信息密度（精简/标准/详细）
+  // 拆成两个独立控制组——视窗决定px/day与scale范围；密度只改聚合阈值/
+  // 标签详略，切换密度不移动时间轴（A17）。
+  const setViewport = (next, zoom = 0) => onViewportChange?.(next, zoom);
   return (
     <div className="monitoring-zoom-controls" aria-label="时间视窗与信息密度控制">
       <span className="monitoring-zoom-label">时间视窗</span>
-      <div className="monitoring-zoom-buttons" role="group" aria-label="时间缩放级别">
-        <button type="button" aria-label="全程自适应（默认）" aria-pressed={zoomLevel === 0} onClick={() => setZoom(0)}>全程</button>
-        <button type="button" aria-label="压缩时间密度" aria-pressed={zoomLevel === -1} onClick={() => setZoom(-1)}>更密</button>
-        <button type="button" aria-label="扩展时间密度" aria-pressed={zoomLevel === 1} onClick={() => setZoom(1)}>更疏</button>
+      <div className="monitoring-zoom-buttons" role="group" aria-label="时间视窗模式">
+        <button type="button" aria-label="全程自适应（默认）" aria-pressed={timeViewport === "fit"} onClick={() => setViewport("fit")}>全程</button>
+        <button type="button" aria-label="自选更密时间尺度" aria-pressed={timeViewport === "custom" && timeZoom < 0} onClick={() => setViewport("custom", -1)}>更密</button>
+        <button type="button" aria-label="自选更疏时间尺度" aria-pressed={timeViewport === "custom" && timeZoom > 0} onClick={() => setViewport("custom", 1)}>更疏</button>
+        <button
+          type="button"
+          aria-label="聚焦选中问题周边时间窗"
+          aria-pressed={timeViewport === "focus"}
+          disabled={!focusAvailable}
+          title={focusAvailable ? "" : "先在时间轴上选中一个事件后可聚焦"}
+          onClick={() => setViewport("focus")}
+        >聚焦</button>
       </div>
-      <small>{zoomLevel === 0 ? "全程自适应容器宽度" : semanticZoomLabel(zoomLevel)} · 文字详略跟随选中详情</small>
+      <span className="monitoring-zoom-label">信息密度</span>
+      <div className="monitoring-zoom-buttons" role="group" aria-label="信息密度级别">
+        {["compact", "standard", "detailed"].map((density) => (
+          <button
+            key={density}
+            type="button"
+            aria-label={`信息密度${DETAIL_DENSITY_LABELS[density]}`}
+            aria-pressed={detailDensity === density}
+            onClick={() => onDensityChange?.(density)}
+          >{DETAIL_DENSITY_LABELS[density]}</button>
+        ))}
+      </div>
+      <small>
+        {timeViewport === "fit"
+          ? "全程自适应容器宽度"
+          : timeViewport === "focus"
+            ? "聚焦选中问题周边时间窗"
+            : semanticZoomLabel(timeZoom)}
+        {" "}· 密度只改聚合与标签详略，不移动时间轴
+      </small>
     </div>
   );
 }
@@ -583,6 +618,8 @@ function eventVisitContext(event, visits = []) {
 }
 
 function timelineMonthTicks(scale) {
+  // W05-J2 A23：全无有效日期时不画月份刻度——不制造假2026时间轴。
+  if (scale.hasValidDates === false) return [];
   const stepMonths = scale.spanMs > 240 * 24 * 60 * 60 * 1000 ? 3 : 1;
   const cursor = new Date(scale.startMs);
   cursor.setUTCDate(1);
@@ -612,7 +649,9 @@ function focusAdjacentTimelineEvent(keyboardEvent) {
 
 export function DomainTracks({
   projection,
-  zoomLevel,
+  timeViewport = "fit",
+  detailDensity = "standard",
+  timeZoom = 0,
   selectedEventRef,
   selectedRiskAnchorRef,
   onEventSelect,
@@ -624,6 +663,9 @@ export function DomainTracks({
   // 宽度变化都触发重测；零宽初始状态等待测量（containerWidth=null时
   // scale保持旧行为，不留永久兜底宽度）。卸载时断开观察。
   const [expandedAggregates, setExpandedAggregates] = useState(() => new Set());
+  // W05-J2 J14：显式收起选中聚合应有有效状态出口——用户收起后，选中
+  // 联动不再强制重新展开（收起优先于选中自动展开）。
+  const [collapsedAggregates, setCollapsedAggregates] = useState(() => new Set());
   // R24V2-U13：聚合键盘路径——展开时焦点进入首个成员，收起时焦点
   // 回到组开关（keyboard user不因按钮卸载而丢失位置）。autoFocus只在
   // 用户显式展开的那次mount生效（选择联动自动展开不抢焦点）。
@@ -631,6 +673,22 @@ export function DomainTracks({
   const aggregateUserToggleKey = useRef(null);
   const scrollShellRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(null);
+  // W05-J1 A18：聚焦视窗的窗口=选中事件日期±15天（scale范围只由viewport
+  // 决定）；未选中/无有效日期时不进入聚焦，按钮在父层禁用。
+  const focusWindow = useMemo(() => {
+    if (timeViewport !== "focus") return null;
+    const target = (projection.events || []).find(
+      (event) => event.eventRef === selectedEventRef,
+    );
+    const rawStart = target?.start || target?.start_date || null;
+    const rawEnd = target?.end || target?.end_date || rawStart;
+    const startMs = parseTimelineDate(rawStart);
+    const endMs = parseTimelineDate(rawEnd) ?? startMs;
+    if (startMs == null) return null;
+    const padMs = 15 * 24 * 60 * 60 * 1000;
+    const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
+    return { start: iso(startMs - padMs), end: iso((endMs ?? startMs) + padMs) };
+  }, [timeViewport, selectedEventRef, projection.events]);
   useEffect(() => {
     // 观察滚动外壳（宿主宽度=可用宽度），不是被scale撑大的canvas本身。
     const host = scrollShellRef.current;
@@ -655,12 +713,16 @@ export function DomainTracks({
     pendingDates: projection.temporalSpine?.pendingDates || [],
     windowStart: projection.temporalSpine?.windowStart,
     windowEnd: projection.temporalSpine?.windowEnd,
-    zoomLevel,
+    viewport: timeViewport,
+    timeZoom,
+    density: detailDensity,
+    focusWindow,
     // 标签栏宽度在CSS侧计入；此处给的是canvas宿主的全宽，scale内部
     // 会减去pad；标签列（--timeline-label-width）在fit模式下由调用方
     // 宽度承担，fit结果=宿主全宽（含标签列），绘图区=减pad后。
-    containerWidth: zoomLevel === 0 && containerWidth ? containerWidth : null,
-  }), [projection, zoomLevel, containerWidth]);
+    // custom视窗画布按px/day自扩展，不传入容器宽。
+    containerWidth: timeViewport !== "custom" && containerWidth ? containerWidth : null,
+  }), [projection, timeViewport, timeZoom, detailDensity, focusWindow, containerWidth]);
   const journeyMarkerFor = (eventRef) => (journeyEnabled && journeyMarkerByEventRef ? journeyMarkerByEventRef[eventRef] || null : null);
   // R24V2-B02：中/高风险计数只统计severity_source=recorded的行；
   // unknown/inferred锚点不进风险分级统计（另有N条单独标示）。
@@ -679,7 +741,8 @@ export function DomainTracks({
   const monthTicks = timelineMonthTicks(layout.scale);
   let lastVisitLabelX = -Infinity;
   const labeledVisits = layout.visitMarks.map((mark, index) => {
-    const minGap = zoomLevel === 1 ? 84 : zoomLevel === 0 ? 104 : 124;
+    // W05-J1：标签间距跟随信息密度（详略预算），与时间视窗无关。
+    const minGap = detailDensity === "detailed" ? 84 : detailDensity === "compact" ? 124 : 104;
     const showLabel = index === 0 || mark.x - lastVisitLabelX >= minGap;
     if (showLabel) lastVisitLabelX = mark.x;
     return { ...mark, showLabel, labelSide: index % 2 ? "below" : "above" };
@@ -691,8 +754,11 @@ export function DomainTracks({
           <span className="monitoring-eyebrow">共享时间轴</span>
           <h2 id={journeyEnabled ? MONITORING_JOURNEY_AXIS_TITLE_ID : undefined} tabIndex={journeyEnabled ? -1 : undefined}>{axisMode}</h2>
         </div>
-        <span className="monitoring-axis-window">{text(projection.temporalSpine?.windowStart, layout.scale.windowStartIso)} — {text(projection.temporalSpine?.windowEnd, layout.scale.windowEndIso)}</span>
+        <span className="monitoring-axis-window">{layout.scale.hasValidDates === false ? "无有效日期" : `${text(projection.temporalSpine?.windowStart, layout.scale.windowStartIso)} — ${text(projection.temporalSpine?.windowEnd, layout.scale.windowEndIso)}`}</span>
       </div>
+      {layout.scale.hasValidDates === false ? (
+        <p className="monitoring-query-intro" data-monitoring-timeline-empty>当前数据没有可上轴的有效日期：月份刻度与时间窗已隐藏，日期待确认的记录在下方单独列示。</p>
+      ) : null}
       {journeyTruncationText ? <p className="monitoring-journey-truncation" role="status" data-journey-truncation>{journeyTruncationText}</p> : null}
       <div className="monitoring-density-summary" aria-label="高密度医学旅程摘要">
         <strong>{(projection.events || []).length} 条事件 · {(projection.temporalSpine?.visits || []).length} 次访视 · {(projection.currentRisks || []).length} 个风险锚点</strong>
@@ -780,18 +846,34 @@ export function DomainTracks({
                     const riskLabel = riskInfo
                       ? `${DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel}·${riskInfo.label}`
                       : "";
+                    // W05-J2：窗外方向（before/after）以继续符号呈现，
+                    // title与aria携带原始日期与方向——窗外事件不伪装同日。
+                    const beyondCopy = mark.beyondStart === "before"
+                      ? "开始于时间窗之前"
+                      : mark.beyondEnd === "after"
+                        ? "持续到时间窗之后"
+                        : mark.beyond === "before"
+                          ? "发生于时间窗之前"
+                          : mark.beyond === "after"
+                            ? "发生于时间窗之后"
+                            : "";
+                    const detailText = event.dateState === "exact" ? text(event.start, "实际日期待确认") : event.dateLabel;
+                    const openEnd = mark.geometry === "ongoing" || mark.geometry === "end_unknown";
                     const commonProps = {
                       type: "button",
-                      className: `monitoring-track-event monitoring-track-event-${mark.geometry}${mark.x > layout.scale.width - 170 ? " is-near-end" : ""}${selected ? " is-selected" : ""}${riskInfo ? ` has-risk monitoring-track-risk-${riskInfo.css}` : ""}`,
+                      className: `monitoring-track-event monitoring-track-event-${mark.geometry}${mark.width > 0 ? " monitoring-track-event-span" : ""}${openEnd ? " monitoring-track-event-open-end" : ""}${mark.beyondStart || mark.beyondEnd || mark.beyond ? " monitoring-track-event-beyond" : ""}${mark.x > layout.scale.width - 170 ? " is-near-end" : ""}${selected ? " is-selected" : ""}${riskInfo ? ` has-risk monitoring-track-risk-${riskInfo.css}` : ""}`,
                       "data-event-ref": event.eventRef,
                       "data-timeline-geometry": mark.geometry,
                       "data-stack-row": mark.stackRow,
-                      "aria-label": `${DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel}：${event.eventLabel}${riskInfo ? `，${riskInfo.label}` : ""}${marker ? `，本轮变化：${marker.changeText}${marker.countSuffix}` : ""}`,
+                      "data-finding-beyond": mark.beyondStart || mark.beyondEnd || mark.beyond || "",
+                      "aria-label": `${DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel}：${event.eventLabel}${beyondCopy ? `，${beyondCopy}` : ""}${riskInfo ? `，${riskInfo.label}` : ""}${marker ? `，本轮变化：${marker.changeText}${marker.countSuffix}` : ""}`,
                       onClick: () => onEventSelect?.(event),
                       onKeyDown: focusAdjacentTimelineEvent,
-                      title: `${event.eventLabel} · ${event.dateState === "exact" ? text(event.start, "实际日期待确认") : event.dateLabel}${event.end && event.end !== event.start ? ` — ${event.end}` : ""}`,
+                      title: `${event.eventLabel}${beyondCopy ? `（${beyondCopy}：${event.start || ""}）` : ""} · ${detailText}${event.end && event.end !== event.start ? ` — ${event.end}` : ""}`,
                     };
-                    if (mark.geometry === "interval") {
+                    // W05-J2 A22：interval/ongoing/end_unknown/月精度都以
+                    // 条形（宽度>0）呈现；ongoing/end_unknown附加开-end视觉。
+                    if (mark.width > 0) {
                       return (
                         <button
                           key={event.eventRef}
@@ -802,7 +884,7 @@ export function DomainTracks({
                           {riskInfo ? <span className={`monitoring-compact-risk-label monitoring-track-risk-${riskInfo.css}`}>{riskInfo.chip}</span> : null}
                           <span className="monitoring-track-event-title">{riskInfo && <span className={`monitoring-track-risk monitoring-track-risk-${riskInfo.css}`}>{riskLabel}</span>}{event.eventLabel}</span>
                           {marker ? <MonitoringJourneyChangeMarker marker={marker} /> : null}
-                          <small className="monitoring-track-event-detail">{text(event.start)} — {text(event.end)}</small>
+                          <small className="monitoring-track-event-detail">{beyondCopy ? `${beyondCopy} · ` : ""}{text(event.start)} — {text(event.end)}</small>
                           <small className="monitoring-track-event-source">来源定位：{event.sourceLocatorRefs.length ? `已定位到 ${event.sourceLocatorRefs.length} 条原始记录` : "待确认"}</small>
                         </button>
                       );
@@ -815,9 +897,9 @@ export function DomainTracks({
                       >
                         <DomainIcon domain={event.domain} encoding={event.domainEncoding} size="track" title={DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel} />
                         {riskInfo ? <span className={`monitoring-compact-risk-label monitoring-track-risk-${riskInfo.css}`}>{riskInfo.chip}</span> : null}
-                        <span className="monitoring-track-event-title">{riskInfo && <span className={`monitoring-track-risk monitoring-track-risk-${riskInfo.css}`}>{riskLabel}</span>}{zoomLevel === 1 ? event.eventLabel : ""}</span>
+                        <span className="monitoring-track-event-title">{riskInfo && <span className={`monitoring-track-risk monitoring-track-risk-${riskInfo.css}`}>{riskLabel}</span>}{detailDensity === "detailed" ? event.eventLabel : ""}</span>
                         {marker ? <MonitoringJourneyChangeMarker marker={marker} /> : null}
-                        <small className="monitoring-track-event-detail">{event.dateState === "exact" ? text(event.start, "实际日期待确认") : event.dateLabel}</small>
+                        <small className="monitoring-track-event-detail">{beyondCopy ? `${beyondCopy} · ` : ""}{detailText}</small>
                         <small className="monitoring-track-event-source">来源定位：{event.sourceLocatorRefs.length ? `已定位到 ${event.sourceLocatorRefs.length} 条原始记录` : "待确认"}</small>
                       </button>
                     );
@@ -827,7 +909,9 @@ export function DomainTracks({
                     // React state展开成员列表（就地可点/键盘可达）；选中
                     // 事件在本聚合内时自动展开。
                     const containsSelected = aggregate.eventRefs.includes(selectedRef);
-                    const expanded = containsSelected || expandedAggregates.has(aggregate.aggregateKey);
+                    const expanded =
+                      expandedAggregates.has(aggregate.aggregateKey)
+                      || (containsSelected && !collapsedAggregates.has(aggregate.aggregateKey));
                     return (
                       <span
                         className={`monitoring-domain-track-aggregate monitoring-timeline-aggregate${expanded ? " is-expanded" : ""}`}
@@ -861,6 +945,11 @@ export function DomainTracks({
                               aria-label={`收起本组 ${aggregate.count} 条记录`}
                               onClick={() => {
                                 aggregateUserToggleKey.current = aggregate.aggregateKey;
+                                setCollapsedAggregates((prev) => {
+                                  const next = new Set(prev);
+                                  next.add(aggregate.aggregateKey);
+                                  return next;
+                                });
                                 setExpandedAggregates((prev) => {
                                   const next = new Set(prev);
                                   next.delete(aggregate.aggregateKey);
@@ -890,6 +979,11 @@ export function DomainTracks({
                             }}
                             onClick={() => {
                               aggregateUserToggleKey.current = aggregate.aggregateKey;
+                              setCollapsedAggregates((prev) => {
+                                const next = new Set(prev);
+                                next.delete(aggregate.aggregateKey);
+                                return next;
+                              });
                               setExpandedAggregates((prev) => {
                                 const next = new Set(prev);
                                 next.add(aggregate.aggregateKey);
@@ -939,6 +1033,9 @@ export function DomainTracks({
             <span>{DATE_STATE_LABELS[event.dateState] || "日期待确认"}</span>
             <strong>{DOMAIN_LABELS[event.domain] || event.domainEncoding?.shortLabel || "其他事件"} · {event.eventLabel}</strong>
             <small>不确定访视归属；未按实际日期吸附到共享时间轴，单独列示</small>
+            {timelineDatePrecision(event.start || event.start_date) === "month" ? (
+              <small className="monitoring-pending-precision" data-date-precision="month">月精度：{event.start}（YYYY-MM，不以01日为实际日）</small>
+            ) : null}
             {event.risk ? <span className={`monitoring-track-risk monitoring-track-risk-${event.risk.severity}`}>{riskSeverityLabel(event.risk.severity)}</span> : null}
             {marker ? <MonitoringJourneyChangeMarker marker={marker} /> : null}
             {marker ? <span className="monitoring-journey-sr-only">，本轮变化：{marker.changeText}{marker.countSuffix}</span> : null}
@@ -1690,7 +1787,9 @@ export function SubjectWorkspaceView({
   payload,
   route,
   view,
-  zoomLevel,
+  timeViewport = "fit",
+  detailDensity = "standard",
+  timeZoom = 0,
   onRiskSelect,
   onEventSelect,
   onSource,
@@ -1880,7 +1979,9 @@ export function SubjectWorkspaceView({
           : (
             <DomainTracks
               projection={projection}
-              zoomLevel={zoomLevel}
+              timeViewport={timeViewport}
+              detailDensity={detailDensity}
+              timeZoom={timeZoom}
               selectedEventRef={route.event_ref}
               selectedRiskAnchorRef={route.risk_anchor_ref}
               onEventSelect={selectWorkspaceEvent}
@@ -1977,6 +2078,15 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
     .sort((left, right) => ["critical", "high", "medium"].indexOf(left.severity) - ["critical", "high", "medium"].indexOf(right.severity));
   const totalCount = projection.aggregation?.risk_count ?? risks.length;
   const aiFindings = Array.isArray(projection.aiQueryFindings) ? projection.aiQueryFindings : [];
+  // W01-R26 A12：真实Finding卡——query_findings是Finding冻结DTO
+  // （与QueryDraft分离），claim/source按分类与逐条入口渲染；旧形态
+  // （legacy_query_drafts）如实按draft呈现并标注来源形态。
+  const findingCards = Array.isArray(projection.findingCards) ? projection.findingCards : [];
+  const queryFindingsMeta = projection.queryFindingsMeta || {};
+  const queryDraftRows = Array.isArray(projection.queryDraftRows) ? projection.queryDraftRows : [];
+  const legacyDraftRows = queryFindingsMeta.shape === "legacy_query_drafts" ? queryDraftRows : [];
+  const FINDING_STATE_LABELS = { open: "待核实", confirmed: "已确认", closed: "已关闭" };
+  const CLAIM_KIND_LABELS = { basis: "依据", finding: "发现", action: "行动项" };
   const aiAccepted = aiFindings.filter((item) => item.state === "accepted").length;
   const aiEscalated = aiFindings.filter((item) => item.state === "escalated").length;
   const aiGaps = aiFindings.filter((item) => item.state === "unverifiable_gap" || item.state === "coverage_gap").length;
@@ -2044,6 +2154,82 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
           </ul>
         </section>
       ) : null}
+      {findingCards.length || legacyDraftRows.length || (queryFindingsMeta.shape === "finding_dto_v1" && queryFindingsMeta.state !== "not_applicable") ? (
+        <section className="monitoring-panel monitoring-panel-wide" data-monitoring-finding-cards>
+          <div className="monitoring-section-heading"><span className="monitoring-eyebrow">真实发现</span><h2>发现（{findingCards.length} 条 · 载荷形态 {queryFindingsMeta.shape === "legacy_query_drafts" ? "旧版draft载荷" : "Finding DTO"}）</h2></div>
+          {findingCards.length ? (
+            <ul className="monitoring-query-card-list">
+              {findingCards.map((item) => {
+                const claims = Array.isArray(item.claims) ? item.claims : [];
+                const sourceRefs = Array.isArray(item.sourceRefs) ? item.sourceRefs : [];
+                const windowText = item.windowStart || item.windowEnd
+                  ? `${item.windowStart || "未知"} — ${item.windowEnd || "未知"}`
+                  : "时间窗待确认";
+                return (
+                  <li key={item.findingId} className="monitoring-query-card" data-query-finding={item.findingId} data-finding-state={item.findingState} data-finding-kind={item.scopeKind || "finding"}>
+                    <header className="monitoring-query-card-head">
+                      <span className={`monitoring-query-state-chip monitoring-query-state-${item.findingState}`}>{FINDING_STATE_LABELS[item.findingState] || item.findingState}</span>
+                      <strong>{item.findingId}</strong>
+                      <span className="monitoring-query-card-target">
+                        受试者{" "}
+                        <button type="button" className="monitoring-subject-link" onClick={() => onSubjectSelect?.({ subject_ref: item.subjectRef, site_ref: item.siteRef })}>{item.subjectRef || "—"}</button>
+                        {" "}· 中心 {item.siteRef || "—"}
+                      </span>
+                    </header>
+                    <div className="monitoring-query-card-body">
+                      <section aria-label="事件与时间窗"><h3>事件与时间窗</h3>
+                        <p data-finding-event-ref={item.eventRef || ""}>{item.eventRef || "未关联具体事件"} · {windowText}</p>
+                      </section>
+                      <section aria-label="分类型主张"><h3>分类型主张</h3>
+                        <ul className="monitoring-claim-list">
+                          {claims.map((claim, claimIndex) => (
+                            <li key={claimIndex} data-claim-kind={claim.kind}>{CLAIM_KIND_LABELS[claim.kind] || claim.kind}：{claim.text}</li>
+                          ))}
+                        </ul>
+                      </section>
+                      <section aria-label="来源定位"><h3>来源定位（{sourceRefs.length} 条）</h3>
+                        <ul>
+                          {sourceRefs.map((ref, refIndex) => (
+                            <li key={ref.evidenceId || refIndex} data-source-evidence-id={ref.evidenceId}>
+                              {ref.path ? `${ref.path} · ${ref.recordId || ""} · ${ref.field || ""}` : ref.evidenceId}
+                              <button type="button" className="monitoring-subject-link" onClick={() => onSource?.({ risk_instance_ref: item.riskId, source_locator_ref: ref.evidenceId })}>来源定位</button>
+                            </li>
+                          ))}
+                        </ul>
+                        {item.locator ? <p>{[item.locator.path, item.locator.recordId, item.locator.field].filter(Boolean).join(" · ")}</p> : null}
+                      </section>
+                    </div>
+                    <footer className="monitoring-query-card-actions">
+                      <button type="button" onClick={() => onSubjectSelect?.({ subject_ref: item.subjectRef, site_ref: item.siteRef })}>进入受试者医学旅程</button>
+                      {item.eventRef && onFindingSelect ? (
+                        <button type="button" className="monitoring-back-button" data-event-ref={item.eventRef} onClick={() => onFindingSelect?.({ subject_ref: item.subjectRef, site_ref: item.siteRef, anchor_event_refs: [item.eventRef] })}>定位关联事件</button>
+                      ) : null}
+                    </footer>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : legacyDraftRows.length ? (
+            <div>
+              <p className="monitoring-query-intro" data-monitoring-findings-legacy-note>本次结果为旧版载荷形态：仅含查询草稿（QueryDraft），以下按草稿如实呈现，不伪造Finding。</p>
+              <ul className="monitoring-query-card-list">
+                {legacyDraftRows.map((draft) => (
+                  <li key={draft.queryDraftId} className="monitoring-query-card" data-query-draft={draft.queryDraftId}>
+                    <header className="monitoring-query-card-head">
+                      <span className="monitoring-query-state-chip monitoring-query-state-draft">草稿</span>
+                      <strong>{draft.queryDraftId}</strong>
+                      <span className="monitoring-query-card-target">引用Finding {draft.findingId || "—"}</span>
+                    </header>
+                    <div className="monitoring-query-card-body"><section aria-label="草稿内容"><h3>草稿内容</h3><p>{draft.displayText || "草稿内容待确认"}</p></section></div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="monitoring-query-intro" data-monitoring-findings-empty>本轮零发现：findings为显式空集，不存在可导航的发现卡。</p>
+          )}
+        </section>
+      ) : null}
       <section className="monitoring-panel monitoring-panel-wide">
         <div className="monitoring-section-heading"><span className="monitoring-eyebrow">查询工作区</span><h2>请核实事项（{risks.length} 项待核对 · 全量锚点 {numberText(totalCount)}）</h2></div>
         <p className="monitoring-query-intro">以下每张卡片按「依据 — 发现 — 请核实事项」三段呈现：先看数据依据，再看医学发现，最后由您核对原始记录后决定是否发出数据核查问题。AI 只定位证据和风险，医学判断由您终审。</p>
@@ -2097,7 +2283,12 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
   const [status, setStatus] = useState(routeValid ? "loading" : "invalid");
   const [error, setError] = useState(null);
   const [focusIndex, setFocusIndex] = useState(0);
-  const [zoomLevel, setZoomLevel] = useState(0);
+  // W05-J1 §3②：timeViewport（全程/自选/聚焦）与detailDensity（精简/
+  // 标准/详细）拆成两个独立state——视窗决定px/day与scale范围，密度只
+  // 影响聚合阈值/collisionWidth/标签详略（A17：切密度scale四值不变）。
+  const [timeViewport, setTimeViewport] = useState("fit");
+  const [timeZoom, setTimeZoom] = useState(0);
+  const [detailDensity, setDetailDensity] = useState("standard");
   const lastRouteKey = useRef("");
   const risks = payload?.projection?.currentRisks || [];
   const currentRouteRef = useRef(route);
@@ -2169,7 +2360,8 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
       if (event.target instanceof Element && event.target.closest("[data-monitoring-flow-scope]")) return;
       if (event.key === "-" || event.key === "0" || event.key === "+" || (event.key === "=" && event.shiftKey)) {
         event.preventDefault();
-        setZoomLevel((current) => event.key === "0" ? 0 : event.key === "-" ? Math.max(-1, current - 1) : Math.min(1, current + 1));
+        setTimeZoom((current) => event.key === "0" ? 0 : event.key === "-" ? Math.max(-1, current - 1) : Math.min(1, current + 1));
+        setTimeViewport(event.key === "0" ? "fit" : "custom");
         return;
       }
       const available = risks.filter((risk) => ["critical", "high", "medium"].includes(risk.severity));
@@ -2317,10 +2509,10 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
   }
 
   return (
-    <main className="monitoring-page" data-monitoring-view={effectiveView || "invalid"} data-monitoring-status={status} data-monitoring-zoom={zoomLevel}>
+    <main className="monitoring-page" data-monitoring-view={effectiveView || "invalid"} data-monitoring-status={status} data-monitoring-viewport={timeViewport} data-monitoring-density={detailDensity}>
       <header className="monitoring-page-header">
         <div><span className="monitoring-eyebrow">医学监查</span><h1>{VIEW_LABELS[effectiveView] || "项目风险概览"}</h1><p>从项目风险进入中心与受试者，沿时间轴查看事件、趋势和来源依据</p></div>
-        <div className="monitoring-page-actions"><ZoomControls zoomLevel={zoomLevel} onZoomChange={setZoomLevel} /><button type="button" className="monitoring-back-button" onClick={onReturn}>医学监查首页</button></div>
+        <div className="monitoring-page-actions"><ZoomControls timeViewport={timeViewport} timeZoom={timeZoom} detailDensity={detailDensity} onViewportChange={(next, zoom = 0) => { setTimeViewport(next); setTimeZoom(zoom); }} onDensityChange={setDetailDensity} focusAvailable={Boolean(route.event_ref)} /><button type="button" className="monitoring-back-button" onClick={onReturn}>医学监查首页</button></div>
       </header>
       <IdentityStrip identity={route} project={payload?.projection?.project || {}} />
       <nav className="monitoring-route-tabs" aria-label="医学监查页面导航">
@@ -2336,7 +2528,7 @@ export function MedicalMonitoringWorkspace({ routeState, onRouteChange, onReturn
       {status === "ready" && payload && (
         <>
           {route.view === "overview" || route.view === "site_overview" ? <OverviewView payload={payload} route={route} selectedRiskInstanceRef={route.risk_instance_ref} onRiskSelect={selectRisk} onCenterSelect={selectCenter} onSubjectSelect={selectSubject} onSource={openSource} onFlowStageSelect={selectFlowStage} onFlowLinkSelect={selectFlowLink} onFlowMetricSelect={selectFlowMetric} onFlowRiskToggle={toggleFlowRiskBand} onFlowClear={clearFlowSelection} onFlowSubjectJump={jumpFlowSubject} /> : null}
-          {SUBJECT_VIEW_KEYS.includes(route.view) ? <SubjectWorkspaceView payload={payload} route={route} view={route.view} zoomLevel={zoomLevel} onRiskSelect={selectRisk} onEventSelect={selectEvent} onSource={openSource} onDrawerClose={closeJourneyDrawer} /> : null}
+          {SUBJECT_VIEW_KEYS.includes(route.view) ? <SubjectWorkspaceView payload={payload} route={route} view={route.view} timeViewport={timeViewport} detailDensity={detailDensity} timeZoom={timeZoom} onRiskSelect={selectRisk} onEventSelect={selectEvent} onSource={openSource} onDrawerClose={closeJourneyDrawer} /> : null}
           {route.view === "evidence" ? <EvidenceView payload={payload} route={route} onBack={backFromEvidence} /> : null}
         </>
       )}

@@ -502,7 +502,13 @@ def test_resolved_context_reads_findings_from_committed_mode_output() -> None:
     assert envelope["findings"] == [
         {"finding_id": "finding-old", "kind": "finding"}
     ]
-    assert envelope["meta"]["content_sha256"] == "a" * 64
+    # W01-R26（20260926）：content_sha256改为实际载荷内容的确定性哈希，
+    # 不再等于artifact_id。
+    from packages.medical_monitoring.runtime import launch_registry as _lr
+
+    assert envelope["meta"]["content_sha256"] == _lr.content_digest(
+        envelope["findings"]
+    )
     assert envelope["meta"]["state"] == "completed_with_findings"
 
 

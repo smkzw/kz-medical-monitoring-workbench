@@ -384,6 +384,61 @@ def _check_draft_only(item: Mapping[str, Any]) -> None:
             )
 
 
+def _validate_affected_query_draft_payload(
+    payload: Mapping[str, Any],
+    *,
+    require_findings_key: bool,
+) -> None:
+    """W01-R26 A12：affected_query_draft载荷的两DTO身份关联校验。
+
+    新形态载荷必须显式携带平行findings数组（空集也必须写``findings: []``），
+    每条Finding含稳定finding_id，且每个query_draft以finding_id引用存在的
+    Finding。``require_findings_key=False``时（历史工件重抽取）findings键
+    缺失的pre-S3存量载荷保持原抽取路径，不回溯追溯。
+    """
+    drafts = payload.get("query_drafts", [])
+    finding_rows = payload.get("findings")
+    if finding_rows is None and not require_findings_key:
+        return
+    if not isinstance(finding_rows, Sequence) or isinstance(
+        finding_rows, (str, bytes)
+    ):
+        raise AtomicExtractionError(
+            "FINDINGS_PAYLOAD_INVALID",
+            "affected_query_draft payload must carry an explicit findings array",
+        )
+    finding_identities: Set[str] = set()
+    for f in finding_rows:
+        if not isinstance(f, Mapping):
+            raise AtomicExtractionError("FINDING_ITEM_INVALID")
+        fid = str(f.get("finding_id", "")).strip()
+        if not fid:
+            raise AtomicExtractionError("FINDING_ID_MISSING")
+        if fid in finding_identities:
+            raise AtomicExtractionError(
+                "DUPLICATE_OBJECT_ID",
+                f"duplicate finding identity ('finding', {fid})",
+            )
+        finding_identities.add(fid)
+    expected_count = payload.get("finding_count")
+    if expected_count is not None and expected_count != len(finding_rows):
+        raise AtomicExtractionError(
+            "FINDING_COUNT_MISMATCH",
+            "finding_count does not match findings array length",
+        )
+    for q in drafts:
+        if not isinstance(q, Mapping):
+            continue
+        draft_finding_id = str(q.get("finding_id", "")).strip()
+        if draft_finding_id not in finding_identities:
+            qid = str(q.get("query_draft_id", "")).strip()
+            raise AtomicExtractionError(
+                "QUERY_DRAFT_FINDING_REFERENCE_INVALID",
+                f"query draft {qid} references finding"
+                f" {draft_finding_id or '<missing>'} outside payload findings",
+            )
+
+
 def extract_atomic_items(
     outputs: Sequence[Mapping[str, Any]],
     *,
@@ -463,6 +518,14 @@ def extract_atomic_items(
             drafts = payload.get("query_drafts", [])
             if not isinstance(drafts, Sequence) or isinstance(drafts, (str, bytes)):
                 raise AtomicExtractionError("QUERY_DRAFTS_PAYLOAD_INVALID")
+            # W01-R26 A12：payload携带平行findings数组时（新DTO形态）校验
+            # 每条含稳定finding_id且每个query_draft以finding_id引用存在的
+            # Finding。findings键缺失的载荷是pre-S3存量工件，保持原抽取
+            # 路径（提交侧的新载荷由commit_mode_outputs强制要求findings）。
+            _validate_affected_query_draft_payload(
+                payload,
+                require_findings_key=False,
+            )
             for q in drafts:
                 if not isinstance(q, Mapping):
                     raise AtomicExtractionError("QUERY_DRAFT_ITEM_INVALID")
@@ -786,6 +849,28 @@ def commit_mode_outputs(
                 "MODE_OUTPUT_INVALID",
                 f"output {out.get('output_kind')} failed validation: {issues}",
             )
+
+    # W01-R26 A12：新提交的affected_query_draft必须显式携带平行findings
+    # 数组（空集也写findings: []），QueryDraft以finding_id引用存在的Finding。
+    if mode == "daily":
+        draft_output = by_kind.get("affected_query_draft")
+        draft_payload = (
+            draft_output.get("payload")
+            if isinstance(draft_output, Mapping)
+            else None
+        )
+        if isinstance(draft_payload, Mapping):
+            try:
+                _validate_affected_query_draft_payload(
+                    draft_payload,
+                    require_findings_key=True,
+                )
+            except AtomicExtractionError as exc:
+                raise R6OutputVerificationError(
+                    "AFFECTED_QUERY_DRAFT_PAYLOAD_INVALID",
+                    f"affected_query_draft payload failed Finding/QueryDraft"
+                    f" separation validation: {exc}",
+                ) from exc
 
     # Validate post_lock cross-output set
     if mode == "post_lock_pre_cfdi":
