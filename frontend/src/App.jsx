@@ -2054,7 +2054,7 @@ function AiGatewayPanel({ status, runs = [], onStatusChange, compact = false }) 
                                 <input
                                   type="number"
                                   min="1"
-                                  max="50"
+                                  max="12"
                                   value={form.listing_mapping_chunk_size || ""}
                                   placeholder="系统默认 12"
                                   onChange={(event) => setForm({ ...form, listing_mapping_chunk_size: event.target.value === "" ? 0 : Number(event.target.value) })}

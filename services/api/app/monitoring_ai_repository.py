@@ -119,6 +119,118 @@ def _iso(value: datetime | None) -> str:
     return value.isoformat() if value is not None else ""
 
 
+def _int_value(source: Mapping[str, Any], key: str) -> int | None:
+    """B5：缺失/空→None（unknown），明确0是真实观测值必须保留。
+
+    显式None判断，不用or真值回退——0经or回退会丢失为unknown。"""
+    raw = source.get(key)
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _float_value(source: Mapping[str, Any], key: str) -> float | None:
+    raw = source.get(key)
+    if raw is None or raw == "":
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_int(*pairs: tuple[Mapping[str, Any], str]) -> int | None:
+    """按优先级取第一个非None整型；显式None判断（0不会触发回退）。"""
+    for source, key in pairs:
+        value = _int_value(source, key)
+        if value is not None:
+            return value
+    return None
+
+
+def _normalize_call_usage(
+    diagnostics: Mapping[str, Any],
+) -> tuple[int | None, int | None, int | None, int | None, int | None, int]:
+    """B5：提供方实际usage schema规范化为账本五列+unknown标记。
+
+    提供方实际schema（按优先级取第一个非None值，全部显式None判断）：
+      prompt:     usage.prompt_tokens | usage.input_tokens
+      completion: usage.completion_tokens | usage.output_tokens
+      reasoning:  usage.detail.reasoning_tokens |
+                  usage.completion_tokens_details.reasoning_tokens |
+                  usage.reasoning_tokens
+      cached:     usage.detail.cached_tokens |
+                  usage.prompt_tokens_details.cached_tokens |
+                  usage.prompt_cache_hit_tokens（DeepSeek实际字段） |
+                  usage.cached_tokens
+      total:      usage.detail.total_tokens | usage.total_tokens
+    total绝不从组件伪造或相加——reasoning⊆completion、cached⊆prompt，
+    重复计入total会双算；上游未回报total则保持None。usage平面键
+    （diagnostics.prompt_tokens等）仅在usage字典整体缺失时兜底。
+    0是真实观测值必须保留；全部已知键均无整型时usage_unknown=1。
+    """
+    usage = (
+        diagnostics.get("usage")
+        if isinstance(diagnostics.get("usage"), dict)
+        else {}
+    )
+    flat_fallback = not usage
+    detail = (
+        usage.get("detail")
+        if isinstance(usage.get("detail"), dict)
+        else {}
+    )
+    prompt_details = (
+        usage.get("prompt_tokens_details")
+        if isinstance(usage.get("prompt_tokens_details"), dict)
+        else {}
+    )
+    completion_details = (
+        usage.get("completion_tokens_details")
+        if isinstance(usage.get("completion_tokens_details"), dict)
+        else {}
+    )
+    if flat_fallback and isinstance(diagnostics.get("prompt_tokens"), int):
+        usage = diagnostics
+
+    prompt_tokens = _first_int(
+        (usage, "prompt_tokens"), (usage, "input_tokens"),
+    )
+    completion_tokens = _first_int(
+        (usage, "completion_tokens"), (usage, "output_tokens"),
+    )
+    reasoning_tokens = _first_int(
+        (detail, "reasoning_tokens"),
+        (completion_details, "reasoning_tokens"),
+        (usage, "reasoning_tokens"),
+    )
+    cached_tokens = _first_int(
+        (detail, "cached_tokens"),
+        (prompt_details, "cached_tokens"),
+        (usage, "prompt_cache_hit_tokens"),
+        (usage, "cached_tokens"),
+    )
+    total_tokens = _first_int(
+        (detail, "total_tokens"), (usage, "total_tokens"),
+    )
+    known_sources = (usage, detail, prompt_details, completion_details)
+    usage_unknown = (
+        0 if any(
+            isinstance(value, int) and not isinstance(value, bool)
+            for source in known_sources
+            for value in source.values()
+        )
+        else 1
+    )
+    return (
+        prompt_tokens, completion_tokens, reasoning_tokens,
+        cached_tokens, total_tokens, usage_unknown,
+    )
+
+
 def _datetime(value: str) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
 
@@ -971,6 +1083,106 @@ class MonitoringAiRepository:
                            "attempt_number": row["attempt_number"], "read_id": row["read_id"]})
         return tuple(result)
 
+    def start_call(
+        self,
+        *,
+        project_id: str,
+        job_id: str,
+        attempt_id: str,
+        owner: str,
+        provider: str,
+        requested_model: str,
+    ) -> str:
+        """B5：物理POST发出前先落started行。
+
+        进程中断时该行保持started且用量列为NULL、usage_unknown=1——
+        中断的调用处于started/unknown，绝不推断为0。正常结束后由
+        complete_call原行更新真实用量与结局。
+        """
+        if not project_id or not job_id:
+            raise ValueError("call ledger requires project_id and job_id")
+        now = self.clock()
+        call_id = "moncall_" + content_sha256({
+            "project_id": project_id,
+            "job_id": job_id,
+            "attempt_id": attempt_id,
+            "phase": "start",
+            "created_at": _iso(now),
+        })[:28]
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            call_seq = int(
+                connection.execute(
+                    """
+                    SELECT COALESCE(MAX(call_seq), 0) + 1
+                    FROM monitoring_ai_call_ledger
+                    WHERE project_id = ? AND job_id = ?
+                    """,
+                    (project_id, job_id),
+                ).fetchone()[0]
+            )
+            connection.execute(
+                """
+                INSERT INTO monitoring_ai_call_ledger(
+                    call_id, project_id, job_id, attempt_id, call_seq,
+                    owner, provider, requested_model, observed_model,
+                    outcome, usage_unknown, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 'started', 1, ?)
+                """,
+                (
+                    call_id, project_id, job_id, attempt_id, call_seq,
+                    owner, provider, requested_model, _iso(now),
+                ),
+            )
+            connection.commit()
+        return call_id
+
+    def complete_call(
+        self,
+        call_id: str,
+        *,
+        diagnostics: Mapping[str, Any],
+        observed_model: str = "",
+        outcome: str = "",
+        error_code: str = "",
+    ) -> None:
+        """B5：请求结束后原行更新——提供方实际usage schema规范化入账。"""
+        (
+            prompt_tokens, completion_tokens, reasoning_tokens,
+            cached_tokens, total_tokens, usage_unknown,
+        ) = _normalize_call_usage(diagnostics)
+        with self._connect() as connection:
+            updated = connection.execute(
+                """
+                UPDATE monitoring_ai_call_ledger
+                SET wire = ?, observed_model = ?,
+                    prompt_tokens = ?, completion_tokens = ?,
+                    reasoning_tokens = ?, cached_tokens = ?, total_tokens = ?,
+                    usage_unknown = ?, response_bytes = ?, read_seconds = ?,
+                    outcome = ?, error_code = ?
+                WHERE call_id = ?
+                """,
+                (
+                    str(diagnostics.get("wire") or ""),
+                    str(observed_model or ""),
+                    prompt_tokens,
+                    completion_tokens,
+                    reasoning_tokens,
+                    cached_tokens,
+                    total_tokens,
+                    usage_unknown,
+                    _int_value(diagnostics, "response_bytes"),
+                    _float_value(diagnostics, "sse_read_seconds"),
+                    outcome,
+                    error_code,
+                    call_id,
+                ),
+            )
+            if updated.rowcount != 1:
+                raise MonitoringAiRepositoryError(
+                    "call ledger completion lost its started row"
+                )
+
     def record_call(
         self,
         *,
@@ -986,7 +1198,11 @@ class MonitoringAiRepository:
         outcome: str = "",
         error_code: str = "",
     ) -> str:
-        """E0：一次物理POST一条成本账（usage缺失记unknown不填0）。"""
+        """E0：一次物理POST一条成本账（usage缺失记unknown不填0）。
+
+        B5：用量提取统一走_normalize_call_usage（提供方实际schema规范
+        化；total不从组件伪造；0与unknown显式区分）。
+        """
         if not project_id or not job_id:
             raise ValueError("call ledger requires project_id and job_id")
         call_id = "moncall_" + content_sha256({
@@ -996,40 +1212,10 @@ class MonitoringAiRepository:
             "call_seq": call_seq,
             "created_at": _iso(self.clock()),
         })[:28]
-        def _float(source: Mapping[str, Any], key: str) -> float | None:
-            raw = source.get(key)
-            if raw is None or raw == "":
-                return None
-            try:
-                return float(raw)
-            except (TypeError, ValueError):
-                return None
-
-        def _int(source: Mapping[str, Any], key: str) -> int | None:
-            raw = source.get(key)
-            if raw is None or raw == "":
-                return None
-            try:
-                return int(raw)
-            except (TypeError, ValueError):
-                return None
-        usage = diagnostics.get("usage") if isinstance(diagnostics.get("usage"), dict) else {}
-        # B06：嵌套usage.detail规范化（提供方把细分放detail子字典时仍可读）
-        detail = usage.get("detail") if isinstance(usage.get("detail"), dict) else {}
-        if not usage and isinstance(diagnostics.get("prompt_tokens"), int):
-            # 平面键直接在diagnostics上的形态
-            usage = diagnostics
-        prompt_tokens = _int(usage, "prompt_tokens")
-        completion_tokens = _int(usage, "completion_tokens")
-        # W02-E0b动作4（B14）：显式None判断做fallback——明确0用量经or
-        # 回退会丢失为unknown；0是真实观测值必须保留。
-        reasoning_tokens = _int(detail, "reasoning_tokens")
-        if reasoning_tokens is None:
-            reasoning_tokens = _int(usage, "reasoning_tokens")
-        cached_tokens = _int(detail, "cached_tokens")
-        if cached_tokens is None:
-            cached_tokens = _int(usage, "cached_tokens")
-        total_tokens = _int(usage, "total_tokens")
+        (
+            prompt_tokens, completion_tokens, reasoning_tokens,
+            cached_tokens, total_tokens, usage_unknown,
+        ) = _normalize_call_usage(diagnostics)
         now = self.clock()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -1064,15 +1250,12 @@ class MonitoringAiRepository:
                     reasoning_tokens,
                     cached_tokens,
                     total_tokens,
-                    # W02-E0b（B14）：嵌套detail中的整型用量也是真实观测值
-                    # ——unknown判定必须计入detail，明确0不得标unknown。
-                    1 if not any(
-                        isinstance(value, int)
-                        for source in (usage, detail)
-                        for value in source.values()
-                    ) else 0,
-                    _int(diagnostics, "response_bytes"),
-                    _float(diagnostics, "sse_read_seconds"),
+                    # W02-E0b（B14）：嵌套detail/子字典中的整型用量也是
+                    # 真实观测值——unknown判定计入全部已知schema位置，
+                    # 明确0不得标unknown。
+                    usage_unknown,
+                    _int_value(diagnostics, "response_bytes"),
+                    _float_value(diagnostics, "sse_read_seconds"),
                     outcome, error_code, _iso(now),
                 ),
             )
@@ -1134,6 +1317,9 @@ class MonitoringAiRepository:
             "failed_calls": sum(
                 1 for r in calls if r.get("outcome") not in ("success", "", None)
             ),
+            # B5：started=请求已发出但进程在完成更新前中断——观测停留在
+            # started/unknown，绝不推断为0用量。
+            "started_calls": sum(1 for r in calls if r.get("outcome") == "started"),
             "outcome_unknown_count": sum(
                 1 for r in calls if r.get("outcome") in ("", None)
             ),

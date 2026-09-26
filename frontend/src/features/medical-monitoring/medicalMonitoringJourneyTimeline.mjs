@@ -81,6 +81,15 @@ export function eventGeometry(event) {
   return "point";
 }
 
+// E1（J14探针退役）：聚合展开/收起判定的唯一实现，从Workspace.jsx的
+// 内联布尔表达式提取为纯函数——选中联动自动展开，但用户显式收起优先
+// 于选中联动（收起后选中不再强制重新展开）。直接回归见
+// tests/test_mm_r27_probe_retirement_and_worklist.py（node导入本真实模块）。
+export function isAggregateExpanded({ expandedSet, collapsedSet, aggregateKey, containsSelected }) {
+  return expandedSet.has(aggregateKey)
+    || (Boolean(containsSelected) && !collapsedSet.has(aggregateKey));
+}
+
 // W05-J1 §3②：时间视窗（timeViewport）与信息密度（detailDensity）是两个
 // 独立控制轴——px/day与scale范围只由viewport决定，密度只影响聚合阈值/
 // collisionWidth/标签详略。切换密度不得改变scale.startMs/endMs/pxPerDay/

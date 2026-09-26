@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -34,6 +35,9 @@ from services.api.app.monitoring_ai_service import (
     MonitoringAiService,
     monitoring_revision_with_field_profile,
     resolve_monitoring_ai_runtime,
+)
+from packages.medical_monitoring.admission.mapping_pipeline import (
+    MAPPING_ADJUDICATION_PROMPT_VERSION,
 )
 from services.api.app.monitoring_mapping_draft_repository import (
     MonitoringMappingDraftRepository,
@@ -805,7 +809,10 @@ def test_adjudication_never_silently_demotes_a_malformed_question(
         project_id="project-alpha",
         input_revision=_revision(),
         field_profile=profile,
-        prompt_version="monitoring-listing-field-mapping-adjudication-v2",
+        # R27-01后改用裁决lane现行登记的无工具派发身份v5：原v2从未登记于
+        # evidence_tool_contract，提交预检按收口合同拒收未登记版本。
+        # 本测试钉的是裁决信封文案与坏问题拒收，不依赖该历史版本号。
+        prompt_version=MAPPING_ADJUDICATION_PROMPT_VERSION,
     )
 
     result = service.run_next("worker-a")
@@ -4255,16 +4262,20 @@ def test_cross_table_task_rejects_pseudo_second_domain(
     assert "two actual source domains" in result.job.failure_message
 
 
-def test_cross_table_task_requires_two_to_three_candidates(
+def test_cross_table_task_accepts_single_qualified_candidate(
     tmp_path: Path,
 ) -> None:
+    # R27-03更新钉点：本用例原钉"普通跨表线索要求2-3候选、单候选拒收"，
+    # 与提示文案"输出1至3个……只能构造出合格的单一候选时只输出这一个"
+    # 跨层矛盾——模型服从提示输出单一合格候选会被拒并触发无效修复轮。
+    # 现按医学意图统一（提示与两层校验同源于
+    # CROSS_TABLE_CLUE_CANDIDATE_RANGE=(1,3)）：单一合格候选合法；
+    # 越界拒收（0/4+）与定向核实恰好1子合同由
+    # tests/test_mm_r27_clue_count_contract.py钉住。
     service = _service(
         tmp_path,
         FakeProvider(
-            [
-                lambda envelope: _valid_output(envelope, candidate_count=1),
-                lambda envelope: _valid_output(envelope, candidate_count=1),
-            ]
+            [lambda envelope: _valid_output(envelope, candidate_count=1)]
         ),
     )
     service.submit_task(
@@ -4278,8 +4289,9 @@ def test_cross_table_task_requires_two_to_three_candidates(
     result = service.run_next("worker-a")
 
     assert result.job is not None
-    assert result.job.status == MonitoringAiJobStatus.FAILED
-    assert result.job.failure_code == "invalid_ai_output"
+    assert result.job.status == MonitoringAiJobStatus.COMPLETED
+    stored = service.repository.candidates("project-alpha", result.job.job_id)
+    assert len(stored) == 1
 
 
 def test_monitoring_ai_rejects_generic_pending_approval_language(
@@ -11166,6 +11178,12 @@ def test_v7_visit_sdtm_assertion_candidate_indexed(tmp_path: Path) -> None:
 @pytest.mark.parametrize("adjudication", [False, True])
 def test_tool_enabled_verifier_preserves_independent_challenge_contract(tmp_path: Path, adjudication):
     service = _service(tmp_path, FakeProvider([_valid_output]))
+    # R27-01提交预检：tool-enabled版本要求工具集可达；本测试只看信封
+    # 文案，桩工厂代表工具合同可兑现的部署。
+    @contextmanager
+    def reachable_factory(*_args):
+        yield SimpleNamespace(schemas={}, execute=lambda *_: None)
+    service.evidence_tool_factory = reachable_factory
     profile = _field_profile(field_count=1)
     if adjudication:
         profile["adjudication_contract"] = {
@@ -11236,7 +11254,7 @@ def test_tool_protocol_failure_is_bounded_and_not_a_worker_error(tmp_path, exhau
                                      for i in range(17 if exhaust_budget else 1)]}
         if exhaust_budget: request["input_revision_sha256"] = envelope.payload["input_revision_sha256"]
         return request
-    provider = FakeProvider([bad_request, bad_request, bad_request, bad_request])
+    provider = FakeProvider([bad_request, bad_request])
     service = _service(tmp_path, provider)
     @contextmanager
     def factory(job, payload):
@@ -11246,18 +11264,20 @@ def test_tool_protocol_failure_is_bounded_and_not_a_worker_error(tmp_path, exhau
     job = service.submit_listing_field_mapping(project_id="project-alpha", input_revision=_revision(),
         field_profile=_field_profile(field_count=1), prompt_version="monitoring-listing-field-mapping-v20-tools-v1")
     result = service.run_next("protocol-check")
-    assert result.job.status == (MonitoringAiJobStatus.FAILED if exhaust_budget else MonitoringAiJobStatus.QUEUED)
+    # B4硬错误不重试（更新钉点）：原断言钉"协议失败retryable=True、重排队
+    # 后第二次认领把同一失败再发给模型"——那是程序造成的无效推理。协议
+    # 坏输出在循环内已有一次受控修复，残余即硬错误，与预算耗尽一样直接
+    # 终态；两次模型调用（初始+循环内修复轮）之后不再有第二次执行。
+    assert result.job.status == MonitoringAiJobStatus.FAILED
     assert result.job.failure_code == ("evidence_tool_budget_exhausted" if exhaust_budget else "evidence_tool_protocol")
-    assert result.job.retryable is (not exhaust_budget)
+    assert result.job.retryable is False
+    # 预算耗尽在第1轮模型调用即触发；协议错误经1次循环内受控修复后
+    # 在第2轮终态。两者都不再重排队。
+    assert len(provider.envelopes) == (1 if exhaust_budget else 2)
     failure = service.repository.attempts(job.project_id, job.job_id)[0]["response"]["invalid_tool_output"]
     assert failure["task_id"] == job.job_id
     assert len(failure["tool_requests"]) == (17 if exhaust_budget else 1)
     assert service.repository.candidates(job.project_id, job.job_id) == ()
-    if not exhaust_budget:
-        second = service.run_next("protocol-check-again")
-        assert second.job.status == MonitoringAiJobStatus.FAILED
-        assert second.job.attempt_count == 2
-        assert second.job.failure_code == "evidence_tool_protocol"
 
 
 @pytest.mark.parametrize('version', [

@@ -33,6 +33,10 @@ def _patch_factory():
 
 
 def _submit_v71(service: MonitoringAiService) -> Any:
+    if service.evidence_tool_factory is None:
+        # R27-01提交预检：tool-enabled版本要求工具集可达；桩工厂代表
+        # 已配置部署。需要真实patch工具行为的测试会先行注入自己的工厂。
+        service.evidence_tool_factory = _patch_factory()
     profile = _field_profile(1)
     profile["adjudication_contract"] = {"first_pass_mappings": []}
     return service.submit_listing_field_mapping(
@@ -59,9 +63,14 @@ def test_v71_versions_and_pipeline_selection() -> None:
     assert V71_PRIMARY in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS
     assert V71_VERIFIER in STRICT_MAPPING_RESPONSE_PROMPT_VERSIONS
     assert V71_PRIMARY in ROLE_EQUIVALENCE_PROMPT_VERSIONS
-    assert MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS == frozenset(
-        {V71_PRIMARY, V71_VERIFIER}
-    )
+    # 20260927更新钉点：裁决lane现行版本已按2026-09-23后继合同推进到
+    # tools-v7.2（v17/v19，见mapping_pipeline._adjudication_prompt_version
+    # 注释：v16/v18曾因feature-set漏注册产残缺候选，版本再推进以脱离该
+    # 命名空间）。本断言原钉v7.1对，属未随推进更新的过期钉点。
+    assert MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS == frozenset({
+        "monitoring-listing-field-mapping-adjudication-v19-tools-v7.2",
+        "monitoring-listing-field-mapping-adjudication-verifier-v17-tools-v7.2",
+    })
     assert V7_PRIMARY in MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS
     assert "monitoring-listing-field-mapping-adjudication-v15-tools-v7.1" in (
         MAPPING_ADJUDICATION_LEGACY_TERMINAL_PROMPT_VERSIONS
@@ -72,9 +81,11 @@ def test_v71_versions_and_pipeline_selection() -> None:
         visual_tool_reads=True,
         role_equivalence=True,
     )
-    assert pipeline.adjudication_prompt_versions == frozenset(
-        {V71_PRIMARY, V71_VERIFIER}
-    )
+    # 同上：role-equivalence管线的派发身份亦已推进到tools-v7.2对。
+    assert pipeline.adjudication_prompt_versions == frozenset({
+        "monitoring-listing-field-mapping-adjudication-v19-tools-v7.2",
+        "monitoring-listing-field-mapping-adjudication-verifier-v17-tools-v7.2",
+    })
     assert pipeline.adjudication_comparison_policy == (
         "mm-mapping-role-equivalence-v2"
     )

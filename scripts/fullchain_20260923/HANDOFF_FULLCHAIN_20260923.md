@@ -883,3 +883,52 @@ S1-S6六切片+门禁两轮修复已提交（39b62ce，54文件+5819行，未pus
 - 编排工作流已无损暂停（ResumeWorkflowRun续跑）：暂停点=映射候选就绪，待批量核验→确认→事实→运行→发布；
 - 深度复盘（为什么100+任务/5-7小时 vs 单Agent分钟级）与效率重构五条建议：
   **scripts/fullchain_sar_rerun_20260926/HANDOFF_SAR_RERUN_20260926.md**。
+
+# 0927V1第一交付批台账（20260927）
+
+## 工作包A对账结论
+
+- **A2（302作业逐项查清，只读实测）**：SAR attempt `stg-e9d5050c…` 首轮 = 主侧 `monitoring-listing-field-mapping-v19`×151（completed）+ 盲核 `monitoring-listing-field-mapping-verifier-v8-tools-v6`×151（completed），302/302完成回执成立；另有 v19×151、verifier-v1×151、verifier-v5/v6/v7 各10为 stale_input（历史轮次）。**evidence_reads 回执 302/302 全为 0**——首轮合同本就无取证工具，"完成"不得引用为"已做自主取证"（导出：`scripts/fullchain_sar_rerun_20260926/mapping_tool_usage_classification_20260927.jsonl`，审计脚本 `scripts/monitoring_mapping_tool_usage_audit.py` 只读实跑）。
+- **A4（首轮能力派发查证）**：改前实测 v19 与 verifier-v8-tools-v6 均不在 EVIDENCE_TOOL 集合（34成员），执行路径为单次 provider 调用、submit 不做冻结文档源绑定——审阅包判断成立；已由 B1 收口。
+- **A1/A5**：148788→148727 的逐项转换解释与分阶段（排队/请求/重试/修复/工具/验证）统计本批**未重做**，沿用 SAR 交接实测数字（302作业/5.5小时）；逐调用计量由 B5 的两段式 call ledger 承接（后续运行可测）。
+- **A3（部分）**：双队列原始成功输出保留；确定性比较与分类已完成（下方LLM上限清单即其产出之一）。
+
+## B1–B5与E1交付
+
+- **B1 能力合同收口**：prompt版本→能力映射唯一登记于 `evidence_tool_contract.py`；v19、verifier-v8-tools-v6 等8个首轮/遗留身份**如实登记为无工具（空集）**——tools-vN后缀不构成能力声称；提交前可达性预检（未登记版本/工具不可达入队前显式失败）；启动闭包（main.py `_check_mapping_prompt_tool_closure`，派发集逐个核对登记）；历史302作业按实际回执诚实分类。测试 `tests/test_mm_r27_capability_contract.py`（12条）。
+- **B2 分片边界统一**：先用公开配置→真实submit往返测试证实 13..50 配置三层放行、submit 处以泛化 `mapping_bridge_failed` 失败；统一取12为实际能力（pipeline MAX 50→12、settings API le 50→12、前端输入 max→12）。测试 `tests/test_mm_r27_chunk_boundary.py`（6条，含往返与fail-closed）。
+- **B3 线索候选数合同同源**：普通跨表线索提示写1至3但服务层与持久化门两层校验均要求2..3（模型服从提示输出单一合格候选即被拒）。修复：唯一常量 `CROSS_TABLE_CLUE_CANDIDATE_RANGE=(1,3)` 派生提示文案与两层校验；普通lane允许单一合格候选；定向核实恰好1子合同独立保留（并闭合旧代码 focused+2/3 候选意外放行缺口）。测试 `tests/test_mm_r27_clue_count_contract.py`（10条）。
+- **B4 硬错误不重试+确定性重放+轻量状态GET**：证据工具协议坏输出/预算耗尽/回执身份错配直接终态（修改前协议失败会重排队把同一失败再发给模型）；成功输出的持久化失败只重放确定性步骤（进程内重parse+重complete，跨认领由 `_replay_recorded_completion` 凭留痕输出完成，全程零模型调用）；field-mapping-status GET 的重验按（项目，冻结修订）请求内缓存（同批分片一次GET只重验一次，跨请求新鲜度检查保持真实）；`_latest_job_cohort` payload 读取每作业至多1次（原至多3次，302作业GET≈千次读）。测试 `tests/test_mm_r27_hard_errors_and_light_status.py`（4条）。
+- **B5 用量记录**：真实HTTP尝试两段记账——`start_call` 请求发出前落 started 行（进程中断保持 started/unknown，用量列 NULL 绝不推断为0），`complete_call` 结束原行更新；提供方实际 usage schema 规范化（OpenAI prompt/completion_tokens_details、DeepSeek prompt_cache_hit_tokens、input/output别名、detail子字典）；total 只取上游回报值，reasoning/cached 绝不重复计入；0与unknown显式None区分。gateway 此前 SSE 只透传 total、非流式不提取 usage——已透传完整 usage 字典。测试 `tests/test_mm_r27_usage_ledger.py`（5条，stub transport）。
+- **E1 探针退役+工作列表负载**：B14/J14 记录器形态探针退役——J14 判定提取为真实纯模块函数 `medicalMonitoringJourneyTimeline.mjs::isAggregateExpanded`（Workspace.jsx 实际调用）并以 node 直接回归；B14 由真实 record_call 回归覆盖；1200条合成正式 Finding DTO 工作列表负载测试（真实 `buildFindingCards` 过滤+规范化与真实 QueryWorkspaceView 渲染：规范化5ms/静态渲染216ms，锚点1200/1200、顺序稳定、坏行只剔5条；预算天花板规范化2s/渲染15s）。测试 `tests/test_mm_r27_probe_retirement_and_worklist.py`（7条）+ `medicalMonitoringFindingWorklistLoad.test.{mjs,jsx}`。新增测试合计 **44条**。
+
+## 测试门结果
+
+- **第1轮**：`tests/medical_monitoring` 收集ERROR——根因=门环境用 `.venv/bin/python`（**Python 3.9.6**）而 B1 新注解用了 PEP 604 联合（`frozenset[str] | None`），3.9 定义即 TypeError。修复：该文件加 `from __future__ import annotations`（行为零变化）；全部被改/新增文件在 venv 3.9 下 py_compile+import+实跑复验。→ **143 passed**（venv逐字命令）。
+- **第2/3轮**：`frontend/tests/final_matrix_process.test.mjs`——SIGKILL 后进程组死亡异步，实现此前立即 resolve，调用方探活到残留组成员（负载下偶发）；且文件固有墙钟≈990–1010ms 处于门1s/文件上限刀锋。修复：SIGKILL 后对进程组做有界（20ms×2s上限）存活轮询、整组 ESRCH 才交付（超时保护语义不变、返回shape不变）；三用例并发化（断言逐字保留），墙钟 993ms→578ms。→ `node --test` **85/85 passed**（两轮均实跑确认）。
+- 开发验证自本轮起统一改用门的 `.venv` 3.9 解释器实跑。
+
+## 复核发现
+
+1. 线索候选数矛盾实为**跨三层**（信封文案/服务层校验/持久化门校验），且后两层 focused 识别机制不同（payload 合同版本 vs business_key `:focus:` 标记）；旧代码 focused 作业携带2-3候选经范围检查外层**意外放行**——已闭合并由测试钉住。
+2. `_latest_job_cohort` 对每作业重复读 input_payload 至多3次（302作业的状态GET≈千次载荷读）——已改为每作业1次，选择语义不变。
+3. 真实HTTP调用的 prompt/completion/reasoning/cached 此前**从未入账**（SSE只透传total、非流式不提取）——B5修复前账本token列恒为unknown。
+4. 302作业的诚实口径：全部为单次调用、无工具回执；任何材料不得引用为"已做自主取证"。
+5. workbench 全量套件存在 **55个既有失败**（含 sqlite_runtime×6、r5_product_router×4、medical_writing/前端契约等），经 git stash 基线对照逐字节一致确认与本批五切片无关；`test_medical_writing_dynamic_section_matrix.py` 存在既有收集错误（导入源码中不存在的 `_REQUIRED_CORE_BODY_SEMANTIC_IDS`）。
+6. `test_ai_mapping_gate` 的3个失败（盲核门 ollama-cloud 常量钉点）为0926门常量回切后未更新的过期钉点，属既有，未在本批处理。
+
+## LLM任务上限报告（继续SAR链后续阶段的模型任务数量上限清单——只报告，不启动）
+
+受试者规模：**278**（SAR交接实测数字，本批未独立重验）。上限为合同允许的最大值，非计划值；现实估算按CSU链比例另列。
+
+| 阶段 | LLM任务上限 | 依据 |
+|---|---|---|
+| 映射确认 | **0** | 确定性对账+医学经理UI确认，无模型任务 |
+| 事实物化 | **0** | FactMaterializationService 纯确定性（无provider/模型调用） |
+| 发现lane·主分析 | **≤278** | 每受试者1作业（cross_table_clue_synthesis 主队列） |
+| 发现lane·独立盲核 | **≤278** | 每受试者1作业（verifier队列） |
+| 定向复核（focused verification） | **≤发现总数**（每条escalated发现至多1次核实，expected_candidates=1；按CSU实测≈7发现/受试者 → 理论上限≈1946；按CSU escalated比例≈46% 现实估算≈900） | 每发现1作业（aemh-focused-v1合同） |
+
+- 合计上限：发现lane ≤556 + 复核 ≤1946（理论）= **≤2502模型任务**；按CSU比例现实估算 ≈556+900 ≈ **1456**。
+- 备注1：如映射分歧需要第二轮裁决（adjudication lane），属独立模型段，上限随分歧分片数计——SAR首轮分歧数尚未产生，不在本清单。
+- 备注2：**本节只报告数量上限，不启动任何任务**；启动须按门禁流程另行授权与执行。

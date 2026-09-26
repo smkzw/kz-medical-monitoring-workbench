@@ -89,7 +89,12 @@ MAPPING_ADJUDICATION_BUSINESS_PREFIX = (
     "listing-field-mapping-adjudication"
 )
 DEFAULT_LISTING_MAPPING_CHUNK_SIZE = 12
-MAX_LISTING_MAPPING_CHUNK_SIZE = 50
+# R27-02统一边界：真实提交能力是submit_listing_field_mapping_chunks的
+# 1..12合同，声明上限必须与之一致。50系旧声明残留——13..50的配置此前
+# 能通过本层校验、直到真实submit才以泛化mapping_bridge_failed失败。
+# 放大submit前必须先实测更大语义包的上下文与单包失败成本（复审01），
+# 长期方向是token/依赖预算的语义分组，不是放大固定字段数。
+MAX_LISTING_MAPPING_CHUNK_SIZE = 12
 _ADJUDICATION_GENERATION_RE = re.compile(r":g(\d{2}):")
 _ADJUDICATION_AUTO_RECOVERY_LIMIT = 1
 
@@ -294,7 +299,15 @@ def _latest_job_cohort(
             str(job.requested_model or "").strip().casefold(),
         )
 
-    cohort_identity = identity(latest, required=True)
+    # B4状态GET轻量化：identity每作业只解析一次（旧实现latest一次加上
+    # 下方过滤器对每作业重复读最多3次input_payload——同一GET对302作业
+    # 即近千次载荷读）。选择语义逐字不变。
+    job_identities = [(job, identity(job, required=True)) for job in jobs]
+    cohort_identity = next(
+        job_identity
+        for job, job_identity in job_identities
+        if job is latest
+    )
     cohort_prompt = cohort_identity[0]
     latest_routes = {
         (
@@ -306,12 +319,12 @@ def _latest_job_cohort(
     }
     return tuple(
         job
-        for job in jobs
+        for job, job_identity in job_identities
         if str(job.prompt_version) == cohort_prompt
-        and identity(job, required=True)[:2] == cohort_identity[:2]
+        and job_identity[:2] == cohort_identity[:2]
         and (
-            identity(job, required=True)[2:] == cohort_identity[2:]
-            or identity(job, required=True)[2:] in latest_routes
+            job_identity[2:] == cohort_identity[2:]
+            or job_identity[2:] in latest_routes
             or str(getattr(job, "provider", "")) == "workbench-system"
         )
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -1829,6 +1830,12 @@ def test_tool_shard_current_revision_tracks_document_only_changes(tmp_path, prom
         profile_id=MONITORING_C3_MAPPING_PROFILE_ID, provider=MONITORING_C3_MAPPING_PROVIDER,
         model=MONITORING_C3_MAPPING_MODEL, env={}, available=True,
     ))
+    # R27-01提交预检：tool-enabled分片要求工具集可达；本测试只验证
+    # 冻结修订绑定，桩工厂代表已配置部署。
+    @contextmanager
+    def reachable_factory(*_args):
+        yield SimpleNamespace(schemas={}, execute=lambda *_: None)
+    service.evidence_tool_factory = reachable_factory
     jobs = service.submit_listing_field_mapping_chunks(
         project_id=PROJECT_ID,
         input_revision=MonitoringAiInputRevision.model_validate(frozen.input_revision),

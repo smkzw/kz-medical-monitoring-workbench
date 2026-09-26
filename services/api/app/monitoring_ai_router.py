@@ -676,13 +676,29 @@ def create_monitoring_ai_router(
                 selected_profile_sha256,
             ).revision_sha256
         from packages.medical_monitoring.admission.evidence_tool_contract import EVIDENCE_TOOL_PROMPT_VERSIONS
+
+        # B4状态GET轻量化：同参数作业的重验是不变计算——同一GET内按
+        # (project, 冻结修订)缓存判定结果，N个同源分片只重验一次。
+        # 跨请求不缓存：输入新鲜度检查保持逐请求真实。
+        revision_checks: dict[tuple[str, str], bool] = {}
+
+        def _revision_still_current(job) -> bool:
+            key = (str(job.project_id), str(job.input_revision_sha256))
+            verdict = revision_checks.get(key)
+            if verdict is None:
+                verdict = (
+                    current_revision_resolver is not None
+                    and current_revision_resolver(job) == job.input_revision_sha256
+                )
+                revision_checks[key] = verdict
+            return verdict
+
         selected_jobs = [
             (job, profile)
             for job, profile, profile_sha256 in matching_jobs
             if profile_sha256 == selected_profile_sha256
             and (
-                (current_revision_resolver is not None
-                 and current_revision_resolver(job) == job.input_revision_sha256)
+                _revision_still_current(job)
                 if job.prompt_version in EVIDENCE_TOOL_PROMPT_VERSIONS else
                 (not preferred_revision_sha256
                  or job.input_revision_sha256 == preferred_revision_sha256)

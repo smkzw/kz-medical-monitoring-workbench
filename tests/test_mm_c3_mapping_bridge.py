@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -597,6 +598,14 @@ def test_pipeline_second_pass_submits_only_questions_with_full_table_context(
             MONITORING_C3_VERIFIER_MODEL,
         ),
     )
+    if tool_reads:
+        # R27-01提交预检：tools-v1裁决合同要求冻结证据工具集可达；
+        # 本测试只验证提交与上下文投影，桩工厂代表已配置部署。
+        @contextmanager
+        def reachable_factory(*_args):
+            yield SimpleNamespace(schemas={}, execute=lambda *_: None)
+        service.evidence_tool_factory = reachable_factory
+        verifier_service.evidence_tool_factory = reachable_factory
     pipeline = AdmissionMappingPipeline(
         ai_service=service,
         verifier_ai_service=verifier_service,

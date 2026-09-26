@@ -48,6 +48,8 @@ from .ai_role_runtime_settings import (
     runtime_ai_role_settings_store,
 )
 from .monitoring_ai_contracts import (
+    CROSS_TABLE_CLUE_CANDIDATE_CONTRACT,
+    CROSS_TABLE_CLUE_CANDIDATE_RANGE,
     MONITORING_AI_SCHEMA_VERSION,
     MonitoringAiCandidate,
     MonitoringAiCandidateStatus,
@@ -178,6 +180,10 @@ _C3_VERIFIER_PROMPT_VERSION = "monitoring-listing-field-mapping-verifier-v1"
 CROSS_TABLE_VERIFIER_PROMPT_VERSION = (
     "monitoring-cross-table-clue-synthesis-verifier-v1"
 )
+# R27-03：普通跨表线索候选数合同的同源常量
+# （CROSS_TABLE_CLUE_CANDIDATE_RANGE/CONTRACT）定义在
+# monitoring_ai_contracts（两层校验的持久化门所在层），由本模块导入；
+# 信封文案与_validate_task_specific_output均不得手写候选数数字。
 
 AI_TASK_TYPE_BY_MONITORING_TASK: Dict[MonitoringAiTaskType, AiTaskType] = {
     MonitoringAiTaskType.LISTING_FIELD_MAPPING: (AiTaskType.LISTING_SEMANTIC_MAPPING),
@@ -243,8 +249,11 @@ TASK_CONTRACTS: Dict[MonitoringAiTaskType, str] = {
         "不得使用未冻结字段语义，不得把CM与试验药物给药或变更混为一类。"
     ),
     MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS: (
-        "跨表连接同一受试者、访视、事件和用药的线索，提出2至3个值得人工复核、"
-        "彼此不重复的解释候选。每个候选必须引用至少两个真实原始数据域，"
+        "跨表连接同一受试者、访视、事件和用药的线索，提出"
+        f"{CROSS_TABLE_CLUE_CANDIDATE_RANGE[0]}至"
+        f"{CROSS_TABLE_CLUE_CANDIDATE_RANGE[1]}个值得人工复核、"
+        "彼此不重复的解释候选（宁少勿滥：只能构造出合格的单一候选时，"
+        "只输出这一个）。每个候选必须引用至少两个真实原始数据域，"
         "不得用分析主题、派生概念或方案条款冒充第二个数据域；"
         "不得把时间相关性直接表述为因果关系或确定性风险结论。"
     ),
@@ -1854,7 +1863,14 @@ class MonitoringAiService:
             or PROMPT_VERSION_BY_TASK[MonitoringAiTaskType.LISTING_FIELD_MAPPING]
         )
         from packages.medical_monitoring.admission.evidence_tool_contract import (
-            EVIDENCE_TOOL_PROMPT_VERSIONS, bind_frozen_document_sources, bind_tool_revision_sources,
+            EVIDENCE_TOOL_PROMPT_VERSIONS, assert_prompt_version_reachable,
+            bind_frozen_document_sources, bind_tool_revision_sources,
+        )
+        # R27-01提交前可达性预检：能力合同未登记或工具设施不可达的作业
+        # 在入队前显式失败，不允许静默降级为单次调用。
+        assert_prompt_version_reachable(
+            effective_prompt_version,
+            evidence_tool_factory=self.evidence_tool_factory,
         )
         if effective_prompt_version in EVIDENCE_TOOL_PROMPT_VERSIONS:
             effective_field_profile = bind_frozen_document_sources(effective_field_profile)
@@ -2467,6 +2483,11 @@ class MonitoringAiService:
                     owner=owner,
                     input_payload=input_payload,
                 )
+            replayed = self._replay_recorded_completion(
+                job, owner=owner, input_payload=input_payload,
+            )
+            if replayed is not None:
+                return replayed
 
             runtime = self.runtime_resolver()
             if not runtime.available:
@@ -2716,33 +2737,87 @@ class MonitoringAiService:
             if stale_result is not None:
                 return stale_result
             self.repository.heartbeat(job.project_id, job.job_id, owner)
-            self.repository.record_attempt(
-                job,
-                owner=owner,
-                request_payload={
-                    "envelope": envelope.payload,
-                    "repair_used": repaired,
-                },
-                response_payload=_audit_payload(),
-                response_model=observed_response_model,
-                outcome="success_repaired" if repaired else "success",
-            )
-            completed = self.repository.complete(
-                job,
-                owner=owner,
-                response_model=job.requested_model,
-                raw_output=outputs[-1],
-                candidates=candidates,
-                observed_response_model=observed_response_model,
-            )
+            try:
+                self.repository.record_attempt(
+                    job,
+                    owner=owner,
+                    request_payload={
+                        "envelope": envelope.payload,
+                        "repair_used": repaired,
+                    },
+                    response_payload=_audit_payload(),
+                    response_model=observed_response_model,
+                    outcome="success_repaired" if repaired else "success",
+                )
+                completed = self.repository.complete(
+                    job,
+                    owner=owner,
+                    response_model=job.requested_model,
+                    raw_output=outputs[-1],
+                    candidates=candidates,
+                    observed_response_model=observed_response_model,
+                )
+            except MonitoringAiStateConflictError:
+                raise
+            except Exception as persist_error:
+                # B4：模型输出已成功（并已随record_attempt留痕）。持久化
+                # 失败只重放确定性步骤——从已成功的原始输出重新parse并重
+                # 试入库，绝不重调模型；重放仍失败则按worker_error终态，
+                # 已留痕的成功输出留给下次认领时的
+                # _replay_recorded_completion（同样不调模型）。
+                try:
+                    candidates = self._parse_provider_output(
+                        job,
+                        outputs[-1],
+                        input_payload,
+                        normalization_notes=normalization_notes,
+                    )
+                    completed = self.repository.complete(
+                        job,
+                        owner=owner,
+                        response_model=job.requested_model,
+                        raw_output=outputs[-1],
+                        candidates=candidates,
+                        observed_response_model=observed_response_model,
+                    )
+                except Exception as replay_error:
+                    # 不能走_fail_claimed_job：那会再记一条同序号attempt
+                    # （UNIQUE(job_id, attempt_number)冲突）。成功attempt
+                    # 已留痕，这里只置终态；下次认领由
+                    # _replay_recorded_completion凭留痕输出确定性重放。
+                    try:
+                        failed = self.repository.fail(
+                            job,
+                            owner=owner,
+                            failure_code="completion_replay_failed",
+                            failure_message=(
+                                "provider output succeeded but deterministic "
+                                f"completion replay failed: {replay_error}"
+                            ),
+                            retryable=False,
+                        )
+                    except MonitoringAiStateConflictError:
+                        return MonitoringAiRunResult(
+                            job=self._current_job_or_claim(job),
+                            processed=False,
+                            lease_lost=True,
+                        )
+                    return MonitoringAiRunResult(job=failed, processed=True)
             return MonitoringAiRunResult(job=completed, processed=True)
         except EvidenceToolLoopError as exc:
+            # B4硬错误不重试：预算耗尽、协议坏输出与工具回执身份错配都
+            # 直接终态。协议坏输出在循环内已有一次受控修复机会（
+            # max_protocol_repairs=1），残余即硬错误——重排队只会把同一
+            # 失败原样再发给模型（程序造成的无效推理）；
+            # tool_result_revision_mismatch属证据身份错配，重放亦不可能
+            # 自愈。传输暂态的退避重试走AiProviderRuntimeError分支，与此
+            # 无关。
             exhausted = str(exc) == "evidence_tool_budget_exhausted"
             return self._fail_claimed_job(
                 job, owner=owner, request_payload={"job_id": job.job_id},
                 response_payload={"invalid_tool_output": exc.output},
                 failure_code="evidence_tool_budget_exhausted" if exhausted else "evidence_tool_protocol",
-                failure_message=str(exc), retryable=not exhausted,
+                failure_message=str(exc), retryable=False,
                 outcome="evidence_tool_error",
             )
         except MonitoringAiEvidenceChangedError:
@@ -2838,6 +2913,67 @@ class MonitoringAiService:
                 retryable=False,
                 outcome="worker_error",
             )
+
+    def _replay_recorded_completion(
+        self,
+        job: MonitoringAiJob,
+        *,
+        owner: str,
+        input_payload: Dict[str, Any],
+    ) -> Optional[MonitoringAiRunResult]:
+        """B4：成功输出持久化/发布失败后，仅重放确定性步骤。
+
+        认领到带有已留痕成功attempt（success/success_repaired）的作业时，
+        从留痕的原始provider输出重新parse并完成入库——不重调模型。返回
+        None表示没有可重放的成功输出（走正常执行路径）。
+        """
+        try:
+            attempts = self.repository.attempts(job.project_id, job.job_id)
+        except Exception:
+            return None
+        recorded = None
+        for attempt in reversed(attempts):
+            if str(attempt.get("outcome")) in {"success", "success_repaired"}:
+                recorded = attempt
+                break
+        if recorded is None:
+            return None
+        response_payload = recorded.get("response") or {}
+        outputs = response_payload.get("provider_outputs")
+        if not isinstance(outputs, list) or not outputs:
+            return None
+        stale_result = self._fail_if_revision_changed(
+            job,
+            owner=owner,
+            request_payload={
+                "replay_from_attempt": recorded.get("attempt_number"),
+            },
+            response_payload=response_payload,
+            stage="before_replayed_completion",
+            response_model=str(
+                recorded.get("response_model") or job.requested_model
+            ),
+        )
+        if stale_result is not None:
+            return stale_result
+        candidates = self._parse_provider_output(
+            job,
+            outputs[-1],
+            input_payload,
+            normalization_notes=[],
+        )
+        self.repository.heartbeat(job.project_id, job.job_id, owner)
+        completed = self.repository.complete(
+            job,
+            owner=owner,
+            response_model=job.requested_model,
+            raw_output=outputs[-1],
+            candidates=candidates,
+            observed_response_model=(
+                str(recorded.get("response_model")) or job.requested_model
+            ),
+        )
+        return MonitoringAiRunResult(job=completed, processed=True)
 
     @staticmethod
     def _is_deterministic_only_mapping(
@@ -3319,11 +3455,9 @@ class MonitoringAiService:
                 "{\"exists\":{\"field_role\":\"cm_end_date\"}}]}。"
             )
         elif job.task_type == MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS:
-            candidate_count = (
-                "输出1至3个彼此不重复的候选；每个候选必须引用至少两个"
-                "真实原始数据域的证据。宁少勿滥：只能构造出合格的单一候选时，"
-                "只输出这一个，不得为凑数输出单数据域候选。"
-            )
+            # R27-03：候选数合同与_validate_task_specific_output同源
+            # （CROSS_TABLE_CLUE_CANDIDATE_RANGE），不得在此手写数字。
+            candidate_count = CROSS_TABLE_CLUE_CANDIDATE_CONTRACT
         elif job.task_type in (
             MonitoringAiTaskType.RISK_EVIDENCE_SUMMARY,
             MonitoringAiTaskType.RISK_QUESTION_ANSWER,
@@ -4934,13 +5068,13 @@ class MonitoringAiService:
             raise MonitoringAiOutputValidationError(
                 "rule-template recommendation requires 1 to 3 candidates"
             )
-        if (
-            job.task_type == MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS
-            and not 2 <= len(parsed.candidates) <= 3
-        ):
+        if job.task_type == MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS:
             # 版本化定向核实子合同（submit_focused_verifications注入）：
             # 恰好一个核实候选（确认或data_gap反证），与普通综合分析
-            # 的2-3候选合同显式区分，不靠隐式约定。
+            # 合同显式区分，不靠隐式约定。普通综合分析候选数与提示文案
+            # 同源（CROSS_TABLE_CLUE_CANDIDATE_RANGE，R27-03：单一合格
+            # 候选允许1个）；focused作业不再经旧的范围检查 accidental
+            # 放行2-3候选。
             subject_context = (
                 input_payload.get("subject_context") or {}
                 if isinstance(input_payload, dict)
@@ -4959,14 +5093,20 @@ class MonitoringAiService:
                     raise MonitoringAiOutputValidationError(
                         "focused verification requires exactly one candidate"
                     )
-            else:
+            elif not (
+                CROSS_TABLE_CLUE_CANDIDATE_RANGE[0]
+                <= len(parsed.candidates)
+                <= CROSS_TABLE_CLUE_CANDIDATE_RANGE[1]
+            ):
                 # 诊断：携带标记匹配状态，便于区分"非focused作业按通用合同
                 # 拒绝"与"focused标记在运行时意外缺失"。
                 marker_present = isinstance(focused_contract, dict) and bool(
                     focused_contract
                 )
                 raise MonitoringAiOutputValidationError(
-                    "cross-table clue task requires 2 to 3 candidates "
+                    f"cross-table clue task requires "
+                    f"{CROSS_TABLE_CLUE_CANDIDATE_RANGE[0]} to "
+                    f"{CROSS_TABLE_CLUE_CANDIDATE_RANGE[1]} candidates "
                     f"(focused_marker_present={marker_present}, "
                     f"payload_is_dict={isinstance(input_payload, dict)}, "
                     f"subject_context_keys={sorted(subject_context.keys())[:6] if isinstance(subject_context, dict) else 'n/a'})"
@@ -9046,6 +9186,26 @@ class MonitoringAiService:
                     return
 
         self.repository.heartbeat(job.project_id, job.job_id, owner)
+        # B5用量记录：请求发出前先落started行——进程在完成更新前中断时，
+        # 该行保持started/unknown（用量列NULL，不推断为0）；正常结束后
+        # 由complete_call原行更新真实用量。
+        call_id: Optional[str] = None
+        try:
+            call_id = self.repository.start_call(
+                project_id=job.project_id,
+                job_id=job.job_id,
+                attempt_id=owner,
+                owner=owner,
+                provider=job.provider,
+                requested_model=job.requested_model,
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "call ledger start failed for job %s; "
+                "metering incomplete for this physical call",
+                job.job_id,
+            )
         thread = threading.Thread(
             target=heartbeat_loop,
             name=f"monitoring-ai-heartbeat-{job.job_id[:12]}",
@@ -9066,36 +9226,31 @@ class MonitoringAiService:
             call_diagnostics = deepcopy(
                 getattr(provider, "response_diagnostics", {}) or {}
             )
-            try:
-                self.repository.record_call(
-                    project_id=job.project_id,
-                    job_id=job.job_id,
-                    attempt_id=owner,
-                    call_seq=0,
-                    owner=owner,
-                    provider=job.provider,
-                    requested_model=job.requested_model,
-                    observed_model=str(
-                        getattr(provider, "response_model", "") or ""
-                    ),
-                    diagnostics=call_diagnostics,
-                    outcome=(
-                        "success"
-                        if not call_error
-                        else "provider_error"
-                    ),
-                    error_code=(
-                        type(call_error[0]).__name__ if call_error else ""
-                    ),
-                )
-            except Exception:
-                # 计量写入失败不阻塞主链，但必须显式告警（不静默消失）。
-                import logging
-                logging.getLogger(__name__).warning(
-                    "call ledger write failed for job %s; "
-                    "metering incomplete for this physical call",
-                    job.job_id,
-                )
+            if call_id is not None:
+                try:
+                    self.repository.complete_call(
+                        call_id,
+                        diagnostics=call_diagnostics,
+                        observed_model=str(
+                            getattr(provider, "response_model", "") or ""
+                        ),
+                        outcome=(
+                            "success"
+                            if not call_error
+                            else "provider_error"
+                        ),
+                        error_code=(
+                            type(call_error[0]).__name__ if call_error else ""
+                        ),
+                    )
+                except Exception:
+                    # 计量写入失败不阻塞主链，但必须显式告警（不静默消失）。
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "call ledger write failed for job %s; "
+                        "metering incomplete for this physical call",
+                        job.job_id,
+                    )
         if heartbeat_error:
             # W02-E0b A30（20260926）：后台心跳失败=租约已失守——失租后的
             # provider输出不得冒充有效完成被消费/返回（上层昂贵提交按失败
