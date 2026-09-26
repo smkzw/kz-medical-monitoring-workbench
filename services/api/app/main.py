@@ -1384,6 +1384,16 @@ def _monitoring_evidence_tool_factory(job, input_payload):
     )
 
 
+# R27-01能力合同：本轮可派发的mapping提示词版本闭包——主侧默认首轮、
+# 盲核门现行首轮与裁决lane现行版本。启动时逐一核对已在
+# evidence_tool_contract显式登记（含如实登记为无工具的v19/verifier-v8）。
+MONITORING_MAPPING_DISPATCH_PROMPT_VERSIONS = frozenset({
+    PROMPT_VERSION_BY_TASK[MonitoringAiTaskType.LISTING_FIELD_MAPPING],
+    MONITORING_C3_VERIFIER_PROMPT_VERSION,
+    *MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS,
+})
+
+
 monitoring_ai_service = MonitoringAiService(
     monitoring_ai_repository,
     current_revision_resolver=_current_monitoring_ai_revision,
@@ -1675,6 +1685,19 @@ def _recover_synopsis_import_jobs():
         medical_writing_synopsis_import_service.recover_stale_jobs()
     except Exception:
         pass  # recovery is best-effort; do not block app startup
+
+
+@app.on_event("startup")
+def _check_mapping_prompt_tool_closure():
+    """R27-01启动闭包：可派发的mapping版本必须已登记且能力合同自洽。
+
+    违约直接让启动失败（不吞异常）：派发了未登记版本或登记行引用了
+    未知功能键，都属于工程合同错误，不得带病进入队列。
+    """
+    from packages.medical_monitoring.admission.evidence_tool_contract import (
+        check_prompt_version_tool_closure,
+    )
+    check_prompt_version_tool_closure(MONITORING_MAPPING_DISPATCH_PROMPT_VERSIONS)
 
 
 @app.on_event("startup")

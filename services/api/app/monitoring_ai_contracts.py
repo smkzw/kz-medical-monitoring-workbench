@@ -459,6 +459,22 @@ class MonitoringAiConversationTurn(BaseModel):
     created_at: datetime
 
 
+# R27-03：普通跨表线索候选数合同——提示文案（monitoring_ai_service
+# 信封）与两层校验（本函数与_validate_task_specific_output）由此同源
+# 派生，杜绝"提示写1至3、校验要求2至3"的跨层矛盾再次出现。医学意图：
+# 宁少勿滥，只能构造出合格单一候选时允许1个；上限3防止无边界输出
+# 耗尽上下文。每个候选仍必须引用至少两个真实原始数据域。定向核实
+# lane（business_key :focus:/:focus-p: 标记）恰好1候选，独立子合同。
+CROSS_TABLE_CLUE_CANDIDATE_RANGE = (1, 3)
+CROSS_TABLE_CLUE_CANDIDATE_CONTRACT = (
+    f"输出{CROSS_TABLE_CLUE_CANDIDATE_RANGE[0]}至"
+    f"{CROSS_TABLE_CLUE_CANDIDATE_RANGE[1]}个彼此不重复的候选；"
+    "每个候选必须引用至少两个真实原始数据域的证据。宁少勿滥："
+    "只能构造出合格的单一候选时，只输出这一个，"
+    "不得为凑数输出单数据域候选。"
+)
+
+
 def validate_candidates_for_job(
     job: MonitoringAiJob,
     candidates: tuple[MonitoringAiCandidate, ...],
@@ -501,19 +517,29 @@ def validate_candidates_for_job(
         1 <= len(candidates) <= 3
     ):
         raise ValueError("Rule-template recommendation requires 1 to 3 candidates")
-    if job.task_type == MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS and not (
-        2 <= len(candidates) <= 3
-    ):
+    if job.task_type == MonitoringAiTaskType.CROSS_TABLE_CLUE_SYNTHESIS:
         # 版本化定向核实子合同（business_key侧别标记focus/focus-p）：
-        # 恰好一个核实候选（确认或data_gap反证），与普通综合分析
-        # 的2-3候选合同显式区分。
+        # 恰好一个核实候选（确认或data_gap反证），与普通综合分析合同
+        # 显式区分；focused判定不再依赖旧的范围检查外层条件——此前
+        # focused作业携带2-3候选会经该外层检查意外放行。普通综合分析
+        # 候选数与提示文案同源（CROSS_TABLE_CLUE_CANDIDATE_RANGE，
+        # R27-03：单一合格候选允许1个）。
         focused = ":focus:" in job.business_key or ":focus-p:" in job.business_key
-        if focused and len(candidates) != 1:
+        if focused:
+            if len(candidates) != 1:
+                raise ValueError(
+                    "focused verification requires exactly one candidate"
+                )
+        elif not (
+            CROSS_TABLE_CLUE_CANDIDATE_RANGE[0]
+            <= len(candidates)
+            <= CROSS_TABLE_CLUE_CANDIDATE_RANGE[1]
+        ):
             raise ValueError(
-                "focused verification requires exactly one candidate"
+                f"cross-table clue task requires "
+                f"{CROSS_TABLE_CLUE_CANDIDATE_RANGE[0]} to "
+                f"{CROSS_TABLE_CLUE_CANDIDATE_RANGE[1]} candidates"
             )
-        if not focused:
-            raise ValueError("cross-table clue task requires 2 to 3 candidates")
     if (
         job.task_type
         in {

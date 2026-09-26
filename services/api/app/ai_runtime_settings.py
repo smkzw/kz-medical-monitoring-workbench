@@ -95,8 +95,10 @@ class AiProviderProfileUpsertRequest(BaseModel):
     activate: bool = False
     output_token_budget: Optional[int] = Field(default=None, ge=0, le=262_144)
     output_discipline: Optional[str] = Field(default=None, max_length=80)
+    # R27-02：允许范围与真实提交能力（submit的1..12合同）一致，拒绝再
+    # 声明13..50——否则配置能保存，却在映射提交时以泛化错误失败。
     listing_mapping_chunk_size: Optional[int] = Field(
-        default=None, ge=1, le=50
+        default=None, ge=1, le=12
     )
     extra_headers_json: Optional[str] = Field(default=None, max_length=8_000)
 

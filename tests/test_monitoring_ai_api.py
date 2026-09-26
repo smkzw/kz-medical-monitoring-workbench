@@ -1442,6 +1442,13 @@ def test_generic_tool_revision_binds_documents_and_rejects_document_only_change(
     profile.pop('profile_sha256', None)
     profile['profile_sha256'] = content_hash(profile)
     revision = monitoring_input_revision_for_profile_identity(batch_repository.load_field_profile_cache_identity('batch-api'))
+    # R27-01提交预检：tool-enabled提交要求工具集可达；本测试只验证冻结
+    # 修订绑定，桩工厂代表已配置部署。
+    from contextlib import contextmanager as _cm
+    @_cm
+    def reachable_factory(*_args):
+        yield SimpleNamespace(schemas={}, execute=lambda *_: None)
+    service.evidence_tool_factory = reachable_factory
     job = service.submit_listing_field_mapping(project_id='project-api', input_revision=revision,
         field_profile=profile, prompt_version='monitoring-listing-field-mapping-v20-tools-v1')
     current = lambda **kwargs: packet

@@ -21,5 +21,9 @@ const a=l.lanes[0].aggregates[0];record('J10','窗外聚合坐标必须为有限
 l=m.layoutJourneyTimeline({...base,events:[{eventRef:'syn-ongoing',domain:'ae',start:'2025-01-05',ongoing:true}]});let mark=l.lanes[0].marks[0];record('J11','持续事件需有持续几何而非零宽点',{geometry:mark.geometry,width:mark.width},mark.geometry==='ongoing'&&mark.width>0);
 l=m.layoutJourneyTimeline({...base,visits:[{visit_ref:'syn-invalid-visit',actual_date:'2025-02-30'}]});record('J12','非法访视不得从可访问集合消失',{positioned:l.visitMarks.length,pending:l.pendingVisits.length},l.visitMarks.length+l.pendingVisits.length===1);
 l=m.layoutJourneyTimeline({...base,events:[{eventRef:'syn-partial',domain:'ae',start:'2025-01-UK'}]});record('J13','无日期事件仍在pending集合',l.pendingEvents.map(e=>e.eventRef),l.pendingEvents.some(e=>e.eventRef==='syn-partial'));
-const refs=['syn-a'];const selected='syn-a';const expandedSet=new Set(['g']);expandedSet.delete('g');record('J14','显式收起选中聚合应有有效状态出口',{expanded:refs.includes(selected)||expandedSet.has('g')},!(refs.includes(selected)||expandedSet.has('g')));
-console.log(JSON.stringify({suite:'timeline_excerpt_probes',target,scope:'No browser/production API. J14 is the observed JSX Boolean expression, not the module.',results:out},null,2));
+// J14已退役（E1，20260927）：原为记录器形态探针——在探针文件内转录
+// Workspace.jsx的聚合展开/收起布尔表达式并断言其缺陷，不触达实际实现。
+// 该判定已提取为真实模块函数 medicalMonitoringJourneyTimeline.mjs::
+// isAggregateExpanded，直接回归见 tests/test_mm_r27_probe_retirement_and_worklist.py
+// （node导入真实模块验证：选中联动自动展开、显式收起优先、用户展开保持）。
+console.log(JSON.stringify({suite:'timeline_excerpt_probes',target,scope:'No browser/production API. J14 retired (E1): recorder-form JSX expression probe replaced by a direct regression on the real module function isAggregateExpanded.',results:out},null,2));

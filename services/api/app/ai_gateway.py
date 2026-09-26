@@ -1721,6 +1721,11 @@ def _extract_completion(
             ),
             **_completion_contract_diag(stream),
         }
+        # B5用量记录：SSE收尾usage块的完整字典原样透传（此前只取total
+        # 一个数，prompt/completion/reasoning/cached全部丢失）。账本负责
+        # 提供方实际schema的规范化。
+        if isinstance(stream.usage, dict) and stream.usage:
+            diag["usage"] = dict(stream.usage)
         if content:
             return content, model, diag
         reasoning = "".join(stream.reasoning_chunks)
@@ -1858,6 +1863,10 @@ def _completion_response_diagnostics(
 
     if isinstance(payload, dict):
         diagnostics["wire_format"] = "json"
+        # B5用量记录：非流式响应同样携带提供方实际usage字典——原样透传
+        # 给账本做schema规范化（此处不解释字段，避免两处漂移）。
+        if isinstance(payload.get("usage"), dict) and payload["usage"]:
+            diagnostics["usage"] = payload["usage"]
         choices = payload.get("choices")
         if isinstance(choices, list):
             diagnostics["choice_count"] = len(choices)

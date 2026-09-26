@@ -34,7 +34,9 @@ LEASE_SECONDS = 0.75  # interval = max(0.25, min(30, 0.75/3)) = 0.25s
 
 
 class StubRepository:
-    """heartbeat首次成功、其后失租冲突的存根；record_call照收真实账。"""
+    """heartbeat首次成功、其后失租冲突的存根；B5两段记账照收真实账
+    （start_call落started行、complete_call原行更新——此处以calls列表
+    记录complete_call收到的最终账目）。"""
 
     lease_seconds = LEASE_SECONDS
 
@@ -50,8 +52,14 @@ class StubRepository:
                 "monitoring AI heartbeat lost lease"
             )
 
-    def record_call(self, **kwargs):
-        self.calls.append(kwargs)
+    def start_call(self, **kwargs):
+        self.call_owner = kwargs.get("owner", "")
+        return "moncall-stub"
+
+    def complete_call(self, call_id, **kwargs):
+        self.calls.append(
+            {"call_id": call_id, "owner": getattr(self, "call_owner", ""), **kwargs}
+        )
 
 
 class StubProvider:
@@ -101,6 +109,8 @@ def test_heartbeat_lease_lost_stops_output_and_preserves_ledger() -> None:
     # 失租确实发生（首次续租成功、其后任一次续租抛失租冲突即停）。
     assert repository.heartbeats >= 2
     # A30后半句：已发生调用的真实账照记（outcome=success：物理调用成功）。
+    # B5两段记账：owner在start_call时落账，complete_call原行更新——桩把
+    # owner并回complete账目以保持断言面。
     assert len(repository.calls) == 1
     assert repository.calls[0]["outcome"] == "success"
     assert repository.calls[0]["owner"] == "owner-1"

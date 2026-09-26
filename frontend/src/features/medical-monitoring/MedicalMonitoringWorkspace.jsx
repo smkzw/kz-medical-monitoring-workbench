@@ -9,7 +9,7 @@ import {
   normalizeMedicalMonitoringWorkspaceRouteState,
   routeStateForMedicalMonitoringWorkspaceView,
 } from "./medicalMonitoringWorkspaceRouteState.mjs";
-import { layoutJourneyTimeline, parseTimelineDate, timelineDatePrecision, visitAxisDate } from "./medicalMonitoringJourneyTimeline.mjs";
+import { isAggregateExpanded, layoutJourneyTimeline, parseTimelineDate, timelineDatePrecision, visitAxisDate } from "./medicalMonitoringJourneyTimeline.mjs";
 import { DomainIcon } from "./DomainIcon.jsx";
 import { KzSubjectFlowSankey, KzRiskTypeBars, KzCenterDomainHeatmap } from "./medicalMonitoringKzChart.jsx";
 import { MedicalMonitoringProgressPanel } from "./MedicalMonitoringProgressPanel.jsx";
@@ -909,9 +909,14 @@ export function DomainTracks({
                     // React state展开成员列表（就地可点/键盘可达）；选中
                     // 事件在本聚合内时自动展开。
                     const containsSelected = aggregate.eventRefs.includes(selectedRef);
-                    const expanded =
-                      expandedAggregates.has(aggregate.aggregateKey)
-                      || (containsSelected && !collapsedAggregates.has(aggregate.aggregateKey));
+                    // E1（J14探针退役）：判定唯一实现移入纯模块
+                    // isAggregateExpanded（W05-J2：显式收起优先于选中联动）。
+                    const expanded = isAggregateExpanded({
+                      expandedSet: expandedAggregates,
+                      collapsedSet: collapsedAggregates,
+                      aggregateKey: aggregate.aggregateKey,
+                      containsSelected,
+                    });
                     return (
                       <span
                         className={`monitoring-domain-track-aggregate monitoring-timeline-aggregate${expanded ? " is-expanded" : ""}`}

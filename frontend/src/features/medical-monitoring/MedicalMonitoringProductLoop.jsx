@@ -315,6 +315,15 @@ function normalizeFindingCard(value = {}) {
 }
 
 // QueryDraft边界对象：保留自身query_draft_id，仅以finding_id引用Finding。
+// E1（工作列表负载回归）：Finding工作列表的过滤+规范化唯一实现，
+// 导出供 tests/test_mm_r27_probe_retirement_and_worklist.py 的node负载
+// 测试直接调用（1000+条Finding排序/筛选/渲染不劣化的实测入口）。
+export function buildFindingCards(raw = {}) {
+  return (Array.isArray(raw.query_findings) ? raw.query_findings : [])
+    .filter((value) => isRecord(value) && (clean(value.finding_id) || clean(value.title)))
+    .map(normalizeFindingCard);
+}
+
 function normalizeQueryDraft(value = {}) {
   return {
     queryDraftId: clean(value.query_draft_id),
@@ -404,9 +413,7 @@ function normalizePublicProductPayload(resultContext) {
   // 按draft如实呈现并标注来源形态，不伪造Finding DTO。
   const queryFindingsMeta = isRecord(raw.query_findings_meta) ? raw.query_findings_meta : {};
   const queryFindingsShape = clean(queryFindingsMeta.payload_shape, "finding_dto_v1");
-  const findingCards = (Array.isArray(raw.query_findings) ? raw.query_findings : [])
-    .filter((value) => isRecord(value) && (clean(value.finding_id) || clean(value.title)))
-    .map(normalizeFindingCard);
+  const findingCards = buildFindingCards(raw);
   const queryDraftRows = (Array.isArray(queryFindingsMeta.query_drafts) ? queryFindingsMeta.query_drafts : [])
     .filter((value) => isRecord(value) && clean(value.query_draft_id))
     .map(normalizeQueryDraft);

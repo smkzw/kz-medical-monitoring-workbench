@@ -81,12 +81,15 @@ actual=clue['_clues_agree'](a,b);record('B11','两个事件前后关系互换不
 
 class Repo:
     lease_seconds=0.3
-    def __init__(self,fail=False):self.calls=[];self.n=0;self.fail=fail;self.lost=threading.Event()
+    def __init__(self,fail=False):self.calls=[];self.n=0;self.fail=fail;self.lost=threading.Event();self.call_id='moncall-stub'
     def heartbeat(self,*args):
         self.n+=1
         if self.fail and self.n>1:
             self.lost.set();raise RuntimeError('synthetic lease lost')
     def record_call(self,**kwargs):self.calls.append(kwargs)
+    # E1/B5：_run_with_heartbeat改为start/complete两段记账，桩同步接口
+    def start_call(self,**kwargs):return self.call_id
+    def complete_call(self,call_id,**kwargs):self.calls.append({'call_id':call_id,**kwargs})
 job=SimpleNamespace(project_id='syn-project',job_id='syn-job',provider='stub',requested_model='stub',prompt_version='probe')
 repo=Repo(True)
 class SlowProvider:
@@ -107,13 +110,9 @@ class FailingProvider:
 try:heartbeat['_run_with_heartbeat'](SimpleNamespace(repository=repo2),job,'syn-owner',FailingProvider(),{})
 except TimeoutError:pass
 record('B13','provider异常路径已写账（保留修复）',{'rows':len(repo2.calls),'outcome':repo2.calls[0]['outcome'] if repo2.calls else None},len(repo2.calls)==1 and repo2.calls[0]['outcome']=='provider_error')
-# Exact truthiness expression from record_call; not a database persistence test.
-def _int(source,key):
-    raw=source.get(key)
-    if raw is None or raw=='':return None
-    try:return int(raw)
-    except (TypeError,ValueError):return None
-usage={'detail':{'reasoning_tokens':0,'cached_tokens':0}}
-observed=_int(usage['detail'],'reasoning_tokens') or _int(usage,'reasoning_tokens')
-record('B14','明确0用量不得在or回退中变为unknown',{'input':usage,'reasoning_tokens':observed},observed==0,'source_expression_probe')
-print(json.dumps({'suite':'backend_isolated_probes','scope':'Isolated selected functions, no production DB/API/model execution. B03-B06 compare helper output to evaluator source contract, not full evaluator execution.','results':results},ensure_ascii=False,indent=2))
+# B14已退役（E1，20260927）：原为记录器形态表达式探针——在探针文件内
+# 转录record_call旧`or`回退表达式并断言其缺陷，不触达实际实现。实际行为
+# 已由直接回归覆盖（测试真实record_call/_normalize_call_usage）：
+#   tests/test_mm_r24_identity_raw.py::test_call_ledger_zero_usage_in_detail_survives_fallback
+#   tests/test_mm_r27_usage_ledger.py::test_zero_usage_in_provider_subdict_is_not_unknown
+print(json.dumps({'suite':'backend_isolated_probes','scope':'Isolated selected functions, no production DB/API/model execution. B03-B06 compare helper output to evaluator source contract, not full evaluator execution. B14 retired (E1): recorder-form expression probe replaced by direct regressions on the real repository code.','results':results},ensure_ascii=False,indent=2))

@@ -22,6 +22,12 @@ export function terminateProcessGroup(pid, signal = "SIGTERM") {
  * window) so nested uvicorn/Vite/Chrome processes cannot survive a child-only
  * timeout. The returned shape preserves spawnSync's status/signal fields and
  * adds auditable timeout metadata.
+ *
+ * E1修复（第2轮门）：SIGKILL之后进程组的死亡是异步的——直接子进程close
+ * （或被收养）不等于组成员全部消失；此前立即resolve，调用方会看到"已超时
+ * 杀死"却仍能以kill(pid,0)探活到残留组成员（负载下偶发假阳性）。现在对
+ * 进程组做有界liveness轮询：整组ESRCH后才交付结果；到达上限仍存活则照常
+ * 交付（保留"绝不无限等待坏子进程"的既有契约）。返回对象shape不变。
  */
 export function runChildWithTimeout(command, args, options = {}, timeoutMs = 420000) {
   const { graceMs = 5000, ...spawnOptions } = options;
@@ -44,13 +50,54 @@ export function runChildWithTimeout(command, args, options = {}, timeoutMs = 420
     let timeoutTimer = null;
     let forceTimer = null;
     let finalTimer = null;
+    let drainTimer = null;
+
+    const groupHasLiveMembers = () => {
+      if (!child.pid) return false;
+      try {
+        process.kill(-child.pid, 0);
+        return true;
+      } catch (error) {
+        // ESRCH=整组（含被收养的残留成员）已不存在——可安全交付。
+        return error?.code !== "ESRCH";
+      }
+    };
 
     const complete = (result) => {
       if (settled) return;
+      if (timedOut && timeoutSignal === "SIGKILL") {
+        // SIGKILL已发（无论直接子进程close是否先到）：等整组ESRCH
+        // （有界），再交付。forceTimer随后仍会发SIGKILL并重入本路径，
+        // settled守卫保证只交付一次。
+        const deadline = Date.now() + 2000;
+        const drain = () => {
+          if (settled) return;
+          if (!groupHasLiveMembers() || Date.now() >= deadline) {
+            settled = true;
+            if (timeoutTimer) clearTimeout(timeoutTimer);
+            if (forceTimer) clearTimeout(forceTimer);
+            if (finalTimer) clearTimeout(finalTimer);
+            if (drainTimer) clearTimeout(drainTimer);
+            resolve({
+              ...result,
+              stdout: stdout.join(""),
+              stderr: stderr.join(""),
+              timedOut,
+              timeoutSignal,
+              pid: child.pid ?? null,
+            });
+            return;
+          }
+          drainTimer = setTimeout(drain, 20);
+        };
+        drain();
+        return;
+      }
       settled = true;
       if (timeoutTimer) clearTimeout(timeoutTimer);
       if (forceTimer) clearTimeout(forceTimer);
       if (finalTimer) clearTimeout(finalTimer);
+      if (drainTimer) clearTimeout(drainTimer);
       resolve({
         ...result,
         stdout: stdout.join(""),
