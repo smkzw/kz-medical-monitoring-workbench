@@ -1,0 +1,54 @@
+{
+ "attempt_id": "stg-e9d5050c73ef44be818e1f44920fdb5f",
+ "phase": "B_dual_candidates_started",
+ "documents_ready": true,
+ "scale": {
+  "primary": 151,
+  "verifier": 151
+ },
+ "eta": {
+  "job_count": {
+   "primary": 151,
+   "verifier": 151
+  },
+  "assumptions": {
+   "worker_parallelism": {
+    "primary": 4,
+    "verifier": 1
+   },
+   "per_job_budget_s": 900,
+   "note": "上限法（每作业900s预算）；verifier串行为瓶颈；实际中位数更快"
+  },
+  "eta_upper_bound_h": {
+   "primary": 9.4,
+   "verifier": 37.8
+  }
+ },
+ "samples": [
+  {
+   "primary_state": "generating",
+   "primary_jobs": 151,
+   "primary_completed": 0,
+   "verifier_state": "generating",
+   "verifier_jobs": 151,
+   "verifier_completed": 0
+  },
+  {
+   "primary_state": "generating",
+   "primary_jobs": 151,
+   "primary_completed": 0,
+   "verifier_state": "generating",
+   "verifier_jobs": 151,
+   "verifier_completed": 0
+  },
+  {
+   "primary_state": "generating",
+   "primary_jobs": 151,
+   "primary_completed": 3,
+   "verifier_state": "generating",
+   "verifier_jobs": 151,
+   "verifier_completed": 0
+  }
+ ],
+ "updated_at": "2026-09-26T10:53:14.780668+00:00"
+}

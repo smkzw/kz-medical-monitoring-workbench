@@ -525,6 +525,20 @@ class SourceRegistryStore:
             fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
             try:
                 existing = self._read_all()
+                # 20260926 按用户指令修复：entry_id由(project,kind,content)派生，
+                # 同content二次注册=刷新验证与绑定，必须原位替换既有行
+                # （spans+entry+元数据），而不是按provenance差异追加重复行——
+                # 重复行会使list_spans对同一entry累计多份spans，破坏
+                # locator index sha不变量（文档权威readiness fail-closed）。
+                # 历史遗留的同entry_id重复行一并收敛到最早一行。
+                first_position_by_entry: Dict[str, int] = {}
+                duplicate_positions: set[int] = set()
+                for index, item in enumerate(existing):
+                    entry_id = item.entry.entry_id
+                    if entry_id in first_position_by_entry:
+                        duplicate_positions.add(index)
+                    else:
+                        first_position_by_entry[entry_id] = index
                 identities = {
                     (item.entry.entry_id, _registration_identity(item))
                     for item in existing
@@ -535,7 +549,19 @@ class SourceRegistryStore:
                     (item.entry.entry_id, _registration_identity(item)): index
                     for index, item in enumerate(existing)
                 }
+                seen_incoming_entries: set[str] = set()
                 for result in incoming:
+                    entry_id = result.entry.entry_id
+                    if (
+                        entry_id in first_position_by_entry
+                        and entry_id not in seen_incoming_entries
+                    ):
+                        # 同entry_id（同content）：原位替换，不再追加重复行
+                        replacements[first_position_by_entry[entry_id]] = result
+                        seen_incoming_entries.add(entry_id)
+                        continue
+                    if entry_id in seen_incoming_entries:
+                        continue
                     identity = (result.entry.entry_id, _registration_identity(result))
                     if identity in identities:
                         incoming_metadata = dict(result.entry.metadata or {})
@@ -555,11 +581,12 @@ class SourceRegistryStore:
                         continue
                     identities.add(identity)
                     additions.append(result)
-                if not additions and not replacements:
+                if not additions and not replacements and not duplicate_positions:
                     return
                 rows = [
                     replacements.get(index, result)
                     for index, result in enumerate(existing)
+                    if index not in duplicate_positions
                 ] + additions
                 with tempfile.NamedTemporaryFile(
                     "w",

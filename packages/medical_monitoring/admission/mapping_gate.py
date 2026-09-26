@@ -31,8 +31,12 @@ MONITORING_C3_MAPPING_MODEL = "glm-5.3-flash"
 # 本机路由。
 DOC_AUTH_PRIMARY_PROVIDER = MONITORING_C3_MAPPING_PROVIDER
 DOC_AUTH_PRIMARY_MODEL = MONITORING_C3_MAPPING_MODEL
-DOC_AUTH_VERIFIER_PROVIDER = "cms-router"
-DOC_AUTH_VERIFIER_MODEL = "deepseek-latest-cloud"
+# 20260926 按用户绑定指令回切：文档权威盲核=ollama-cloud/deepseek-v4.1-flash
+# （思考强度high）。0923临时门（cms-router/deepseek-latest-cloud）系当时
+# ollama-cloud密钥未配所设，现密钥/角色绑定/provider设置均就位，常量随之
+# 回切；cms-router/deepseek-latest-cloud 身份保留于历史回执重验集合。
+DOC_AUTH_VERIFIER_PROVIDER = "ollama-cloud"
+DOC_AUTH_VERIFIER_MODEL = "deepseek-v4.1-flash"
 MONITORING_C3_MAPPING_PROFILE_ID = "medical_monitoring_ai__cms_router_glm53flash"
 MONITORING_C3_DEEPSEEK_PRIMARY_PROVIDER = "deepseek"
 MONITORING_C3_DEEPSEEK_PRIMARY_MODEL = "deepseek-flash"
@@ -44,9 +48,9 @@ MONITORING_C3_CMS_PRIMARY_MODEL = "MiniMax-M3"
 MONITORING_C3_CMS_PRIMARY_PROFILE_ID = "medical_monitoring_ai__cms_smk_minimax_m3"
 MONITORING_C3_ALTERNATE_PROVIDER = "cms-router"
 MONITORING_C3_ALTERNATE_MODEL = "minimax-m3"
-# 2026-09-23 用户指定：盲核切cms-router/deepseek-latest-cloud（与主分析
-# 同路由不同模型族；请求名=回执名，探针+实测通过）。ollama-cloud密钥
-# 未提供，恢复后可回切。Earlier MTPLX/GLM/opencode-go identities remain
+# 2026-09-23 曾按用户指定切cms-router/deepseek-latest-cloud（当时ollama-cloud
+# 密钥未配）；20260926已按用户新指令回切ollama-cloud/deepseek-v4.1-flash
+# （见上方DOC_AUTH_VERIFIER_*）。Earlier MTPLX/GLM/opencode-go identities remain
 # below so their frozen receipts can be replayed.
 MONITORING_C3_VERIFIER_PROVIDER = "cms-router"
 MONITORING_C3_VERIFIER_MODEL = "deepseek-latest-cloud"
