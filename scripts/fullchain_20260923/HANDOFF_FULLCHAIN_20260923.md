@@ -932,3 +932,9 @@ S1-S6六切片+门禁两轮修复已提交（39b62ce，54文件+5819行，未pus
 - 合计上限：发现lane ≤556 + 复核 ≤1946（理论）= **≤2502模型任务**；按CSU比例现实估算 ≈556+900 ≈ **1456**。
 - 备注1：如映射分歧需要第二轮裁决（adjudication lane），属独立模型段，上限随分歧分片数计——SAR首轮分歧数尚未产生，不在本清单。
 - 备注2：**本节只报告数量上限，不启动任何任务**；启动须按门禁流程另行授权与执行。
+
+## 0927V1复核勘误（20260927）
+
+1. **B1审计脚本分类缺陷[已修复·verified]**：monitoring_mapping_tool_usage_audit.py原按(prompt_version,status)组级read_rows总数分类，混合组整组误记——tool_loop_executed reported 1175 vs 实际118（夸大约10倍，复核员实算118/2022/985与修复后脚本输出一致）。已改按作业粒度分类，导出jsonl同步更正；
+2. **pytest-timeout环境说明[unconfirmed·low澄清]**：pytest-timeout安装于**venv**（测试门全部经.venv/bin/python执行，配置生效无警告）；复核员以系统python(9.1.1)检查报ModuleNotFoundError属解释器不一致，非门禁缺陷；
+3. **LLM任务上限报告**（映射确认0模型/事实物化0模型/发现lane≤556/定向复核≤1946现实≈900/合计上限≤2502现实≈1456）——按工作令A.3只报告不启动，等用户指令。

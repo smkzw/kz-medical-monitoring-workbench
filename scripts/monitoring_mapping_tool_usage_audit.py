@@ -39,15 +39,11 @@ def classify_persisted_jobs(db_path: Path) -> dict:
     try:
         rows = conn.execute(
             """
-            SELECT j.prompt_version, j.status, COUNT(*) AS jobs,
-                   SUM(CASE WHEN r.reads > 0 THEN 1 ELSE 0 END) AS jobs_with_reads,
-                   COALESCE(SUM(r.reads), 0) AS read_rows
+            SELECT j.job_id, j.prompt_version, j.status,
+                   (SELECT COUNT(*) FROM monitoring_ai_evidence_reads r
+                    WHERE r.job_id = j.job_id) AS reads
             FROM monitoring_ai_jobs j
-            LEFT JOIN (SELECT job_id, COUNT(*) AS reads
-                       FROM monitoring_ai_evidence_reads GROUP BY job_id) r
-              ON r.job_id = j.job_id
             WHERE j.task_type = 'listing_field_mapping'
-            GROUP BY j.prompt_version, j.status
             ORDER BY j.prompt_version, j.status
             """
         ).fetchall()
@@ -55,19 +51,19 @@ def classify_persisted_jobs(db_path: Path) -> dict:
         conn.close()
     by_class: dict[str, int] = {}
     detail = []
+    # R27复核修正（20260927）：按作业粒度分类——组级read_rows总数会把
+    # 混合组（少数有回执+多数0回执）整组误记，夸大tool_loop_executed。
     for row in rows:
-        usage_class = classify_tool_usage(row["prompt_version"], row["read_rows"])
-        by_class[usage_class] = by_class.get(usage_class, 0) + row["jobs"]
+        usage_class = classify_tool_usage(row["prompt_version"], row["reads"])
+        by_class[usage_class] = by_class.get(usage_class, 0) + 1
         detail.append({
+            "job_id": row["job_id"],
             "prompt_version": row["prompt_version"],
             "status": row["status"],
-            "jobs": row["jobs"],
-            "jobs_with_evidence_reads": row["jobs_with_reads"],
-            "evidence_read_rows": row["read_rows"],
             "class": usage_class,
         })
     return {
-        "total_jobs": sum(item["jobs"] for item in detail),
+        "total_jobs": len(detail),
         "by_class": by_class,
         "rows": detail,
     }
