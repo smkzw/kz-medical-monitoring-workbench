@@ -1,0 +1,216 @@
+{
+ "project": "proj_mgk10_sar_real",
+ "runtime": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/phase_c_mgk10_authority_v2_20260905/runtime",
+ "stage": "state",
+ "listing_staging_files": [
+  "admissions/staging/stg-e9d5050c73ef44be818e1f44920fdb5f/【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx"
+ ],
+ "listing_file_ok": true,
+ "listing_file": {
+  "path": "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/phase_c_mgk10_authority_v2_20260905/runtime/medical_monitoring_r7/proj_mgk10_sar_real/admissions/staging/stg-e9d5050c73ef44be818e1f44920fdb5f/【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx",
+  "size_bytes": 17013973,
+  "sheet_count": 62,
+  "first_sheets": [
+   "TOC",
+   "ICF",
+   "SV",
+   "DM",
+   "SARH",
+   "PARH"
+  ]
+ },
+ "listing_snapshots_by_revision": [
+  {
+   "revision_id": "srcc1_bdd4dac3ea07fd7257ef4b08",
+   "snapshot_version": "d78556f3c7f500a5",
+   "n": 62,
+   "rows_total": 148788,
+   "t0": "2026-09-05T10:06:54.453900+00:00"
+  }
+ ],
+ "snapshot_acceptance_baseline_eligible": 62,
+ "source_revisions": [
+  {
+   "revision_id": "srcc1_bdd4dac3ea07fd7257ef4b08",
+   "source_type": "listing",
+   "version": "81f47614ca6ab96c",
+   "content_hash": "ec2bd919c26c188455332ff386659dc3c123a95b8a62c4a3c57c6dce2049705e",
+   "scope_json": "{\"source_file\":\"【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx\"}",
+   "created_at": "2026-09-05T10:05:35.596604+00:00"
+  },
+  {
+   "revision_id": "facts-snapshot-001",
+   "source_type": "listing",
+   "version": "mm-r7-slice04-synthetic-binding-v1",
+   "content_hash": "849851324980919218f57f2c9bceffef1c3e07e1a573e09f39662442e2b53ca4",
+   "scope_json": "{}",
+   "created_at": "2026-09-14T14:04:55.153193+00:00"
+  }
+ ],
+ "listing_snapshot_ok": true,
+ "mapping": {
+  "drafts": [
+   {
+    "draft_id": "monmapdraft_da52157f3ed6f42405d0de95d8be",
+    "batch_id": "stg-e9d5050c73ef44be818e1f44920fdb5f",
+    "status": "confirmed",
+    "version": 275,
+    "confirmed_revision_id": "monmaprev_185410413d17078e8c6e83070e21",
+    "created_at": "2026-09-05T14:19:28.080731+00:00",
+    "updated_at": "2026-09-14T12:14:55.992867+00:00"
+   }
+  ],
+  "revisions": [
+   {
+    "mapping_revision": "monmaprev_185410413d17078e8c6e83070e21",
+    "draft_id": "monmapdraft_da52157f3ed6f42405d0de95d8be",
+    "batch_id": "stg-e9d5050c73ef44be818e1f44920fdb5f",
+    "draft_version": 275,
+    "confirmed_by": "宋旻恺",
+    "idempotency_key": "confirm-monmapdraft_da52157f3ed6f42405d0de95d8be-v275-20260911",
+    "created_at": "2026-09-14T12:14:55.992867+00:00"
+   }
+  ],
+  "activation_row": null,
+  "latest_draft_field_count": 1495
+ },
+ "confirmed_mapping_revision": {
+  "mapping_revision": "monmaprev_185410413d17078e8c6e83070e21",
+  "draft_id": "monmapdraft_da52157f3ed6f42405d0de95d8be",
+  "batch_id": "stg-e9d5050c73ef44be818e1f44920fdb5f",
+  "draft_version": 275,
+  "confirmed_by": "宋旻恺",
+  "idempotency_key": "confirm-monmapdraft_da52157f3ed6f42405d0de95d8be-v275-20260911",
+  "created_at": "2026-09-14T12:14:55.992867+00:00"
+ },
+ "confirmed_mapping_field_count": 1495,
+ "mapping_activated": false,
+ "facts_manifest_present": true,
+ "facts_manifest_summary": {
+  "schema": "facts-table-manifest-v1",
+  "tables": 62,
+  "skipped": 55,
+  "superseded": 0
+ },
+ "findings_artifacts": [
+  "aemh-findings-facts-snapshot-001.dualvlm-full1.json",
+  "aemh-findings-facts-snapshot-001.dualvlm11.json",
+  "aemh-findings-facts-snapshot-001.full1.json",
+  "aemh-findings-facts-snapshot-001.r5.json"
+ ],
+ "canonical_facts_rows": 0,
+ "facts_ok": true,
+ "runs_total": 12,
+ "runs_all_completed": true,
+ "latest_run": {
+  "run_id": "r7-run-aea8ef6f41bd4027b5c23d0ad6732264",
+  "public_run_token": "run:3699c3df85b21d61d45bf845",
+  "idempotency_key": "dualvlm-full1-publish-0806eebcd74e",
+  "mode": "daily",
+  "execution_basis": "full",
+  "current_snapshot_token": "snapshot:e0b671c2bba9fe322d54c029",
+  "data_cutoff": "2025-12-25",
+  "run_state": "completed",
+  "result_available": 1,
+  "created_at": "2026-09-20T16:15:11.373+00:00"
+ },
+ "publications_total": 12,
+ "latest_publications": [
+  {
+   "token": "result-context:abffa1c8f26d4fc197f436e814a31d47",
+   "publication_state": "available",
+   "mode": "daily",
+   "created_at": "2026-09-15T15:36:31.770+00:00"
+  },
+  {
+   "token": "result-context:ff212ea931334dceaca26d29f02fc7a1",
+   "publication_state": "available",
+   "mode": "daily",
+   "created_at": "2026-09-20T16:03:00.083+00:00"
+  },
+  {
+   "token": "result-context:296971b6cc6540228365dacbbefa671e",
+   "publication_state": "available",
+   "mode": "daily",
+   "created_at": "2026-09-20T16:15:12.362+00:00"
+  }
+ ],
+ "latest_run_binding": {
+  "run_id": "r7-run-aea8ef6f41bd4027b5c23d0ad6732264",
+  "source_revision_id": "facts-snapshot-001",
+  "execution_profile_id": "ep_ea3ab9033f8b682cdc58929b90ba4c4a",
+  "profile_id": "monitoring_harness_default_mtplx_qwen38_medium",
+  "effective_selector": "mtplx/Youssofal/Qwen3.8-27B-MTPLX-Optimized-Quality"
+ },
+ "runs_ok": true,
+ "protocol_w4_lane": {
+  "protocol_versions": [],
+  "protocol_facts": 0,
+  "rule_packs": []
+ },
+ "risk_rule_revisions": 0,
+ "protocol_note": "SAR在monitoring_protocol_rules无协议版本/事实/规则包（W4链未跑，历史run rule_tokens_json=[]，规则来自mgk10_sar_monitoring_service内置registry）；协议文档V2.1(2025-09-19)存在于qoderwork/datalisting&protocol/但未注册为W4协议版本。",
+ "model_bindings": {
+  "medical_monitoring_ai": {
+   "model": "glm-5.3-flash",
+   "effort": "high",
+   "profile_id": "medical_monitoring_ai__cms_router_glm53flash",
+   "enabled": true
+  },
+  "medical_monitoring_verifier_ai": {
+   "model": "deepseek-v4.1-flash",
+   "effort": "high",
+   "profile_id": "medical_monitoring_verifier_ai__ollama_cloud_dsv41",
+   "enabled": true
+  }
+ },
+ "model_bindings_ok": true,
+ "model_bindings_note": "2026-09-15/20历史run的run_binding冻结profile为mtplx/Qwen3.8-27B（非现役绑定）；当前ai_role_bindings.json已为主glm-5.3-flash(cms_router,high)+盲核deepseek-v4.1-flash(ollama_cloud,high)。后续阶段prepare-and-start后须核对新run_binding冻结值不降档。",
+ "api_reachable": true,
+ "api_snapshot_token": "snapshot:e0b671c2bba9fe322d54c029",
+ "api_current_data": {
+  "snapshot_token": "snapshot:e0b671c2bba9fe322d54c029",
+  "data_cutoff": "2025-12-25",
+  "imported_at": "2026-09-05T10:05:35.583450+00:00",
+  "scope_description": "已核验事实快照：62表/148788行/3950919值100%往返校验",
+  "row_count": 365,
+  "can_compare": true
+ },
+ "api_modes_available": [
+  "daily",
+  "post_lock_pre_cfdi",
+  "pre_lock"
+ ],
+ "api_rule_revisions": [],
+ "verdict": "ready_rerun_no_reintake",
+ "verdict_reason": "真实62表listing已intake并100%往返校验（srcc1_bdd4dac3ea07fd7257ef4b08，活跃API current_data=snapshot:e0b671c2bba9fe322d54c029，62表/148788行）；映射已确认（monmaprev_185410413d17078e8c6e83070e21，1495字段）；事实manifest在（62表）。重跑无需重新intake，后续阶段直接基于现役快照token走prepare-and-start。'快照只有180行'系旧脚本LIMIT-1误读（180为末表DS行数）。",
+ "identifiers": {
+  "snapshot_token": "snapshot:e0b671c2bba9fe322d54c029",
+  "intake_source_revision": "srcc1_bdd4dac3ea07fd7257ef4b08（真实listing，62表148788行）",
+  "run_source_revision": "facts-snapshot-001（历史run binding实际引用）",
+  "mapping_revision": "monmaprev_185410413d17078e8c6e83070e21",
+  "mapping_draft_batch": "stg-e9d5050c73ef44be818e1f44920fdb5f",
+  "protocol_version": null,
+  "protocol_note": "SAR在monitoring_protocol_rules无协议版本/事实/规则包（W4链未跑，历史run rule_tokens_json=[]，规则来自mgk10_sar_monitoring_service内置registry）；协议文档V2.1(2025-09-19)存在于qoderwork/datalisting&protocol/但未注册为W4协议版本。",
+  "attempt_state": "attempt日志空（capability_attempt_journal/node_attempts 0行）；attempt随每次prepare-and-start新铸",
+  "latest_run": "run:3699c3df85b21d61d45bf845",
+  "latest_run_id": "r7-run-aea8ef6f41bd4027b5c23d0ad6732264",
+  "latest_publication": "result-context:296971b6cc6540228365dacbbefa671e",
+  "model_binding_required": {
+   "medical_monitoring_ai": {
+    "model": "glm-5.3-flash",
+    "effort": "high"
+   },
+   "medical_monitoring_verifier_ai": {
+    "model": "deepseek-v4.1-flash",
+    "effort": "high"
+   }
+  },
+  "model_binding_current_ok": true
+ },
+ "stage1_plus_guards": [
+  "prepare-and-start后核对run_binding冻结profile=现役绑定（glm-5.3-flash/deepseek-v4.1-flash high），不得降档",
+  "付费批跑启动前在run_ledger.jsonl记录时间与规模",
+  "历史结论（如map激活行缺失、W4协议链未跑）如实带过，不伪造完成"
+ ]
+}
