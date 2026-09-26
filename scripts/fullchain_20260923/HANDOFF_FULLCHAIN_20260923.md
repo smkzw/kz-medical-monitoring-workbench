@@ -730,3 +730,127 @@ restoreReturnAnchor按U18锚点恢复滚动/焦点。
 →journey出现返回按钮→点击→queries视图scrollY精确恢复900、56条发现
 完整渲染。A25"finding→subject→event→back+滚动焦点恢复，浏览0调用"
 闭环达成（全程call_ledger 0行）。jsx 6/6、mjs 68/71（3项基线旧债）。
+
+---
+
+# 0926V1第一交付批：S1–S6六切片 + 门禁两轮修复（2026-09-26）
+
+> 承接：`HANDOFF_W04_CLOSEOUT_20260926.md`（commit 872a451）。评审包
+> `review_pack_0926V1/`（probes/backend_probes.py、probes/timeline_probes.mjs、
+> 04_ACCEPTANCE_0926V1.json A05–A23）。全部切片零模型调用、零付费队列。
+
+## 切片清单与前后行为
+
+### S1 诊断豁免收紧（W04-VAL，P0）
+- 前：walker仅认changed/no_corresponding_record，行级比较/日期/regex算子
+  被豁免，但求值器对这些输入返回indeterminate——豁免与能力不符。
+- 后：walker改查同址OPERATOR_CAPABILITIES注册表（total_boolean=exists/
+  missing/all/any/not；can_indeterminate=13算子），unknown保守；walker的
+  total集改为函数kw-only默认值字面量自足携带（AST级探针可独立提取执行，
+  __kwdefaults__与注册表一致性有防漂移断言）。
+- 测试：tests/test_monitoring_rule_diagnostic_coverage_0926.py 30例。
+
+### S2 冻结历史read model（W01-R26，P0）
+- 前：读取时用当前代码重建packet再与冻结digest比对——投影代码升级即
+  result_context_unavailable（p7c coverage2用例在HEAD实证RED）。
+- 后：发布时把R5 packet快照为冻结read model（frozen_read_model.py经
+  Store artifact+CAS落库），发布行新增两个可空引用列，finalize在同一
+  BEGIN IMMEDIATE事务写入；读取优先反序列化快照并按冻结sha256+CAS+锚点
+  校验（校验强度不降）。launch schema bump v5，存量v4库经守卫式ALTER
+  原地升级（不重建表，open()同事务推进marker+staging迁移步V4→V5）。
+- 测试：tests/test_public_result_freeze_0926.py 8例（含存量token行为
+  不变的三形态验证）；HEAD上曾RED的p7c发布门用例转绿。
+
+### S3 Finding DTO与QueryDraft分离（W01-R26，P1）
+- 前：公开findings实为query_drafts换名（:89-94回退），content_sha256填
+  artifact_id，overview注入truthy省略零发现。
+- 后：daily载荷增平行冻结findings数组（稳定finding_id/subject/site/
+  事件与时间窗/状态/分类型claims/逐条source refs），QueryDraft保留自身
+  ID以finding_id引用，commit侧强校验引用关系（恰4 kinds不变）；读取侧
+  删除换名回退（两键皆无即unavailable）；content_sha256=真实载荷哈希；
+  零发现显式写空数组；legacy载荷drafts如实携带并标注payload_shape。
+- 测试：tests/test_finding_dto_freeze_0926.py 10例 + 前端渲染契约44
+  checks（medicalMonitoringFindingCardRender）。
+
+### S4 默认fit与独立密度（W05-J1）
+- 前：zoomLevel单变量耦合px/day/聚合/碰撞宽度/标签显隐；width有640
+  下限两处把窄容器撑出横滚。
+- 后：拆timeViewport（全程fit/自选custom含更密-1更疏+1/聚焦focus以
+  选中事件±15天收窄范围）与detailDensity（精简/标准/详细）两个独立
+  state——px/day与scale范围只由viewport决定，密度只改聚合阈值/
+  collisionWidth/标签间距；删640下限（A16：containerWidth=500→
+  width=500）；A17密度切换scale四值不变有断言；密度CSS改挂
+  data-monitoring-density。
+- 测试：medicalMonitoringJourneyTimeline.test.mjs重写（node --test
+  pass 1 fail 0）。
+
+### S5 时间语义必需项（W05-J2，含A23）
+- 后：xFor恒返回有限number、窗外方向改beyondFor独立通道（修A21聚合
+  '[object Object]px'混型根因），区间首尾越界分别保留beyondStart/
+  beyondEnd；parseTimelineDate加尾锚仅接受完整YYYY-MM-DD、仅年月返回
+  null进待确认（J03），timelineDatePrecision导出；partial无论dateState
+  还是date_precision进pending且DTO边界归一datePrecision；ongoing/
+  end_unknown渲染为延伸到轴端的开放条形+开-end视觉（A22）；A23：
+  hasValidDates=false时月份刻度返回空、轴窗显示无有效日期+空态段落。
+- 测试：timeline test追加A19/A21/A22/A23断言；新增
+  medicalMonitoringTimelineSemanticsRender渲染契约30 checks。
+
+### S6 失租约传播（W02-E0b，A30）
+- 前：后台心跳失败仅append进heartbeat_error后return，全函数无读取点
+  ——失租后provider输出照常返回（HEAD探针实证returned output）。
+- 后：provider.run返回后、输出消费前检查heartbeat_error非空即抛
+  MonitoringAiStateConflictError（repository失租同族类型，携带
+  job_id/owner属性、__cause__链回原始冲突），输出不返回不冒充完成；
+  计量finally原样保留（record_call照记outcome=success的物理调用真实
+  账）；repository owner CAS第二道防线不动。
+- 测试：tests/test_heartbeat_lease_lost_0926.py 3例（失租终止+照记/
+  正常路径/provider异常路径回归）。
+
+## 测试门结果与探针基线对比
+
+| 项 | 基线 | 第1次修复后 | 本轮（第3次验证） |
+|---|---|---|---|
+| strongFailures | tests/medical_monitoring | 同（ini未覆盖门禁cwd形态） | 无（143×3形态全过） |
+| backend probe exit | 0 | 1（NameError崩溃） | 0 |
+| backend failing | 9 | 0（崩溃掩蔽未记录） | 1（仅B14记录器） |
+| timeline failing | 9 | 4 | 1（仅J14记录器） |
+| feExit | 0 | 0 | 0（56文件0失败） |
+
+- B01–B06由S1转绿；B12由S6转绿；B08/B09/B11由命题归属实现转绿
+  （tests/test_aemh_dualvlm_contracts.py新增3条回归：方向绑定指标/
+  分级绑定分期/事件锚前后互换）。
+- B14/J14为记录性探针：探针文件内自含硬编码缺陷表达式
+  （`...or _int(usage,'reasoning_tokens')`与
+  `refs.includes(selected)||expandedSet.has('g')`），不import被测实现，
+  任何实现修改都无法改变其结果。对应产品缺陷均已修复并有回归测试
+  （repository None回退+usage_unknown计入detail；Workspace
+  collapsedAggregates收起优先）。探针文件在修改权限之外，未动。
+- tests/medical_monitoring修复：新增implementation/workbench/pytest.ini
+  （与根ini同内容）解决-c相对路径按cwd叠加的双层路径问题；项目根新增
+  conftest.py sys.path桥+tests符号链接（项目根侧，仓库外未入库），
+  使门禁从项目根/工作台根任一cwd均可收集。
+
+## 复核发现
+
+- tests/test_medical_monitoring_r7_product_router.py两条
+  test_monitoring_ai_mapping_gate失败为环境性（宿主路由配置
+  cms-router/DEEPSEEK-V4.1-FLASH vs 测试期望ollama-cloud/
+  deepseek-latest-cloud），HEAD stash对照实证预存在，与本批无关。
+- test_slice07c3...refetches的provider/builder/validator==2断言钉住
+  读取时重建——S4/S5冻结路径下product-less发布保持重建（fixture无
+  product factory），断言保留并加注释。
+- test_late_project_dispatchers的content_sha256断言更新为新合同
+  （真实载荷哈希≠artifact_id），churn线程补try/finally防断言失败时
+  join永久挂起。
+
+## 未测范围与边界
+
+- A31–A35计量改造（call_id幂等重放/usage规范化细节）按切片边界延后；
+  小规模同源质量成本对照待授权未执行。
+- W03/W04命题归属仅落地探针B08/B09/B11的结构性属性绑定，全域覆盖
+  账本与其余命题切片未动。
+- 浏览器级视觉/逐跳点击验证未在真浏览器运行（需全栈环境；稳定后端
+  启动脚本要求AI凭证），以静态markup渲染契约替代（44+30+41 checks）。
+- 200%浏览缩放人工可用性检查未自动化。
+- B14/J14两条记录性探针在探针文件内自含硬编码表达式，实现无法关闭，
+  需评审包所有者更新期望表达式（探针在修改权限之外）。

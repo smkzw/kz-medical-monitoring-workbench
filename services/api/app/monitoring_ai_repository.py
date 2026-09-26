@@ -1021,8 +1021,14 @@ class MonitoringAiRepository:
             usage = diagnostics
         prompt_tokens = _int(usage, "prompt_tokens")
         completion_tokens = _int(usage, "completion_tokens")
-        reasoning_tokens = _int(detail, "reasoning_tokens") or _int(usage, "reasoning_tokens")
-        cached_tokens = _int(detail, "cached_tokens") or _int(usage, "cached_tokens")
+        # W02-E0b动作4（B14）：显式None判断做fallback——明确0用量经or
+        # 回退会丢失为unknown；0是真实观测值必须保留。
+        reasoning_tokens = _int(detail, "reasoning_tokens")
+        if reasoning_tokens is None:
+            reasoning_tokens = _int(usage, "reasoning_tokens")
+        cached_tokens = _int(detail, "cached_tokens")
+        if cached_tokens is None:
+            cached_tokens = _int(usage, "cached_tokens")
         total_tokens = _int(usage, "total_tokens")
         now = self.clock()
         with self._connect() as connection:
@@ -1058,7 +1064,13 @@ class MonitoringAiRepository:
                     reasoning_tokens,
                     cached_tokens,
                     total_tokens,
-                    1 if not any(isinstance(v, int) for v in usage.values()) else 0,
+                    # W02-E0b（B14）：嵌套detail中的整型用量也是真实观测值
+                    # ——unknown判定必须计入detail，明确0不得标unknown。
+                    1 if not any(
+                        isinstance(value, int)
+                        for source in (usage, detail)
+                        for value in source.values()
+                    ) else 0,
                     _int(diagnostics, "response_bytes"),
                     _float(diagnostics, "sse_read_seconds"),
                     outcome, error_code, _iso(now),

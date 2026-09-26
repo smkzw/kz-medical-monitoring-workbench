@@ -391,6 +391,8 @@ class LaunchRegistryPublicationStateMixin:
         artifact_member_set: Optional[Iterable[Any]] = None,
         artifact_member_set_digest: Optional[str] = None,
         artifact_members_digest: Optional[str] = None,
+        frozen_read_model_artifact_id: Optional[str] = None,
+        frozen_read_model_sha256: Optional[str] = None,
         require_continuity_plan: bool = False,
         expected_plan_digest: Optional[str] = None,
     ) -> ResultPublication:
@@ -558,6 +560,31 @@ class LaunchRegistryPublicationStateMixin:
                 if member_set_digest_text != expected_member_digest:
                     raise LaunchRegistryError("invalid_publication_metadata")
 
+        # W01-R26（20260926）：冻结read model引用。二者必须成对出现，
+        # sha256必须是小写64位十六进制（与发布行锚点同强度）。
+        frozen_artifact_text = (
+            _optional_text(
+                frozen_read_model_artifact_id, "invalid_publication_metadata"
+            )
+            if frozen_read_model_artifact_id is not None
+            else None
+        )
+        frozen_sha_text = (
+            _optional_text(
+                frozen_read_model_sha256, "invalid_publication_metadata"
+            )
+            if frozen_read_model_sha256 is not None
+            else None
+        )
+        if (frozen_artifact_text is None) != (frozen_sha_text is None):
+            raise LaunchRegistryError("invalid_publication_metadata")
+        if frozen_sha_text is not None:
+            if len(frozen_sha_text) != 64 or any(
+                c not in "0123456789abcdef" for c in frozen_sha_text.lower()
+            ):
+                raise LaunchRegistryError("invalid_publication_metadata")
+            frozen_sha_text = frozen_sha_text.lower()
+
         with self._lock:
             connection = self._require_conn()
             try:
@@ -695,6 +722,18 @@ class LaunchRegistryPublicationStateMixin:
                     ):
                         raise LaunchRegistryError("publication_cas_conflict")
                     if (
+                        frozen_artifact_text is not None
+                        and frozen_artifact_text
+                        != current.frozen_read_model_artifact_id
+                    ):
+                        raise LaunchRegistryError("publication_cas_conflict")
+                    if (
+                        frozen_sha_text is not None
+                        and frozen_sha_text
+                        != current.frozen_read_model_sha256
+                    ):
+                        raise LaunchRegistryError("publication_cas_conflict")
+                    if (
                         continuity_plan is not None
                         and continuity_plan.status
                         == CONTINUITY_PLAN_STATE_VERIFIED
@@ -780,6 +819,13 @@ class LaunchRegistryPublicationStateMixin:
                 effective_member_set_digest = _effective_text(
                     member_set_digest_text, current.artifact_member_set_digest
                 )
+                effective_frozen_artifact = _effective_text(
+                    frozen_artifact_text,
+                    current.frozen_read_model_artifact_id,
+                )
+                effective_frozen_sha = _effective_text(
+                    frozen_sha_text, current.frozen_read_model_sha256
+                )
                 if effective_member_ids and effective_member_set_digest is None:
                     effective_member_set_digest = content_digest(list(effective_member_ids))
                 if (
@@ -807,6 +853,8 @@ class LaunchRegistryPublicationStateMixin:
                     "r6_output_set_digest = ?, "
                     "artifact_member_ids_json = ?, "
                     "artifact_member_set_digest = ?, "
+                    "frozen_read_model_artifact_id = ?, "
+                    "frozen_read_model_sha256 = ?, "
                     "failure_code = NULL, failure_message = NULL, "
                     "updated_at = ? WHERE " + where,
                     (
@@ -821,6 +869,8 @@ class LaunchRegistryPublicationStateMixin:
                         effective_r6_output_set_digest,
                         _json_token_list(effective_member_ids),
                         effective_member_set_digest,
+                        effective_frozen_artifact,
+                        effective_frozen_sha,
                         updated_at,
                         project_text,
                         launch.run_id,

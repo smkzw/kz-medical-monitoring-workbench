@@ -49,7 +49,7 @@ def migrate_staged_member(
     if member not in {RUNTIME_MEMBER, LAUNCH_MEMBER}:
         raise MigrationError("migration_operation_conflict")
     expected_target = (
-        RUNTIME_V6 if member == RUNTIME_MEMBER else LAUNCH_V4
+        RUNTIME_V6 if member == RUNTIME_MEMBER else LAUNCH_V5
     )
     if target_version is None:
         target_version = expected_target
@@ -58,7 +58,7 @@ def migrate_staged_member(
     allowed_sources = (
         {RUNTIME_V4, RUNTIME_V5}
         if member == RUNTIME_MEMBER
-        else {LAUNCH_V1, LAUNCH_V2, LAUNCH_V3}
+        else {LAUNCH_V1, LAUNCH_V2, LAUNCH_V3, LAUNCH_V4}
     )
     if source_version not in allowed_sources or not path.is_file():
         raise MigrationError("migration_requires_staging")
@@ -184,6 +184,7 @@ __all__ = [
     "LAUNCH_V2",
     "LAUNCH_V3",
     "LAUNCH_V4",
+    "LAUNCH_V5",
     "MIGRATION_OPERATION_KIND",
     "MIGRATION_ROLLBACK_DIR_NAME",
     "MIGRATION_STAGING_DIR_NAME",

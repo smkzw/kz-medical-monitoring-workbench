@@ -48,7 +48,10 @@ SCHEMA_VERSION_V1 = "mm-r7-slice07c2-launch-registry-v1"
 SCHEMA_VERSION_V2 = "mm-r7-slice07c3-launch-registry-v2"
 SCHEMA_VERSION_V3 = "mm-r7-slice08a-launch-registry-v3"
 SCHEMA_VERSION_V4 = "mm-r7-slice08b-launch-registry-v4"
-SCHEMA_VERSION = SCHEMA_VERSION_V4
+# W01-R26（20260926）：v5在v4之上仅新增两个可空冻结read model引用列，
+# open()对存量v4文件按守卫式ALTER原地升级，不重建表。
+SCHEMA_VERSION_V5 = "mm-r7-w01r26-launch-registry-v5"
+SCHEMA_VERSION = SCHEMA_VERSION_V5
 LAUNCH_REGISTRY_DB_NAME = "launch_registry.sqlite3"
 BUSY_TIMEOUT_MS = 10_000
 DEFAULT_HISTORY_LIMIT = 50
@@ -910,6 +913,10 @@ class ResultPublication:
     r6_output_set_digest: Optional[str] = None
     artifact_member_ids: Tuple[str, ...] = ()
     artifact_member_set_digest: Optional[str] = None
+    # W01-R26（20260926）：冻结read model引用列。可空：存量发布行无引用，
+    # 读取侧对其保持既有重建比对路径。
+    frozen_read_model_artifact_id: Optional[str] = None
+    frozen_read_model_sha256: Optional[str] = None
 
     @property
     def artifact_member_set(self) -> Tuple[str, ...]:
@@ -1156,11 +1163,22 @@ _PUBLICATION_ALLOWED_TRANSITIONS = {
 
 
 def _assert_current_schema(path: Path) -> None:
-    """Reject an existing legacy/unknown file before writable SQLite calls."""
+    """Reject an existing legacy/unknown file before writable SQLite calls.
+
+    W01-R26（20260926）例外：v4→v5仅新增两个可空引用列，v4文件由
+    ``LaunchRegistry.open`` 以守卫式ALTER原地升级，因此放行标记为
+    SCHEMA_VERSION_V4的legacy形状；更早版本仍须走staging迁移。
+    """
     if not path.exists():
         return
     from .schema_manifest import SchemaClassification, inspect_member
 
     report = inspect_member(path, "launch_registry")
-    if report.classification is not SchemaClassification.CURRENT:
-        raise LaunchRegistryError("unsupported_schema_version")
+    if report.classification is SchemaClassification.CURRENT:
+        return
+    if (
+        report.classification is SchemaClassification.LEGACY
+        and report.schema_version == SCHEMA_VERSION_V4
+    ):
+        return
+    raise LaunchRegistryError("unsupported_schema_version")

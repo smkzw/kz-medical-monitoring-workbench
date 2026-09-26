@@ -418,6 +418,37 @@ def test_call_ledger_query_and_usage_roundtrip(tmp_path):
     assert second["call_seq"] > first["call_seq"]
 
 
+def test_call_ledger_zero_usage_in_detail_survives_fallback(tmp_path):
+    """W02-E0b动作4（B14反例）：嵌套detail里的明确0用量经fallback不得
+    丢失为unknown——0是真实观测值；回退必须以None判断而非or真值。"""
+    from services.api.app.monitoring_ai_repository import MonitoringAiRepository
+
+    repo = MonitoringAiRepository(tmp_path / "ledger-zero.sqlite3")
+    repo.record_call(
+        project_id="p1", job_id="job-zero", attempt_id="att-1", call_seq=0,
+        owner="owner-a", provider="cms-router", requested_model="glm-5.3-flash",
+        observed_model="glm-5.3-flash",
+        diagnostics={
+            "wire": "sse",
+            "usage": {
+                "detail": {
+                    "reasoning_tokens": 0,
+                    "cached_tokens": 0,
+                    "total_tokens": 0,
+                },
+            },
+            "response_bytes": 128,
+        },
+        outcome="success",
+    )
+    rows = repo.call_ledger("p1", "job-zero")
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["reasoning_tokens"] == 0
+    assert row["cached_tokens"] == 0
+    assert row["usage_unknown"] == 0
+
+
 def test_call_ledger_failure_and_retry_accounting(tmp_path):
     """0924V2-B06/B12：失败调用同样记账（outcome=provider_error）、
     操作员重试各自成行、usage缺失unknown不填0、summary统计一致。"""

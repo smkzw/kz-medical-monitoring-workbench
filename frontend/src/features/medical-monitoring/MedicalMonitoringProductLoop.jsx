@@ -253,6 +253,79 @@ function normalizeIndicator(value = {}, index = 0) {
   };
 }
 
+// W01-R26 A12：Finding DTO边界对象。稳定finding_id/subject/site/事件与
+// 时间窗/状态/分类型claims/逐条source refs——真实Finding卡的数据来源。
+function normalizeFindingCard(value = {}) {
+  const claims = (Array.isArray(value.claims) ? value.claims : [])
+    .map((claim) => {
+      if (!isRecord(claim)) return null;
+      const kind = clean(claim.kind, "finding");
+      const text = clean(claim.text);
+      if (!text) return null;
+      return {
+        kind,
+        text,
+        evidenceIds: Array.isArray(claim.evidence_ids)
+          ? claim.evidence_ids.map((id) => clean(id)).filter(Boolean)
+          : [],
+      };
+    })
+    .filter(Boolean);
+  const sourceRefs = (Array.isArray(value.source_refs) ? value.source_refs : [])
+    .map((ref) => {
+      if (isRecord(ref)) {
+        const evidenceId = clean(ref.evidence_id || ref.ref);
+        if (!evidenceId) return null;
+        return {
+          evidenceId,
+          path: clean(ref.path),
+          recordId: clean(ref.record_id),
+          field: clean(ref.field),
+        };
+      }
+      const text = clean(ref);
+      return text ? { evidenceId: text, path: "", recordId: "", field: "" } : null;
+    })
+    .filter(Boolean);
+  const locator = isRecord(value.locator)
+    ? {
+      path: clean(value.locator.path),
+      recordId: clean(value.locator.record_id),
+      field: clean(value.locator.field),
+      uri: clean(value.locator.uri),
+    }
+    : null;
+  return {
+    findingId: clean(value.finding_id),
+    riskId: clean(value.risk_id),
+    issueId: clean(value.issue_id),
+    subjectRef: clean(value.subject_id || value.subject_ref),
+    siteRef: clean(value.site_id || value.site_ref),
+    scopeKind: clean(value.scope_kind),
+    eventRef: clean(value.event_ref),
+    windowStart: clean(value.window_start),
+    windowEnd: clean(value.window_end),
+    findingState: clean(value.finding_state, "open"),
+    claims,
+    sourceRefs,
+    locator,
+    dataCutoff: clean(value.data_cutoff),
+    sourceRevisionId: clean(value.source_revision_id),
+  };
+}
+
+// QueryDraft边界对象：保留自身query_draft_id，仅以finding_id引用Finding。
+function normalizeQueryDraft(value = {}) {
+  return {
+    queryDraftId: clean(value.query_draft_id),
+    findingId: clean(value.finding_id),
+    subjectRef: clean(value.subject_id || value.subject_ref),
+    siteRef: clean(value.site_id || value.site_ref),
+    displayText: clean(value.display_text),
+    draftState: clean(value.draft_state, "draft"),
+  };
+}
+
 function normalizePublicProductPayload(resultContext) {
   const identity = isRecord(resultContext?.identity) ? resultContext.identity : {};
   const raw = isRecord(resultContext?.projection) ? resultContext.projection : {};
@@ -323,12 +396,28 @@ function normalizePublicProductPayload(resultContext) {
   const temporal = isRecord(raw.temporal_spine) ? raw.temporal_spine : isRecord(raw.spine) ? raw.spine : {};
   const events = (Array.isArray(raw.events) ? raw.events : Array.isArray(temporal.events) ? temporal.events : [])
     .map((value) => normalizeEvent(value, domainMap));
+  // W01-R26 A12：DTO边界拆分——query_findings承载Finding冻结DTO
+  // （稳定finding_id/subject/site/事件与时间窗/状态/分类型claims/逐条
+  // source refs），QueryDraft以自身query_draft_id+finding_id引用随
+  // query_findings_meta.query_drafts携带，两类对象在此分离。
+  // 旧形态（pre-S3旧token，payload_shape=legacy_query_drafts）：drafts
+  // 按draft如实呈现并标注来源形态，不伪造Finding DTO。
+  const queryFindingsMeta = isRecord(raw.query_findings_meta) ? raw.query_findings_meta : {};
+  const queryFindingsShape = clean(queryFindingsMeta.payload_shape, "finding_dto_v1");
+  const findingCards = (Array.isArray(raw.query_findings) ? raw.query_findings : [])
+    .filter((value) => isRecord(value) && (clean(value.finding_id) || clean(value.title)))
+    .map(normalizeFindingCard);
+  const queryDraftRows = (Array.isArray(queryFindingsMeta.query_drafts) ? queryFindingsMeta.query_drafts : [])
+    .filter((value) => isRecord(value) && clean(value.query_draft_id))
+    .map(normalizeQueryDraft);
   // N1/V4-04：无标题的覆盖缺口（kind=coverage_gap，后端已给回退标题）
   // 不得因标题清洗被丢弃；仅剔除非记录/完全无身份的坏行。
-  const aiQueryFindings = Array.isArray(raw.query_findings)
-    ? raw.query_findings.filter((value) => isRecord(value)
-      && (clean(value.title) || clean(value.finding_id) || clean(value.state)))
-    : [];
+  const aiQueryFindings = queryFindingsShape === "finding_dto_v1"
+    ? []
+    : (Array.isArray(raw.query_findings)
+      ? raw.query_findings.filter((value) => isRecord(value)
+        && (clean(value.title) || clean(value.finding_id) || clean(value.state)))
+      : []);
   const visits = Array.isArray(raw.visits) ? raw.visits : Array.isArray(temporal.visits) ? temporal.visits : [];
   const pendingDates = raw.pending_dates ?? raw.date_pending_refs ?? temporal.pending_dates ?? [];
   const sourceEvidence = raw.source_evidence || raw.evidence || null;
@@ -367,6 +456,17 @@ function normalizePublicProductPayload(resultContext) {
       subjectFlow: raw.subject_flow || null,
       aggregation: isRecord(raw.aggregation) ? raw.aggregation : null,
       aiQueryFindings,
+      findingCards,
+      queryDraftRows,
+      queryFindingsMeta: {
+        shape: queryFindingsShape,
+        state: clean(queryFindingsMeta.state),
+        artifact: clean(queryFindingsMeta.artifact),
+        contentSha256: clean(queryFindingsMeta.content_sha256),
+        total: typeof queryFindingsMeta.total === "number" ? queryFindingsMeta.total : findingCards.length,
+        gaps: typeof queryFindingsMeta.gaps === "number" ? queryFindingsMeta.gaps : 0,
+        queryDrafts: queryDraftRows,
+      },
       temporalSpine: {
         ...temporal,
         spineRef: clean(temporal.spine_ref || identity.spine_ref),
@@ -1340,7 +1440,7 @@ export function MedicalMonitoringProductLoop({
       : routeView === "queries"
         ? QueryWorkspaceView ? <QueryWorkspaceView payload={resultPayload} route={route} onSubjectSelect={selectResultSubject} onSource={openResultSource} onFindingSelect={selectResultFinding} onBack={() => navigate("overview")} /> : null
       : PRODUCT_RESULT_SUBJECT_VIEWS.has(routeView)
-        ? SubjectWorkspaceView ? <SubjectWorkspaceView payload={resultPayload} route={route} view={routeView} zoomLevel={0} onRiskSelect={selectResultRisk} onEventSelect={selectResultEvent} onSource={openResultSource} onDrawerClose={() => onRouteChange?.(monitoringJourneyDrawerClosePatch(route))} onJourneyRowSelect={selectResultContinuityRow} continuityResult={continuityResult} continuityUnavailable={continuityUnavailableText} continuityLoading={continuityLoading} /> : null
+        ? SubjectWorkspaceView ? <SubjectWorkspaceView payload={resultPayload} route={route} view={routeView} timeViewport="fit" detailDensity="standard" timeZoom={0} onRiskSelect={selectResultRisk} onEventSelect={selectResultEvent} onSource={openResultSource} onDrawerClose={() => onRouteChange?.(monitoringJourneyDrawerClosePatch(route))} onJourneyRowSelect={selectResultContinuityRow} continuityResult={continuityResult} continuityUnavailable={continuityUnavailableText} continuityLoading={continuityLoading} /> : null
         : routeView === "evidence"
           ? EvidenceView ? <EvidenceView payload={resultPayload} route={route} onBack={backFromPublicEvidence} /> : null
           : null

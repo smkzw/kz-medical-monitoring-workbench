@@ -12,7 +12,11 @@ export function parseTimelineDate(value) {
   // R24V2-U07：UK/UNK/XX等未知日token不入前缀解析——返回null交给
   // 待确认集合，绝不补成01日。
   if (/[^\d-]/.test(raw)) return null;
-  const match = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(raw);
+  // W05-J2：尾锚——'2025-09-01-99'等数字后缀必须完整拒绝（进待确认），
+  // 不再按'YYYY-MM'前缀接受。
+  // W05-J2 J03：仅年月不返回精确日——'YYYY-MM'不补01当实际日，
+  // 返回null交给待确认集合（精度语义由timelineDatePrecision表达）。
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
   if (!match) return null;
   const year = Number(match[1]);
   const month = Number(match[2]);
@@ -22,6 +26,22 @@ export function parseTimelineDate(value) {
   const checked = new Date(parsed);
   if (checked.getUTCFullYear() !== year || checked.getUTCMonth() !== month - 1 || checked.getUTCDate() !== day) return null;
   return parsed;
+}
+
+// W05-J2：精度表达——'YYYY-MM'是月精度而非'01日'实际日期。
+// 返回'day'|'month'|null，供上轴区间呈现与label/aria精度标注使用。
+export function timelineDatePrecision(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const raw = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return "day";
+  if (/^\d{4}-\d{2}$/.test(raw)) return "month";
+  return null;
+}
+
+function daysInMonthOf(iso) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(iso).trim());
+  if (!match) return 1;
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]), 0)).getUTCDate();
 }
 
 export function visitAxisDate(visit) {
@@ -36,12 +56,15 @@ export function visitAxisDate(visit) {
 export function eventIsPendingDate(event) {
   if (!event) return true;
   const dateState = event.dateState || event.date_state;
+  // W05-J2 A19：partial是注册表合法状态——无论start是否完整，部分精度
+  // 一律进待确认集合，不以补01日的方式上轴。
+  if (dateState === "partial") return true;
+  if (event.date_precision === "partial" || event.datePrecision === "partial") return true;
   if (dateState === "missing" || dateState === "conflicted") return true;
   const start = event.start ?? event.start_date ?? null;
   if (!start) return true;
   // R24V2-U07/U08：部分精度（2025-09-UK/2025-09）与无效日期（2025-02-30）
   // 进入待确认集合——不前缀宽松解析成01日，不静默跳过。
-  if (event.date_precision === "partial") return true;
   if (parseTimelineDate(start) == null) return true;
   return false;
 }
@@ -58,13 +81,33 @@ export function eventGeometry(event) {
   return "point";
 }
 
-function pxPerDayForZoom(zoomLevel) {
-  if (zoomLevel === -1) return 5;
-  if (zoomLevel === 1) return 14;
+// W05-J1 §3②：时间视窗（timeViewport）与信息密度（detailDensity）是两个
+// 独立控制轴——px/day与scale范围只由viewport决定，密度只影响聚合阈值/
+// collisionWidth/标签详略。切换密度不得改变scale.startMs/endMs/pxPerDay/
+// width（A17不变性判据）。
+export const TIME_VIEWPORTS = Object.freeze(["fit", "custom", "focus"]);
+export const DETAIL_DENSITIES = Object.freeze(["compact", "standard", "detailed"]);
+
+function pxPerDayForViewport(viewport, timeZoom) {
+  if (viewport === "custom") {
+    // 自选显式时间缩放：更密=5px/天，更疏=14px/天，未选层级=8px/天。
+    if (timeZoom < 0) return 5;
+    if (timeZoom > 0) return 14;
+    return 8;
+  }
   return 8;
 }
 
-export function buildTimelineScale({ windowStart, windowEnd, visits = [], events = [], zoomLevel = 0, containerWidth = null } = {}) {
+export function buildTimelineScale({
+  windowStart,
+  windowEnd,
+  visits = [],
+  events = [],
+  viewport = "fit",
+  timeZoom = 0,
+  containerWidth = null,
+  focusWindow = null,
+} = {}) {
   const dated = [];
   for (const visit of visits) {
     const iso = visitAxisDate(visit);
@@ -87,35 +130,64 @@ export function buildTimelineScale({ windowStart, windowEnd, visits = [], events
   const hasValidDates = startMs != null && endMs != null;
   if (startMs == null) startMs = Date.UTC(2026, 0, 1);
   if (endMs == null || endMs <= startMs) endMs = startMs + 30 * DAY_MS;
+  // W05-J1：聚焦视窗——scale范围收窄到选中问题周边窗口（调用方给出）；
+  // 范围只由viewport决定，与密度无关。
+  if (viewport === "focus" && focusWindow && typeof focusWindow === "object") {
+    const focusStart = parseTimelineDate(focusWindow.start);
+    const focusEnd = parseTimelineDate(focusWindow.end ?? focusWindow.start);
+    if (focusStart != null) {
+      startMs = focusStart;
+      endMs = focusEnd != null && focusEnd >= focusStart ? focusEnd : focusStart + 30 * DAY_MS;
+    }
+  }
   const spanMs = Math.max(endMs - startMs, DAY_MS);
   const pad = 72;
   // R24V2-U01：默认fit——绘图区宽度=容器宽度-标签/边距，真实日期线性
-  // 投影到可用宽度；px/day只作为显式时间缩放（zoomLevel≠0）时的密度，
-  // 不再作为默认无限画布的来源。containerWidth缺失时保持旧行为。
-  let pxPerDay = pxPerDayForZoom(zoomLevel);
+  // 投影到可用宽度；px/day只作为自选显式时间缩放（viewport=custom）时的
+  // 密度，不作为默认无限画布的来源。
+  let pxPerDay = pxPerDayForViewport(viewport, timeZoom);
   let rawContentWidth = Math.ceil(spanMs / DAY_MS) * pxPerDay;
-  let width = Math.max(640, rawContentWidth + pad * 2);
-  if (zoomLevel === 0 && typeof containerWidth === "number" && containerWidth > pad * 2 + 200) {
-    width = Math.max(640, Math.floor(containerWidth));
+  // W05-J1 §3②：删除640px下限——fit=实际容器宽；窄区不再被人为撑出
+  // 横向滚动。宽度未测得/过窄时保持px/day回退画布，等待ResizeObserver
+  // 重新测量（等待重测职责在宿主组件）。
+  let width = rawContentWidth + pad * 2;
+  if (
+    (viewport === "fit" || viewport === "focus")
+    && typeof containerWidth === "number"
+    && containerWidth > pad * 2 + 200
+  ) {
+    width = Math.max(1, Math.floor(containerWidth));
     rawContentWidth = width - pad * 2;
     pxPerDay = rawContentWidth / Math.ceil(spanMs / DAY_MS);
   }
   const contentWidth = width - pad * 2;
 
   function xFor(iso) {
+    // W05-J2 A21：xFor恒返回有限number（或null=无效日期）——窗外语义改由
+    // beyondFor独立通道暴露，不再混型返回{x,beyond}对象（旧混型让聚合
+    // 标签渲染'[object Object]px'，且x==null拦不住对象）。
     const ms = parseTimelineDate(iso);
     if (ms == null) return null;
-    // R24V2-U10：窗口外不伪装同日——返回位置+超出标记，调用方渲染
-    // 继续符号；clamp只影响绘图位置，不影响语义。
     const clamped = Math.min(Math.max(ms, startMs), endMs);
-    const beyond = ms < startMs ? "before" : ms > endMs ? "after" : null;
-    const x = pad + ((clamped - startMs) / spanMs) * contentWidth;
-    return beyond ? { x, beyond } : x;
+    return pad + ((clamped - startMs) / spanMs) * contentWidth;
   }
 
+  // W05-J2：窗外方向独立通道——'before'|'after'|null（窗口外不伪装同日，
+  // clamp只影响绘图位置，不影响语义；渲染层据此画继续符号并标注原始
+  // 日期与方向）。
+  function beyondFor(iso) {
+    const ms = parseTimelineDate(iso);
+    if (ms == null) return null;
+    if (ms < startMs) return "before";
+    if (ms > endMs) return "after";
+    return null;
+  }
+
+  // W05-J2 A23/J09：无有效日期时不返回可被UI误用的假日期窗——
+  // isos为null，UI据hasValidDates显示明确空态。
   return Object.freeze({
-    windowStartIso: new Date(startMs).toISOString().slice(0, 10),
-    windowEndIso: new Date(endMs).toISOString().slice(0, 10),
+    windowStartIso: hasValidDates ? new Date(startMs).toISOString().slice(0, 10) : null,
+    windowEndIso: hasValidDates ? new Date(endMs).toISOString().slice(0, 10) : null,
     startMs,
     endMs,
     spanMs,
@@ -125,6 +197,7 @@ export function buildTimelineScale({ windowStart, windowEnd, visits = [], events
     pxPerDay,
     hasValidDates,
     xFor,
+    beyondFor,
   });
 }
 
@@ -159,8 +232,11 @@ export function assignLaneStacks(marks, { collisionPx = 16 } = {}) {
 
 /**
  * Build per-domain dated marks and pending events for the shared journey canvas.
- * zoomLevel < 1 aggregates low-risk/non-risk points that share the same day bucket;
- * medium/high/critical never aggregate-hide.
+ * W05-J1 §3②：detailDensity决定聚合阈值——compact聚合全部低风险/常规点，
+ * standard保留单点低风险，detailed全部可见；medium/high/critical任何密度
+ * 下都不聚合隐藏。scale范围与px/day只由viewport/timeZoom决定。
+ * 旧``zoomLevel``参数保留shim：1→custom+detailed / 0→fit+standard /
+ * -1→custom+compact。
  */
 export function layoutJourneyTimeline({
   domains = [],
@@ -170,9 +246,18 @@ export function layoutJourneyTimeline({
   pendingDates = [],
   windowStart = null,
   windowEnd = null,
+  viewport = null,
+  timeZoom = 0,
+  density = null,
+  focusWindow = null,
   zoomLevel = 0,
   containerWidth = null,
 } = {}) {
+  const effectiveViewport = viewport || (zoomLevel === 0 ? "fit" : "custom");
+  const effectiveTimeZoom = viewport ? timeZoom : zoomLevel;
+  const effectiveDensity =
+    density
+    || (zoomLevel === 1 ? "detailed" : zoomLevel === -1 ? "compact" : "standard");
   const risksByAnchor = new Map(risks.map((risk) => [risk.riskAnchorRef || risk.risk_anchor_ref, risk]));
   const pendingRefSet = new Set(
     pendingDates.map((item) => (typeof item === "string" ? item : item?.item_ref || item?.event_ref)).filter(Boolean),
@@ -200,7 +285,9 @@ export function layoutJourneyTimeline({
   const pendingVisits = [];
   for (const visit of visits) {
     const iso = visitAxisDate(visit);
-    if (!iso) {
+    // W05-J2 J12：非法日历日（如2025-02-30）与缺失日期同权——进待确认
+    // 集合，不从可访问集合消失。
+    if (!iso || parseTimelineDate(iso) == null) {
       pendingVisits.push(visit);
       continue;
     }
@@ -212,22 +299,20 @@ export function layoutJourneyTimeline({
     windowEnd,
     visits: positionedVisits.map((item) => item.visit),
     events: datedEvents,
-    zoomLevel,
-    containerWidth,
+    viewport: effectiveViewport,
+    timeZoom: effectiveTimeZoom,
+    containerWidth:
+      effectiveViewport === "custom" ? null : containerWidth,
+    focusWindow,
   });
 
-  const _x = (v) => (typeof v === "object" && v !== null ? v.x : v);
-  const _beyond = (v) => (typeof v === "object" && v !== null ? v.beyond : null);
-  const visitMarks = positionedVisits.map(({ visit, iso }) => {
-    const raw = scale.xFor(iso);
-    return {
-      visitRef: visit.visit_ref || visit.visitRef,
-      iso,
-      x: _x(raw),
-      beyond: _beyond(raw),
-      visit,
-    };
-  }).filter((mark) => mark.x != null);
+  const visitMarks = positionedVisits.map(({ visit, iso }) => ({
+    visitRef: visit.visit_ref || visit.visitRef,
+    iso,
+    x: scale.xFor(iso),
+    beyond: scale.beyondFor(iso),
+    visit,
+  })).filter((mark) => mark.x != null);
 
   const lanes = domains.map((domain) => {
     const domainKey = domain.domain;
@@ -235,9 +320,9 @@ export function layoutJourneyTimeline({
     const priorityEvents = domainEvents.filter((event) => isPriorityRisk(event.severity));
     const otherEvents = domainEvents.filter((event) => !isPriorityRisk(event.severity));
 
-    const visible = zoomLevel === 1 ? [...domainEvents] : [...priorityEvents];
+    const visible = effectiveDensity === "detailed" ? [...domainEvents] : [...priorityEvents];
     const aggregates = [];
-    if (zoomLevel !== 1) {
+    if (effectiveDensity !== "detailed") {
       const buckets = new Map();
       for (const event of otherEvents) {
         const bucket = String(event.start || event.start_date || "").slice(0, 10) || "undated";
@@ -245,13 +330,14 @@ export function layoutJourneyTimeline({
         buckets.get(bucket).push(event);
       }
       for (const [bucket, group] of buckets) {
-        // Standard zoom keeps singleton low-risk marks; compact zoom aggregates all low-risk.
-        if (zoomLevel === 0 && group.length === 1) {
+        // Standard密度保留单点低风险；compact密度聚合全部低风险/常规点。
+        if (effectiveDensity === "standard" && group.length === 1) {
           visible.push(group[0]);
           continue;
         }
+        // A21：xFor恒为有限number——聚合坐标不再出现'[object Object]px'。
         const x = scale.xFor(group[0].start || group[0].start_date);
-        if (x == null) continue;
+        if (x == null || !Number.isFinite(x)) continue;
         aggregates.push({
           aggregateKey: `${domainKey}:${bucket}`,
           domain: domainKey,
@@ -267,21 +353,41 @@ export function layoutJourneyTimeline({
     for (const event of visible) {
       const startIso = event.start || event.start_date;
       const endIso = event.end || event.end_date || startIso;
-      const rawX0 = scale.xFor(startIso);
-      const x0 = _x(rawX0);
-      if (x0 == null) continue;
-      const x1 = _x(scale.xFor(endIso));
-      const beyond = _beyond(rawX0);
+      // W05-J2 A21：坐标恒为有限number；窗外方向走独立通道。
+      const x0 = scale.xFor(startIso);
+      if (x0 == null || !Number.isFinite(x0)) continue;
+      const x1 = scale.xFor(endIso);
+      // 区间首尾越界分别保留标志（03_FRONTEND_DELTA §24）：
+      // before=整个开始于窗前，after=结束于窗后，渲染层画继续符号。
+      const beyondStart = scale.beyondFor(startIso);
+      const beyondEnd = scale.beyondFor(endIso);
+      const beyond = beyondStart ?? beyondEnd;
       const geometry = event.geometry;
-      const width = geometry === "interval" ? Math.max(10, (x1 ?? x0) - x0) : 0;
+      const startPrecision = timelineDatePrecision(startIso);
+      // 月精度起点上轴呈现为当月区间（宽度=当月天数×px/day）——不以
+      // 01日为实际日；ongoing/end_unknown呈开放条形（延伸到轴右端），
+      // 与point区分（A22）。
+      let width = 0;
+      if (geometry === "interval") {
+        width = Math.max(10, (x1 ?? x0) - x0);
+      } else if (geometry === "ongoing" || geometry === "end_unknown") {
+        width = Math.max(10, scale.pad + scale.contentWidth - x0);
+      } else if (startPrecision === "month") {
+        width = Math.max(10, daysInMonthOf(startIso) * scale.pxPerDay);
+      }
       marks.push({
         eventRef: event.eventRef,
         domain: domainKey,
         geometry,
         x: x0,
+        beyondStart,
+        beyondEnd,
         beyond,
         width,
-        collisionWidth: event.risk ? (zoomLevel === 1 ? 220 : zoomLevel === 0 ? 90 : 40) : (zoomLevel === 1 ? 150 : 24),
+        // 密度只影响碰撞宽度（标签详略的空间预算），不影响px/day。
+        collisionWidth: event.risk
+          ? (effectiveDensity === "detailed" ? 220 : effectiveDensity === "standard" ? 90 : 40)
+          : (effectiveDensity === "detailed" ? 150 : 24),
         event,
         severity: event.severity,
         risk: event.risk,

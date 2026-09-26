@@ -62,7 +62,10 @@ assert.equal(pageSource.includes("eventVisitContext"), true, "event detail deriv
 assert.equal(pageSource.includes("医学事件泳道概览"), true, "all eight lanes are visible in the first-screen journey summary");
 assert.equal(pageSource.includes('className={empty ? "monitoring-lane-chip is-empty" : "monitoring-lane-chip"}'), true, "zero-event lanes collapse to an explicit empty chip, not a blank box");
 assert.equal(pageSource.includes('sourceLocatorRefs.join("、")'), false, "timeline detail does not expose internal source locator ids");
-assert.equal(pageSource.includes('data-monitoring-zoom={zoomLevel}'), true, "page exposes the semantic zoom state to the presentation layer");
+// W05-J1 §3②：timeViewport与detailDensity拆分后，页面分别暴露
+// 时间视窗与信息密度两个演示层状态（旧的单zoomLevel属性被替换）。
+assert.equal(pageSource.includes('data-monitoring-viewport={timeViewport}'), true, "page exposes the time viewport state to the presentation layer");
+assert.equal(pageSource.includes('data-monitoring-density={detailDensity}'), true, "page exposes the detail density state to the presentation layer");
 assert.equal(pageSource.includes('event.key === "-"'), true, "semantic zoom accepts the minus keyboard shortcut");
 assert.equal(pageSource.includes('event.key === "0"'), true, "semantic zoom accepts the reset keyboard shortcut");
 assert.equal(pageSource.includes('event.key === "+"'), true, "semantic zoom accepts the plus keyboard shortcut");
@@ -78,8 +81,8 @@ assert.equal(pageSource.includes("laneChipLabel"), true, "lane chips use balance
 assert.equal(pageSource.includes("DATE_STATE_CHIPS"), true, "date edge states use short visible chips");
 assert.equal(pageSource.includes("共享时间轴</span>"), true, "indicator trend retains the shared temporal window heading");
 assert.equal(pageSource.includes("synthetic://"), false, "ordinary source view does not expose synthetic URI text");
-assert.equal(styleSource.includes('.monitoring-page[data-monitoring-zoom="-1"]'), true, "compact semantic zoom changes track detail density");
-assert.equal(styleSource.includes('.monitoring-page[data-monitoring-zoom="1"] .monitoring-track-event-source'), true, "detailed semantic zoom reveals source locator detail");
+assert.equal(styleSource.includes('.monitoring-page[data-monitoring-density="compact"]'), true, "compact detail density changes track detail density");
+assert.equal(styleSource.includes('.monitoring-page[data-monitoring-density="detailed"] .monitoring-track-event-source'), true, "detailed detail density reveals source locator detail");
 assert.equal(styleSource.includes(".monitoring-timeline-canvas"), true, "styles define the shared timeline canvas");
 assert.equal(styleSource.includes(".monitoring-pending-date-zone"), true, "styles isolate the pending-date surface");
 console.log("medicalMonitoringProductContract: production source checks passed");
