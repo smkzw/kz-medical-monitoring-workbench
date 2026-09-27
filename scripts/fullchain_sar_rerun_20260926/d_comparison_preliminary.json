@@ -1,0 +1,21 @@
+{
+ "note": "初步对照（20260927）：token重叠≥1视作语义一致；正式对照需工作包D的案例级复核（配额恢复后）",
+ "A路线主盲一致性": {
+  "both_sides": 52,
+  "semantic_agree": 52,
+  "semantic_diverge": 0,
+  "diverge_samples": []
+ },
+ "B路线主盲一致性": {
+  "both_sides": 5,
+  "semantic_agree": 5,
+  "semantic_diverge": 0,
+  "diverge_samples": []
+ },
+ "跨路线主主一致性": {
+  "both_sides": 13,
+  "semantic_agree": 13,
+  "semantic_diverge": 0,
+  "diverge_samples": []
+ }
+}
