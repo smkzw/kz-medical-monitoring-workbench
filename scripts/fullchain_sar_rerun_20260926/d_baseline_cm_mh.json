@@ -1,0 +1,2320 @@
+{
+ "schema_version": "d-baseline-cm-mh-v1",
+ "generated_at": "2026-09-27T04:26:18.372539+00:00",
+ "route": "A",
+ "mode": "read_only",
+ "caveats": "A路线结论是对照基线之一，不是参考答案；分侧字段清单如实记录，两侧字段集与元数据分类本就不同（如主侧CM含SUBJSTA=source_metadata、盲核侧为source_collected），不做并集归并。",
+ "databases": {
+  "ai": "runs/phase_c_mgk10_authority_v2_20260905/runtime/medical_monitoring_ai.sqlite3",
+  "batches": "runs/phase_c_mgk10_authority_v2_20260905/runtime/medical_monitoring_batches.sqlite3",
+  "opened_mode": "sqlite3 mode=ro"
+ },
+ "frozen_quadruple": {
+  "attempt_id": "stg-e9d5050c73ef44be818e1f44920fdb5f",
+  "content_sha256": "81f47614ca6ab96c3d0a3e45d72ec49c98690fb49e8b574b1dc6b06f7e8259e3",
+  "content_sha256_location": "monitoring_content_objects.content_sha256",
+  "content_size_bytes": 17013973,
+  "row_set_sha256": "5752250104d2f9c542f97af756dd0c591297c5748c8c1fbe3e2c885d5e32b148",
+  "row_set_sha256_location": "monitoring_batch_events.payload_json (event_seq=55, event_type=replace_rows)",
+  "schema_fields_sha256": "4bdf488754215ae3f4c24ebd223b9c1f996b4b228350448cdb1ff3cd8f5f62f6",
+  "schema_fields_sha256_location": "monitoring_batch_events.payload_json (event_seq=55)",
+  "schema_field_count": 1493
+ },
+ "totals": {
+  "completed_jobs": 10,
+  "stale_generations_filtered": 10,
+  "field_mappings": 104,
+  "cm_fields_per_side": {
+   "primary": 32,
+   "verifier": 32
+  },
+  "mh_fields_per_side": {
+   "primary": 20,
+   "verifier": 20
+  },
+  "per_side_metadata_counts": {
+   "primary": {
+    "CM": 14,
+    "MH": 13
+   },
+   "verifier": {
+    "CM": 13,
+    "MH": 13
+   }
+  }
+ },
+ "jobs": [
+  {
+   "business_key": "listing-field-mapping-verifier:stg-e9d5050c73ef44be818e1f44920fdb5f:CM:0001-of-0003",
+   "job_id": "monai_542d621eadbd7a6525ef140148e8",
+   "prompt_version": "monitoring-listing-field-mapping-verifier-v8-tools-v6",
+   "candidate_id": "moncand_7579cd158723f6854ee9a27af70c",
+   "domain": "CM",
+   "chunk": "0001-of-0003",
+   "mapping_count": 12
+  },
+  {
+   "business_key": "listing-field-mapping-verifier:stg-e9d5050c73ef44be818e1f44920fdb5f:CM:0002-of-0003",
+   "job_id": "monai_00861ee9504f0e77ac469550e50c",
+   "prompt_version": "monitoring-listing-field-mapping-verifier-v8-tools-v6",
+   "candidate_id": "moncand_4170c446242655446a3f03717f30",
+   "domain": "CM",
+   "chunk": "0002-of-0003",
+   "mapping_count": 12
+  },
+  {
+   "business_key": "listing-field-mapping-verifier:stg-e9d5050c73ef44be818e1f44920fdb5f:CM:0003-of-0003",
+   "job_id": "monai_47ef402bc698b416984f907e62ac",
+   "prompt_version": "monitoring-listing-field-mapping-verifier-v8-tools-v6",
+   "candidate_id": "moncand_3d977eab0bee18167f15c5cdd231",
+   "domain": "CM",
+   "chunk": "0003-of-0003",
+   "mapping_count": 8
+  },
+  {
+   "business_key": "listing-field-mapping-verifier:stg-e9d5050c73ef44be818e1f44920fdb5f:MH:0001-of-0002",
+   "job_id": "monai_2d7c82cb496347558164806255a9",
+   "prompt_version": "monitoring-listing-field-mapping-verifier-v8-tools-v6",
+   "candidate_id": "moncand_c0b74a8dfe78abd07e10ece6c29d",
+   "domain": "MH",
+   "chunk": "0001-of-0002",
+   "mapping_count": 12
+  },
+  {
+   "business_key": "listing-field-mapping-verifier:stg-e9d5050c73ef44be818e1f44920fdb5f:MH:0002-of-0002",
+   "job_id": "monai_c9831a5875a25cc76ba51521c960",
+   "prompt_version": "monitoring-listing-field-mapping-verifier-v8-tools-v6",
+   "candidate_id": "moncand_cb3f80a2d1c7578c79304128afac",
+   "domain": "MH",
+   "chunk": "0002-of-0002",
+   "mapping_count": 8
+  },
+  {
+   "business_key": "listing-field-mapping:stg-e9d5050c73ef44be818e1f44920fdb5f:CM:0001-of-0003",
+   "job_id": "monai_9c5148aa03e1c0ac4ab7b38448fa",
+   "prompt_version": "monitoring-listing-field-mapping-v19",
+   "candidate_id": "moncand_d0a03f6886e2e1ef622eace4cbf8",
+   "domain": "CM",
+   "chunk": "0001-of-0003",
+   "mapping_count": 12
+  },
+  {
+   "business_key": "listing-field-mapping:stg-e9d5050c73ef44be818e1f44920fdb5f:CM:0002-of-0003",
+   "job_id": "monai_9f9512940e66edf5deedfc1edee4",
+   "prompt_version": "monitoring-listing-field-mapping-v19",
+   "candidate_id": "moncand_2043c563515fca91ceb19f8ec5ac",
+   "domain": "CM",
+   "chunk": "0002-of-0003",
+   "mapping_count": 12
+  },
+  {
+   "business_key": "listing-field-mapping:stg-e9d5050c73ef44be818e1f44920fdb5f:CM:0003-of-0003",
+   "job_id": "monai_d5c633a895953556dac38e047277",
+   "prompt_version": "monitoring-listing-field-mapping-v19",
+   "candidate_id": "moncand_6de396013bac9fd4a1ce3b2aad35",
+   "domain": "CM",
+   "chunk": "0003-of-0003",
+   "mapping_count": 8
+  },
+  {
+   "business_key": "listing-field-mapping:stg-e9d5050c73ef44be818e1f44920fdb5f:MH:0001-of-0002",
+   "job_id": "monai_a1b994efac8b87d3957141432145",
+   "prompt_version": "monitoring-listing-field-mapping-v19",
+   "candidate_id": "moncand_6e2c04655f21c731d981fa8d1b8f",
+   "domain": "MH",
+   "chunk": "0001-of-0002",
+   "mapping_count": 12
+  },
+  {
+   "business_key": "listing-field-mapping:stg-e9d5050c73ef44be818e1f44920fdb5f:MH:0002-of-0002",
+   "job_id": "monai_6828e3ef5472133b922178b524d8",
+   "prompt_version": "monitoring-listing-field-mapping-v19",
+   "candidate_id": "moncand_baed223eb3808dea8189491e80f0",
+   "domain": "MH",
+   "chunk": "0002-of-0002",
+   "mapping_count": 8
+  }
+ ],
+ "sides": {
+  "primary": {
+   "CM": {
+    "Block顺序号": [
+     {
+      "recommended_role": "record_block_sequence",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "CMAENO": [
+     {
+      "recommended_role": "cm_adverse_event_reference",
+      "field_kind": "source_collected",
+      "confidence": 0.88,
+      "user_decision_required": false
+     }
+    ],
+    "CMCO": [
+     {
+      "recommended_role": "cm_comment",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "CMDOSE": [
+     {
+      "recommended_role": "cm_dose_per_administration",
+      "field_kind": "source_collected",
+      "confidence": 0.72,
+      "user_decision_required": false
+     }
+    ],
+    "CMDOSFRO": [
+     {
+      "recommended_role": "cm_dosing_frequency_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "CMDOSFRQ": [
+     {
+      "recommended_role": "cm_dosing_frequency",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "CMDOSU": [
+     {
+      "recommended_role": "cm_dose_unit",
+      "field_kind": "source_collected",
+      "confidence": 0.55,
+      "user_decision_required": false
+     }
+    ],
+    "CMDOSUO": [
+     {
+      "recommended_role": "cm_dose_unit_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.55,
+      "user_decision_required": false
+     }
+    ],
+    "CMENDAT": [
+     {
+      "recommended_role": "cm_end_date",
+      "field_kind": "source_collected",
+      "confidence": 0.92,
+      "user_decision_required": false
+     }
+    ],
+    "CMINDC": [
+     {
+      "recommended_role": "cm_indication_reason",
+      "field_kind": "source_collected",
+      "confidence": 0.93,
+      "user_decision_required": false
+     }
+    ],
+    "CMMHNO": [
+     {
+      "recommended_role": "cm_medical_history_reference",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "CMONGO": [
+     {
+      "recommended_role": "cm_ongoing_flag",
+      "field_kind": "source_collected",
+      "confidence": 0.94,
+      "user_decision_required": false
+     }
+    ],
+    "CMPDCO": [
+     {
+      "recommended_role": "medication_reason_prophylaxis_or_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.92,
+      "user_decision_required": false
+     }
+    ],
+    "CMROUTE": [
+     {
+      "recommended_role": "medication_route",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "CMROUTEO": [
+     {
+      "recommended_role": "medication_route_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "CMSHNO": [
+     {
+      "recommended_role": "medication_reason_surgical_history_reference",
+      "field_kind": "source_collected",
+      "confidence": 0.85,
+      "user_decision_required": false
+     }
+    ],
+    "CMSTDAT": [
+     {
+      "recommended_role": "medication_start_date",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "CMTRT": [
+     {
+      "recommended_role": "prior_concomitant_medication_name",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "CMYN": [
+     {
+      "recommended_role": "prior_concomitant_medication_presence_flag",
+      "field_kind": "source_collected",
+      "confidence": 0.92,
+      "user_decision_required": false
+     }
+    ],
+    "FORMNM": [
+     {
+      "recommended_role": "form_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "FORMNM__2": [
+     {
+      "recommended_role": "form_name_duplicate",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "FORMOID": [
+     {
+      "recommended_role": "form_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "PAGELMDT": [
+     {
+      "recommended_role": "page_last_modified_datetime",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "RECREP": [
+     {
+      "recommended_role": "record_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SITEID": [
+     {
+      "recommended_role": "site_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SITENM": [
+     {
+      "recommended_role": "site_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "STUDYID": [
+     {
+      "recommended_role": "study_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SUBJID": [
+     {
+      "recommended_role": "subject_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SUBJINI": [
+     {
+      "recommended_role": "subject_initials",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SUBJSTA": [
+     {
+      "recommended_role": "subject_status",
+      "field_kind": "source_metadata",
+      "confidence": 0.85,
+      "user_decision_required": false
+     }
+    ],
+    "VISIT": [
+     {
+      "recommended_role": "visit_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "VISTREP": [
+     {
+      "recommended_role": "visit_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ]
+   },
+   "MH": {
+    "Block顺序号": [
+     {
+      "recommended_role": "record_block_sequence",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "FORMNM": [
+     {
+      "recommended_role": "form_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "FORMNM__2": [
+     {
+      "recommended_role": "form_name_duplicate",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "FORMOID": [
+     {
+      "recommended_role": "form_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "MHCO": [
+     {
+      "recommended_role": "medical_history_comment",
+      "field_kind": "source_collected",
+      "confidence": 0.85,
+      "user_decision_required": false
+     }
+    ],
+    "MHENDAT": [
+     {
+      "recommended_role": "medical_history_end_date",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "MHONGO": [
+     {
+      "recommended_role": "medical_history_ongoing_flag",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "MHSTDAT": [
+     {
+      "recommended_role": "medical_history_start_date",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "MHTERM": [
+     {
+      "recommended_role": "medical_history_term",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "MHYN": [
+     {
+      "recommended_role": "medical_history_presence_flag",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "PAGELMDT": [
+     {
+      "recommended_role": "page_last_modified_datetime",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "RECREP": [
+     {
+      "recommended_role": "record_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SITEID": [
+     {
+      "recommended_role": "site_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SITENM": [
+     {
+      "recommended_role": "site_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "STUDYID": [
+     {
+      "recommended_role": "study_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SUBJID": [
+     {
+      "recommended_role": "subject_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SUBJINI": [
+     {
+      "recommended_role": "subject_initials",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SUBJSTA": [
+     {
+      "recommended_role": "subject_status",
+      "field_kind": "source_collected",
+      "confidence": 0.8,
+      "user_decision_required": false
+     }
+    ],
+    "VISIT": [
+     {
+      "recommended_role": "visit_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "VISTREP": [
+     {
+      "recommended_role": "visit_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ]
+   }
+  },
+  "verifier": {
+   "CM": {
+    "Block顺序号": [
+     {
+      "recommended_role": "record_block_sequence",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "CMAENO": [
+     {
+      "recommended_role": "ae_record_reference",
+      "field_kind": "source_collected",
+      "confidence": 0.88,
+      "user_decision_required": false
+     }
+    ],
+    "CMCO": [
+     {
+      "recommended_role": "free_text_comment",
+      "field_kind": "source_collected",
+      "confidence": 0.8,
+      "user_decision_required": false
+     }
+    ],
+    "CMDOSE": [
+     {
+      "recommended_role": "dose_per_administration",
+      "field_kind": "source_collected",
+      "confidence": 0.75,
+      "user_decision_required": false
+     }
+    ],
+    "CMDOSFRO": [
+     {
+      "recommended_role": "dosing_frequency_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.85,
+      "user_decision_required": false
+     }
+    ],
+    "CMDOSFRQ": [
+     {
+      "recommended_role": "dosing_frequency",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "CMDOSU": [
+     {
+      "recommended_role": "dose_unit",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "CMDOSUO": [
+     {
+      "recommended_role": "dose_unit_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.88,
+      "user_decision_required": false
+     }
+    ],
+    "CMENDAT": [
+     {
+      "recommended_role": "medication_end_date",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "CMINDC": [
+     {
+      "recommended_role": "indication",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "CMMHNO": [
+     {
+      "recommended_role": "medical_history_record_reference",
+      "field_kind": "source_collected",
+      "confidence": 0.88,
+      "user_decision_required": false
+     }
+    ],
+    "CMONGO": [
+     {
+      "recommended_role": "medication_ongoing_indicator",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "CMPDCO": [
+     {
+      "recommended_role": "medication_indication_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.85,
+      "user_decision_required": false
+     }
+    ],
+    "CMROUTE": [
+     {
+      "recommended_role": "medication_route_of_administration",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "CMROUTEO": [
+     {
+      "recommended_role": "medication_route_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.92,
+      "user_decision_required": false
+     }
+    ],
+    "CMSHNO": [
+     {
+      "recommended_role": "surgery_history_reference",
+      "field_kind": "source_collected",
+      "confidence": 0.75,
+      "user_decision_required": false
+     }
+    ],
+    "CMSTDAT": [
+     {
+      "recommended_role": "medication_start_date",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "CMTRT": [
+     {
+      "recommended_role": "concomitant_medication_name",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "CMYN": [
+     {
+      "recommended_role": "prior_concomitant_medication_presence_flag",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "FORMNM": [
+     {
+      "recommended_role": "form_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "FORMNM__2": [
+     {
+      "recommended_role": "form_name_duplicate",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "FORMOID": [
+     {
+      "recommended_role": "form_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "PAGELMDT": [
+     {
+      "recommended_role": "page_last_modified_datetime",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "RECREP": [
+     {
+      "recommended_role": "record_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SITEID": [
+     {
+      "recommended_role": "site_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SITENM": [
+     {
+      "recommended_role": "site_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "STUDYID": [
+     {
+      "recommended_role": "study_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SUBJID": [
+     {
+      "recommended_role": "subject_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SUBJINI": [
+     {
+      "recommended_role": "subject_initials",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SUBJSTA": [
+     {
+      "recommended_role": "subject_status",
+      "field_kind": "source_collected",
+      "confidence": 0.82,
+      "user_decision_required": false
+     }
+    ],
+    "VISIT": [
+     {
+      "recommended_role": "visit_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "VISTREP": [
+     {
+      "recommended_role": "visit_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ]
+   },
+   "MH": {
+    "Block顺序号": [
+     {
+      "recommended_role": "record_block_sequence",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "FORMNM": [
+     {
+      "recommended_role": "form_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "FORMNM__2": [
+     {
+      "recommended_role": "form_name_duplicate",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "FORMOID": [
+     {
+      "recommended_role": "form_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "MHCO": [
+     {
+      "recommended_role": "medical_history_comment",
+      "field_kind": "source_collected",
+      "confidence": 0.85,
+      "user_decision_required": false
+     }
+    ],
+    "MHENDAT": [
+     {
+      "recommended_role": "medical_history_end_date",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "MHONGO": [
+     {
+      "recommended_role": "medical_history_ongoing_indicator",
+      "field_kind": "source_collected",
+      "confidence": 0.93,
+      "user_decision_required": false
+     }
+    ],
+    "MHSTDAT": [
+     {
+      "recommended_role": "medical_history_start_date",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "MHTERM": [
+     {
+      "recommended_role": "medical_history_reported_term",
+      "field_kind": "source_collected",
+      "confidence": 0.93,
+      "user_decision_required": false
+     }
+    ],
+    "MHYN": [
+     {
+      "recommended_role": "medical_history_presence_indicator",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "PAGELMDT": [
+     {
+      "recommended_role": "page_last_modified_datetime",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "RECREP": [
+     {
+      "recommended_role": "record_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SITEID": [
+     {
+      "recommended_role": "site_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SITENM": [
+     {
+      "recommended_role": "site_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "STUDYID": [
+     {
+      "recommended_role": "study_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SUBJID": [
+     {
+      "recommended_role": "subject_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SUBJINI": [
+     {
+      "recommended_role": "subject_initials",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "SUBJSTA": [
+     {
+      "recommended_role": "subject_status",
+      "field_kind": "source_collected",
+      "confidence": 0.88,
+      "user_decision_required": false
+     }
+    ],
+    "VISIT": [
+     {
+      "recommended_role": "visit_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "VISTREP": [
+     {
+      "recommended_role": "visit_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ]
+   }
+  }
+ },
+ "divergence": {
+  "alignment_key": "(domain, source_field)",
+  "criteria": "count 0/1/N per side；divergent=两侧条数不同 或 (role,field_kind)集合不同；未知field_kind（五类边界词表外）单列不计入分歧",
+  "divergent_count": 19,
+  "unknown_entries": [],
+  "fields": [
+   {
+    "domain": "CM",
+    "source_field": "Block顺序号",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "record_block_sequence",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "record_block_sequence",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMAENO",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "cm_adverse_event_reference",
+      "field_kind": "source_collected",
+      "confidence": 0.88,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "ae_record_reference",
+      "field_kind": "source_collected",
+      "confidence": 0.88,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMCO",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "cm_comment",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "free_text_comment",
+      "field_kind": "source_collected",
+      "confidence": 0.8,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMDOSE",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "cm_dose_per_administration",
+      "field_kind": "source_collected",
+      "confidence": 0.72,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "dose_per_administration",
+      "field_kind": "source_collected",
+      "confidence": 0.75,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMDOSFRO",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "cm_dosing_frequency_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "dosing_frequency_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.85,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMDOSFRQ",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "cm_dosing_frequency",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "dosing_frequency",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMDOSU",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "cm_dose_unit",
+      "field_kind": "source_collected",
+      "confidence": 0.55,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "dose_unit",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMDOSUO",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "cm_dose_unit_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.55,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "dose_unit_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.88,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMENDAT",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "cm_end_date",
+      "field_kind": "source_collected",
+      "confidence": 0.92,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "medication_end_date",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMINDC",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "cm_indication_reason",
+      "field_kind": "source_collected",
+      "confidence": 0.93,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "indication",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMMHNO",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "cm_medical_history_reference",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "medical_history_record_reference",
+      "field_kind": "source_collected",
+      "confidence": 0.88,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMONGO",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "cm_ongoing_flag",
+      "field_kind": "source_collected",
+      "confidence": 0.94,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "medication_ongoing_indicator",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMPDCO",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "medication_reason_prophylaxis_or_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.92,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "medication_indication_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.85,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMROUTE",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "medication_route",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "medication_route_of_administration",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMROUTEO",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "medication_route_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "medication_route_other_specify",
+      "field_kind": "source_collected",
+      "confidence": 0.92,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMSHNO",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "medication_reason_surgical_history_reference",
+      "field_kind": "source_collected",
+      "confidence": 0.85,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "surgery_history_reference",
+      "field_kind": "source_collected",
+      "confidence": 0.75,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMSTDAT",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "medication_start_date",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "medication_start_date",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMTRT",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "prior_concomitant_medication_name",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "concomitant_medication_name",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "CMYN",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "prior_concomitant_medication_presence_flag",
+      "field_kind": "source_collected",
+      "confidence": 0.92,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "prior_concomitant_medication_presence_flag",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "FORMNM",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "form_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "form_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "FORMNM__2",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "form_name_duplicate",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "form_name_duplicate",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "FORMOID",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "form_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "form_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "PAGELMDT",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "page_last_modified_datetime",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "page_last_modified_datetime",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "RECREP",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "record_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "record_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "SITEID",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "site_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "site_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "SITENM",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "site_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "site_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "STUDYID",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "study_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "study_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "SUBJID",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "subject_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "subject_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "SUBJINI",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "subject_initials",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "subject_initials",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "SUBJSTA",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "subject_status",
+      "field_kind": "source_metadata",
+      "confidence": 0.85,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "subject_status",
+      "field_kind": "source_collected",
+      "confidence": 0.82,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "CM",
+    "source_field": "VISIT",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "visit_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "visit_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "CM",
+    "source_field": "VISTREP",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "visit_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "visit_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "Block顺序号",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "record_block_sequence",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "record_block_sequence",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "FORMNM",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "form_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "form_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "FORMNM__2",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "form_name_duplicate",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "form_name_duplicate",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "FORMOID",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "form_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "form_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "MHCO",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "medical_history_comment",
+      "field_kind": "source_collected",
+      "confidence": 0.85,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "medical_history_comment",
+      "field_kind": "source_collected",
+      "confidence": 0.85,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "MHENDAT",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "medical_history_end_date",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "medical_history_end_date",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "MHONGO",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "medical_history_ongoing_flag",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "medical_history_ongoing_indicator",
+      "field_kind": "source_collected",
+      "confidence": 0.93,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "MH",
+    "source_field": "MHSTDAT",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "medical_history_start_date",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "medical_history_start_date",
+      "field_kind": "source_collected",
+      "confidence": 0.9,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "MHTERM",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "medical_history_term",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "medical_history_reported_term",
+      "field_kind": "source_collected",
+      "confidence": 0.93,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "MH",
+    "source_field": "MHYN",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "medical_history_presence_flag",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "medical_history_presence_indicator",
+      "field_kind": "source_collected",
+      "confidence": 0.95,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": true,
+    "divergence_reasons": [
+     "role_or_kind_mismatch"
+    ]
+   },
+   {
+    "domain": "MH",
+    "source_field": "PAGELMDT",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "page_last_modified_datetime",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "page_last_modified_datetime",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "RECREP",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "record_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "record_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "SITEID",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "site_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "site_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "SITENM",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "site_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "site_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "STUDYID",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "study_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "study_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "SUBJID",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "subject_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "subject_identifier",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "SUBJINI",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "subject_initials",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "subject_initials",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "SUBJSTA",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "subject_status",
+      "field_kind": "source_collected",
+      "confidence": 0.8,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "subject_status",
+      "field_kind": "source_collected",
+      "confidence": 0.88,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "VISIT",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "visit_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "visit_name",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   },
+   {
+    "domain": "MH",
+    "source_field": "VISTREP",
+    "primary_count": "1",
+    "verifier_count": "1",
+    "primary": [
+     {
+      "recommended_role": "visit_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "verifier": [
+     {
+      "recommended_role": "visit_repeat_key",
+      "field_kind": "source_metadata",
+      "confidence": 1.0,
+      "user_decision_required": false
+     }
+    ],
+    "divergent": false,
+    "divergence_reasons": []
+   }
+  ]
+ },
+ "confirmed_baseline": {
+  "draft_id": "monmapdraft_da52157f3ed6f42405d0de95d8be",
+  "status": "confirmed",
+  "version": 275,
+  "confirmed_revision_id": "monmaprev_185410413d17078e8c6e83070e21",
+  "batch_id": "stg-e9d5050c73ef44be818e1f44920fdb5f",
+  "full_profile_sha256": "f682d276bfe2cc11583cde2821351fce34287eaf665baa0daa2336dc67e6e50c",
+  "full_input_sha256": "e84cb67fe180dc8d08f97214c5f33e7050809fda85fb9512679e0c6d5d05100e",
+  "fields_json_chars": 1246814,
+  "fields_json_entries": 1495,
+  "field_sources_json_chars": 660980,
+  "field_sources_entries": 1495,
+  "confidence_spot_checks": {
+   "CMDOSFRQ": 0.55,
+   "CMTRT": 0.93,
+   "MHTERM": 0.93
+  }
+ },
+ "self_check": {
+  "cm_fields_both_sides": 32,
+  "mh_fields_both_sides": 20,
+  "completed_jobs": 10,
+  "field_mappings_total": 104,
+  "cm_last_chunk_mappings": 8,
+  "v275_spot_checks": {
+   "CMDOSFRQ": 0.55,
+   "CMTRT": 0.93,
+   "MHTERM": 0.93
+  },
+  "per_side_metadata_counts": {
+   "primary": {
+    "CM": 14,
+    "MH": 13
+   },
+   "verifier": {
+    "CM": 13,
+    "MH": 13
+   }
+  },
+  "failures": [],
+  "status": "pass"
+ }
+}
