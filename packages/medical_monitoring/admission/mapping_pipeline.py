@@ -272,7 +272,13 @@ def _latest_job_cohort(
     *,
     repository: Any,
 ) -> tuple[Any, ...]:
-    """Keep only the newest submission contract for an admission attempt."""
+    """Keep only the newest submission contract for an admission attempt.
+
+    20260927 按用户指令修复：最新提交合同若整组stale_input（其input
+    revision经当前合同重提交验证为不可复现的死分支——反复re-freeze链的
+    孤儿组），不得绑架cohort选择；回退到最近的含completed作业的cohort。
+    过滤语义对选中组逐字保留（含workbench-system确定性作业的挂靠）。
+    """
 
     if not jobs:
         return ()
@@ -281,11 +287,6 @@ def _latest_job_cohort(
         if str(getattr(job, "provider", "")) != "workbench-system"
     ]
     selectable = model_jobs or list(jobs)
-    latest_created_at = max(item.created_at for item in selectable)
-    latest_at_time = [
-        item for item in selectable if item.created_at == latest_created_at
-    ]
-    latest = max(latest_at_time, key=lambda item: item.job_id)
 
     def identity(job: Any, *, required: bool = False) -> tuple[str, str, str, str]:
         try:
@@ -305,13 +306,46 @@ def _latest_job_cohort(
 
     # B4状态GET轻量化：identity每作业只解析一次（旧实现latest一次加上
     # 下方过滤器对每作业重复读最多3次input_payload——同一GET对302作业
-    # 即近千次载荷读）。选择语义逐字不变。
+    # 即近千次载荷读）。选择语义见docstring：按cohort分组取最新，
+    # 最新组全stale时回退到最近的completed组。
     job_identities = [(job, identity(job, required=True)) for job in jobs]
-    cohort_identity = next(
-        job_identity
+
+    model_identity_index = {
+        id(job): job_identity
         for job, job_identity in job_identities
-        if job is latest
+        if str(getattr(job, "provider", "")) != "workbench-system"
+    }
+    cohort_members: dict[tuple, list[Any]] = {}
+    cohort_recency: dict[tuple, str] = {}
+    for job in selectable:
+        ident = model_identity_index[id(job)]
+        cohort_members.setdefault(ident, []).append(job)
+        prev = cohort_recency.get(ident)
+        if prev is None or job.created_at > prev:
+            cohort_recency[ident] = job.created_at
+    ordered_identities = sorted(
+        cohort_recency, key=lambda ident: (cohort_recency[ident],), reverse=True
     )
+    selected_identity = None
+    fallback_identity = ordered_identities[0] if ordered_identities else None
+    for ident in ordered_identities:
+        members = cohort_members.get(ident) or []
+        if any(
+            str(_value(getattr(m, "status", ""))) == "completed" for m in members
+        ):
+            selected_identity = ident
+            break
+    if selected_identity is None:
+        selected_identity = fallback_identity
+    if selected_identity is None:
+        return ()
+    selected_members = cohort_members.get(selected_identity) or []
+    latest_created_at = max(item.created_at for item in selected_members)
+    latest_at_time = [
+        item for item in selected_members if item.created_at == latest_created_at
+    ]
+    latest = max(latest_at_time, key=lambda item: item.job_id)
+    cohort_identity = selected_identity
     cohort_prompt = cohort_identity[0]
     latest_routes = {
         (

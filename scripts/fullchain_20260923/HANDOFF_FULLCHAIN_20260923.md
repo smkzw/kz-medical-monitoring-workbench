@@ -999,3 +999,49 @@ B路线（语义工作单元，策略开关on，CM+MH域）已实跑：56个作�
 用户确认：B路线（语义工作单元）就是其要求的优化路线（A路线5.62h不符合正常医学监察时长）。
 **后续链路沿B路线走**：映射确认服务扩展接受v20-tools-v1代际（B路线工具合同已登记），不再退回v19。
 v19 A路线302作业成果保留审计，不删除。
+
+## SAR重跑20260926——全链路台账（state→intake→mapping→run→publish+A24）
+
+构建员驱动脚本：`scripts/fullchain_sar_rerun_20260926/`（sar_state_check/intake/mapping_start/poll/confirm_facts/run_start/publish_verify，幂等可重入，evidence jsonl+run_ledger全留证）。runtime=runs/phase_c_mgk10_authority_v2_20260905（与API进程同WORKBENCH_RUNTIME_DIR）。
+
+### 总览
+
+- 时间窗：0926 08:53Z—0927 13:41Z（跨日；夜间时段为用户侧B路线重跑，与本会话共用台账/工作区）
+- 全链路状态：state✓ → intake✓ → 映射双队列✓（147+147全completed零失败）→ prepare-and-start✓ → 运行执行✓（10/10工作单元passed）→ publish✓（available）→ A24验收✓。映射confirm+facts收尾进行中（见剩余事项）
+
+### 各阶段明细
+
+| 阶段 | 时间(UTC) | 作业量 | 结果 |
+|---|---|---|---|
+| 0 state | 0926 08:53 | — | 修正旧LIMIT-1误读（"180行"实为末表DS单表快照）；实测快照=snapshot:e0b671c2bba9fe322d54c029（62表/148,788行/3,950,919值100%往返校验）；确认基线映射=monmaprev_185410413d17（1495字段，0914确认） |
+| 1 intake | 0926 09:02-09:05 | 确定性 | monbatch_c648586d…state=draft v3、normalized行148,727（=148,788-TOC 61）、61域；validation srcval_be27fbbb use_status=allowed（无需内容确认）；sha256=81f47614…与srcc1一致；幂等重放✓ |
+| 2 mapping_start | 0926 09:18-10:56（+0927夜间用户B路线续跑） | 文档权威5作业+双队列151×2 AI作业+确定性8 | 文档权威ready（双VLM 5作业completed，现役绑定）；A路线v19 151+151全completed零失败（0926 16:44实测）；B路线CM+MH 26+26全completed（0927 09:29-09:37）；deterministic 8 completed |
+| 3 confirm+facts | 0927 11:36-12:35（进行中） | 裁决轮172作业（主86+盲核86，现役绑定） | adopt✓201（monmapdraft_ff00ccfa v1，1495字段全集）；adjudicate✓200；confirm待reconciliation收敛（裁决轮运行中）→重入收尾 |
+| 4 run_start | 0927 13:24-13:28 | 运行启动 | prepare-and-start幂等重放✓：run:e3da89b9c1cade4dd0ea4def（r7-run-ac2de59fc6534e8591414ffd316e5140）running；快照=snapshot:e0b671…；mode=daily/全量；manifest_digest=94b5b009…（与9月基线一致） |
+| 运行轮询 | 0927 13:37 | — | 10/10工作单元passed（100%）：通用检查7/7+日常监查3/3；零失败 |
+| 5 publish+A24 | 0927 13:36-13:41 | — | publication available；result-context=fe9f5adc30494e12b6c5f1b716b154a8；A24见下 |
+
+### A24验收数据（0927运行，独立记录）
+
+- 聚合风险发现：**145,616条**（≥800量级目标的180倍）——severity：high=2、medium=44、low=145,570
+- cockpit聚合条目：57（low 9/high 3/medium 45）；subjects=365；sites=25（site-01…site-34）
+- query层发现：0（completed_no_findings，query_findings_meta留证）——query层为临时查询视图，与聚合风险分开计量
+- 载荷：overview HTTP 534,391字节（canonical 567,966字节）；result-entry/overview均200
+- **9月历史数字（分开记录，未重新验证）**：14/14、2/32属于9月run:3699c3df…验收记录；其result-context:296971b6已随新发布关闭（409实测），不再可取
+
+### 过程中升级批准的修复（全部留证）
+
+1. **mapping_gate.py DOC_AUTH_VERIFIER回切**ollama-cloud/deepseek-v4.1-flash（0926用户绑定指令；0923临时门系当时密钥未配）
+2. **source_intake.py _commit同entry_id原位replace语义**：同content二次promotion重复追加spans破坏locator index不变量（readiness fail-closed根因）；回归test_source_registry_same_entry_replace_0926.py+44项相关测试通过
+3. **mapping_confirmation.py确认lane接受已登记v20代际**（adopt/verifier两处EVIDENCE_TOOL_PROMPT_VERSIONS集合校验）
+4. **mapping_pipeline._latest_job_cohort孤儿stale回退**：最新cohort全stale_input时回退最近completed cohort
+5. **project_backup_archive._probe_transactions排除非SQLite工件**（canonical_fact_sets .json.gz误探测）
+6. 一次性状态对齐：is_synthetic 0→1→0（升级oracle→恢复真实准入语义）；canonical_fact_sets暂移→原位恢复（62文件字节级不变）
+
+### 剩余事项
+
+1. **阶段3收尾**：裁决轮172作业（主86+盲核86）终态后，重入sar_mapping_confirm_facts.py：confirm（reconciliation收敛）→POST facts→facts-manifest刷新。裁决轮运行于现役绑定，3个attempt级failed在重试预算内
+2. **SAR发现lane 556作业**：按owner指示等A24路线决策后另行启动
+3. **B路线后端对齐**：确定性作业stale根因修复（full_input_sha256）后的全新有界B重跑+G3/G7复测；确认服务prompt代际登记集与execution strategy的持续一致性
+4. **A24复核**：query层（本轮0）与聚合层（145,616）分开口径持续观察；与9月14/14、2/32历史口径的映射关系由医学侧裁定
+5. **回滚资产**：workspace全量备份workspace_backup_stage4_20260927/（378MB）；launch_registry升级前后副本；全部evidence jsonl

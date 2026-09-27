@@ -29,6 +29,7 @@ from .mapping_gate import (
     monitoring_mapping_execution_route,
     normalize_monitoring_mapping_model,
 )
+from .evidence_tool_contract import EVIDENCE_TOOL_PROMPT_VERSIONS
 from .mapping_pipeline import (
     AdmissionMappingPipelineError,
     MAPPING_ADJUDICATION_CURRENT_PROMPT_VERSIONS,
@@ -522,7 +523,12 @@ class AdmissionMappingConfirmationService:
             if profile_sha and profile_sha != digest:
                 raise AdmissionMappingPipelineError("mapping_bridge_failed")
             profile_sha = digest
-            if str(job.prompt_version) != str(self.prompt_version):
+            if str(job.prompt_version) != str(self.prompt_version) and str(
+                job.prompt_version
+            ) not in EVIDENCE_TOOL_PROMPT_VERSIONS:
+                # 20260927 按用户指令对齐：B路线(semantic_evidence)的工具执行
+                # 代际已登记于evidence_tool_contract，确认lane接受之；未知
+                # 代际仍fail-closed。
                 raise AdmissionMappingPipelineError("mapping_run_incomplete")
             if str(_value(job.status)) != "completed":
                 raise AdmissionMappingPipelineError("mapping_run_incomplete")
@@ -1490,7 +1496,9 @@ class AdmissionMappingConfirmationService:
                 MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX,
             )
             if any(
-                str(job.prompt_version) != MONITORING_C3_VERIFIER_PROMPT_VERSION
+                str(job.prompt_version)
+                != MONITORING_C3_VERIFIER_PROMPT_VERSION
+                and str(job.prompt_version) not in EVIDENCE_TOOL_PROMPT_VERSIONS
                 for job in verifier_jobs
             ):
                 raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
