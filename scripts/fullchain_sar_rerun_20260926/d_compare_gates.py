@@ -794,6 +794,14 @@ def render_md(report: dict) -> str:
     g = report["gates"]
     g1, g2, g3, g4 = g["G1"], g["G2"], g["G3"], g["G4"]
     g5, g6, g7, g8 = g["G5"], g["G6"], g["G7"], g["G8"]
+    g1_status = g["G1"].get("status", "partial")
+    g2_status = g["G2"].get("status", "partial")
+    g3_status = g["G3"].get("status", "partial")
+    g4_status = g["G4"].get("status", "partial")
+    g5_status = g["G5"].get("status", "partial")
+    g6_status = g["G6"].get("status", "partial")
+    g7_status = g["G7"].get("status", "partial")
+    g8_status = g["G8"].get("status", "partial")
     rec = report["recommendation"]
     lines = [
         "# D对照·G1-G8指标报告（CM+MH，A=09-26热启动重跑 vs B=本轮冷启动语义证据）",
@@ -813,7 +821,7 @@ def render_md(report: dict) -> str:
     lines.append("")
     g1 = g["G1"]
     lines += [
-        "## G1 来源与身份（partial）",
+        f"## G1 来源与身份（{g1_status}）",
         "",
         f"- attempt：`{g1['attempt_id']}`；共享冻结画像 profile_sha256：`{g1['shared_profile_sha256'][:16]}…`",
         f"- A修订摘要：`{g1['a_revision_sha256'][:16]}…`；B模型作业修订摘要："
@@ -821,7 +829,7 @@ def render_md(report: dict) -> str:
         f"- 回链：A候选 {g1['a_candidate_linkage_count']} 字段、B候选 {g1['b_candidate_linkage_count']} 字段均回链candidate_id；"
         "B确定性作业4个同cohort同prompt版本回链，但revision与单元不一致（例外已记录）",
         "",
-        "## G2 工具可达（pass）",
+        f"## G2 工具可达（{g2_status}）",
         "",
         f"- A：10作业、evidence_reads={g2['a_evidence_reads']} → single_call（如实登记无工具）",
         f"- B模型：{g2['b_model_jobs']}作业 = executed {g2['b_model_tool_loop_executed']} + idle {g2['b_model_tool_loop_idle']}，"
@@ -829,25 +837,25 @@ def render_md(report: dict) -> str:
         f"- B确定性：tool_loop_idle（登记有工具合同、零读取，如实标注）",
         f"- 分类口径：{g2['classify_basis']}",
         "",
-        "## G3 完整覆盖（fail）",
+        f"## G3 完整覆盖（{g3_status}）",
         "",
         f"- A：CM {g3['a_primary_cm']}/{g3['a_verifier_cm']}（主/盲核）、MH {g3['a_primary_mh']}/{g3['a_verifier_mh']}，"
         "每字段显式；元数据不对称：主CM 14含SUBJSTA(source_metadata) vs 盲核13；元数据结论由确定性规则并入候选",
         f"- B：每cohort覆盖 {g3['b_covered_per_cohort']['primary']}/{g3['b_expected_per_cohort']}，"
         f"缺失 {g3['b_missing_count']} 字段（元数据，确定性作业stale），缺失清单见JSON b_missing_fields",
         "",
-        "## G4 独立复核（pass）",
+        f"## G4 独立复核（{g4_status}）",
         "",
         f"- B盲核：{g4['b_verifier_units']}单元、前缀`{g4['b_verifier_prefix'][:40]}…`、"
         f"自有取证回执{g4['b_verifier_own_evidence_reads']}条；隔离标识=业务键前缀/profile/独立worker",
         f"- A盲核：{g4['a_verifier_jobs']}作业（verifier-v8，单次调用0取证回执）",
         "",
-        "## G5 诚实结果（partial）",
+        f"## G5 诚实结果（{g5_status}）",
         "",
         f"- A：{g5['a_per_field_counts']}；A双盲分歧 {g5['a_dual_divergent_fields']}/52；未知条目 {len(g5['a_unknown_entries'])}",
         f"- B：{g5['b_per_field_counts']}；B双盲分歧 {g5['b_dual_divergent_fields']}/26；未知条目 {len(g5['b_unknown_entries'])}",
         "",
-        "## G6 恢复（fail）",
+        f"## G6 恢复（{g6_status}）",
         "",
         f"- B：模型失败 {g6['b_failed_model_jobs']}；确定性第一代退役 {g6['b_stale_deterministic_jobs_retired_first_generation']}；"
         f"确定性固定代际stale {g6['b_stale_deterministic_jobs_fixed_generation']}；"
@@ -855,7 +863,7 @@ def render_md(report: dict) -> str:
         f"- A：attempt内失败 {g6['a_failed_jobs']}；重试作业 {g6['a_retries']}",
         f"- 成功无重复推理：{g6['success_without_duplicate_reasoning']}",
         "",
-        "## G7 可用交付（fail）",
+        f"## G7 可用交付（{g7_status}）",
         "",
         f"- D2同会话捕获（{g7['d2_same_session_capture']['captured_at']}）：HTTP {g7['d2_same_session_capture']['http_ok']}，"
         f"field_count {g7['d2_same_session_capture']['primary_field_count']}/{g7['d2_same_session_capture']['verifier_field_count']}（每cohort，应52）",
@@ -864,7 +872,7 @@ def render_md(report: dict) -> str:
         f"- 浏览器走查：{g7['browser_walkthrough']}",
         f"- {g7['restart_invalidation_note']}",
         "",
-        "## G8 质量与效率（partial）",
+        f"## G8 质量与效率（{g8_status}）",
         "",
         f"- B-vs-A 主侧：比较 {g8['b_vs_a_primary']['compared_fields']} 字段，一致 {g8['b_vs_a_primary']['agree']}，分歧 {g8['b_vs_a_primary']['diverge']}；"
         f"盲核侧：比较 {g8['b_vs_a_verifier']['compared_fields']}，一致 {g8['b_vs_a_verifier']['agree']}，分歧 {g8['b_vs_a_verifier']['diverge']}"

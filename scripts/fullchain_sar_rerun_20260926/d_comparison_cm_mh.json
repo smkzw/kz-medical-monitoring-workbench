@@ -1,6 +1,6 @@
 {
  "schema_version": "d-comparison-cm-mh-v1",
- "generated_at": "2026-09-27T09:53:24.297582+00:00",
+ "generated_at": "2026-09-27T11:23:25.957487+00:00",
  "inputs": {
   "d1_export": "d_baseline_cm_mh.json",
   "d2_export": "d_route_b_run_result.json",
@@ -2759,7 +2759,7 @@
    },
    "fresh_reverification_same_service_session": {
     "server_reachable": true,
-    "captured_at": "2026-09-27T09:53:24.297329+00:00",
+    "captured_at": "2026-09-27T11:23:25.957220+00:00",
     "projections": {
      "primary": {
       "http_status": 200,
@@ -2774,7 +2774,7 @@
        "candidate_count": 52,
        "completed_job_count": 28
       },
-      "captured_at": "2026-09-27T09:53:14.650398+00:00"
+      "captured_at": "2026-09-27T11:23:16.054198+00:00"
      },
      "verifier": {
       "http_status": 200,
@@ -2789,7 +2789,7 @@
        "candidate_count": 52,
        "completed_job_count": 28
       },
-      "captured_at": "2026-09-27T09:53:24.297315+00:00"
+      "captured_at": "2026-09-27T11:23:25.957208+00:00"
      }
     }
    },
