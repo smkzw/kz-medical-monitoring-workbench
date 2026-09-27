@@ -679,6 +679,11 @@ class ProjectBackupArchiveMixin:
         for relative in _member_rel_paths(workspace):
             if relative.endswith("/" + ARTIFACT_DIR_NAME) or "/" in relative and relative.split("/")[-1].endswith(".json"):
                 continue
+            # 20260927修复：事务探测仅适用于SQLite成员。canonical_fact_sets
+            # 等.json.gz工件（facts lane产物）不是数据库，探测会误报
+            # sqlite_integrity_failed并阻断整个升级路径。
+            if not relative.endswith(".sqlite3"):
+                continue
             path = workspace / Path(relative)
             conn: Optional[sqlite3.Connection] = None
             try:
