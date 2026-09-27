@@ -61,6 +61,8 @@ def classify_persisted_jobs(db_path: Path) -> dict:
             "prompt_version": row["prompt_version"],
             "status": row["status"],
             "class": usage_class,
+            # 该作业的实际回执行数（分类证据本身，随行可核查）。
+            "evidence_read_rows": row["reads"],
         })
     return {
         "total_jobs": len(detail),

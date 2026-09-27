@@ -18,6 +18,10 @@ from .mapping_bridge import (
     MappingHarnessInput,
     admission_record_to_harness_input,
 )
+from .mapping_execution_strategy import (
+    resolve_mapping_execution_strategy,
+    submit_semantic_evidence_units,
+)
 from .document_evidence import DOCUMENT_ROLES, MAPPING_REQUIRED_DOCUMENT_ROLES
 from .mapping_gate import (
     MONITORING_C3_LOCAL_FALLBACK_MODEL,
@@ -1250,14 +1254,26 @@ class AdmissionMappingPipeline:
         *,
         project_id: str,
     ) -> tuple[Any, ...]:
-        revision = self._revision_factory(harness_input.input_revision)
-        return service.submit_listing_field_mapping_chunks(
+        # B路线唯一接缝：接缝开头一次策略解析；off（None）时下方原路径
+        # 逐字节保持不变，on 时整次提交改走语义单元+确定性作业。
+        strategy = resolve_mapping_execution_strategy(service)
+        if strategy is None:
+            revision = self._revision_factory(harness_input.input_revision)
+            return service.submit_listing_field_mapping_chunks(
+                project_id=project_id,
+                input_revision=revision,
+                field_profile=harness_input.field_profile,
+                chunk_size=self._listing_mapping_chunk_size(service),
+                prompt_version=contract.prompt_version,
+                business_key_prefix=contract.business_key_prefix,
+            )
+        return submit_semantic_evidence_units(
+            service=service,
+            contract=contract,
+            harness_input=harness_input,
+            strategy=strategy,
             project_id=project_id,
-            input_revision=revision,
-            field_profile=harness_input.field_profile,
-            chunk_size=self._listing_mapping_chunk_size(service),
-            prompt_version=contract.prompt_version,
-            business_key_prefix=contract.business_key_prefix,
+            revision_factory=self._revision_factory,
         )
 
     @staticmethod
