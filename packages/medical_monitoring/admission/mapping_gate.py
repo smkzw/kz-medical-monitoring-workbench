@@ -48,14 +48,17 @@ MONITORING_C3_CMS_PRIMARY_MODEL = "MiniMax-M3"
 MONITORING_C3_CMS_PRIMARY_PROFILE_ID = "medical_monitoring_ai__cms_smk_minimax_m3"
 MONITORING_C3_ALTERNATE_PROVIDER = "cms-router"
 MONITORING_C3_ALTERNATE_MODEL = "minimax-m3"
-# 2026-09-23 曾按用户指定切cms-router/deepseek-latest-cloud（当时ollama-cloud
-# 密钥未配）；20260926已按用户新指令回切ollama-cloud/deepseek-v4.1-flash
-# （见上方DOC_AUTH_VERIFIER_*）。Earlier MTPLX/GLM/opencode-go identities remain
-# below so their frozen receipts can be replayed.
-MONITORING_C3_VERIFIER_PROVIDER = "cms-router"
-MONITORING_C3_VERIFIER_MODEL = "deepseek-latest-cloud"
+# 盲核身份沿革：2026-09-23曾切cms-router/deepseek-latest-cloud（当时
+# ollama-cloud密钥未配）；20260926按用户绑定指令回切ollama-cloud/
+# deepseek-v4.1-flash（DOC_AUTH_VERIFIER_*与verifier()合同先行切换）；
+# 20260927收尾本常量组并与live绑定profile对齐。Earlier MTPLX/GLM/
+# opencode-go identities remain below so their frozen receipts can be
+# replayed. cms-router/deepseek-latest-cloud保留于历史回执重验集合
+# （VERIFIER_RUNTIME_PAIRS）。
+MONITORING_C3_VERIFIER_PROVIDER = "ollama-cloud"
+MONITORING_C3_VERIFIER_MODEL = "deepseek-v4.1-flash"
 MONITORING_C3_VERIFIER_PROFILE_ID = (
-    "medical_monitoring_verifier_ai__cms_router_dlc"
+    "medical_monitoring_verifier_ai__ollama_cloud_dsv41"
 )
 MONITORING_C3_MTPLX_VERIFIER_PROVIDER = "mtplx"
 MONITORING_C3_MTPLX_VERIFIER_MODEL = "mtplx-flash-next-optimized-speed"
@@ -124,9 +127,8 @@ MONITORING_C3_SUPPORTED_RUNTIMES = frozenset({
 # Every verifier identity that persisted jobs may legally carry.  Membership
 # here never authorizes a new call; new calls freeze the selected role profile.
 MONITORING_C3_VERIFIER_RUNTIME_PAIRS = frozenset({
+    # 现行盲核身份（20260926回切后的常量组）
     (MONITORING_C3_VERIFIER_PROVIDER, MONITORING_C3_VERIFIER_MODEL),
-    # 历史身份：ollama-cloud直连盲核（密钥未提供暂停，冻结回执仍可重验）
-    ("ollama-cloud", "deepseek-v4.1-flash"),
     (MONITORING_C3_GLM_VERIFIER_PROVIDER, MONITORING_C3_GLM_VERIFIER_MODEL),
     (
         MONITORING_C3_MTPLX_VERIFIER_PROVIDER,
@@ -134,7 +136,9 @@ MONITORING_C3_VERIFIER_RUNTIME_PAIRS = frozenset({
     ),
     (DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL),
     ("opencode-go", "deepseek-flash"),
-    # 历史文档权威身份：已持久化作业/回执仍可重验，但不再用于新提交。
+    # 历史身份：cms-router中转期deepseek-latest-cloud与omp-router直连盲核
+    # （冻结回执仍可重验，不再用于新提交）
+    ("cms-router", "deepseek-latest-cloud"),
     ("omp-router", "deepseek-latest-cloud"),
 })
 MONITORING_C3_PRIMARY_RUNTIME_PAIRS = frozenset({

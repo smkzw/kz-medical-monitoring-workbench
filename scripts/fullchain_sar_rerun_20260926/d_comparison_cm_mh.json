@@ -1,0 +1,3361 @@
+{
+ "schema_version": "d-comparison-cm-mh-v1",
+ "generated_at": "2026-09-27T09:53:24.297582+00:00",
+ "inputs": {
+  "d1_export": "d_baseline_cm_mh.json",
+  "d2_export": "d_route_b_run_result.json",
+  "live_db": "runs/phase_c_mgk10_authority_v2_20260905/runtime/medical_monitoring_ai.sqlite3",
+  "opened_mode": "read_only (sqlite3 mode=ro)"
+ },
+ "per_field_comparison": [
+  {
+   "domain": "CM",
+   "source_field": "Block顺序号",
+   "a_primary": [
+    {
+     "recommended_role": "record_block_sequence",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "record_block_sequence",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "record_block_sequence",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "record_block_sequence",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_d0a03f6886e2e1ef622eace4cbf8",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f39878e308f74015726b4fb00d99",
+     "job_id": "monai_91b4b3a2a4969c54fe6f3f370d0c",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_46e67f52eec3e00c57028ee7ba2c"
+     ]
+    },
+    "b_candidate_id": "moncand_8b922a274bb12382d4a0e10e80d5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMAENO",
+   "a_primary": [
+    {
+     "recommended_role": "cm_adverse_event_reference",
+     "field_kind": "source_collected",
+     "confidence": 0.88,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "ae_record_reference",
+     "field_kind": "source_collected",
+     "confidence": 0.88,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "cm_indication_ae_reference",
+    "field_kind": "source_collected",
+    "confidence": 0.88,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "concomitant_medication_ae_reference",
+    "field_kind": "source_collected",
+    "confidence": 0.9,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_d0a03f6886e2e1ef622eace4cbf8",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f39878e308f74015726b4fb00d99",
+     "job_id": "monai_91b4b3a2a4969c54fe6f3f370d0c",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_e59676fb5e3c439764db77992ec6"
+     ]
+    },
+    "b_candidate_id": "moncand_a4f104b0f5962f4ca1cb851d82bb",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMCO",
+   "a_primary": [
+    {
+     "recommended_role": "cm_comment",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "free_text_comment",
+     "field_kind": "source_collected",
+     "confidence": 0.8,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "concomitant_medication_comment",
+    "field_kind": "source_collected",
+    "confidence": 0.93,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "concomitant_medication_comment",
+    "field_kind": "source_collected",
+    "confidence": 0.9,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_d0a03f6886e2e1ef622eace4cbf8",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f39878e308f74015726b4fb00d99",
+     "job_id": "monai_91b4b3a2a4969c54fe6f3f370d0c",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_f94b1c5509b27eb71c36a199f686"
+     ]
+    },
+    "b_candidate_id": "moncand_d3868d40942f9aad69caf69222e2",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMDOSE",
+   "a_primary": [
+    {
+     "recommended_role": "cm_dose_per_administration",
+     "field_kind": "source_collected",
+     "confidence": 0.72,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "dose_per_administration",
+     "field_kind": "source_collected",
+     "confidence": 0.75,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "concomitant_medication_dose",
+    "field_kind": "source_collected",
+    "confidence": 0.85,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "concomitant_medication_dose",
+    "field_kind": "source_collected",
+    "confidence": 0.82,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_d0a03f6886e2e1ef622eace4cbf8",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f39878e308f74015726b4fb00d99",
+     "job_id": "monai_91b4b3a2a4969c54fe6f3f370d0c",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_f6777c6812be2b313cbc29efd8f4"
+     ]
+    },
+    "b_candidate_id": "moncand_f3b8084dfa144d0c63c5a5f4dad6",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMDOSFRO",
+   "a_primary": [
+    {
+     "recommended_role": "cm_dosing_frequency_other_specify",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "dosing_frequency_other_specify",
+     "field_kind": "source_collected",
+     "confidence": 0.85,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "concomitant_medication_other_frequency_specify_text",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "cm_dosing_frequency_other_text",
+    "field_kind": "source_collected",
+    "confidence": 0.9,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_d0a03f6886e2e1ef622eace4cbf8",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f39878e308f74015726b4fb00d99",
+     "job_id": "monai_91b4b3a2a4969c54fe6f3f370d0c",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_26962549a421c40f090cb1cc8266"
+     ]
+    },
+    "b_candidate_id": "moncand_d75983700bc0115c3433f738e013",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMDOSFRQ",
+   "a_primary": [
+    {
+     "recommended_role": "cm_dosing_frequency",
+     "field_kind": "source_collected",
+     "confidence": 0.95,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "dosing_frequency",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "concomitant_medication_dosing_frequency",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "concomitant_medication_dosing_frequency",
+    "field_kind": "source_collected",
+    "confidence": 0.9,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_d0a03f6886e2e1ef622eace4cbf8",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f39878e308f74015726b4fb00d99",
+     "job_id": "monai_91b4b3a2a4969c54fe6f3f370d0c",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_82555109155149a22f214102dfab"
+     ]
+    },
+    "b_candidate_id": "moncand_e93d6b9d0c47782737b3769253f3",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMDOSU",
+   "a_primary": [
+    {
+     "recommended_role": "cm_dose_unit",
+     "field_kind": "source_collected",
+     "confidence": 0.55,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "dose_unit",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "concomitant_medication_dose_unit",
+    "field_kind": "source_collected",
+    "confidence": 0.55,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "concomitant_medication_dose_unit",
+    "field_kind": "source_collected",
+    "confidence": 0.55,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_d0a03f6886e2e1ef622eace4cbf8",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f39878e308f74015726b4fb00d99",
+     "job_id": "monai_91b4b3a2a4969c54fe6f3f370d0c",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_b19f0170df5b5ead7f54867f2591"
+     ]
+    },
+    "b_candidate_id": "moncand_5cbcfae60eab690f4acc7e456661",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMDOSUO",
+   "a_primary": [
+    {
+     "recommended_role": "cm_dose_unit_other_specify",
+     "field_kind": "source_collected",
+     "confidence": 0.55,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "dose_unit_other_specify",
+     "field_kind": "source_collected",
+     "confidence": 0.88,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "cm_other_dose_unit_specify_text",
+    "field_kind": "source_collected",
+    "confidence": 0.55,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "concomitant_medication_dose_unit_other_specify",
+    "field_kind": "source_collected",
+    "confidence": 0.55,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_d0a03f6886e2e1ef622eace4cbf8",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f39878e308f74015726b4fb00d99",
+     "job_id": "monai_91b4b3a2a4969c54fe6f3f370d0c",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_b1030f1f89d1beb639db4dbfb388"
+     ]
+    },
+    "b_candidate_id": "moncand_eebd8586ead5f52ca0c1e4d4e925",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMENDAT",
+   "a_primary": [
+    {
+     "recommended_role": "cm_end_date",
+     "field_kind": "source_collected",
+     "confidence": 0.92,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "medication_end_date",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "concomitant_medication_end_date",
+    "field_kind": "source_collected",
+    "confidence": 0.93,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "concomitant_medication_end_date",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_d0a03f6886e2e1ef622eace4cbf8",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f39878e308f74015726b4fb00d99",
+     "job_id": "monai_91b4b3a2a4969c54fe6f3f370d0c",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_ee1744057ff20212b4484c45b932"
+     ]
+    },
+    "b_candidate_id": "moncand_87da542772c3171220ac08955def",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMINDC",
+   "a_primary": [
+    {
+     "recommended_role": "cm_indication_reason",
+     "field_kind": "source_collected",
+     "confidence": 0.93,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "indication",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "cm_indication",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "concomitant_medication_indication",
+    "field_kind": "source_collected",
+    "confidence": 0.9,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_d0a03f6886e2e1ef622eace4cbf8",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f39878e308f74015726b4fb00d99",
+     "job_id": "monai_91b4b3a2a4969c54fe6f3f370d0c",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_961d7cf9ff5f6c6a189720e85a41"
+     ]
+    },
+    "b_candidate_id": "moncand_dd01cf13cffa5f736122ac0050a1",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMMHNO",
+   "a_primary": [
+    {
+     "recommended_role": "cm_medical_history_reference",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "medical_history_record_reference",
+     "field_kind": "source_collected",
+     "confidence": 0.88,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "cm_indication_medical_history_reference",
+    "field_kind": "source_collected",
+    "confidence": 0.8,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "medical_history_reference",
+    "field_kind": "source_collected",
+    "confidence": 0.82,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_d0a03f6886e2e1ef622eace4cbf8",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f39878e308f74015726b4fb00d99",
+     "job_id": "monai_91b4b3a2a4969c54fe6f3f370d0c",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_0d991b8be0cf908bb32df37056f1"
+     ]
+    },
+    "b_candidate_id": "moncand_34e9d44d8530333a9a3c8fe734ae",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMONGO",
+   "a_primary": [
+    {
+     "recommended_role": "cm_ongoing_flag",
+     "field_kind": "source_collected",
+     "confidence": 0.94,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "medication_ongoing_indicator",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "ongoing_flag",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "concomitant_medication.ongoing",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_d0a03f6886e2e1ef622eace4cbf8",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f39878e308f74015726b4fb00d99",
+     "job_id": "monai_91b4b3a2a4969c54fe6f3f370d0c",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_41fca6c79055ce7a3066a60f266e"
+     ]
+    },
+    "b_candidate_id": "moncand_05b235b55d00290d496a4e8d203a",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMPDCO",
+   "a_primary": [
+    {
+     "recommended_role": "medication_reason_prophylaxis_or_other_specify",
+     "field_kind": "source_collected",
+     "confidence": 0.92,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "medication_indication_other_specify",
+     "field_kind": "source_collected",
+     "confidence": 0.85,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "concomitant_medication_reason_specify",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "concomitant_medication_indication_specify",
+    "field_kind": "source_collected",
+    "confidence": 0.9,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_2043c563515fca91ceb19f8ec5ac",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_ad5ee81981e132dfa914d708222d",
+     "job_id": "monai_16c2b66a36a1a5066064260243fc",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_6fdeafd57465a5e6b6baa5e68f67"
+     ]
+    },
+    "b_candidate_id": "moncand_b7f400c604a2bc9f4501cdce5862",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMROUTE",
+   "a_primary": [
+    {
+     "recommended_role": "medication_route",
+     "field_kind": "source_collected",
+     "confidence": 0.95,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "medication_route_of_administration",
+     "field_kind": "source_collected",
+     "confidence": 0.95,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "cm_route_of_administration",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "concomitant_medication_route",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_2043c563515fca91ceb19f8ec5ac",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_ad5ee81981e132dfa914d708222d",
+     "job_id": "monai_16c2b66a36a1a5066064260243fc",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_43ef957bb4fb81e17a34be7ec809"
+     ]
+    },
+    "b_candidate_id": "moncand_deb9af3a8b9a62e7605eaeedc550",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMROUTEO",
+   "a_primary": [
+    {
+     "recommended_role": "medication_route_other_specify",
+     "field_kind": "source_collected",
+     "confidence": 0.95,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "medication_route_other_specify",
+     "field_kind": "source_collected",
+     "confidence": 0.92,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "cm_route_other_specify",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "concomitant_medication_route_other_specification",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_2043c563515fca91ceb19f8ec5ac",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_ad5ee81981e132dfa914d708222d",
+     "job_id": "monai_16c2b66a36a1a5066064260243fc",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_46e620bbff28d5aaa0ed98b6264f"
+     ]
+    },
+    "b_candidate_id": "moncand_d09c96742f453bf04ea1282c5358",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMSHNO",
+   "a_primary": [
+    {
+     "recommended_role": "medication_reason_surgical_history_reference",
+     "field_kind": "source_collected",
+     "confidence": 0.85,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "surgery_history_reference",
+     "field_kind": "source_collected",
+     "confidence": 0.75,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "surgical_history_item",
+    "field_kind": "source_collected",
+    "confidence": 0.9,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "surgery_history_reference",
+    "field_kind": "source_collected",
+    "confidence": 0.82,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_2043c563515fca91ceb19f8ec5ac",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_ad5ee81981e132dfa914d708222d",
+     "job_id": "monai_16c2b66a36a1a5066064260243fc",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_8e65456c5e5dd5e7171fdec2f741"
+     ]
+    },
+    "b_candidate_id": "moncand_1bfa9db403d0fe97aebfd93801de",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMSTDAT",
+   "a_primary": [
+    {
+     "recommended_role": "medication_start_date",
+     "field_kind": "source_collected",
+     "confidence": 0.95,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "medication_start_date",
+     "field_kind": "source_collected",
+     "confidence": 0.95,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "cm_start_date",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "concomitant_medication_start_date",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_2043c563515fca91ceb19f8ec5ac",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_ad5ee81981e132dfa914d708222d",
+     "job_id": "monai_16c2b66a36a1a5066064260243fc",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_69c2e2c80682c6cecaff01ac2b58"
+     ]
+    },
+    "b_candidate_id": "moncand_4ebe986194253180f9cb586bc711",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMTRT",
+   "a_primary": [
+    {
+     "recommended_role": "prior_concomitant_medication_name",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "concomitant_medication_name",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "prior_concomitant_medication_name",
+    "field_kind": "source_collected",
+    "confidence": 0.93,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "prior_and_concomitant_medication_name",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_2043c563515fca91ceb19f8ec5ac",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_ad5ee81981e132dfa914d708222d",
+     "job_id": "monai_16c2b66a36a1a5066064260243fc",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_30a2d8513343b9cfdf17e914a440"
+     ]
+    },
+    "b_candidate_id": "moncand_4f107bf95a7a80aa87b10b541b89",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "CMYN",
+   "a_primary": [
+    {
+     "recommended_role": "prior_concomitant_medication_presence_flag",
+     "field_kind": "source_collected",
+     "confidence": 0.92,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "prior_concomitant_medication_presence_flag",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "prior_concomitant_medication_flag",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "prior_and_concomitant_medication_flag",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_2043c563515fca91ceb19f8ec5ac",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_ad5ee81981e132dfa914d708222d",
+     "job_id": "monai_16c2b66a36a1a5066064260243fc",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_ea7d06e13bc471f30a5f302502fc"
+     ]
+    },
+    "b_candidate_id": "moncand_2fe9777dc068e762581a078ed0e7",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "FORMNM",
+   "a_primary": [
+    {
+     "recommended_role": "form_name",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "form_name",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "form_name",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "form_name",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_2043c563515fca91ceb19f8ec5ac",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_ad5ee81981e132dfa914d708222d",
+     "job_id": "monai_16c2b66a36a1a5066064260243fc",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_46652d76a9f300f542f9fede3fea"
+     ]
+    },
+    "b_candidate_id": "moncand_8b922a274bb12382d4a0e10e80d5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "FORMNM__2",
+   "a_primary": [
+    {
+     "recommended_role": "form_name_duplicate",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "form_name_duplicate",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "form_name_duplicate",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "form_name_duplicate",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_2043c563515fca91ceb19f8ec5ac",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_ad5ee81981e132dfa914d708222d",
+     "job_id": "monai_16c2b66a36a1a5066064260243fc",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_07d283a75aaac15658fb6be3b281"
+     ]
+    },
+    "b_candidate_id": "moncand_8b922a274bb12382d4a0e10e80d5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "FORMOID",
+   "a_primary": [
+    {
+     "recommended_role": "form_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "form_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "form_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "form_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_2043c563515fca91ceb19f8ec5ac",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_ad5ee81981e132dfa914d708222d",
+     "job_id": "monai_16c2b66a36a1a5066064260243fc",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_7fad1d8a5820054ee95313699fad"
+     ]
+    },
+    "b_candidate_id": "moncand_8b922a274bb12382d4a0e10e80d5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "PAGELMDT",
+   "a_primary": [
+    {
+     "recommended_role": "page_last_modified_datetime",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "page_last_modified_datetime",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "page_last_modified_datetime",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "page_last_modified_datetime",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_2043c563515fca91ceb19f8ec5ac",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_ad5ee81981e132dfa914d708222d",
+     "job_id": "monai_16c2b66a36a1a5066064260243fc",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_f2e76f5b95ee15b60b13d9d46aaa"
+     ]
+    },
+    "b_candidate_id": "moncand_8b922a274bb12382d4a0e10e80d5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "RECREP",
+   "a_primary": [
+    {
+     "recommended_role": "record_repeat_key",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "record_repeat_key",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "record_repeat_key",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "record_repeat_key",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_2043c563515fca91ceb19f8ec5ac",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_ad5ee81981e132dfa914d708222d",
+     "job_id": "monai_16c2b66a36a1a5066064260243fc",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_9b6bc8d90a590f3b22cd48f1568c"
+     ]
+    },
+    "b_candidate_id": "moncand_8b922a274bb12382d4a0e10e80d5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "SITEID",
+   "a_primary": [
+    {
+     "recommended_role": "site_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "site_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "site_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "site_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6de396013bac9fd4a1ce3b2aad35",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_96da98942f25fef76ea0fbef8cb5",
+     "job_id": "monai_4aa9b0041d2aa1a8ffdf4cfe415b",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_f6560aea9fa6ffe384ca1c8e6b74"
+     ]
+    },
+    "b_candidate_id": "moncand_8b922a274bb12382d4a0e10e80d5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "SITENM",
+   "a_primary": [
+    {
+     "recommended_role": "site_name",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "site_name",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "site_name",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "site_name",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6de396013bac9fd4a1ce3b2aad35",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_96da98942f25fef76ea0fbef8cb5",
+     "job_id": "monai_4aa9b0041d2aa1a8ffdf4cfe415b",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_e486e20066b81a0d1326f56d5078"
+     ]
+    },
+    "b_candidate_id": "moncand_8b922a274bb12382d4a0e10e80d5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "STUDYID",
+   "a_primary": [
+    {
+     "recommended_role": "study_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "study_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "study_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "study_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6de396013bac9fd4a1ce3b2aad35",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_96da98942f25fef76ea0fbef8cb5",
+     "job_id": "monai_4aa9b0041d2aa1a8ffdf4cfe415b",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_508fd1f25aa24c4b7d2101a72be1"
+     ]
+    },
+    "b_candidate_id": "moncand_8b922a274bb12382d4a0e10e80d5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "SUBJID",
+   "a_primary": [
+    {
+     "recommended_role": "subject_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "subject_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "subject_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "subject_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6de396013bac9fd4a1ce3b2aad35",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_96da98942f25fef76ea0fbef8cb5",
+     "job_id": "monai_4aa9b0041d2aa1a8ffdf4cfe415b",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_f5fed11a2d33aa76b8ae2220f06c"
+     ]
+    },
+    "b_candidate_id": "moncand_8b922a274bb12382d4a0e10e80d5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "SUBJINI",
+   "a_primary": [
+    {
+     "recommended_role": "subject_initials",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "subject_initials",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "subject_initials",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "subject_initials",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6de396013bac9fd4a1ce3b2aad35",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_96da98942f25fef76ea0fbef8cb5",
+     "job_id": "monai_4aa9b0041d2aa1a8ffdf4cfe415b",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_2c4a2fb6d522f2d1416358ac38b4"
+     ]
+    },
+    "b_candidate_id": "moncand_8b922a274bb12382d4a0e10e80d5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "SUBJSTA",
+   "a_primary": [
+    {
+     "recommended_role": "subject_status",
+     "field_kind": "source_metadata",
+     "confidence": 0.85,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "subject_status",
+     "field_kind": "source_collected",
+     "confidence": 0.82,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "subject_status",
+    "field_kind": "source_collected",
+    "confidence": 0.85,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "subject_status",
+    "field_kind": "source_collected",
+    "confidence": 0.9,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6de396013bac9fd4a1ce3b2aad35",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_96da98942f25fef76ea0fbef8cb5",
+     "job_id": "monai_4aa9b0041d2aa1a8ffdf4cfe415b",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_4d866fbc2226572fca55f9146e64"
+     ]
+    },
+    "b_candidate_id": "moncand_532a7da1893ce18bc75da252a3b2",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "VISIT",
+   "a_primary": [
+    {
+     "recommended_role": "visit_name",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "visit_name",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "visit_name",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "visit_name",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6de396013bac9fd4a1ce3b2aad35",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_96da98942f25fef76ea0fbef8cb5",
+     "job_id": "monai_4aa9b0041d2aa1a8ffdf4cfe415b",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_d36aa0ea774bd501203a12b7062a"
+     ]
+    },
+    "b_candidate_id": "moncand_8b922a274bb12382d4a0e10e80d5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "CM",
+   "source_field": "VISTREP",
+   "a_primary": [
+    {
+     "recommended_role": "visit_repeat_key",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "visit_repeat_key",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "visit_repeat_key",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "visit_repeat_key",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6de396013bac9fd4a1ce3b2aad35",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_96da98942f25fef76ea0fbef8cb5",
+     "job_id": "monai_4aa9b0041d2aa1a8ffdf4cfe415b",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_46c18299c417a651e050ea2b89e6"
+     ]
+    },
+    "b_candidate_id": "moncand_8b922a274bb12382d4a0e10e80d5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "Block顺序号",
+   "a_primary": [
+    {
+     "recommended_role": "record_block_sequence",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "record_block_sequence",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "record_block_sequence",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "record_block_sequence",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6e2c04655f21c731d981fa8d1b8f",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f710a2eb04e5cb3642f1a049ddee",
+     "job_id": "monai_34fe142f5486bae2045d451748f6",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_c07bd42d0c08782e67fb296d2e9b"
+     ]
+    },
+    "b_candidate_id": "moncand_7fdb46617deadc56c09a5db13c72",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "FORMNM",
+   "a_primary": [
+    {
+     "recommended_role": "form_name",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "form_name",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "form_name",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "form_name",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6e2c04655f21c731d981fa8d1b8f",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f710a2eb04e5cb3642f1a049ddee",
+     "job_id": "monai_34fe142f5486bae2045d451748f6",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_325d005ae852ec26df7b4cd44866"
+     ]
+    },
+    "b_candidate_id": "moncand_7fdb46617deadc56c09a5db13c72",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "FORMNM__2",
+   "a_primary": [
+    {
+     "recommended_role": "form_name_duplicate",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "form_name_duplicate",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "form_name_duplicate",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "form_name_duplicate",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6e2c04655f21c731d981fa8d1b8f",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f710a2eb04e5cb3642f1a049ddee",
+     "job_id": "monai_34fe142f5486bae2045d451748f6",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_36adb20280f5e068a5b03ccbcd95"
+     ]
+    },
+    "b_candidate_id": "moncand_7fdb46617deadc56c09a5db13c72",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "FORMOID",
+   "a_primary": [
+    {
+     "recommended_role": "form_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "form_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "form_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "form_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6e2c04655f21c731d981fa8d1b8f",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f710a2eb04e5cb3642f1a049ddee",
+     "job_id": "monai_34fe142f5486bae2045d451748f6",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_440f07bba7ad51160bda4d256361"
+     ]
+    },
+    "b_candidate_id": "moncand_7fdb46617deadc56c09a5db13c72",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "MHCO",
+   "a_primary": [
+    {
+     "recommended_role": "medical_history_comment",
+     "field_kind": "source_collected",
+     "confidence": 0.85,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "medical_history_comment",
+     "field_kind": "source_collected",
+     "confidence": 0.85,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "medical_history_comment",
+    "field_kind": "source_collected",
+    "confidence": 0.9,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "medical_history_comment",
+    "field_kind": "source_collected",
+    "confidence": 0.9,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6e2c04655f21c731d981fa8d1b8f",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_5a64810e06b42b5c61f532ac1856",
+     "job_id": "monai_9c749b814d3841f558317c6ee155",
+     "prompt_version": "monitoring-listing-field-mapping-adjudication-v16-tools-v7.1",
+     "evidence_ids": [
+      "profile_26a94473fc6a0019cad2fa041bdf"
+     ]
+    },
+    "b_candidate_id": "moncand_7739787b742f4bdc65e6271b7d0b",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "MHENDAT",
+   "a_primary": [
+    {
+     "recommended_role": "medical_history_end_date",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "medical_history_end_date",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "medical_history_end_date",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "medical_history_end_date",
+    "field_kind": "source_collected",
+    "confidence": 0.9,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6e2c04655f21c731d981fa8d1b8f",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f710a2eb04e5cb3642f1a049ddee",
+     "job_id": "monai_34fe142f5486bae2045d451748f6",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_e9d688174febd9427652dba4dea3"
+     ]
+    },
+    "b_candidate_id": "moncand_28f44362bfabe5b20e9af25e52ba",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "MHONGO",
+   "a_primary": [
+    {
+     "recommended_role": "medical_history_ongoing_flag",
+     "field_kind": "source_collected",
+     "confidence": 0.95,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "medical_history_ongoing_indicator",
+     "field_kind": "source_collected",
+     "confidence": 0.93,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "mh_ongoing_flag",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "medical_history_ongoing_status",
+    "field_kind": "source_collected",
+    "confidence": 0.9,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6e2c04655f21c731d981fa8d1b8f",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f710a2eb04e5cb3642f1a049ddee",
+     "job_id": "monai_34fe142f5486bae2045d451748f6",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_968e66d52305e3ca06dcf827aa30"
+     ]
+    },
+    "b_candidate_id": "moncand_05e311ba52387cf25b2ce8c3e19b",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "MHSTDAT",
+   "a_primary": [
+    {
+     "recommended_role": "medical_history_start_date",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "medical_history_start_date",
+     "field_kind": "source_collected",
+     "confidence": 0.9,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "medical_history_start_date",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "medical_history_start_date",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6e2c04655f21c731d981fa8d1b8f",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f710a2eb04e5cb3642f1a049ddee",
+     "job_id": "monai_34fe142f5486bae2045d451748f6",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_e2e25c59e5e19fe0273207f8e2f1"
+     ]
+    },
+    "b_candidate_id": "moncand_0be4b1ab8d6783757570d894a974",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "MHTERM",
+   "a_primary": [
+    {
+     "recommended_role": "medical_history_term",
+     "field_kind": "source_collected",
+     "confidence": 0.95,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "medical_history_reported_term",
+     "field_kind": "source_collected",
+     "confidence": 0.93,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "medical_history_term",
+    "field_kind": "source_collected",
+    "confidence": 0.92,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "medical_history_term",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6e2c04655f21c731d981fa8d1b8f",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f710a2eb04e5cb3642f1a049ddee",
+     "job_id": "monai_34fe142f5486bae2045d451748f6",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_33a074c200e287d83b71da4e1803"
+     ]
+    },
+    "b_candidate_id": "moncand_e299c07c31e91f3e547a3f3bbcb5",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "MHYN",
+   "a_primary": [
+    {
+     "recommended_role": "medical_history_presence_flag",
+     "field_kind": "source_collected",
+     "confidence": 0.95,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "medical_history_presence_indicator",
+     "field_kind": "source_collected",
+     "confidence": 0.95,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "medical_history_present_flag",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "medical_history_presence",
+    "field_kind": "source_collected",
+    "confidence": 0.95,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "diverge",
+    "b_verifier_vs_a_verifier": "diverge",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6e2c04655f21c731d981fa8d1b8f",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f710a2eb04e5cb3642f1a049ddee",
+     "job_id": "monai_34fe142f5486bae2045d451748f6",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_f86e75367f957138f4c7d20629e4"
+     ]
+    },
+    "b_candidate_id": "moncand_1422b4fa889cbb1ffcda5263e332",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "PAGELMDT",
+   "a_primary": [
+    {
+     "recommended_role": "page_last_modified_datetime",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "page_last_modified_datetime",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "page_last_modified_datetime",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "page_last_modified_datetime",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6e2c04655f21c731d981fa8d1b8f",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f710a2eb04e5cb3642f1a049ddee",
+     "job_id": "monai_34fe142f5486bae2045d451748f6",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_ea5a8e555d51542ff00da3ac1408"
+     ]
+    },
+    "b_candidate_id": "moncand_7fdb46617deadc56c09a5db13c72",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "RECREP",
+   "a_primary": [
+    {
+     "recommended_role": "record_repeat_key",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "record_repeat_key",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "record_repeat_key",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "record_repeat_key",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_6e2c04655f21c731d981fa8d1b8f",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_f710a2eb04e5cb3642f1a049ddee",
+     "job_id": "monai_34fe142f5486bae2045d451748f6",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_083d27016f5852e2fb98102683ed"
+     ]
+    },
+    "b_candidate_id": "moncand_7fdb46617deadc56c09a5db13c72",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "SITEID",
+   "a_primary": [
+    {
+     "recommended_role": "site_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "site_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "site_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "site_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_baed223eb3808dea8189491e80f0",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_033983302a4532ec59f203bfce3c",
+     "job_id": "monai_15454104fb91244255dd4be9d772",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_cabb59784ca306383e1e25b9b4e8"
+     ]
+    },
+    "b_candidate_id": "moncand_7fdb46617deadc56c09a5db13c72",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "SITENM",
+   "a_primary": [
+    {
+     "recommended_role": "site_name",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "site_name",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "site_name",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "site_name",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_baed223eb3808dea8189491e80f0",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_033983302a4532ec59f203bfce3c",
+     "job_id": "monai_15454104fb91244255dd4be9d772",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_89371ec3814ac0171ccca3fd3166"
+     ]
+    },
+    "b_candidate_id": "moncand_7fdb46617deadc56c09a5db13c72",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "STUDYID",
+   "a_primary": [
+    {
+     "recommended_role": "study_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "study_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "study_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "study_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_baed223eb3808dea8189491e80f0",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_033983302a4532ec59f203bfce3c",
+     "job_id": "monai_15454104fb91244255dd4be9d772",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_8184cbc210cb21b1048c57da5eca"
+     ]
+    },
+    "b_candidate_id": "moncand_7fdb46617deadc56c09a5db13c72",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "SUBJID",
+   "a_primary": [
+    {
+     "recommended_role": "subject_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "subject_identifier",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "subject_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "subject_identifier",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_baed223eb3808dea8189491e80f0",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_033983302a4532ec59f203bfce3c",
+     "job_id": "monai_15454104fb91244255dd4be9d772",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_5b6cdce9635fa1857ebddc12a631"
+     ]
+    },
+    "b_candidate_id": "moncand_7fdb46617deadc56c09a5db13c72",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "SUBJINI",
+   "a_primary": [
+    {
+     "recommended_role": "subject_initials",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "subject_initials",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "subject_initials",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "subject_initials",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_baed223eb3808dea8189491e80f0",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_033983302a4532ec59f203bfce3c",
+     "job_id": "monai_15454104fb91244255dd4be9d772",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_5d1ce293d9d20d4749e5b0c48027"
+     ]
+    },
+    "b_candidate_id": "moncand_7fdb46617deadc56c09a5db13c72",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "SUBJSTA",
+   "a_primary": [
+    {
+     "recommended_role": "subject_status",
+     "field_kind": "source_collected",
+     "confidence": 0.8,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "subject_status",
+     "field_kind": "source_collected",
+     "confidence": 0.88,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "subject_status",
+    "field_kind": "source_collected",
+    "confidence": 0.9,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "subject_status",
+    "field_kind": "source_collected",
+    "confidence": 0.86,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_baed223eb3808dea8189491e80f0",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_033983302a4532ec59f203bfce3c",
+     "job_id": "monai_15454104fb91244255dd4be9d772",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_4a0d5fd453d779dc4030921e5842"
+     ]
+    },
+    "b_candidate_id": "moncand_994b459092b398c104100eafaee2",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "VISIT",
+   "a_primary": [
+    {
+     "recommended_role": "visit_name",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "visit_name",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "visit_name",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "visit_name",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_baed223eb3808dea8189491e80f0",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_033983302a4532ec59f203bfce3c",
+     "job_id": "monai_15454104fb91244255dd4be9d772",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_fe4e5125d4c3fb7f15bf177ae174"
+     ]
+    },
+    "b_candidate_id": "moncand_7fdb46617deadc56c09a5db13c72",
+    "b_candidate_missing_reason": null
+   }
+  },
+  {
+   "domain": "MH",
+   "source_field": "VISTREP",
+   "a_primary": [
+    {
+     "recommended_role": "visit_repeat_key",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "a_verifier": [
+    {
+     "recommended_role": "visit_repeat_key",
+     "field_kind": "source_metadata",
+     "confidence": 1.0,
+     "user_decision_required": false
+    }
+   ],
+   "b_primary": {
+    "recommended_role": "visit_repeat_key",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "b_verifier": {
+    "recommended_role": "visit_repeat_key",
+    "field_kind": "source_metadata",
+    "confidence": 1.0,
+    "user_decision_required": false
+   },
+   "comparison": {
+    "b_primary_vs_a_primary": "agree",
+    "b_verifier_vs_a_verifier": "agree",
+    "note": "分歧分析非错误判定；A=09-26重跑代际、B=本轮冷启动"
+   },
+   "linkage": {
+    "a_candidate_id": "moncand_baed223eb3808dea8189491e80f0",
+    "a_confirmed_v275_field_source": {
+     "candidate_id": "moncand_033983302a4532ec59f203bfce3c",
+     "job_id": "monai_15454104fb91244255dd4be9d772",
+     "prompt_version": "monitoring-listing-field-mapping-v19",
+     "evidence_ids": [
+      "profile_ed23525538e45ec0fc8c7c1763fc"
+     ]
+    },
+    "b_candidate_id": "moncand_7fdb46617deadc56c09a5db13c72",
+    "b_candidate_missing_reason": null
+   }
+  }
+ ],
+ "gates": {
+  "G1": {
+   "attempt_id": "stg-e9d5050c73ef44be818e1f44920fdb5f",
+   "project_id": "proj_mgk10_sar_real",
+   "a_revision_sha256": "2d2e35625a0918cb62e2912c3db2a787ada2370192cb4f5dfc7a8873061c0702",
+   "b_model_revision_sha256": [
+    "f0593847643d8c029e63acf79b3b8feae8524f901bbd6c3b1ad1db3c0e9aa351"
+   ],
+   "shared_profile_sha256": "ab23d774811dfc17fea20767e580c178b37985d55f2a73a0beac47c72828e52d",
+   "a_candidate_linkage_count": 104,
+   "b_candidate_linkage_count": 104,
+   "b_deterministic_linkage": [
+    {
+     "business_key": "listing-field-mapping:stg-e9d5050c73ef44be818e1f44920fdb5f:deterministic:CM",
+     "prompt_version": "monitoring-listing-field-mapping-v20-tools-v1",
+     "status": "stale_input",
+     "input_revision_sha256": "5df95f07ef44325cd4ac3164250d4638d7b206207b4f9b89eaebff178c2f8aed"
+    },
+    {
+     "business_key": "listing-field-mapping:stg-e9d5050c73ef44be818e1f44920fdb5f:deterministic:MH",
+     "prompt_version": "monitoring-listing-field-mapping-v20-tools-v1",
+     "status": "stale_input",
+     "input_revision_sha256": "bfcf6e0b42b2c8003b2c300613622f5b62ac85636a4a1f7ff1dde221470e6a15"
+    },
+    {
+     "business_key": "listing-field-mapping-verifier:stg-e9d5050c73ef44be818e1f44920fdb5f:deterministic:CM",
+     "prompt_version": "monitoring-listing-field-mapping-verifier-v2-tools-v1",
+     "status": "stale_input",
+     "input_revision_sha256": "5df95f07ef44325cd4ac3164250d4638d7b206207b4f9b89eaebff178c2f8aed"
+    },
+    {
+     "business_key": "listing-field-mapping-verifier:stg-e9d5050c73ef44be818e1f44920fdb5f:deterministic:MH",
+     "prompt_version": "monitoring-listing-field-mapping-verifier-v2-tools-v1",
+     "status": "stale_input",
+     "input_revision_sha256": "bfcf6e0b42b2c8003b2c300613622f5b62ac85636a4a1f7ff1dde221470e6a15"
+    },
+    {
+     "business_key": "listing-field-mapping:stg-e9d5050c73ef44be818e1f44920fdb5f:deterministic:CM",
+     "prompt_version": "monitoring-listing-field-mapping-v20-tools-v1",
+     "status": "completed",
+     "input_revision_sha256": "ca8b125a311103c43ad202955d947d20144b6395c8ba7642de05b53eaaf6de06"
+    },
+    {
+     "business_key": "listing-field-mapping:stg-e9d5050c73ef44be818e1f44920fdb5f:deterministic:MH",
+     "prompt_version": "monitoring-listing-field-mapping-v20-tools-v1",
+     "status": "completed",
+     "input_revision_sha256": "2b8e0f09a518f73aaf9ff4c9df2d1c3eca397c0795d927c993378bc1378bf1b9"
+    },
+    {
+     "business_key": "listing-field-mapping-verifier:stg-e9d5050c73ef44be818e1f44920fdb5f:deterministic:CM",
+     "prompt_version": "monitoring-listing-field-mapping-verifier-v2-tools-v1",
+     "status": "completed",
+     "input_revision_sha256": "ca8b125a311103c43ad202955d947d20144b6395c8ba7642de05b53eaaf6de06"
+    },
+    {
+     "business_key": "listing-field-mapping-verifier:stg-e9d5050c73ef44be818e1f44920fdb5f:deterministic:MH",
+     "prompt_version": "monitoring-listing-field-mapping-verifier-v2-tools-v1",
+     "status": "completed",
+     "input_revision_sha256": "2b8e0f09a518f73aaf9ff4c9df2d1c3eca397c0795d927c993378bc1378bf1b9"
+    }
+   ],
+   "deterministic_revision_matches_units": false,
+   "partial_note": "确定性作业revision与单元不一致（合同性，身份已全回链）",
+   "deterministic_exception": "确定性作业同cohort同prompt版本，但revision与单元不同（bind_frozen_document_sources对非chunk画像重算profile_sha256，C1③已记录的条件性边界）；身份仍可回链作业与画像字段清单。",
+   "status": "partial"
+  },
+  "G2": {
+   "a_attempt_jobs": 10,
+   "a_evidence_reads": 0,
+   "a_classification": "single_call（登记无工具，0回执）",
+   "b_model_jobs": 52,
+   "b_model_tool_loop_executed": 10,
+   "b_model_tool_loop_idle": 42,
+   "b_model_evidence_read_rows": 21,
+   "b_deterministic_tool_loop_idle": 8,
+   "classify_basis": "evidence_tool_contract.classify_tool_usage：按实际回执数事后分类，不按版本名声称",
+   "status": "pass"
+  },
+  "G3": {
+   "a_primary_cm": 32,
+   "a_primary_mh": 20,
+   "a_verifier_cm": 32,
+   "a_verifier_mh": 20,
+   "a_metadata_asymmetry": {
+    "primary_cm_metadata": 14,
+    "verifier_cm_metadata": 13,
+    "SUBJSTA": "主侧=source_metadata(0.85)，盲核侧=source_collected(0.82)"
+   },
+   "a_deterministic_candidates": "A侧元数据结论由系统确定性规则在解析层并入候选（conf=1.0），双侧候选均含元数据字段",
+   "b_covered_per_cohort": {
+    "primary": 52,
+    "verifier": 52
+   },
+   "b_expected_per_cohort": 52,
+   "b_missing_fields": [],
+   "b_missing_count": 0,
+   "b_missing_reason": "无缺失",
+   "status": "pass"
+  },
+  "G4": {
+   "b_verifier_units": 26,
+   "b_verifier_prefix": "listing-field-mapping-verifier:stg-e9d5050c73ef44be818e1f44920fdb5f:",
+   "b_verifier_prompt": "monitoring-listing-field-mapping-verifier-v2-tools-v1",
+   "b_verifier_own_evidence_reads": 19,
+   "b_isolation_identifiers": {
+    "business_key_prefix": "listing-field-mapping-verifier:*",
+    "profile_id": "medical_monitoring_verifier_ai__ollama_cloud_dsv",
+    "worker": "独立verifier队列（main.py单独worker，identity_bound）"
+   },
+   "a_verifier_jobs": 5,
+   "a_verifier_prefix": "listing-field-mapping-verifier:stg-e9d5050c73ef44be818e1f44920fdb5f:",
+   "a_verifier_own_evidence_reads": 0,
+   "status": "pass"
+  },
+  "G5": {
+   "a_per_field_counts": "52字段双侧均恰1条结论（0缺失、0多值）",
+   "a_unknown_entries": [],
+   "a_dual_divergent_fields": 19,
+   "b_per_field_counts": "52字段双侧恰1条；0字段0条（显式列出，不凑数）",
+   "b_unknown_entries": [],
+   "b_dual_divergent_fields": 15,
+   "status": "pass"
+  },
+  "G6": {
+   "b_failed_model_jobs": 0,
+   "b_stale_deterministic_jobs_retired_first_generation": 4,
+   "b_stale_deterministic_jobs_fixed_generation": 0,
+   "b_note": "第一代确定性作业（实现修复前构造，载荷无full_input_sha256）按设计退役保留计数；修复代际4作业全部completed（G6恢复路径：仓库retry_terminal恢复，候选还原proposed）",
+   "b_retries": [
+    {
+     "business_key": "listing-field-mapping-verifier:stg-e9d5050c73ef44be818e1f44920fdb5f:u14:stg-e9d5050c73ef44be818e1f44920fdb5f:CM:0001-of-0001",
+     "attempt_count": 2
+    }
+   ],
+   "b_superseded_candidates": 0,
+   "a_failed_jobs": 0,
+   "a_retries": 14,
+   "success_without_duplicate_reasoning": "B每字段仅一条结论（56候选覆盖52字段×双侧，单元字段集两两不相交）；A同构（104条覆盖52字段×双侧）",
+   "status": "pass"
+  },
+  "G7": {
+   "d2_same_session_capture": {
+    "captured_at": "2026-09-27T09:53:04.314631+00:00",
+    "http_ok": true,
+    "primary_field_count": 52,
+    "verifier_field_count": 52,
+    "projected_field_count_total": 104
+   },
+   "fresh_reverification_same_service_session": {
+    "server_reachable": true,
+    "captured_at": "2026-09-27T09:53:24.297329+00:00",
+    "projections": {
+     "primary": {
+      "http_status": 200,
+      "summary": {
+       "displayed_count": 0,
+       "pending_confirmation_count": 52,
+       "user_question_count": 0,
+       "job_count": 30,
+       "system_adopted_count": 52,
+       "critical_count": 0,
+       "field_count": 52,
+       "candidate_count": 52,
+       "completed_job_count": 28
+      },
+      "captured_at": "2026-09-27T09:53:14.650398+00:00"
+     },
+     "verifier": {
+      "http_status": 200,
+      "summary": {
+       "displayed_count": 0,
+       "pending_confirmation_count": 52,
+       "user_question_count": 0,
+       "job_count": 30,
+       "system_adopted_count": 52,
+       "critical_count": 0,
+       "field_count": 52,
+       "candidate_count": 52,
+       "completed_job_count": 28
+      },
+      "captured_at": "2026-09-27T09:53:24.297315+00:00"
+     }
+    }
+   },
+   "browser_walkthrough": "未做（工作令不含浏览器走查，如实标注）",
+   "restart_invalidation_note": "任意后续重启会把live库B全部作业（含completed）翻STALE_INPUT、候选翻SUPERSEDED（N5后无v19存活例外）；live库B证据链随即全报废，以本导出为准。",
+   "status": "pass"
+  },
+  "G8": {
+   "compared_fields_total": 104,
+   "b_vs_a_divergent_total": 40,
+   "b_vs_a_primary": {
+    "compared_fields": 52,
+    "agree": 32,
+    "diverge": 20,
+    "divergent_details": [
+     {
+      "domain": "CM",
+      "source_field": "CMAENO",
+      "a": [
+       "cm_adverse_event_reference",
+       "source_collected"
+      ],
+      "b": [
+       "cm_indication_ae_reference",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMCO",
+      "a": [
+       "cm_comment",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_comment",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMDOSE",
+      "a": [
+       "cm_dose_per_administration",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_dose",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMDOSFRO",
+      "a": [
+       "cm_dosing_frequency_other_specify",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_other_frequency_specify_text",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMDOSFRQ",
+      "a": [
+       "cm_dosing_frequency",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_dosing_frequency",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMDOSU",
+      "a": [
+       "cm_dose_unit",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_dose_unit",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMDOSUO",
+      "a": [
+       "cm_dose_unit_other_specify",
+       "source_collected"
+      ],
+      "b": [
+       "cm_other_dose_unit_specify_text",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMENDAT",
+      "a": [
+       "cm_end_date",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_end_date",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMINDC",
+      "a": [
+       "cm_indication_reason",
+       "source_collected"
+      ],
+      "b": [
+       "cm_indication",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMMHNO",
+      "a": [
+       "cm_medical_history_reference",
+       "source_collected"
+      ],
+      "b": [
+       "cm_indication_medical_history_reference",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMONGO",
+      "a": [
+       "cm_ongoing_flag",
+       "source_collected"
+      ],
+      "b": [
+       "ongoing_flag",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMPDCO",
+      "a": [
+       "medication_reason_prophylaxis_or_other_specify",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_reason_specify",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMROUTE",
+      "a": [
+       "medication_route",
+       "source_collected"
+      ],
+      "b": [
+       "cm_route_of_administration",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMROUTEO",
+      "a": [
+       "medication_route_other_specify",
+       "source_collected"
+      ],
+      "b": [
+       "cm_route_other_specify",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMSHNO",
+      "a": [
+       "medication_reason_surgical_history_reference",
+       "source_collected"
+      ],
+      "b": [
+       "surgical_history_item",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMSTDAT",
+      "a": [
+       "medication_start_date",
+       "source_collected"
+      ],
+      "b": [
+       "cm_start_date",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMYN",
+      "a": [
+       "prior_concomitant_medication_presence_flag",
+       "source_collected"
+      ],
+      "b": [
+       "prior_concomitant_medication_flag",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "SUBJSTA",
+      "a": [
+       "subject_status",
+       "source_metadata"
+      ],
+      "b": [
+       "subject_status",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "MH",
+      "source_field": "MHONGO",
+      "a": [
+       "medical_history_ongoing_flag",
+       "source_collected"
+      ],
+      "b": [
+       "mh_ongoing_flag",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "MH",
+      "source_field": "MHYN",
+      "a": [
+       "medical_history_presence_flag",
+       "source_collected"
+      ],
+      "b": [
+       "medical_history_present_flag",
+       "source_collected"
+      ]
+     }
+    ]
+   },
+   "b_vs_a_verifier": {
+    "compared_fields": 52,
+    "agree": 32,
+    "diverge": 20,
+    "divergent_details": [
+     {
+      "domain": "CM",
+      "source_field": "CMAENO",
+      "a": [
+       "ae_record_reference",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_ae_reference",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMCO",
+      "a": [
+       "free_text_comment",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_comment",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMDOSE",
+      "a": [
+       "dose_per_administration",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_dose",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMDOSFRO",
+      "a": [
+       "dosing_frequency_other_specify",
+       "source_collected"
+      ],
+      "b": [
+       "cm_dosing_frequency_other_text",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMDOSFRQ",
+      "a": [
+       "dosing_frequency",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_dosing_frequency",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMDOSU",
+      "a": [
+       "dose_unit",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_dose_unit",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMDOSUO",
+      "a": [
+       "dose_unit_other_specify",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_dose_unit_other_specify",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMENDAT",
+      "a": [
+       "medication_end_date",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_end_date",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMINDC",
+      "a": [
+       "indication",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_indication",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMMHNO",
+      "a": [
+       "medical_history_record_reference",
+       "source_collected"
+      ],
+      "b": [
+       "medical_history_reference",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMONGO",
+      "a": [
+       "medication_ongoing_indicator",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication.ongoing",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMPDCO",
+      "a": [
+       "medication_indication_other_specify",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_indication_specify",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMROUTE",
+      "a": [
+       "medication_route_of_administration",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_route",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMROUTEO",
+      "a": [
+       "medication_route_other_specify",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_route_other_specification",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMSTDAT",
+      "a": [
+       "medication_start_date",
+       "source_collected"
+      ],
+      "b": [
+       "concomitant_medication_start_date",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMTRT",
+      "a": [
+       "concomitant_medication_name",
+       "source_collected"
+      ],
+      "b": [
+       "prior_and_concomitant_medication_name",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "CM",
+      "source_field": "CMYN",
+      "a": [
+       "prior_concomitant_medication_presence_flag",
+       "source_collected"
+      ],
+      "b": [
+       "prior_and_concomitant_medication_flag",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "MH",
+      "source_field": "MHONGO",
+      "a": [
+       "medical_history_ongoing_indicator",
+       "source_collected"
+      ],
+      "b": [
+       "medical_history_ongoing_status",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "MH",
+      "source_field": "MHTERM",
+      "a": [
+       "medical_history_reported_term",
+       "source_collected"
+      ],
+      "b": [
+       "medical_history_term",
+       "source_collected"
+      ]
+     },
+     {
+      "domain": "MH",
+      "source_field": "MHYN",
+      "a": [
+       "medical_history_presence_indicator",
+       "source_collected"
+      ],
+      "b": [
+       "medical_history_presence",
+       "source_collected"
+      ]
+     }
+    ]
+   },
+   "divergence_disclaimer": "分歧分析非错误判定：两侧输入代际不同（见G1）",
+   "timing": {
+    "a_warm_start": {
+     "note": "热启动：复用文档权威ready与既有入库（重跑代际）",
+     "submitted_at": "2026-09-26T10:49:04.450490+00:00",
+     "submission_span_s": 49.4,
+     "first_result_at": "2026-09-26T10:50:53.919512+00:00",
+     "full_result_at": "2026-09-26T16:26:23.090363+00:00",
+     "wall_clock_h": 5.62
+    },
+    "b_cold_start": {
+     "note": "冷启动：本轮全新提交+逐单元取证循环",
+     "submitted_at": "2026-09-27T05:08:35.258586+00:00",
+     "submission_span_s": 1.5,
+     "first_result_at": "2026-09-27T05:11:50.680468+00:00",
+     "full_result_at": "2026-09-27T05:55:31.036515+00:00",
+     "wall_clock_h": 0.78
+    }
+   },
+   "model_usage": {
+    "a": {
+     "call_ledger_rows": 314,
+     "known_usage_rows": 0,
+     "prompt_tokens": null,
+     "completion_tokens": null,
+     "note": "usage_unknown行不计入求和、不推算总量"
+    },
+    "b": {
+     "call_ledger_rows": 67,
+     "known_usage_rows": 66,
+     "usage_unknown_rows": 1,
+     "prompt_tokens": 2011217,
+     "completion_tokens": 317916,
+     "read_seconds_total": 4333.3,
+     "note": "usage缺失不填0不写省X%；1行usage_unknown未计入求和"
+    }
+   },
+   "failure_overhead": {
+    "b": "第一代确定性作业4个已退役（实现修复前构造，系统作业无模型开销）；修复代际4个全部completed；模型作业0失败",
+    "a": "0个失败作业（attempt内）"
+   },
+   "human_intervention_pending": {
+    "a_user_decision_required_fields": 0,
+    "b_user_decision_required_fields": 0
+   },
+   "partial_note": "A与B为不同提示词代际（v19 vs v20）的对照分歧，非错误判定",
+   "status": "pass"
+  }
+ },
+ "recommendation": {
+  "enable_b_in_verified_scope": true,
+  "reason": "G1-G8无fail门：B在已验证范围（CM+MH共52字段、双盲独立、诚实台账、同服务会话投影可定位）满足启用条件。保留决策上下文：G1 partial（确定性作业revision与单元不一致（合同性，身份已全回链））。B-vs-A分歧字段逐条见per_field_comparison（分歧分析非错误判定），最终采纳由医学经理人工复核。本报告不切换任何生产路由。",
+  "prerequisites_to_revisit": [
+   "确定性作业revision与单元作业不一致（工具合同对非chunk画像重算profile_sha256所致）——如需修订级全cohort统一，需登记新的确定性画像合同版本",
+   "工具版本身份的修订摘要与v19逐字不同（绑定冻结文档源所致），画像级已逐字一致",
+   "重启后live库B证据链失效，以D2导出为准"
+  ]
+ },
+ "self_check": {
+  "gate_count": 8,
+  "per_field_items": 52,
+  "problems": [],
+  "status": "pass"
+ }
+}

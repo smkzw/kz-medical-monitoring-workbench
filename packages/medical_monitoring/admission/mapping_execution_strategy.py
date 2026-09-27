@@ -328,11 +328,12 @@ def _deterministic_profile(
     profile = _restricted_profile_copy(field_profile)
     profile["fields"] = [deepcopy(field) for field in metadata_fields]
     profile["domain"] = domain
-    # N2：单发不经 chunks，无 full_* 自动补键。identity(required=True)
-    # 读取该键把本作业收进cohort投影；缺键会让整个前缀的候选投影抛
-    # mapping_bridge_failed。取完整profile的profile_sha256，与单元作业
-    # 的片内 full_profile_sha256 同源。
+    # N2：单发不经chunks，无full_*自动补键。current_admission_mapping_revision
+    # 的身份核验要求画像同时携带full_profile_sha256与full_input_sha256且等于
+    # 当前冻结输入（缺full_input_sha256会让确定性作业入队即被判stale——D2实测）。
+    # 两键均取完整profile，与单元作业的片内取值同源。
     profile["full_profile_sha256"] = str(field_profile["profile_sha256"])
+    profile["full_input_sha256"] = str(field_profile["input_sha256"])
     return profile
 
 

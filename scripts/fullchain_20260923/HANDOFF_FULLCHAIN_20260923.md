@@ -955,3 +955,37 @@ B路线（语义工作单元，策略开关on，CM+MH域）已实跑：56个作�
   ③ test_frontend_empty_project_contract 3例（App.jsx医学监查路由集成为本链已交付改动，过期方是测试本身——授权按工作令E更新该测试并保留失效原因注释）；
 - D系列门以构建员实测验证的命令与清单为准；工作流测试门已重构为**逐文件自诊断门**（14目标各自独立运行+自动重试一次+失败全量输出），其他lane三红从门清单移除、单独记录为各lane待修项；
 - 另：构建员 created tests/test_monitoring_ai_contracts.py（10个真实DTO契约测试，727 passed）补上了编排门曾引用但不存在的文件。
+
+## C切片+D对照台账（20260927，D系列构建员）
+
+### C切片设计（已提交基线+工作树收尾）
+
+- **C1 语义工作单元执行策略**（packages/medical_monitoring/admission/mapping_execution_strategy.py，唯一接缝=mapping_pipeline._submit_harness）：
+  - 开关 `WORKBENCH_AI_MAPPING_EXECUTION_STRATEGY`（空/未知=off，`semantic_evidence`=on；经runtime_resolver().env，与chunk_size同模式）+ `WORKBENCH_AI_MAPPING_STRATEGY_DOMAINS` 域白名单（缺省全域）；**默认off，off路径逐字段回归通过**。
+  - 语义单元：每域先 `partition_metadata_fields` 分离元数据，业务字段按冻结 `relationships` 连通分量分组、≤12字段/单元（本冻结批次同表关系为空⇒退化为单字段单元：CM 19+MH 7=26单元/cohort）；每单元经同一 `submit_listing_field_mapping_chunks`（1..12合同，每单元恰一片0001-of-0001），键形 `listing-field-mapping:{batch}:uNN:{batch}:{domain}:0001-of-0001`。
+  - 工具版本身份（N5）：单元与确定性作业同cohort B版prompt（主 v20-tools-v1 / 盲核 verifier-v2-tools-v1，均登记evidence_tool功能集）；确定性作业每cohort每域恰1个workbench-system作业（N2补 full_profile_sha256；工作树收尾再补 full_input_sha256，见复核发现）。
+- **C2 保证面**：tests/medical_monitoring/test_mm_mapping_execution_strategy.py 8例（off逐字段回归、proposed只存proposed、classify_tool_usage诚实、重启翻STALE_INPUT钉为特性、N2+N5投影连贯）+ tests/test_monitoring_ai_contracts.py 10例DTO契约；门清单cwd兼容（tests/conftest.py + 存根目录符号链接 + 顶层转发器）后14条前缀路径785 passed×2种cwd。
+
+### 对照G1-G8数据（D3导出：d_comparison_cm_mh.json/.md，20260927T09:06Z）
+
+| 门 | 状态 | 关键数 |
+|---|---|---|
+| G1 来源与身份 | partial | 冻结画像双侧逐字一致（profile_sha256=ab23d774…）；A修订2d2e3562… vs B模型修订f0593847…（工具合同绑文档源所致，系统性）；B确定性4作业同版本回链但revision与单元不一致（例外） |
+| G2 工具可达 | pass | A 10作业0回执=single_call；B模型52作业=executed 10+idle 42（回执21条）；B确定性=tool_loop_idle；按实际回执事后分类 |
+| G3 完整覆盖 | **fail** | A每侧CM32/MH20全显式（主CM元数据14含SUBJSTA vs 盲核13）；B每cohort仅26/52——4个确定性作业stale，26个元数据字段结论缺席 |
+| G4 独立复核 | pass | B盲核26单元自有取证回执19条；隔离=verifier前缀/ollama-cloud profile/独立worker |
+| G5 诚实结果 | partial | A双盲分歧19/52、B双盲分歧15/26；缺失字段显式列出（不凑数）；未知条目0 |
+| G6 恢复 | **fail** | B模型失败0、确定性stale 4（恢复受阻）、重试作业1、superseded候选0；A attempt内失败0、重试14；成功无重复推理双侧成立 |
+| G7 可用交付 | **fail** | 同服务会话list_for_review投影field_count 26/26（应52，确定性缺席）；服务PID 3187连续双时间戳核验；浏览器走查未做（工作令不含） |
+| G8 质量与效率 | partial | B-vs-A主侧26字段一致6/分歧20、盲核侧一致6/分歧20（分歧≠错误，输入代际不同）；A热启动5.62h vs B冷启动0.78h（分开报告）；B模型用量66行已知usage：prompt 2,011,217/completion 317,916 tokens（1行usage_unknown不计入不推算）；失败开销：B=4确定性stale（系统作业无模型开销）、模型0失败；人工介入待决A 0/B 0字段 |
+
+### 复核发现
+
+1. **确定性作业stale根因[已定位·工作树已修]**：元数据-only画像非complete_profile_chunk，bind_frozen_document_sources重算其profile_sha256⇒确定性作业revision与单元/当前核验不一致⇒入队即stale（D2实测4/4 stale）；且原实现缺 full_input_sha256，current_admission_mapping_revision 期望双键。工作树修复：_deterministic_profile 补 `full_input_sha256=完整画像input_sha256`（与full_profile_sha256同源）。**修复后需全新有界B重跑重新导出**——本次导出仍为修复前终态，作为失败证据保留。
+2. **sha钉子口径[需编排裁定]**：工具版本身份必然把冻结文档源bind进修订摘要，v19/verifier-v8不绑定⇒『B全部作业修订摘要与A逐字一致』在文档证据在场时不可满足；冻结**画像**级已逐字一致（可比性成立）。建议口径改为画像级一致+修订差异说明。
+3. **语义单元退化说明**：本冻结批次relationships为空（A/B同源），单元=单字段，B规模26单元/cohort为上界情形而非设计目标形态。
+4. **先前台账更正**：上文“D对照初步数据”记“56个作业全部完成”不确——实测52模型作业completed+4确定性作业stale_input；其“B路线内部12字段4同8异”样本口径与D3全量口径（26共享字段15分歧）并存，以D3导出为准。
+
+### 启用建议（D对照数据决定是否启用B路线；只建议不切换生产路由）
+
+**不建议在已验证范围启用B路线**。理由：G3/G6/G7三处失败同源（确定性作业stale⇒元数据结论缺席），属可修复缺陷而非策略方向问题；修复（发现1）落地并全新有界B重跑、G3/G7复测通过后，再按D3口径复核G8分歧面。启用前置：①落地确定性绑定修复；②裁定sha钉子口径（见发现2）；③全新重跑+重新导出（重启后live库B证据链失效，以当次导出为准）。
