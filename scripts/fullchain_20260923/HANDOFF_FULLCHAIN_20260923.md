@@ -1080,3 +1080,82 @@ v19 A路线302作业成果保留审计，不删除。
 3. **批内合并**：12字段/批→同表整域/批，调用数降一个量级。
 4. **门禁自愈内建**：盲核门回切/提升replace语义/上下文过期自愈——本轮三个人工升级的修复应内建为自动化路径。
 5. **对比实验先行**：同一份方案——单Agent解构 vs 流水线，人工评审质量。数据说话再定大规模切换路径。
+
+---
+
+# 0927V1 收尾与测试就绪状态（20260927）
+
+## 0927V1工作令交付摘要
+
+按0927V1工作令§七"先交B和E的可见减负"执行，六个切片全部交付：
+
+### 工作包A（零模型对账，审计员交付）
+- SAR映射302作业**最终只读回执**：v19×151 + verifier-v8×151 全completed，evidence_reads 302/302全为0（诚实口径"完成≠自主取证"）
+- poll_state in_progress根因定位：脚本两处bug（states_done键名不匹配+B通道漏盲核前缀），作业事实层已全终态
+- prompt_version分布：主v19×151、盲核verifier-v8-tools-v6×151，均**未登记**于evidence_tool_contract——当前默认入口跳过取证循环（R27-01成立）
+- 148788→148727行差=TOC表61行整表排除（61/61数据表diff=0，无丢行）
+- 主盲比较：1495字段全配对，1049同/446分歧/0单侧
+- 时间分层：主队排队均值2.84h+请求178s/次；盲核排队均值2.22h+请求29.6s/次；314次HTTP全usage_unknown（B5修复后续批有账）
+- token记账：314次HTTP调用全usage_unknown=1（SSE未回传usage）
+
+### 工作包B（五项无效推理去除）
+
+**B1 能力合同收口**（R27-01，12测试）：
+- 唯一登记表 _PROMPT_VERSION_FEATURES 新增8行**如实登记为无工具**（v19/verifier-v8/v1/v5/v6/v7/adjudication-v5/verifier-v3）
+- 新增 prompt_version_features（唯一查询入口）、assert_prompt_version_reachable（提交预检）、check_prompt_version_tool_closure（启动闭包）、classify_tool_usage（5类诚实分类）
+- 提交前可达性预检：未登记版本拒收+工具声称但factory未配时显式失败
+- 启动闭包检查：main.py新增 MONITORING_MAPPING_DISPATCH_PROMPT_VERSIONS + startup handler
+- 审计脚本：scripts/monitoring_mapping_tool_usage_audit.py（全库3125映射作业分类导出）
+
+**B2 分片边界三层统一**（6测试）：
+- pipeline MAX 50→12 + settings upsert le=50→le=12 + App.jsx max="50"→max="12"
+- 回归测试：配置12 accepted、13/50 rejected（配置解析点即fail-closed，不到submit才泛化失败）
+
+**B3 线索数量矛盾四处同源**（10测试）：
+- CROSS_TABLE_CLUE_CANDIDATE_RANGE=(1,3) 常量落contracts，四张面（信封/TASK_CONTRACTS/服务层校验/持久化门）全部引用
+- 顺带闭合focused lane意外放行缺口（focused+2/3此前未校验）
+- 端到端：单候选合法COMPLETED、4候选FAILED同源消息、focused+1合法/+2拒收
+
+**B4 硬错误不重试+轻量状态GET**（4测试）：
+- 工具协议坏输出/回执身份错配/预算耗尽→retryable=False（不再二次发给模型）
+- 成功输出持久化失败→确定性重放（不调模型）；连续失败→终态留痕→故障恢复后retry_terminal→凭留痕完成（零模型调用）
+- _latest_job_cohort 每作业identity()调用从3次降为1次（302作业GET从近千次载荷读降为302次）
+- field-mapping-status GET 证据工具版本重验加请求内缓存（跨请求不缓存）
+
+**B5 用量记录**（5测试）：
+- start_call/complete_call 两段记账：发出前started行（usage NULL+unknown=1），finally原行UPDATE真实用量
+- _normalize_call_usage：多schema归一（OpenAI嵌套details/DeepSeek缓存命中/input|output别名），显式None判断不用or
+- 0与unknown分开：明确0保留为0；全缺失→unknown
+- reasoning/cached不重复计入total（只取上游回报值，不从组件相加）
+- gateway透传：SSE stream.usage完整字典入diag["usage"]（保留sse_usage_total_tokens兼容）；非流式从JSON payload提取
+
+**E1 探针退役+千条负载**：
+- B14记录器探针退役→真实record_call直接回归（detail明确0不丢为unknown）
+- J14记录器探针退役→真实isAggregateExpanded纯模块直接回归（四状态钉点）
+- 1200条合成Finding工作列表负载测试（规范化5ms/渲染216ms，排序不重排，计数头精确）
+
+### 工作包E（前端并行）
+
+- pytest-timeout安装+pytest.ini全局timeout=900/thread——**pytest防卡死根治**
+- 前端77/77全过（含E1新增负载测试）
+- 后端监测子集143×N轮全过
+
+### 工作包A审计的诚实发现
+
+- 302作业evidence_reads全0（完成≠自主取证）——prompt版本名带"tools-v6"但实际跳过取证循环
+- 314次HTTP调用全部usage_unknown（SSE未回传usage→B5修复后续批有账）
+- 主盲比较：1495字段1049同/446分歧/0单侧
+- 148788→148727=TOC表61行整表排除（61/61数据表diff=0，无丢行）
+- poll_state in_progress=脚本两bug（states_done键名+B通道漏盲核前缀），作业事实层已全终态
+
+## 复核发现（独立复核员+逐发现确认）
+
+1. [verified·medium] B1审计脚本组粒度分类失真——executed夸大约10倍（1175→实际118）。已修复为按作业粒度分类。
+2. [unconfirmed·low] pytest-timeout安装于venv（测试门全部经venv执行✓），系统python无该插件属解释器不一致非门禁缺陷。
+
+## 未测/待续
+
+- LLM任务上限：映射确认0模型/事实物化0模型/发现lane≤556/复核≤1946（现实≈900）——**等用户决策是否启动**
+- 工作包C受控自主切片+D同源对照（下一批）
+- 工作包D：B路线主盲12共享字段中8处token不一致（案例级复核分类）
+- A24浏览器宽屏走查
