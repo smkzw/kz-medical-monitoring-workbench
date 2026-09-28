@@ -22,6 +22,7 @@ import {
   AlignJustify,
   AlignLeft,
   AlignRight,
+  Archive,
   ArrowLeft,
   Bell,
   Bold,
@@ -1148,6 +1149,13 @@ function AppShell({
   const [newProjectMonitoring, setNewProjectMonitoring] = useState(false);
   const [newProjectMessage, setNewProjectMessage] = useState("");
   const [newProjectErrors, setNewProjectErrors] = useState({});
+  // R3循环：创建成功横幅（含已启用模块清单），8秒或点击后消失。
+  const [projectCreatedNotice, setProjectCreatedNotice] = useState("");
+  useEffect(() => {
+    if (!projectCreatedNotice) return undefined;
+    const timer = setTimeout(() => setProjectCreatedNotice(""), 8000);
+    return () => clearTimeout(timer);
+  }, [projectCreatedNotice]);
   const hasActiveProject = Boolean(
     activeProjectId && projects.some((item) => item.project_id === activeProjectId),
   );
@@ -1216,8 +1224,17 @@ function AppShell({
         }),
       });
       const payload = await readJsonOrThrow(response);
+      // R3循环（报告B）：创建成功必须反馈已启用的模块清单，否则
+      // 「无模块项目误建」无法被用户当场发现。
+      const enabledModules = newProjectMonitoring
+        ? ["医学写作", "医学监查"]
+        : ["医学写作"];
+      setProjectCreatedNotice(
+        `已创建项目「${payload.project?.project_name || newProjectDraft.project_name.trim() || payload.project?.project_code || ""}」，已启用模块：${enabledModules.join("、")}`,
+      );
       onProjectCreated?.(payload.project, payload.entry_mode);
       setNewProjectDraft(EMPTY_NEW_PROJECT);
+      setNewProjectMonitoring(false);
       setNewProjectOpen(false);
     } catch (error) {
       setNewProjectMessage(`创建失败：${apiErrorText(error)}`);
@@ -1306,12 +1323,35 @@ function AppShell({
               disabled={!projectsLoaded || Boolean(projectsLoadError)}
               onClick={() => {
                 setNewProjectMessage("");
+                // R3循环（报告B）：模块勾选不跨会话残留——上次勾选会让
+                // 「再开对话框→一次点击」实际是取消，误建无模块项目。
+                setNewProjectMonitoring(false);
                 setNewProjectOpen(true);
               }}
               title={!projectsLoaded || projectsLoadError ? "项目列表尚未就绪，暂不能新建项目" : "新建中国临床试验方案写作项目"}
             >
               <Plus size={16} /> 新建项目
             </button>
+            {hasActiveProject ? (
+              <button
+                type="button"
+                className="icon-button"
+                title="归档当前项目（软删除：从列表隐藏，数据保留可恢复）"
+                onClick={async () => {
+                  const projectName = project?.project_name || activeProjectId;
+                  if (!globalThis.confirm?.(`确定归档项目「${projectName}」吗？\n归档后从项目列表隐藏，数据保留、可由管理员恢复。`)) return;
+                  try {
+                    const response = await fetch(`/api/projects/${activeProjectId}`, { method: "DELETE" });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    globalThis.location?.reload?.();
+                  } catch (error) {
+                    setNewProjectMessage(`归档失败：${error?.message || error}`);
+                  }
+                }}
+              >
+                <Archive size={16} />
+              </button>
+            ) : null}
             <div>
               <span className="meta-label">适应症</span>
               <strong>{hasActiveProject ? project?.indication : "暂无项目数据"}</strong>
@@ -1343,6 +1383,15 @@ function AppShell({
             </button>
           </div>
         </header>
+        {projectCreatedNotice ? (
+          <div className="project-created-notice" role="status" style={{ display: "flex", alignItems: "center", gap: "10px", margin: "0 16px 8px", padding: "8px 12px", borderRadius: "6px", background: "#f0f9f1", border: "1px solid #cfe8d2", color: "#256b32" }}>
+            <CheckCircle2 size={15} />
+            <span style={{ flex: 1 }}>{projectCreatedNotice}</span>
+            <button type="button" className="icon-button" title="关闭提示" onClick={() => setProjectCreatedNotice("")}>
+              <XCircle size={14} />
+            </button>
+          </div>
+        ) : null}
         {hasActiveProject || forceRenderChildren ? children : (
           <EmptyProjectOverview
             loading={!projectsLoaded}
@@ -1354,6 +1403,7 @@ function AppShell({
             onAiGatewayStatusChange={onAiGatewayStatusChange}
             onCreateProject={() => {
               setNewProjectMessage("");
+              setNewProjectMonitoring(false);
               setNewProjectOpen(true);
             }}
           />
@@ -12931,11 +12981,54 @@ function SourceRegistryPage({ projectId, onOpenModule }) {
   );
 }
 
-function ModuleUnavailablePage({ moduleKey, message = "当前项目尚未配置该模块的真实来源与执行链路。" }) {
+function ModuleUnavailablePage({ moduleKey, message = "当前项目尚未配置该模块的真实来源与执行链路。", projectId = "", onModuleEnabled }) {
+  const [enableBusy, setEnableBusy] = useState(false);
+  const [enableError, setEnableError] = useState("");
+  const [enabled, setEnabled] = useState(false);
+  const moduleKeyToModule = {
+    medical_monitoring: "medical_monitoring",
+    eligibility_review: "eligibility_review",
+  };
+  const targetModule = moduleKeyToModule[moduleKey];
+  const enableModule = async () => {
+    if (!projectId || enableBusy) return;
+    setEnableBusy(true);
+    setEnableError("");
+    try {
+      const response = await fetch(`/api/projects/${projectId}/modules`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modules: ["medical_writing", targetModule].filter(Boolean),
+          actor: "medical_manager",
+        }),
+      });
+      const payload = await readJsonOrThrow(response);
+      setEnabled(true);
+      onModuleEnabled?.(payload);
+    } catch (error) {
+      setEnableError(`启用失败：${apiErrorText(error)}`);
+    } finally {
+      setEnableBusy(false);
+    }
+  };
   return (
     <main className="page">
       <SectionTitle eyebrow={moduleLabels[moduleKey] || "当前模块"} title="功能未配置" />
-      <section className="panel empty-state">{message}</section>
+      <section className="panel empty-state">
+        {message}
+        {targetModule && projectId && !enabled ? (
+          <p style={{ marginTop: 12 }}>
+            <button type="button" className="primary-button" onClick={enableModule} disabled={enableBusy} title="为当前项目补开该模块（记录为项目模块清单变更）">
+              {enableBusy ? "正在启用…" : "为当前项目启用该模块"}
+            </button>
+            {enableError ? <small style={{ display: "block", marginTop: 6, color: "#c53730" }}>{enableError}</small> : null}
+          </p>
+        ) : null}
+        {enabled ? (
+          <p style={{ marginTop: 12 }} role="status">已启用，正在刷新项目配置…</p>
+        ) : null}
+      </section>
     </main>
   );
 }
@@ -13425,6 +13518,11 @@ export function App() {
           onProductReturn={returnFromMedicalMonitoringProduct}
           UnavailableComponent={ModuleUnavailablePage}
           monitoringProjectId={monitoringRouteProjectId}
+          activeProjectId={activeProjectId}
+          onModuleEnabled={() => {
+            // 补开模块后刷新整页，让项目清单与模块路由重新加载。
+            globalThis.location?.reload?.();
+          }}
         />
       );
     }

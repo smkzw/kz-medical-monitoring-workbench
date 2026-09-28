@@ -107,6 +107,15 @@ class MonitoringDocumentAuthorityWorkflow:
         ):
             raise DocumentAuthorityError("document_authority_evidence_incomplete")
         revision = self._input_revision(project_id, batch)
+        # R3循环（报告B）：批次指纹是内容确定性的——同一组文件重传会
+        # 得到同一batch_id并复用已完成的判定（表现为"缓存秒回"）。
+        # 向界面透传该事实，让"重复上传秒出结论"与"新文件全量核对"
+        # 两条路径都可预期。
+        previously_analyzed = self._optional_job(
+            project_id,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+            f"document-authority-analysis:primary:{_ANALYSIS_GENERATION}:{batch['batch_id']}",
+        ) is not None
         self.primary_service.submit_document_authority_analysis(
             project_id=project_id,
             input_revision=revision,
@@ -120,7 +129,11 @@ class MonitoringDocumentAuthorityWorkflow:
             role="verifier",
         )
         self.worker_wake()
-        return {"state": "analyzing", "batch_id": batch["batch_id"]}
+        result = {"state": "analyzing", "batch_id": batch["batch_id"]}
+        if previously_analyzed:
+            # 仅在确为重复内容时附带该事实，保持既有返回契约不变。
+            result["previously_analyzed"] = True
+        return result
 
     def advance(
         self,

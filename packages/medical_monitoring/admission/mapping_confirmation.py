@@ -479,8 +479,13 @@ class AdmissionMappingConfirmationService:
             attempt_id=attempt_id,
             workspace_dir=workspace_dir,
         )
-        if payload.get("state") != "candidates_ready":
+        # R3循环（报告C）：needs_attention=部分识别任务失败/取消。已拒绝
+        # 该状态下采纳导致「识别已完成N字段但确认路径不存在」的全链
+        # 死锁（177任务约4小时吞吐下不可接受）。现允许对已完成任务
+        # 的结果子集知情采纳；generating（仍在产出）依旧拒绝。
+        if payload.get("state") == "generating":
             raise AdmissionMappingPipelineError("mapping_run_incomplete")
+        partial_adoption = payload.get("state") == "needs_attention"
         task_type = self.task_type
         if task_type is None:
             task_type = getattr(self.mapping_pipeline, "_task_type", "")
@@ -507,6 +512,8 @@ class AdmissionMappingConfirmationService:
         current_revisions: dict[str, str] = {}
         candidate_acceptances: list[dict[str, str]] = []
         for job in jobs:
+            if partial_adoption and str(_value(job.status)) != "completed":
+                continue
             revision_key = str(job.input_revision_sha256)
             digest = profile_shas.get(revision_key, "")
             if not digest:
@@ -531,6 +538,10 @@ class AdmissionMappingConfirmationService:
                 # 代际仍fail-closed。
                 raise AdmissionMappingPipelineError("mapping_run_incomplete")
             if str(_value(job.status)) != "completed":
+                if partial_adoption:
+                    # 部分采纳：未完成/失败任务不进入草稿，其字段自然
+                    # 不进入映射结果（与list_candidates的可见口径一致）。
+                    continue
                 raise AdmissionMappingPipelineError("mapping_run_incomplete")
             candidates = self.ai_repository.candidates(project_id, job.job_id)
             if len(candidates) != 1:
@@ -562,12 +573,17 @@ class AdmissionMappingConfirmationService:
                         "input_revision_sha256": revision_key,
                     }
                 )
+        if not candidate_acceptances:
+            # 没有任何可采纳的已完成结果：与运行未完成同样拒绝。
+            raise AdmissionMappingPipelineError("mapping_run_incomplete")
         draft = self.mapping_repository.assemble(
             project_id,
             attempt_id,
             profile_sha,
             prompt_version=self.prompt_version,
-            expected_job_ids=tuple(str(job.job_id) for job in jobs),
+            expected_job_ids=tuple(
+                str(item["job_id"]) for item in candidate_acceptances
+            ),
             candidate_acceptances=tuple(candidate_acceptances),
             decision_actor=actor,
             decision_reason=reason,

@@ -13,7 +13,9 @@ import os
 from pathlib import Path
 import re
 from threading import Lock
-from typing import Any, Mapping, Optional
+from typing import Any, Literal, Mapping, Optional
+
+from pydantic import BaseModel, Field
 from urllib.parse import quote
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
@@ -4773,6 +4775,35 @@ def archive_project(project_id: str):
 def restore_project(project_id: str):
     user_project_store.restore_project(project_id)
     return {"restored": True, "project_id": project_id}
+
+
+class UserProjectModulesRequest(BaseModel):
+    """R3循环：项目级事后补开模块（此前误建无模块项目后无任何补救入口）。"""
+
+    model_config = {"extra": "forbid"}
+
+    modules: list[Literal["medical_writing", "medical_monitoring", "eligibility_review"]] = Field(
+        min_length=1,
+        max_length=3,
+    )
+    actor: str = Field(default="medical_manager", min_length=2, max_length=80)
+
+
+@app.post("/api/projects/{project_id}/modules")
+def update_project_modules(project_id: str, request: UserProjectModulesRequest):
+    canonical_id = user_project_store.get(project_id)
+    target_id = (
+        canonical_id.project_id
+        if canonical_id is not None
+        else _canonical_project_id(project_id)
+    )
+    modules = list(dict.fromkeys(request.modules))
+    if "medical_monitoring" in modules:
+        # 补开监查模块需要与建项时相同的运行时DB初始化，否则
+        # execution/start 等操作找不到required schema members。
+        _init_monitoring_runtime_dbs(target_id)
+    user_project_store.set_project_modules(target_id, modules)
+    return {"project_id": target_id, "modules": modules}
 
 
 

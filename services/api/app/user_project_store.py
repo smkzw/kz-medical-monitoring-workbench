@@ -53,6 +53,23 @@ class UserProjectStore:
             ).fetchone()
             if duplicate is not None:
                 raise ValueError(f"项目编号已存在：{request.project_code}")
+            # R3循环（报告B）：完全同名项目曾可重复创建，下拉中两条一字
+            # 不差无法区分（含是否启用监查模块之别不可见），存在误入误
+            # 操作风险。未归档项目内名称必须唯一；归档项目不占用名称。
+            duplicate_name = connection.execute(
+                """
+                SELECT p.project_id FROM user_projects p
+                LEFT JOIN project_visibility v ON v.project_id = p.project_id
+                WHERE lower(p.project_name) = lower(?)
+                  AND v.project_id IS NULL
+                """,
+                (request.project_name,),
+            ).fetchone()
+            if duplicate_name is not None:
+                raise ValueError(
+                    f"已存在同名项目：{request.project_name}。"
+                    "请填写可区分的项目名称（如加序号或管理代号后缀）。"
+                )
             now = datetime.now(timezone.utc).isoformat()
             project_id = f"proj_user_{uuid4().hex[:12]}"
             modules = getattr(request, "modules", None) or ["medical_writing"]
