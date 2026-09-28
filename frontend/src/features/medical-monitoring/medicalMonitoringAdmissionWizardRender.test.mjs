@@ -69,9 +69,29 @@ check(renders.input.includes("系统先保留副本再识别结构，原始文�
 // Step one: labelled input, format hint, disabled primary until valid.
 check(renders.input.includes('id="monitoring-admission-files"'), "browser-native folder picker rendered");
 check(renders.input.includes("选择本机数据文件夹"), "folder picker is the primary data choice");
-check(renders.input.includes("无法选择文件夹时，手动填写数据位置"), "manual path is a collapsed fallback");
+// R4循环：目录型input必须同时提供文件级入口（webkitdirectory模式下
+// 文件级注入files.length=0且accept无效），手动路径回退不再折叠隐藏。
+check(
+  renders.input.includes('id="monitoring-admission-data-files"')
+    && renders.input.includes("选择单个数据文件"),
+  "file-level picker rendered beside the folder picker",
+);
+check(
+  !renders.input.includes('webkitdirectory="" accept='),
+  "directory input no longer carries the ineffective accept attribute",
+);
+check(
+  renders.input.indexOf("monitoring-admission-data-files")
+    < renders.input.indexOf("选择单个数据文件"),
+  "file picker accepts the supported formats",
+);
+check(
+  !renders.input.includes("<details"),
+  "manual path fallback is always visible, not collapsed",
+);
+check(renders.input.includes("无法选择文件夹时，手动填写数据位置"), "manual path fallback titled");
 check(renders.input.includes('<label for="monitoring-admission-source">数据位置</label>'), "fallback source field remains labelled");
-check(renders.input.includes("选择文件夹后即可开始导入"), "disabled import explains the next action");
+check(renders.input.includes("选择文件夹（或数据文件）后即可开始导入"), "disabled import explains the next action");
 check(renders.input.includes('aria-disabled="true"'), "disabled import exposes its state");
 check(renders.input.includes('disabled=""'), "import disabled without source");
 check(renders.input.includes(".csv / .xls / .xlsx / .xlsm"), "supported formats named");

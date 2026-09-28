@@ -158,6 +158,18 @@
   gap: 6px;
 }
 
+/* R4循环：手动路径回退从details折叠区改为常显小节（四轮测试中它
+   是实际可用的入口，不应藏在低可见度折叠里）。 */
+.monitoring-admission-manual-title {
+  color: var(--monitoring-muted, #6b7785);
+  font-weight: 600;
+}
+
+div.monitoring-admission-manual {
+  display: grid;
+  gap: 6px;
+}
+
 .monitoring-admission-hint,
 .monitoring-admission-prompt,
 .monitoring-admission-minor,
