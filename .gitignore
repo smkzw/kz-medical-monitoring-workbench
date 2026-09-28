@@ -54,3 +54,6 @@ obj/
 final-*.png
 k3*.png
 .trellis/
+
+# 0927测试循环数据暂存（含真实患者数据副本，严禁入库）
+tester_staging_0927/
