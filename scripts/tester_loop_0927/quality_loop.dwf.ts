@@ -108,6 +108,23 @@ const RESTART_API =
   "WORKBENCH_MONITORING_AI_PARALLELISM=2 nohup .venv/bin/python -m uvicorn services.api.app.main:app --host 127.0.0.1 --port 8910 --log-level warning > /tmp/mm_api_8910.log 2>&1 &";
 const RESTART_VITE = "cd " + WBABS + "/frontend && lsof -ti:5177 | xargs kill 2>/dev/null; sleep 1; nohup npx vite --port 5177 --strictPort > /tmp/mm_vite_5177.log 2>&1 &";
 
+// ===== 隔离测试环境（R3+）：独立API 8911 + 独立vite 5178，与医学写作舰队共用的 8910/5177 完全隔离 =====
+const ISOAPI = "http://127.0.0.1:8911/api/runtime-readiness";
+const ISOFE = "http://localhost:5178/monitoring";
+const ISORT_ABS = WBABS + "/runs/tester_loop_iso_20260928/runtime";
+const ISO_SRC_RT = WBABS + "/runs/phase_c_mgk10_authority_v2_20260905/runtime";
+const ISO_RESTART_API =
+  "cd " + WBABS + " && lsof -ti:8911 | xargs kill 2>/dev/null; sleep 2; source ~/.config/cms-medical-workbench/ai-runtime.env; " +
+  "WORKBENCH_RUNTIME_DIR=\"" + ISORT_ABS + "\" WORKBENCH_LOCAL_SINGLE_USER=1 WORKBENCH_AI_RUNTIME=api " +
+  "WORKBENCH_MONITORING_AI_PARALLELISM=2 nohup .venv/bin/python -m uvicorn services.api.app.main:app --host 127.0.0.1 --port 8911 --log-level warning > /tmp/mm_api_8911.log 2>&1 &";
+const ISO_RESTART_VITE =
+  "cd " + WBABS + "/frontend && lsof -ti:5178 | xargs kill 2>/dev/null; sleep 1; " +
+  "VITE_API_PROXY_TARGET=http://127.0.0.1:8911 nohup npx vite --port 5178 --strictPort > /tmp/mm_vite_5178.log 2>&1 &";
+const ISO_GUARD_RULE =
+  "你负责隔离测试环境（独立API 8911 + 独立vite 5178）的可用性，它与医学写作舰队共用的 8910/5177 完全无关。" +
+  "严禁重启或触碰 8910/5177，严禁推进任何业务管道、严禁碰任何项目数据。每次操作把时间戳与结果追加到 " +
+  LOOP + "/ISO_ENV_LOG.md。两次尝试仍不可用就如实上报，不要硬试。没做到就直说，不夸大不编造。";
+
 interface Dataset {
   key: string;
   label: string;
@@ -201,6 +218,90 @@ const CHANNELS = [
 const HONESTY =
   "诚实纪律：没走到就说没走到，不夸大不编造；界面与你的预期不同不等于bug，只有功能缺陷、数据错误、语义不诚实才是bug。" +
   "若任务无法完成或指令互相矛盾，如实说明并停止，不要硬凑通过。";
+
+// ===== R3+ 视角池（用户0928指令：轮换医学监查/PV/QA/工程师等视角；界面易用性·逻辑性·美观性为必测项） =====
+const PERSONAS_V2 = [
+  { name: "一线医学监查专员", background: "在中心做过多年 onsite 监查，习惯从受试者旅程逐访视核对，最在意证据链能不能从结论一路点回原始记录。" },
+  { name: "药物警戒（PV）专员", background: "药物警戒背景十年，对 AE/SAE 术语、严重度分级、因果评估的口径极其敏感，最恨系统把『严重度未知』悄悄渲染成明确分级。" },
+  { name: "QA 稽查官", background: "质量保证与稽查背景，参加过多次监管检查，看系统先看留痕：每一步操作是否可追溯、时间戳是否可信、有没有绕过审核的暗门。" },
+  { name: "系统实施工程师", background: "负责把工具部署到医院与CRO环境的实施工程师，习惯测边界：奇怪的输入、重复上传、超长文本、中断恢复，任何一处静默吞错都逃不过你。" },
+  { name: "资深CRA", background: "临床监查员出身、现在仍频繁出差中心，对新工具的耐心有限：流程绕一步、反馈慢一拍，你就会记录一笔。" },
+  { name: "数据管理员", background: "八年数据管理经验，看数据先看表结构、主键、空值和口径，任何数据搬运错误都逃不过你的眼睛。" },
+  { name: "保守的医学总监", background: "最终拍板人，只认证据链：每个结论必须能溯源到原始记录，否则宁可不用这个系统。" },
+  { name: "临床运营项目经理", background: "管过多个III期项目交付，对效率敏感：一次多余的点击、一段没有进度反馈的等待，都是你记录的对象。" },
+];
+
+const FOCUSES_V2 = [
+  "界面易用性：一个没见过系统的人能否顺着引导走对，操作步数是否最短，上传与等待的反馈是否清楚，防错设计是否到位",
+  "界面逻辑性：信息架构是否讲得通（先看什么后看什么），状态流转是否自洽，同一概念在不同页面叫法是否一致，域代码（AE/CM/MH/LB）是否有解释",
+  "界面美观性：布局与对齐、色彩层次、密度与可读性、专业感、宽屏（1440/1920）表现——以『敢不敢给领导演示』为标尺",
+  "医学语义诚实性：严重度标注是否如实区分记录值/未知/推定，不可判定是否明确标注，发现是否真有医学含量",
+  "全链自主性与进度可见性：系统是否无需人在旁边推就能自己走完，等待期间进度是否可见、卡住是否有原因提示",
+  "错误预防与恢复：传错文件、格式不认识、必填缺失时，系统是清楚拒绝还是静默吞掉或给出误导信息",
+];
+
+const SPECIALS_V2 = [
+  "以PV核查SAE的心态：从发现列表任选一条，反查证据链直到原始记录行，任何一环点不下去或对不上号都是发现",
+  "以QA稽查心态：检查全流程留痕与可追溯性——操作历史、时间戳、版本号、谁在什么时候确认了什么，找出任何不可审计的暗角",
+  "以实施工程师验收心态：故意做边界测试——重复上传同一文件、先传错文件再纠正、项目名用特殊字符，观察系统的预防与提示",
+  "以『从未用过这台电脑的人』心态操作：不假设任何先验知识与历史缓存，看界面本身能否教会你下一步做什么",
+  "把窗口在三档宽度（1280/1440/1920）各过一遍核心页面，记录任何布局挤压、错位、溢出",
+  "只用键盘走一遍主流程（不碰鼠标），记录所有焦点丢失与不可达控件",
+  "以『明天要给团队做培训』的心态：把你会讲到的每个汇总数字、每张图都核对一遍出处，找自相矛盾之处",
+  "中途模拟离开一小时（真实会议打断）：放置后再回来，检查状态是否还在、进度是否延续、有没有需要重做的事",
+];
+
+function buildPromptIso(round: number, slot: string, ds: Dataset, reportPath: string): string {
+  const s = CHANNELS.findIndex((c) => c.slot === slot);
+  const persona = PERSONAS_V2[(round + (s < 0 ? 0 : s)) % PERSONAS_V2.length];
+  const focus = FOCUSES_V2[(round * 2 + (s < 0 ? 0 : s)) % FOCUSES_V2.length];
+  const special = SPECIALS_V2[(round * 3 + (s < 0 ? 0 : s)) % SPECIALS_V2.length];
+  const projName = "MX循R" + round + slot + "-" + ds.key;
+  const files = ds.files.map((f) => "- " + WBABS + "/" + f).join("\n");
+  return (
+    "【第" + round + "轮·" + slot + "号测试任务】（提示词编号 R" + round + "-" + slot + "，与以往任何一轮都不同）\n\n" +
+    "你是" + persona.name + "。" + persona.background + "\n" +
+    "本轮以真实用户身份，独立验收「康哲 AI 医学经理工作台」的医学监查子系统。\n\n" +
+    "## 进入方式\n" +
+    "- 浏览器打开 http://localhost:5178/ ，确认页面标题是「康哲 AI 医学经理工作台」\n" +
+    "- 只准使用 5178 这个入口；若页面打不开、或打开后发现端口/应用不对（例如入排审核工作台或 5177），立即停止并作为发现记录，不要改用其他入口\n" +
+    "- 浏览器工具：ego-browser（先读 /Users/smkzw/.zcode/skills/ego-browser/SKILL.md 学用法；上传本地文件用它的 FileChooser；整个任务只用一个 TaskSpace）\n\n" +
+    "## 铁律（违反即测试作废）\n" +
+    "1. 只通过浏览器界面操作。严禁 curl/API/直连后端/读写数据库/读日志/修改任何文件\n" +
+    "2. 严禁重启或触碰任何服务；严禁推进后台任务——你不是运维，系统必须自己跑\n" +
+    "3. 系统卡住不动本身就是最重要的发现：记录当时页面、状态与已等待时长\n" +
+    "4. 只使用分给你的这套研究材料；页面上如有别人的项目，一律不点开\n" +
+    "5. 报告里不要复制患者身份信息（受试者编号可用，姓名/生日等不可）\n\n" +
+    "## 你的专属研究材料（从本机这些路径经浏览器上传）\n" + files + "\n" +
+    "研究背景：" + ds.brief + "\n\n" +
+    "## 任务（从零开始，走完为止）\n" +
+    "1. 新建项目：名称必须完全是「" + projName + "」，类型勾选「启用医学监查模块」\n" +
+    "2. 上传上述材料，按界面引导完成数据接入\n" +
+    "3. 跟随系统走完全链：内容确认→字段映射→事实准备→运行→发布→结果视图，每一步只做界面允许的用户操作\n" +
+    "4. 在结果视图（概览/发现/旅程等）做结果验收\n" +
+    "5. 全程以" + persona.name + "的视角观察：" + focus + "\n" +
+    "6. 无论你的角色是什么，始终顺带评价界面的易用性、逻辑性与美观性（具体到布局、文案、反馈、对齐、色彩），这是本轮必测项\n\n" +
+    "## 本轮特别情境\n" + special + "\n\n" +
+    "## 等待纪律\n" +
+    "- 系统处理时保持浏览器开着（真实用户会等），每隔几分钟刷新观察进展\n" +
+    "- 单一步骤 ≥" + STALLMIN + " 分钟无任何进展，或总时长 ≥5 小时：停止操作，按当前状态交报告（这本身计为发现）\n\n" +
+    "## 交付\n" +
+    "把最终测试报告（Markdown）写入：" + reportPath + "\n" +
+    "报告必含：\n" +
+    "- 旅程清单：走到了哪些阶段（建项/上传/内容确认/映射/事实/运行/发布/结果验收），在哪个阶段停住\n" +
+    "- 总结论：pass / fail（fail注明卡点）\n" +
+    "- 发现清单：每条含【页面】【问题】【严重度 critical|high|medium|low】【类别 product_bug|medical_accuracy|ux_issue|cosmetic】【证据（你看到的现象）】【复现步骤】\n" +
+    "- 界面评价：易用性/逻辑性/美观性各一小段（具体事例，不写空话）\n" +
+    "- 等待与卡点时长\n" +
+    "- 对「这套系统能否由一名真实用户独立跑通」的一句话判断\n" +
+    "- 收尾清理：说明你做了什么清理\n\n" +
+    "## 收尾清理（报告写完并保存后必做）\n" +
+    "1. 关闭并删除本轮使用的浏览器任务空间（ego-browser：对本次 TaskSpace 调用 delete()；确认浏览器会话完全退出）\n" +
+    "2. 删除测试过程中产生的下载副本、截图与临时缓存文件（分给你的源材料文件本身不动）\n" +
+    "3. 把清理结果追加写在报告的『收尾清理』一节\n" +
+    HONESTY
+  );
+}
 
 // ===== 仪表盘（开赛即声明） =====
 artifact.board("findings-board", {
@@ -308,9 +409,13 @@ async function runSlot(
   const roundDir = LOOP + "/round_" + (round < 10 ? "0" + round : round);
   const reportPath = roundDir + "/report_" + slot + ".md";
   const promptPath = roundDir + "/prompt_" + slot + ".md";
+  const strategyAppend = strategyNote
+    ? "\n\n## 上一轮复盘给本轮的背景提示（仅供留意，不影响你的独立判断）\n" + strategyNote
+    : "";
   const promptText =
-    buildPrompt(round, slot, ds, personaIdx, focusIdx, specialIdx, reportPath) +
-    (strategyNote ? "\n\n## 上一轮复盘给本轮的背景提示（仅供留意，不影响你的独立判断）\n" + strategyNote : "");
+    round <= 2
+      ? buildPrompt(round, slot, ds, personaIdx, focusIdx, specialIdx, reportPath) + strategyAppend
+      : buildPromptIso(round, slot, ds, reportPath) + strategyAppend;
   const useExternal = ch.kind === "external" && externalUsable;
   const projName = "MX循R" + round + slot + "-" + ds.key;
   const fallback: TesterOutcome = {
@@ -346,15 +451,19 @@ async function runSlot(
         "=== 任务文件原文 ===\n" + promptText,
       );
     }
-    const tester = agent("内部测试者-R" + round + slot, {
-      system:
-        "你就是任务里描述的那名测试者本人，直接亲自执行任务（不是调度员）。全程只用浏览器（按 ego-browser skill），" +
-        "只观察不修改，卡住即记录。" + HONESTY,
-    });
-    return await tester.ask<TesterOutcome>(
-      promptText + "\n\n（你是内部测试者，直接执行上述任务；执行前先 mkdir -p " + roundDir + "）\n" +
-      "完成后除把报告写入文件外，同时以 TesterOutcome 结构返回结果（findings 字段严格按报告归纳，不要增删事实）。",
-    );
+    const testerSystem = round <= 2
+      ? "你就是任务里描述的那名测试者本人，直接亲自执行任务（不是调度员）。全程只用浏览器（按 ego-browser skill），" +
+        "只观察不修改，卡住即记录。" + HONESTY
+      : "你就是任务里描述的那名测试者本人，直接亲自执行任务（不是调度员）。全程只用浏览器（按 ego-browser skill，整个任务只用一个 TaskSpace），" +
+        "只观察不修改，卡住即记录。报告写完后必须执行任务里的『收尾清理』并如实确认（TaskSpace 用 delete() 关删、临时缓存清除），清理做没做都要说真话。" + HONESTY;
+    const tester = agent("内部测试者-R" + round + slot, { system: testerSystem });
+    const testerSuffix = round <= 2
+      ? "\n\n（你是内部测试者，直接执行上述任务；执行前先 mkdir -p " + roundDir + "）\n" +
+        "完成后除把报告写入文件外，同时以 TesterOutcome 结构返回结果（findings 字段严格按报告归纳，不要增删事实）。"
+      : "\n\n（你是内部测试者，直接执行上述任务；执行前先 mkdir -p " + roundDir + "）\n" +
+        "完成后除把报告写入文件外，同时以 TesterOutcome 结构返回结果（findings 字段严格按报告归纳，不要增删事实）。" +
+        "然后完成『收尾清理』，并在返回的 coverageNotes 里注明清理结果。";
+    return await tester.ask<TesterOutcome>(promptText + testerSuffix);
   } catch (e) {
     fallback.channelNote = "槽位执行异常：" + String(e);
     return fallback;
@@ -478,6 +587,43 @@ for (let round = 1; round <= MAXROUNDS; round++) {
   roundsDone = round;
   phase("多测试者并行从零验收");
   log("第" + round + "轮开测：4个测试位并行，各用各的数据集与专属提示词");
+  if (round >= 3) {
+    const isoApiProbe = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
+      "-c",
+      "import urllib.request,json\nr=urllib.request.urlopen('" + ISOAPI + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')",
+    ]);
+    const isoFeProbe = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
+      "-c",
+      "import urllib.request\nr=urllib.request.urlopen('" + ISOFE + "',timeout=10)\nprint(r.status)",
+    ]);
+    let isoOk = isoApiProbe.exitCode === 0 && isoApiProbe.stdout.includes("READY") && isoFeProbe.exitCode === 0;
+    if (!isoOk) {
+      await agent("隔离环境守护员-R" + round, { system: ISO_GUARD_RULE }).ask(
+        "隔离测试环境不可用（API探针：" + isoApiProbe.stdout.trim() + " exit=" + isoApiProbe.exitCode +
+        "；前端探针 exit=" + isoFeProbe.exitCode + "）。请恢复：\n" +
+        "1. 运行时目录 " + ISORT_ABS + " 已一次性建好通常无需重建；仅当整目录丢失时才从 " + ISO_SRC_RT +
+        " 重建（sqlite3 逐库 .backup 复制除 medical_monitoring_ai.sqlite3 外的 *.sqlite3；rsync -a --exclude '*.sqlite3*' --exclude medical_monitoring_r7 复制其余）\n" +
+        "2. API重启：" + ISO_RESTART_API + "\n3. vite重启：" + ISO_RESTART_VITE + "\n" +
+        "4. 各等15秒自检：http://127.0.0.1:8911/api/runtime-readiness ready:true；http://localhost:5178/monitoring 200；" +
+        "http://localhost:5178/runtime-build.json 的 expectedBackendBuildId 与 8911 的 backend_build_id 一致\n" +
+        "5. 把时间戳与结果写入 " + LOOP + "/ISO_ENV_LOG.md",
+      );
+      const reApi = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
+        "-c",
+        "import urllib.request,json\nr=urllib.request.urlopen('" + ISOAPI + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')",
+      ]);
+      const reFe = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
+        "-c",
+        "import urllib.request\nr=urllib.request.urlopen('" + ISOFE + "',timeout=10)\nprint(r.status)",
+      ]);
+      isoOk = reApi.exitCode === 0 && reApi.stdout.includes("READY") && reFe.exitCode === 0;
+      if (!isoOk) {
+        stagnationEscalation = "升级：隔离测试环境（8911/5178）两次恢复失败，循环在第" + round + "轮前中止，需要人工介入。";
+        break;
+      }
+    }
+    log("隔离测试环境就绪（独立API 8911 + 独立vite 5178，写作舰队 8910/5177 不受影响），开始派发");
+  }
   const outcomesP = CHANNELS.map((ch, s) => {
     const ds = DATASETS[(round + s) % DATASETS.length];
     const externalUsable = ch.kind !== "external" || (channelOk.get(ch.model) ?? false);
@@ -548,12 +694,19 @@ for (let round = 1; round <= MAXROUNDS; round++) {
   phase("修复缺陷并守住回归门");
   let fixResult: FixResult | null = null;
   if (fixTargets.length > 0) {
+    const restartBlock = round <= 2
+      ? "修复需重启时命令：\n" +
+        "API：" + RESTART_API + "\nvite：" + RESTART_VITE + "\n（两个都要重启，重启后 curl 自检 runtime-readiness ready:true 与 5177=200）"
+      : "修复需重启时只允许重启隔离测试环境（与医学写作舰队完全隔离）：\n" +
+        "API：" + ISO_RESTART_API + "\nvite：" + ISO_RESTART_VITE + "\n" +
+        "（两个都要重启；重启后自检 http://127.0.0.1:8911/api/runtime-readiness ready:true 与 http://localhost:5178/monitoring 200，" +
+        "并核对 http://localhost:5178/runtime-build.json 与 8911 的 backend_build_id 一致；" +
+        "严禁重启或触碰 8910/5177——那是医学写作舰队正在使用的服务；重启留痕写入 " + LOOP + "/ISO_ENV_LOG.md）";
     fixResult = await fixer.ask<FixResult>(
       "第" + round + "轮分诊后待修复清单（按严重度优先，量力而为，critical/high 必须处理）：\n" +
       JSON.stringify(fixTargets.map((f) => ({ id: f.id, title: f.title, severity: f.severity, where: f.where, what: f.what, evidence: f.evidence, repro: f.repro, fixHint: f.fixHint }))) + "\n" +
       (strategyNote ? "上轮复盘策略提示：" + strategyNote + "\n" : "") +
-      "修复纪律见你的角色设定。修完把 fixedIds/skipped/commitHash/testsRun/frontendTouched 如实返回。修复需重启时命令：\n" +
-      "API：" + RESTART_API + "\nvite：" + RESTART_VITE + "\n（两个都要重启，重启后 curl 自检 runtime-readiness ready:true 与 5177=200）",
+      "修复纪律见你的角色设定。修完把 fixedIds/skipped/commitHash/testsRun/frontendTouched 如实返回。" + restartBlock,
     );
     for (const id of fixResult.fixedIds ?? []) {
       const f = registry.find((x) => x.id === id);
@@ -586,13 +739,19 @@ for (let round = 1; round <= MAXROUNDS; round++) {
         log("回归门二次拦截：本批修复判无效，发现退回待修复，留待复盘升级");
       }
     }
-    const postApi = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + APIURL + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
+    const postApiUrl = round <= 2 ? APIURL : ISOAPI;
+    const postApi = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + postApiUrl + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
     if (!(postApi.exitCode === 0 && postApi.stdout.includes("READY"))) {
-      await agent("环境守护员-R" + round).ask("修复后API未就绪，请按标准命令恢复并记录：" + RESTART_API + " ；随后自检 ready:true");
+      await agent("环境守护员-R" + round).ask(
+        round <= 2
+          ? "修复后API未就绪，请按标准命令恢复并记录：" + RESTART_API + " ；随后自检 ready:true"
+          : "修复后隔离API(8911)未就绪，请恢复：" + ISO_RESTART_API + " ；随后自检 ready:true；严禁动 8910/5177",
+      );
     }
   }
 
   phase("复盘认账并归档本轮");
+  const projBase = round <= 2 ? "http://127.0.0.1:8910" : "http://127.0.0.1:8911";
   const recap = await retrospector.ask<Recap>(
     "第" + round + "轮复盘。输入：\n" +
     "- 测试者结果：" + JSON.stringify(outcomes.map((o) => ({ tester: o.tester, projectName: o.projectName, pass: o.pass, blockedAt: o.blockedAt, stages: o.stagesReached ?? [], stallMinutes: o.stallMinutes, channelNote: o.channelNote }))) + "\n" +
@@ -601,7 +760,8 @@ for (let round = 1; round <= MAXROUNDS; round++) {
     "- 全部未决：" + JSON.stringify(registry.filter((f) => f.status === "待修复" || f.status === "待复测").map((f) => ({ id: f.id, title: f.title, round: f.round, status: f.status }))) + "\n\n" +
     "职责：\n" +
     "1. 根因归类与下一轮策略（同一发现连续2轮未决→必须给出与之前不同的策略）\n" +
-    "2. 归档本轮测试项目：curl -s http://127.0.0.1:8910/api/projects 列出后，只对项目名以 MX循R" + round + " 开头的执行 curl -X DELETE http://127.0.0.1:8910/api/projects/<id>（软删除；绝不碰其他前缀）\n" +
+    "2. 归档本轮测试项目：curl -s " + projBase + "/api/projects 列出后，只对项目名以 MX循R" + round + " 开头的执行 curl -X DELETE " + projBase + "/api/projects/<id>（软删除；绝不碰其他前缀）\n" +
+    (round >= 3 ? "   （本轮起项目API在隔离实例 " + projBase + "；同时核对各测试报告是否含『收尾清理』一节，缺失的在轮次报告里如实注明）\n" : "") +
     "3. 写轮次报告到 " + LOOP + "/round_" + (round < 10 ? "0" + round : round) + "/REPORT.md（章节：本轮概览/各测试者旅程/发现与分诊/修复与回归/复盘与策略/遗留清单；面向医学背景负责人的平实语言）\n" +
     "4. 更新 " + LOOP + "/STATE.json（轮次、未决数、连续清洁轮数）\n" +
     "5. git add " + LOOP + " 的本轮目录与 STATE、提交（信息『测试循环R" + round + "轮次归档』）并 push\n" +
@@ -645,7 +805,7 @@ for (let round = 1; round <= MAXROUNDS; round++) {
 phase("收敛判定与总交付");
 const openAtEnd = registry.filter((f) => f.status === "待修复" || f.status === "待复测");
 const finalizer = agent("收官撰稿人", {
-  system: "你负责把整个测试循环写成最终交付报告，读 " + LOOP + " 下各轮 REPORT.md 与 STATE.json 汇总，输出到 " + LOOP + "/DELIVERY.md。" +
+  system: "你负责把整个测试循环写成最终交付报告，读 " + LOOP + " 下各轮 REPORT.md 与 STATE.json 汇总（R3起为隔离环境口径，环境记录见 " + LOOP + "/ISO_ENV_LOG.md），输出到 " + LOOP + "/DELIVERY.md。" +
     "面向医学背景负责人：非工程化语言、四段式（做了什么/没做什么/踩了哪些坑/下一步建议）、每个结论附证据出处。" + HONESTY,
 });
 const delivery = await finalizer.ask<{ deliveryPath: string; summary: string }>(
@@ -657,6 +817,18 @@ try {
 } catch {
   await artifact.markdown("final-report-fallback", "## 总交付报告文件发布失败\n汇总摘要：\n" + delivery.summary, { title: "多测试者质量循环·汇总（降级版）" });
 }
+
+// ===== 收尾：停隔离测试环境（只动8911/5178，写作舰队8910/5177不受影响） =====
+phase("收尾：停隔离测试环境并留痕");
+const isoTeardown = await world.run("bash", [
+  "-c",
+  "lsof -ti:8911 | xargs kill 2>/dev/null; lsof -ti:5178 | xargs kill 2>/dev/null; sleep 2; " +
+  "(lsof -ti:8911 >/dev/null 2>&1 && echo '8911_STILL_UP' || echo '8911_down'); " +
+  "(lsof -ti:5178 >/dev/null 2>&1 && echo '5178_STILL_UP' || echo '5178_down'); " +
+  "echo \"$(date '+%Y-%m-%d %H:%M') 循环收尾：隔离测试环境已停止（运行时目录保留取证）\" >> '" +
+  "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/ISO_ENV_LOG.md'",
+]);
+log("隔离测试环境收尾：" + isoTeardown.stdout.trim().split("\n").join("，"));
 
 return {
   conclusion: convergeReached
@@ -673,6 +845,8 @@ return {
     "修复后监测 pytest 子集回归门，与第0轮基线失败集比对（基线存量 " + baselineFailures.length + " 条）",
     roundsDone + " 轮 × 4 测试位独立从零 E2E（外部通道 " + (precheck.channels ?? []).filter((c) => c.ok).length + "/3 就绪，其余内部测试者代打）",
     "每轮发现经分诊官合并去重，单源critical/high经独立复核",
+    "R3起测试全部跑在隔离环境（独立API 8911 + 独立vite 5178 + 独立运行时副本），与医学写作舰队共用的 8910/5177 全程隔离，环境操作留痕见 ISO_ENV_LOG.md",
+    "R3起每轮派发前隔离环境就绪门（API/前端/指纹配对三检），测试者任务含浏览器任务空间与缓存清理纪律",
   ],
   notCovered: [
     "前端 node --test 未作脚本级回归门（由修复员自行运行并在结果中报告）",
