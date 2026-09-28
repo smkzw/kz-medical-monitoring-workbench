@@ -89,12 +89,19 @@ export function mappingHeadline(payload) {
   // R2循环：识别未完成（generating）或尚未识别到任何字段时，禁止
   // 「全部对应关系清晰/无需您补充判断」类定论表述——0字段阶段给出
   // 该结论与同屏「仍在生成中」自相矛盾，且会被当作最终结论引用。
+  // R3循环：needs_attention（部分识别任务失败）同样禁用定论表述，
+  // 如实说明结果来自已完成的任务子集。
   const generating = payload.state === "generating"
     || payload.confirmation_status === "generating";
   if (generating) {
     return payload.questionCount > 0
       ? `已识别 ${payload.fieldCount} 个字段（其中 ${payload.questionCount} 个待确认），识别仍在生成中…`
       : `已识别 ${payload.fieldCount} 个字段，识别仍在生成中，完成后会显示结论…`;
+  }
+  if (payload.state === "needs_attention") {
+    return payload.fieldCount > 0
+      ? `已识别 ${payload.fieldCount} 个字段（部分识别任务未完成），可采纳当前结果继续`
+      : "字段识别任务未能完成，请重试或重新发起识别";
   }
   if (!Number(payload.fieldCount)) {
     return "尚未识别到字段，识别结果为空，请确认数据文件是否包含数据列。";
@@ -392,25 +399,42 @@ export function admissionMappingPrimaryAction(state) {
   if (state.phase === "drafting" && state.draft) {
     const quality = semanticQualityPresentation(state.draft.semantic_quality);
     const unanswered = mappingUnansweredCount(state);
+    // R3循环修正：原disabled含「!state.error ||」——无错误时恒为true，
+    // 确认按钮永远禁用（报告D：60字段全部清晰后47分钟无法确认）。
+    // 正确语义：仅有未回答问题或质量门阻断时禁用；出错时按钮是
+    // 「重试」；无错且无疑点时按钮是手动兜底确认入口（自动确认
+    // 卡在长请求时用户可自救），均可点击。
     return {
       key: "confirm",
       label: state.error
         ? "重试完成字段识别"
         : unanswered > 0
           ? `请先回答 ${unanswered} 个问题`
-          : "系统正在完成字段识别…",
-      disabled: !state.error || quality.blocksConfirmation || unanswered > 0,
+          : "确认字段对应关系",
+      disabled: quality.blocksConfirmation || unanswered > 0,
     };
   }
-  if (state.phase === "ready" && state.payload?.state === "candidates_ready") {
-    const fieldCount = state.payload.fieldCount;
-    if (fieldCount === 0) {
-      return { key: "noop", label: "暂无字段识别结果", disabled: true };
+  if (state.phase === "ready") {
+    const payloadState = state.payload?.state;
+    const fieldCount = state.payload?.fieldCount;
+    if (payloadState === "candidates_ready") {
+      if (!fieldCount) {
+        return { key: "noop", label: "暂无字段识别结果", disabled: true };
+      }
+      return { key: "adopt", label: "采用系统识别结果", disabled: false };
     }
-    return { key: "adopt", label: "采用系统识别结果", disabled: false };
-  }
-  if (state.phase === "ready" && state.payload?.state === "generating") {
-    return { key: "reload", label: "刷新识别进度", disabled: false };
+    if (payloadState === "needs_attention") {
+      // R3循环修正（报告C）：部分识别任务失败时原实现落入默认分支，
+      // 主按钮变成「加载识别结果」点击循环——已完成任务的字段结果
+      // 应可被知情采纳；无任何完成结果时如实报告。
+      if (fieldCount) {
+        return { key: "adopt", label: `采用已识别的 ${fieldCount} 个字段并继续`, disabled: false };
+      }
+      return { key: "reload", label: "识别任务未成功，重新加载", disabled: false };
+    }
+    if (payloadState === "generating") {
+      return { key: "reload", label: "刷新识别进度", disabled: false };
+    }
   }
   if (state.phase === "failed") {
     return { key: "reload", label: "重新加载识别结果", disabled: false };

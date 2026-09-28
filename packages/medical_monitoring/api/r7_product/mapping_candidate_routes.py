@@ -634,13 +634,21 @@ def register_mapping_candidate_routes(
                 workspace_dir=context.workspace_dir(context.root, canonical),
                 files=captured,
             )
-            return {
+            response = {
                 "project_id": canonical,
                 "state": str(result["state"]),
                 "analysis_token": str(result["batch_id"]),
                 "headline": "系统正在独立识别并交叉核对研究文件",
                 "guidance": "当前无需逐项确认，完成后会自动更新研究文件状态。",
             }
+            if result.get("previously_analyzed"):
+                response["previously_analyzed"] = True
+                response["guidance"] = (
+                    "这组文件与此前上传的内容完全一致，系统会直接复用已有的"
+                    "核对结论（因此可能很快返回相同结果）；如需重新核对，"
+                    "请更换文件版本后上传。"
+                )
+            return response
         except DocumentAuthorityError as exc:
             if str(exc) == "document_authority_evidence_incomplete":
                 return _mapping_error("mapping_document_evidence_incomplete")

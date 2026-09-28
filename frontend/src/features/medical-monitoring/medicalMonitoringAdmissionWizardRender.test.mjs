@@ -224,8 +224,8 @@ check(
 check(renders.confirmDraftingAnswered.includes("已完成 1/1"), "answered progress rendered");
 check(!renders.confirmDraftingAnswered.includes("请做一个医学选择"), "answered card leaves the active view");
 check(
-  renders.confirmDraftingAnswered.includes("系统正在完成字段识别"),
-  "system completes automatically after every question is answered",
+  renders.confirmDraftingAnswered.includes("确认字段对应关系"),
+  "manual confirmation entry is available after every question is answered",
 );
 
 // No-questions draft: system adopted everything, direct confirmation.

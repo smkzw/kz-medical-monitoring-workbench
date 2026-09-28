@@ -68,6 +68,36 @@ button:disabled {
   z-index: 40;
   width: 64px;
   overflow: hidden;
+  transition: width 120ms ease;
+}
+
+/* R3循环（报告B）：折叠侧栏下nav按钮仍按180px布局，溢出部分被
+   overflow:hidden裁剪（渲染与命中同步裁剪），按钮中心点击落进主列
+   被编辑器section拦截——自动化与人工都只剩72px条带可点。悬停展开
+   为浮层恢复完整命中区域；未悬停时按钮收缩到图标宽度。 */
+.app.writing-active .sidebar:hover {
+  width: 180px;
+  overflow: visible;
+  z-index: 60;
+  box-shadow: 6px 0 18px rgba(29, 39, 49, 0.12);
+}
+
+.app.writing-active .nav-item {
+  width: 56px;
+  justify-content: center;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.app.writing-active .sidebar:hover .nav-item {
+  width: auto;
+  justify-content: flex-start;
+  padding: 0 10px;
+}
+
+.app.writing-active .sidebar:hover .nav-item span,
+.app.writing-active .sidebar:hover .sidebar-footer {
+  opacity: 1;
 }
 
 .app.writing-active .brand {
@@ -87,6 +117,15 @@ button:disabled {
 
 .app.writing-active .nav {
   width: 180px;
+  padding: 14px 4px;
+}
+
+.app.writing-active .sidebar:hover .nav {
+  padding: 14px 10px;
+}
+
+.app.writing-active .sidebar:hover .nav {
+  padding: 14px 10px;
 }
 
 .app.writing-active .nav-item span,

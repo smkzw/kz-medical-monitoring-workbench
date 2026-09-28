@@ -8,10 +8,18 @@ export default function MedicalMonitoringRouteOutlet({
   onProductReturn,
   UnavailableComponent,
   monitoringProjectId,
+  activeProjectId = "",
+  onModuleEnabled,
 }) {
   if (!isMedicalMonitoringPage(activePage)) return null;
   if (!monitoringProjectId && activePage !== "monitoringProduct") {
-    return <UnavailableComponent moduleKey="medical_monitoring" />;
+    return (
+      <UnavailableComponent
+        moduleKey="medical_monitoring"
+        projectId={activeProjectId}
+        onModuleEnabled={onModuleEnabled}
+      />
+    );
   }
   return (
     <MedicalMonitoringPage

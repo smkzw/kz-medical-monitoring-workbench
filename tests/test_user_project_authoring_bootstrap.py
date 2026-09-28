@@ -57,7 +57,9 @@ class UserProjectAuthoringBootstrapTests(unittest.TestCase):
     def _request(entry_mode: str, key: str) -> UserProjectCreateRequest:
         return UserProjectCreateRequest(
             project_code=f"QC-{entry_mode}",
-            project_name="类风湿关节炎II期临床研究方案",
+            # R3循环：未归档项目名称必须唯一（同名项目在下拉中不可
+            # 区分，误建误操作风险），夹具按入口模式区分名称。
+            project_name=f"类风湿关节炎II期临床研究方案-{entry_mode}",
             indication="类风湿关节炎",
             product_name="RA-01",
             study_phase="II期",

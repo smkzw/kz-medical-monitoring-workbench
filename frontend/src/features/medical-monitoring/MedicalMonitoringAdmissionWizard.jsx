@@ -107,6 +107,12 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
         <strong>{payload.headline || "正在核对研究文档"}</strong>
         <span>{payload.guidance || "系统会自动识别，无需填写技术信息。"}</span>
       </header>
+      {payload.previously_analyzed ? (
+        <p className="monitoring-admission-warning" role="status">
+          这组文件与此前上传的内容完全一致，系统直接复用已有核对结论；
+          如需重新核对，请更换文件版本后上传。
+        </p>
+      ) : null}
       <ul>
         {(payload.roles || []).map((item) => (
           <li key={item.role}>
@@ -693,7 +699,11 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   });
   const adoptInFlight = useRef(false);
   const adjudicationInFlight = useRef(false);
+  // R3循环（报告D）：确认请求可长时间pending（后端同步收尾任务47分钟
+  // 不返回），布尔防重入会永久卡死。改为{generation, startedAt}并在
+  // 超过5分钟后视为陈旧放行，让手动「确认字段对应关系」可以自救。
   const confirmInFlight = useRef(false);
+  const CONFIRM_STALE_MS = 5 * 60 * 1000;
   const documentUploadInFlight = useRef(false);
   const importRequestGeneration = useRef(0);
   const documentRequestGeneration = useRef(0);
@@ -1152,10 +1162,16 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   }, [adoptDraft, mappingState.phase, mappingState.payload]);
 
   const confirmDraft = useCallback(async () => {
-    if (!mappingState.draft?.draft_id || confirmInFlight.current) return;
+    if (
+      !mappingState.draft?.draft_id
+      || (
+        confirmInFlight.current
+        && Date.now() - confirmInFlight.current.startedAt < CONFIRM_STALE_MS
+      )
+    ) return;
     const generation = mappingRequestGeneration.current + 1;
     mappingRequestGeneration.current = generation;
-    confirmInFlight.current = generation;
+    confirmInFlight.current = { generation, startedAt: Date.now() };
     mappingDispatch({ type: "confirm-start" });
     try {
       const questionCount = mappingState.payload?.questionCount || 0;
@@ -1175,10 +1191,10 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       dispatch({ type: "finish" });
     } catch (error) {
       if (mappingRequestGeneration.current !== generation) return;
-      if (confirmInFlight.current === generation) confirmInFlight.current = false;
+      if (confirmInFlight.current?.generation === generation) confirmInFlight.current = false;
       mappingDispatch(mappingConfirmationFailureAction(error, mappingState.draft));
     } finally {
-      if (confirmInFlight.current === generation) confirmInFlight.current = false;
+      if (confirmInFlight.current?.generation === generation) confirmInFlight.current = false;
     }
   }, [api, mappingState, state.attemptId, state.projectId]);
 

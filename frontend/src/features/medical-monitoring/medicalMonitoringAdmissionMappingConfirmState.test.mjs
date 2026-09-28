@@ -156,8 +156,10 @@ test("confirm waits until every question card is answered", () => {
     payload: { draft_id: "d1", version: 3, fields: [] },
   });
   assert.equal(mappingUnansweredCount(state), 0);
-  assert.equal(admissionMappingPrimaryAction(state).disabled, true);
-  assert.match(admissionMappingPrimaryAction(state).label, /系统正在完成/);
+  // R3循环修正：全部回答后确认必须可点（旧实现disabled含反转的
+  // !state.error，无错误时恒禁用，报告D观察60字段47分钟无法确认）。
+  assert.equal(admissionMappingPrimaryAction(state).disabled, false);
+  assert.match(admissionMappingPrimaryAction(state).label, /确认字段对应关系/);
 });
 
 test("adopted draft replaces stale candidate questions after system normalization", () => {
