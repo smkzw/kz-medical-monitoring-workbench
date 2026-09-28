@@ -449,6 +449,8 @@ export function MedicalMonitoringAdmissionWizardView({
   const resolvedMappingState = mappingState || createAdmissionMappingConfirmState();
   const resolvedFactState = factState || { phase: "idle", error: null };
   const error = state?.error || resolvedMappingState?.error || resolvedFactState.error || null;
+  // R4循环：目录型input收到文件级注入时files.length为0且此前零反馈。
+  const [filePickNotice, setFilePickNotice] = useState("");
   const steps = admissionStepView(state);
   const primary = (
     phase === "done" && mappingState?.phase === "confirmed"
@@ -546,12 +548,44 @@ export function MedicalMonitoringAdmissionWizardView({
                 type="file"
                 multiple
                 webkitdirectory=""
-                accept=".csv,.xls,.xlsx,.xlsm"
                 disabled={phase === "creating"}
-                onChange={(event) => onSourceFilesChange?.(event.target.files)}
+                onChange={(event) => {
+                  // R4循环：目录型控件在webkitdirectory模式下accept无效，
+                  //文件级注入不会注册且此前零反馈（四轮测试位
+                  //「FileChooser未形成选中」之谜）。空选择必须可见提示。
+                  if (!event.target.files?.length) {
+                    setFilePickNotice("未形成选择：该入口只接受文件夹。请选择数据文件夹，或改用下方“选择单个数据文件”。");
+                    event.target.value = "";
+                    return;
+                  }
+                  setFilePickNotice("");
+                  onSourceFilesChange?.(event.target.files);
+                }}
               />
               <span>选择数据文件夹</span>
             </label>
+            <label className="monitoring-admission-picker" htmlFor="monitoring-admission-data-files">
+              <input
+                id="monitoring-admission-data-files"
+                type="file"
+                multiple
+                accept=".csv,.xls,.xlsx,.xlsm"
+                disabled={phase === "creating"}
+                onChange={(event) => {
+                  if (!event.target.files?.length) {
+                    setFilePickNotice("未形成选择：请重新选择数据文件。");
+                    event.target.value = "";
+                    return;
+                  }
+                  setFilePickNotice("");
+                  onSourceFilesChange?.(event.target.files);
+                }}
+              />
+              <span>选择单个数据文件</span>
+            </label>
+            {filePickNotice ? (
+              <p className="monitoring-admission-warning" role="alert">{filePickNotice}</p>
+            ) : null}
             {state?.selectedFiles?.length ? (
               <p className="monitoring-admission-selection" role="status">
                 已选择“{state.selectedFolderName}”，共 {state.selectedFiles.length} 个文件
@@ -561,10 +595,12 @@ export function MedicalMonitoringAdmissionWizardView({
               支持 {ADMISSION_SUPPORTED_SUFFIX_TEXT} 文件；系统会保留一份项目数据副本，原始文件不会修改。
             </p>
             {!state?.selectedFiles?.length && !state?.sourceDir ? (
-              <p className="monitoring-admission-prompt">选择文件夹后即可开始导入。</p>
+              <p className="monitoring-admission-prompt">选择文件夹（或数据文件）后即可开始导入。</p>
             ) : null}
-            <details className="monitoring-admission-manual">
-              <summary>无法选择文件夹时，手动填写数据位置</summary>
+            {/* R4循环：手动路径是四轮测试中实际可用的回退入口，从折叠
+                区改为常显小节，不再依赖用户发现低可见度的details。 */}
+            <div className="monitoring-admission-manual">
+              <span className="monitoring-admission-manual-title">无法选择文件夹时，手动填写数据位置</span>
               <label htmlFor="monitoring-admission-source">数据位置</label>
               <input
                 id="monitoring-admission-source"
@@ -577,7 +613,7 @@ export function MedicalMonitoringAdmissionWizardView({
               {state?.sourceDir && !validation.ok ? (
                 <p className="monitoring-admission-warning">{validation.text}</p>
               ) : null}
-            </details>
+            </div>
           </div>
         ) : phase === "reading" && !profile ? (
           <p className="monitoring-admission-loading" role="status">
