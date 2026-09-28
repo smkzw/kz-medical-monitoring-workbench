@@ -45,6 +45,19 @@ CLINICAL_DATA_FIELDS = {
     "DOMAIN",
 }
 SAFETY_CORE_FIELDS = {"AETERM", "AEDECOD", "AESER", "AESEV", "AEREL"}
+# 编号样但属通用病原/检验/标准术语的字符串：它们出现在排除标准或参考
+# 文献语境，不是研究标识，不得进入「文件内容」差异面板（R2循环D报告
+# 实证：COVID-19出自排除标准句却被当作研究标识要求签核）。
+_GENERIC_CODE_LIKE_TOKENS = frozenset({
+    "COVID-19",
+    "SARS-COV-2",
+    "SARS-COV",
+    "MERS-COV",
+    "HIV-1",
+    "HIV-2",
+    "HBV-DNA",
+    "HCV-RNA",
+})
 SAFETY_CONTEXT_GROUPS = {
     "medical_history": {
         "label": "病史",
@@ -535,7 +548,13 @@ class SourceContentValidationService:
                 evidence_locators=["docx:document"],
             ),
             self._protocol_role_check(full_text, expected.expected_file_role),
-            self._text_project_check(full_text, expected.project_identifiers),
+            self._text_project_check(
+                full_text,
+                expected.project_identifiers,
+                spans=list(document.spans),
+                filename=filename,
+                title=str(document.title or ""),
+            ),
         ]
         protocol_role = expected.expected_file_role in {
             "protocol",
@@ -926,21 +945,64 @@ class SourceContentValidationService:
     def _text_project_check(
         full_text: str,
         expected_identifiers: Sequence[str],
+        spans: Sequence[object] = (),
+        *,
+        filename: str = "",
+        title: str = "",
     ) -> SourceContentValidationCheck:
+        """Compare project identifiers against strings actually present.
+
+        R2测试循环修正（报告D实证）：旧实现把全文正则捞出的所有编号样
+        字符串按大写形式罗列为「文件内容」，并硬编码伪造依据位置——
+        排除标准里的COVID-19、文献编号等被当作研究标识展示，且大小写
+        被改写后在原文中检索不到。现约定：只展示在原文中真实存在（保
+        留原大小写）、非通用病原/检验缩写、且有可回查定位（文件名/
+        文档标题/正文段落）的命中。
+        """
         expected_normalized = {
             _normalize_identifier(value) for value in expected_identifiers if value.strip()
         }
         normalized_text = _normalize_identifier(full_text)
-        observed = sorted(
-            candidate
-            for candidate in set(
-                re.findall(
-                    r"\b[A-Z]{2,12}[-_][A-Z0-9]+(?:[-_][A-Z0-9]+){0,3}\b",
-                    full_text.upper(),
-                )
+        raw_tokens = set(
+            re.findall(
+                r"\b[A-Za-z]{2,12}[-_][A-Za-z0-9]+(?:[-_][A-Za-z0-9]+){0,3}\b",
+                full_text,
             )
-            if any(character.isdigit() for character in candidate)
         )
+        locatable_texts = [
+            (str(filename or ""), "filename"),
+            (str(title or ""), "docx:document_title"),
+            *(
+                (
+                    str(getattr(span, "source_text", "") or ""),
+                    str(getattr(span, "source_locator", "") or ""),
+                )
+                for span in spans
+            ),
+        ]
+        observed: list[str] = []
+        evidence_locators: list[str] = []
+        for token in sorted(raw_tokens):
+            if not any(character.isdigit() for character in token):
+                continue
+            if token.upper() in _GENERIC_CODE_LIKE_TOKENS:
+                continue
+            hit_locator = next(
+                (
+                    locator
+                    for text, locator in locatable_texts
+                    if text and token in text
+                ),
+                "",
+            )
+            if not hit_locator:
+                # 无定位支撑的命中不作为「文件内容」展示，
+                # 防止无中生有或无法人工反查的值进入签核面板。
+                continue
+            observed.append(token)
+            if hit_locator not in evidence_locators:
+                evidence_locators.append(hit_locator)
+        observed = observed[:8]
         if not expected_normalized:
             outcome = "not_assessed"
         elif any(identifier in normalized_text for identifier in expected_normalized):
@@ -951,11 +1013,11 @@ class SourceContentValidationService:
             outcome = "warning"
         return SourceContentValidationCheck(
             check_code="project_identity",
-            label="项目/研究标识",
+            label="文件中出现的研究编号样字符串",
             expected_value=" / ".join(expected_identifiers),
-            observed_value=" / ".join(observed) if observed else "未识别到明确研究标识",
+            observed_value=" / ".join(observed) if observed else "未识别到有定位依据的研究编号样字符串",
             outcome=outcome,
-            evidence_locators=["docx:document_text"],
+            evidence_locators=evidence_locators[:5],
         )
 
     @staticmethod
