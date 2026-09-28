@@ -1273,11 +1273,27 @@ function AppShell({
                   const indication = String(item.indication || "").trim();
                   const phase = String(item.study_phase || "").trim();
                   const code = String(item.project_code || item.project_id || "").trim();
-                  const label = [product || null, indication || null, phase || null, code || null]
-                    .filter(Boolean)
-                    .join(" · ");
+                  // R2循环（报告B/C）：建项表单承诺项目名称「用于项目
+                  // 列表」，但下拉可见标签只含药物/适应症/分期/系统代号，
+                  // 用户填写的名称只存在于悬停title。名称为用户显式填写
+                  // （与自动合成模板不同）时置于可见标签首位；自动合成
+                  // 名称保持旧标签避免下拉被长串占满。
+                  const projectName = String(item.project_name || "").trim();
+                  const synthesized = [
+                    product,
+                    indication ? `用于治疗${indication}` : "",
+                    phase ? `的${phase}临床研究` : "",
+                  ].filter(Boolean).join("");
+                  const customName = projectName && projectName !== synthesized
+                    ? projectName
+                    : "";
+                  const label = customName
+                    ? [customName, product || null, indication || null, phase || null]
+                      .filter(Boolean).join(" · ")
+                    : [product || null, indication || null, phase || null, code || null]
+                      .filter(Boolean).join(" · ");
                   return (
-                    <option key={item.project_id} value={item.project_id} title={item.project_name || label}>
+                    <option key={item.project_id} value={item.project_id} title={projectName || label}>
                       {label || item.project_id}
                     </option>
                   );

@@ -91,7 +91,7 @@ _MAPPING_MESSAGES = {
     "mapping_document_evidence_incomplete": (
         "研究文件未通过完整性核对：未能从这组文件中读取到可核对的内容"
         "（如全部为扫描版或文件损坏）。请更换为可读取的文件版本后"
-        "重新上传；若批内仅个别文件无法读取，其余文件仍会正常核对。"
+        "重新上传。"
     ),
     "document_packet_project_mismatch": (
         "研究文档与当前项目不一致，本次未发送数据。请返回项目首页重新选择文件。"
@@ -818,13 +818,29 @@ def register_mapping_candidate_routes(
             # V5会商L2-1：DocumentAuthorityError携带精确错误码（如
             # document_authority_job_attempt_invalid）——透传而非吞噬。
             diagnostic = str(exc).strip() or "document_authority_error"
+            # R2测试循环：不再对任何诊断码统一承诺「可对文件角色作出
+            # 裁决后重试」——逐码给出与界面能力一致的真实指引。
+            if diagnostic == "document_authority_candidate_not_promotable":
+                guidance_text = (
+                    "所选文件内容无法完整读取（如扫描版PDF），不能作为"
+                    "权威研究文件。请将该文件角色标记为缺失，或更换为"
+                    "可读取版本后重新上传。"
+                )
+            elif diagnostic == "document_authority_selection_not_parsable":
+                guidance_text = (
+                    "该文件内容无法完整读取（如扫描版PDF），不能作为"
+                    "权威研究文件。请改为选择「该角色缺失」，或上传可"
+                    "读取的文件版本。"
+                )
+            else:
+                guidance_text = "请稍后重试，或重新上传研究文件。"
             return JSONResponse(
                 status_code=409,
                 content={
                     "code": "mapping_document_authority_failed",
                     "message": (
                         "研究文件自动核对未完成（诊断：" + diagnostic
-                        + "）；可对文件角色作出裁决后重试。"
+                        + "）。" + guidance_text
                     ),
                     "detail": {"error_code": diagnostic},
                     "project_id": canonical,

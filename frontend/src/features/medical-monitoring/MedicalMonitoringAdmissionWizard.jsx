@@ -873,6 +873,42 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     }
   }, [api, documentState.payload?.analysis_token, state.attemptId, state.projectId]);
 
+  // R2循环：「重新核对研究文件」必须真正重发核对（有analysis_token时
+  // 重新resolve推进链路），而不是只重读readiness快照——否则失败态下
+  // 点击后仍报同一错误，按钮语义与行为不符（报告C F1）。
+  const retryDocumentCheck = useCallback(async () => {
+    if (documentState.payload?.analysis_token) {
+      const generation = documentRequestGeneration.current + 1;
+      documentRequestGeneration.current = generation;
+      setDocumentState((current) => ({ ...current, phase: "analyzing", error: null }));
+      try {
+        const payload = await api.resolveStudyDocuments(
+          state.projectId,
+          state.attemptId,
+          documentState.payload.analysis_token,
+        );
+        if (documentRequestGeneration.current === generation) {
+          setDocumentState({
+            phase: payload.ready ? "ready" : (payload.state || "analyzing"),
+            payload,
+            error: null,
+          });
+        }
+        return;
+      } catch (error) {
+        if (documentRequestGeneration.current === generation) {
+          setDocumentState((current) => ({
+            ...current,
+            phase: "failed",
+            error: error?.detail?.message || error?.message || "研究文件核对失败。",
+          }));
+        }
+        return;
+      }
+    }
+    await loadDocumentReadiness();
+  }, [api, documentState.payload?.analysis_token, loadDocumentReadiness, state.attemptId, state.projectId]);
+
   const submitIdentityConfirmation = useCallback(async (confirmation) => {
     if (!state.projectId || !state.attemptId) return;
     if (confirmation?.confirmed !== true) return;
@@ -961,11 +997,15 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         }
       } catch (error) {
         if (documentRequestGeneration.current === generation) {
-          setDocumentState({
+          // R2循环：失败分支必须保留payload——user_choices/analysis_token
+          // 都取自payload，清空会让「可裁决」提示与裁决控件同时消失，
+          // 把用户锁死在第3步（报告C的document_authority_candidate_
+          // not_promotable死锁）。
+          setDocumentState((current) => ({
+            ...current,
             phase: "failed",
-            payload: null,
             error: error?.detail?.message || error?.message || "研究文件核对失败。",
-          });
+          }));
         }
       }
     }, 1500);
@@ -1014,9 +1054,13 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       mappingState.phase !== "ready"
       || mappingState.payload?.state !== "generating"
     ) return undefined;
+    // R2循环（报告B）：依赖数组只含state字符串，load-ready后引用不变、
+    // effect不重跑，2.5s轮询实际只排程一次——生成中进度永不自动推进，
+    // 页内刷新与整页刷新表现不一致。把payload对象纳入依赖：每次拉取
+    // 返回新引用即重排下一次轮询，直到state离开generating。
     const timer = setTimeout(loadMappingCandidates, 2500);
     return () => clearTimeout(timer);
-  }, [loadMappingCandidates, mappingState.payload?.state, mappingState.phase]);
+  }, [loadMappingCandidates, mappingState.payload, mappingState.payload?.state, mappingState.phase]);
 
   const advanceAdjudication = useCallback(async (draft, activeGeneration = null) => {
     if (!draft?.draft_id || adjudicationInFlight.current) return;
@@ -1294,7 +1338,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onSecondaryAction={onSecondaryAction}
       onAnswerCard={onAnswerCard}
       onDocumentFiles={analyzeDocuments}
-      onDocumentRetry={loadDocumentReadiness}
+      onDocumentRetry={retryDocumentCheck}
       onDocumentAdjudicate={submitDocumentAdjudication}
       onDocumentContentConfirm={submitContentConfirmation}
       onDocumentIdentityConfirm={submitIdentityConfirmation}

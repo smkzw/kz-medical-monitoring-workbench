@@ -86,6 +86,19 @@ function questionText(item) {
 
 export function mappingHeadline(payload) {
   if (!payload) return "正在读取系统识别结果…";
+  // R2循环：识别未完成（generating）或尚未识别到任何字段时，禁止
+  // 「全部对应关系清晰/无需您补充判断」类定论表述——0字段阶段给出
+  // 该结论与同屏「仍在生成中」自相矛盾，且会被当作最终结论引用。
+  const generating = payload.state === "generating"
+    || payload.confirmation_status === "generating";
+  if (generating) {
+    return payload.questionCount > 0
+      ? `已识别 ${payload.fieldCount} 个字段（其中 ${payload.questionCount} 个待确认），识别仍在生成中…`
+      : `已识别 ${payload.fieldCount} 个字段，识别仍在生成中，完成后会显示结论…`;
+  }
+  if (!Number(payload.fieldCount)) {
+    return "尚未识别到字段，识别结果为空，请确认数据文件是否包含数据列。";
+  }
   return payload.questionCount > 0
     ? `系统已自动识别 ${payload.fieldCount} 个字段，其中 ${payload.questionCount} 个需要您确认`
     : `系统已自动识别 ${payload.fieldCount} 个字段，全部对应关系清晰，无需您补充判断`;
@@ -144,7 +157,12 @@ export function projectMappingCandidates(payload) {
     factsGenerated: Boolean(payload?.facts_generated),
     fieldCount,
     questionCount,
-    headline: mappingHeadline({ fieldCount, questionCount }),
+    headline: mappingHeadline({
+      fieldCount,
+      questionCount,
+      state: payload?.state,
+      confirmation_status: payload?.confirmation_status,
+    }),
     questions: questionCards,
     tableSummaries: [...byDomain.values()].sort((a, b) => a.name.localeCompare(b.name, "zh-CN")),
     candidates: projected,

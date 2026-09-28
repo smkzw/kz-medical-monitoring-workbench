@@ -538,6 +538,15 @@ def _apply_user_role_selections(
         for item in candidate_batch.get("candidates", ())
     }
     adjudicated: list[str] = []
+    # 缺省状态按可解析处理：真实分解器产出的候选一定显式携带状态，
+    # 显式非ready/parsed（如扫描件needs_ocr）才排除，兼容历史批次
+    # 与最小化测试夹具。
+    promotable_candidate_ids = {
+        str(item.get("candidate_id"))
+        for item in candidate_batch.get("candidates", ())
+        if item.get("technical_status", "ready") == "ready"
+        and item.get("extraction_status", "parsed") == "parsed"
+    }
     for selection in selections:
         role = str(
             selection.get("role") if isinstance(selection, Mapping) else ""
@@ -551,6 +560,18 @@ def _apply_user_role_selections(
             # 数据完整性fail-closed：指向不存在的候选绝不容忍
             raise DocumentAuthorityError(
                 "document_authority_user_selection_invalid"
+            )
+        if (
+            candidate_id
+            and candidate_id not in promotable_candidate_ids
+            and role in unresolved
+        ):
+            # R2测试循环：不可解析候选（如扫描件needs_ocr）不能作为权威
+            # 文件——此前会落到promote阶段才以candidate_not_promotable
+            # 报错，把用户锁进「裁决→报错→再裁决」死循环。此处提前以
+            # 明确错误码拒绝，错误信息可指导用户改为「该角色缺失」。
+            raise DocumentAuthorityError(
+                "document_authority_selection_not_parsable"
             )
         if role not in unresolved:
             # 过期裁决（该角色此后已自动收敛或本轮本就无争议）：
@@ -584,12 +605,18 @@ def _user_choices_for_unresolved(
     unresolved = list(resolved.get("unresolved_roles", ()))
     if not unresolved:
         return []
+    # R2测试循环：裁决选项只允许「可作为权威文件」的候选（ready+parsed）。
+    # 原实现把needs_ocr的扫描件也列为选项，用户按提示裁决后promote仍会
+    # 拒绝（document_authority_candidate_not_promotable），文案承诺的
+    # 「可裁决后重试」变成死循环——从源头排除不可解析候选。
     candidates = [
         {
             "candidate_id": str(item.get("candidate_id")),
             "filename": str(item.get("filename") or ""),
         }
         for item in candidate_batch.get("candidates", ())
+        if item.get("technical_status", "ready") == "ready"
+        and item.get("extraction_status", "parsed") == "parsed"
     ]
     return [
         {
