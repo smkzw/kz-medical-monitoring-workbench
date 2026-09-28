@@ -363,11 +363,11 @@ async function runSlot(
 
 // ===== 基线环境探针 =====
 phase("开局准备：环境、数据与测试通道");
-const apiProbe = await world.run(PY, [
+const apiProbe = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
   "-c",
   "import urllib.request,json\nr=urllib.request.urlopen('" + APIURL + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')",
 ]);
-const feProbe = await world.run(PY, [
+const feProbe = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
   "-c",
   "import urllib.request\nr=urllib.request.urlopen('" + FEURL + "',timeout=10)\nprint(r.status)",
 ]);
@@ -386,11 +386,11 @@ if (!envOk) {
     "3. 各等 15 秒后用 curl 自检 http://127.0.0.1:8910/api/runtime-readiness 返回 ready:true 且 http://localhost:5177/monitoring 返回 200\n" +
     "4. 把重启时间与结果写入 " + LOOP + "/ENV_RESTART_LOG.md",
   );
-  const reApi = await world.run(PY, [
+  const reApi = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
     "-c",
     "import urllib.request,json\nr=urllib.request.urlopen('" + APIURL + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')",
   ]);
-  const reFe = await world.run(PY, ["-c", "import urllib.request\nr=urllib.request.urlopen('" + FEURL + "',timeout=10)\nprint(r.status)"]);
+  const reFe = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request\nr=urllib.request.urlopen('" + FEURL + "',timeout=10)\nprint(r.status)"]);
   envOk = reApi.exitCode === 0 && reApi.stdout.includes("READY") && reFe.exitCode === 0;
   if (!envOk) {
     return {
@@ -439,7 +439,7 @@ log(
 );
 
 // ===== 回归基线 =====
-const baselineRun = await world.run(PY, [
+const baselineRun = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
   "-c",
   "import os,subprocess,sys\nos.chdir('implementation/workbench')\nr=subprocess.run([sys.executable,'-m','pytest','tests/medical_monitoring','-q','-p','no:cacheprovider'],capture_output=True,text=True)\nsys.stdout.write(r.stdout[-30000:])\nsys.stderr.write(r.stderr[-4000:])\nsys.exit(r.returncode)",
 ], { timeoutMs: 3600000 });
@@ -563,7 +563,7 @@ for (let round = 1; round <= MAXROUNDS; round++) {
       const f = registry.find((x) => x.id === sk.id);
       if (f && f.status === "待修复") f.status = "搁置";
     }
-    const gate = await world.run(PY, [
+    const gate = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
       "-c",
       "import os,subprocess,sys\nos.chdir('implementation/workbench')\nr=subprocess.run([sys.executable,'-m','pytest','tests/medical_monitoring','-q','-p','no:cacheprovider'],capture_output=True,text=True)\nsys.stdout.write(r.stdout[-30000:])\nsys.stderr.write(r.stderr[-4000:])\nsys.exit(r.returncode)",
     ], { timeoutMs: 3600000 });
@@ -573,7 +573,7 @@ for (let round = 1; round <= MAXROUNDS; round++) {
       await fixer.ask(
         "修复引入了新的测试失败（相对第0轮基线），必须处理（修好或回滚）：\n" + newlyFailed.join("\n") + "\n失败输出尾部：\n" + gate.stdout.slice(-4000),
       );
-      const gate2 = await world.run(PY, [
+      const gate2 = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
         "-c",
         "import os,subprocess,sys\nos.chdir('implementation/workbench')\nr=subprocess.run([sys.executable,'-m','pytest','tests/medical_monitoring','-q','-p','no:cacheprovider'],capture_output=True,text=True)\nsys.stdout.write(r.stdout[-30000:])\nsys.stderr.write(r.stderr[-4000:])\nsys.exit(r.returncode)",
       ], { timeoutMs: 3600000 });
@@ -586,7 +586,7 @@ for (let round = 1; round <= MAXROUNDS; round++) {
         log("回归门二次拦截：本批修复判无效，发现退回待修复，留待复盘升级");
       }
     }
-    const postApi = await world.run(PY, ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + APIURL + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
+    const postApi = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + APIURL + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
     if (!(postApi.exitCode === 0 && postApi.stdout.includes("READY"))) {
       await agent("环境守护员-R" + round).ask("修复后API未就绪，请按标准命令恢复并记录：" + RESTART_API + " ；随后自检 ready:true");
     }
@@ -655,7 +655,7 @@ const delivery = await finalizer.ask<{ deliveryPath: string; summary: string }>(
 try {
   await artifact.file("final-report", delivery.deliveryPath, { title: "多测试者质量循环·总交付报告", description: delivery.summary.slice(0, 300), primary: true });
 } catch {
-  await artifact.markdown("final-report", "## 总交付报告发布失败\n汇总摘要：\n" + delivery.summary, { title: "多测试者质量循环·总交付报告" });
+  await artifact.markdown("final-report-fallback", "## 总交付报告文件发布失败\n汇总摘要：\n" + delivery.summary, { title: "多测试者质量循环·汇总（降级版）" });
 }
 
 return {
@@ -671,7 +671,7 @@ return {
   verified: [
     "每轮开测前环境探针（API ready + 前端 200）实跑",
     "修复后监测 pytest 子集回归门，与第0轮基线失败集比对（基线存量 " + baselineFailures.length + " 条）",
-    roundsDone + " 轮 × 4 测试位独立从零 E2E（外部通道 " + precheck.channels.filter((c) => c.ok).length + "/3 就绪，其余内部测试者代打）",
+    roundsDone + " 轮 × 4 测试位独立从零 E2E（外部通道 " + (precheck.channels ?? []).filter((c) => c.ok).length + "/3 就绪，其余内部测试者代打）",
     "每轮发现经分诊官合并去重，单源critical/high经独立复核",
   ],
   notCovered: [
