@@ -1,0 +1,23 @@
+{
+  "round": 1,
+  "updatedAt": "2026-09-28T11:20:00+08:00",
+  "openFindings": 15,
+  "openBreakdown": { "待复测": 6, "待修复": 9 },
+  "openP1": 5,
+  "cleanStreak": 0,
+  "fixCommit": "1007d24",
+  "rounds": [
+    {
+      "round": 1,
+      "date": "2026-09-28",
+      "testers": 4,
+      "testersPassed": 0,
+      "newFindings": 15,
+      "fixed": 6,
+      "openP1": 5,
+      "cleanStreak": 0,
+      "note": "4/4 全部阻断在研究文件门禁+字段映射挂起；监查引擎从未运行，合成植入对照未开考（不可评估，不记 0）；修复 1007d24 已落地未复测；4 个 MX循R1* 测试项目已软删除归档",
+      "report": "scripts/tester_loop_0927/round_01/REPORT.md"
+    }
+  ]
+}
