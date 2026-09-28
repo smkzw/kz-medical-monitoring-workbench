@@ -478,6 +478,7 @@ export function createMedicalMonitoringProductApi({
       signal,
       userRoleSelections,
       expectedDecisionVersion,
+      identityConfirmation,
     } = {}) {
       const body = { batch_id: requireId(analysisToken, "analysisToken") };
       if (Array.isArray(userRoleSelections) && userRoleSelections.length) {
@@ -485,6 +486,9 @@ export function createMedicalMonitoringProductApi({
       }
       if (Number.isInteger(expectedDecisionVersion) && expectedDecisionVersion >= 0) {
         body.expected_decision_version = expectedDecisionVersion;
+      }
+      if (identityConfirmation && typeof identityConfirmation === "object") {
+        body.identity_confirmation = identityConfirmation;
       }
       return post(
         MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStudyDocumentsResolve(

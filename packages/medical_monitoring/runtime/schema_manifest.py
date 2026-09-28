@@ -616,17 +616,29 @@ def inspect_member(path: Any, member: Optional[str] = None) -> MemberInspection:
     if not target.is_file():
         return _failure(selected, target, SchemaClassification.UNKNOWN, "member_missing",
                         present=False, optional=optional)
-    connection: Optional[sqlite3.Connection] = None
-    try:
-        connection = _open_readonly(target)
-        return _classify_open_connection(selected, target, connection)
-    except (OSError, sqlite3.Error) as exc:
-        return _failure(selected, target, SchemaClassification.CORRUPT,
-                        "sqlite_malformed", details=(type(exc).__name__, str(exc)),
-                        optional=optional)
-    finally:
-        if connection is not None:
-            connection.close()
+    report: Optional[MemberInspection] = None
+    # R1测试循环第1轮：写入方在单事务内建库+写marker时，只读探测可能
+    # 落在提交前（marker行尚不可见→UNKNOWN）。有界重试吸收该瞬态；
+    # 真实缺marker是稳定状态，重试耗尽后仍如实返回UNKNOWN。
+    for attempt in range(3):
+        connection: Optional[sqlite3.Connection] = None
+        try:
+            connection = _open_readonly(target)
+            report = _classify_open_connection(selected, target, connection)
+        except (OSError, sqlite3.Error) as exc:
+            report = _failure(selected, target, SchemaClassification.CORRUPT,
+                              "sqlite_malformed", details=(type(exc).__name__, str(exc)),
+                              optional=optional)
+        finally:
+            if connection is not None:
+                connection.close()
+        if not (
+            report.classification is SchemaClassification.UNKNOWN
+            and report.reason_code == "marker_missing"
+        ):
+            break
+        time.sleep(0.4 * (attempt + 1))
+    return report  # type: ignore[return-value]
 
 
 def require_current(path: Any, member: Optional[str] = None) -> MemberInspection:
@@ -711,7 +723,21 @@ class ProjectSchemaInspector:
 # Explicit function names make the read-only seam easy to use without
 # constructing a product router or mutable store.
 def inspect_project_schema(workspace: Any) -> ProjectSchemaInspection:
-    return ProjectSchemaInspector(workspace).inspect()
+    inspection = ProjectSchemaInspector(workspace).inspect()
+    # R1测试循环第1轮：新建项目首屏曾报「暂时无法安全打开此项目」，
+    # F5或后台初始化完成后自行消失——写入方在单事务内建库+写marker时，
+    # 只读探测可能落在提交前（表/marker行尚不可见→UNKNOWN→blocked）。
+    # 这是毫秒级瞬态，不是损坏：对UNKNOWN做有界重试；真损坏是稳定
+    # 状态，重试耗尽后仍返回UNKNOWN，门禁语义不变。
+    attempts = 0
+    while (
+        inspection.classification is SchemaClassification.UNKNOWN
+        and attempts < 3
+    ):
+        attempts += 1
+        time.sleep(0.4 * attempts)
+        inspection = ProjectSchemaInspector(workspace).inspect()
+    return inspection
 
 
 __all__ = [

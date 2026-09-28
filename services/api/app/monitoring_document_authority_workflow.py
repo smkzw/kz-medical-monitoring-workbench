@@ -89,13 +89,21 @@ class MonitoringDocumentAuthorityWorkflow:
             files,
             project_context=frozen_project_context,
         ).to_dict()
-        if any(
-            candidate.get("role_hypotheses")
-            and (
-                candidate.get("technical_status") != "ready"
-                or candidate.get("extraction_status") != "parsed"
-            )
+        # R1测试循环第1轮：原判定「任一候选未完全解析即拒收整批」把
+        # 「合法方案docx + 图片型eCRF pdf」组合整体挡在身份核对之外
+        # （测试者D六次尝试全败，报"尚未通过完整性核对"且无原因）。
+        # 现改为fail-closed于「批内没有任何可解析候选」；部分候选
+        # needs_ocr时照常进入双盲分析，该候选依旧不可被选为权威文件
+        # （下游_validate_analysis的eligible校验与提示词约束不变）。
+        parsable_candidates = [
+            candidate
             for candidate in batch["candidates"]
+            if candidate.get("technical_status") == "ready"
+            and candidate.get("extraction_status") == "parsed"
+        ]
+        if not any(
+            candidate.get("role_hypotheses")
+            for candidate in parsable_candidates
         ):
             raise DocumentAuthorityError("document_authority_evidence_incomplete")
         revision = self._input_revision(project_id, batch)
@@ -123,6 +131,7 @@ class MonitoringDocumentAuthorityWorkflow:
         user_role_selections: Any = (),
         actor: str = "medical_manager",
         expected_decision_version: int | None = None,
+        identity_confirmation: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         candidate_root = self._candidate_root(workspace_dir)
         batch = self._load_batch(candidate_root, batch_id)
@@ -166,27 +175,40 @@ class MonitoringDocumentAuthorityWorkflow:
             verifier_run,
         )
         if identity["status"] != "aligned" and identity["status"] != "not_assessed":
-            filenames = {
-                str(item.get("candidate_id") or ""): str(
-                    item.get("filename") or ""
-                )
-                for item in batch["candidates"]
-            }
-            return {
-                "state": (
-                    "project_mismatch"
-                    if identity["status"] == "mismatch"
-                    else "project_identity_incomplete"
-                ),
-                "authority_status": "not_promoted",
-                "batch_id": batch_id,
-                "identity_status": identity["status"],
-                "attention_files": [
-                    filenames[candidate_id]
-                    for candidate_id in identity["attention_candidate_ids"]
-                    if filenames.get(candidate_id)
-                ],
-            }
+            # R1测试循环第1轮：身份门默认fail-closed（防串项目），但必须
+            # 留人工裁决出口——测试者B/C的项目代号与研究方案编号字面
+            # 不一致时被整体拒收且无入口，全链阻断。人工确认需显式提交
+            # 并落盘审计后才放行；未确认时行为与原短路完全一致。
+            override = self._effective_identity_override(
+                project_id=project_id,
+                workspace_dir=workspace_dir,
+                batch=batch,
+                confirmation=identity_confirmation,
+                actor=actor,
+                identity_status=str(identity["status"]),
+            )
+            if override is None:
+                filenames = {
+                    str(item.get("candidate_id") or ""): str(
+                        item.get("filename") or ""
+                    )
+                    for item in batch["candidates"]
+                }
+                return {
+                    "state": (
+                        "project_mismatch"
+                        if identity["status"] == "mismatch"
+                        else "project_identity_incomplete"
+                    ),
+                    "authority_status": "not_promoted",
+                    "batch_id": batch_id,
+                    "identity_status": identity["status"],
+                    "attention_files": [
+                        filenames[candidate_id]
+                        for candidate_id in identity["attention_candidate_ids"]
+                        if filenames.get(candidate_id)
+                    ],
+                }
         # 只有资料已通过研究身份门，才合并持久化裁决（文件中已有）与
         # 本次显式提交（落盘）。错研究或归属不明的资料不得留下角色选择。
         # 之后所有阶段统一消费有效集——刷新/重启/无参数resolve不丢裁决。
@@ -408,6 +430,121 @@ class MonitoringDocumentAuthorityWorkflow:
     _LEGACY_USER_SELECTIONS_SCHEMA = (
         "monitoring-document-authority-user-selections-v1"
     )
+    _IDENTITY_OVERRIDE_SCHEMA = (
+        "monitoring-document-authority-identity-override-v1"
+    )
+
+    @classmethod
+    def _identity_override_path(cls, workspace_dir: Path, batch_id: str) -> Path:
+        return (
+            cls._candidate_root(workspace_dir)
+            / "identity_overrides"
+            / f"{batch_id}.json"
+        )
+
+    @classmethod
+    def _load_identity_override(
+        cls,
+        workspace_dir: Path,
+        batch_id: str,
+    ) -> dict[str, Any] | None:
+        """Read one persisted human identity adjudication, fail-closed on drift."""
+
+        path = cls._identity_override_path(workspace_dir, batch_id)
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError) as exc:
+            raise DocumentAuthorityError(
+                "document_authority_identity_override_corrupt"
+            ) from exc
+        if (
+            not isinstance(value, dict)
+            or value.get("schema_version") != cls._IDENTITY_OVERRIDE_SCHEMA
+            or value.get("batch_id") != batch_id
+        ):
+            raise DocumentAuthorityError(
+                "document_authority_identity_override_corrupt"
+            )
+        override_sha256 = str(value.get("override_sha256") or "")
+        unsigned = {
+            key: item
+            for key, item in value.items()
+            if key != "override_sha256"
+        }
+        if override_sha256 != content_sha256(unsigned):
+            raise DocumentAuthorityError(
+                "document_authority_identity_override_corrupt"
+            )
+        return value
+
+    @classmethod
+    def _effective_identity_override(
+        cls,
+        *,
+        project_id: str,
+        workspace_dir: Path,
+        batch: dict[str, Any],
+        confirmation: Mapping[str, Any] | None,
+        actor: str,
+        identity_status: str,
+    ) -> dict[str, Any] | None:
+        """Return the human identity adjudication for this batch, if any.
+
+        未确认返回None（保持fail-closed短路）；首次显式确认按CAS写盘；
+        已有确认直接复用。确认记录绑定批次指纹与项目，防止跨批次重放。
+        """
+
+        batch_id = str(batch["batch_id"])
+        with cls._decision_lock(workspace_dir, batch_id):
+            persisted = cls._load_identity_override(workspace_dir, batch_id)
+            if persisted is not None:
+                if (
+                    persisted.get("project_id") != project_id
+                    or persisted.get("batch_manifest_sha256")
+                    != content_sha256(batch)
+                ):
+                    raise DocumentAuthorityError(
+                        "document_authority_identity_override_scope_mismatch"
+                    )
+                return persisted
+            if not isinstance(confirmation, Mapping):
+                return None
+            if confirmation.get("confirmed") is not True:
+                raise DocumentAuthorityError(
+                    "document_authority_identity_confirmation_invalid"
+                )
+            reason = str(confirmation.get("reason") or "").strip()
+            actor_name = str(actor or "").strip()
+            if len(reason) < 2 or not actor_name:
+                raise DocumentAuthorityError(
+                    "document_authority_identity_confirmation_invalid"
+                )
+            now = datetime.now(timezone.utc).isoformat()
+            unsigned = {
+                "schema_version": cls._IDENTITY_OVERRIDE_SCHEMA,
+                "batch_id": batch_id,
+                "project_id": project_id,
+                "batch_manifest_sha256": content_sha256(batch),
+                "original_identity_status": identity_status,
+                "actor": actor_name,
+                "reason": reason[:2_000],
+                "confirmed_at": now,
+            }
+            payload = {
+                **unsigned,
+                "override_sha256": content_sha256(unsigned),
+            }
+            path = cls._identity_override_path(workspace_dir, batch_id)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(".json.tmp")
+            temporary.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=1),
+                encoding="utf-8",
+            )
+            temporary.replace(path)
+            return payload
 
     @classmethod
     def _selections_path(cls, workspace_dir: Path, batch_id: str) -> Path:

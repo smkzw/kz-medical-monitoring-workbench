@@ -61,7 +61,11 @@ _ERROR_MESSAGES = {
     "invalid_mode": "不支持的监查运行模式。",
     "invalid_execution_basis": "不支持的运行基准。",
     "invalid_snapshot": "数据批次定义无效。",
-    "run_data_not_ready": "当前项目的数据仍在核对字段对应关系，确认完成前不会启动医学监查。",
+    "run_data_not_ready": (
+        "字段核对尚未完成，确认完成前不会启动医学监查。"
+        "请先在数据接入向导中完成研究文件核对与字段确认；"
+        "若长时间无进展，请重新打开向导查看具体卡住的步骤。"
+    ),
     "invalid_baseline": "既往比较基线定义无效。",
     "baseline_not_published": "比较基线必须是已发布的同项目结果。",
     "baseline_mode_mismatch": "比较基线必须与本次监查使用相同模式。",

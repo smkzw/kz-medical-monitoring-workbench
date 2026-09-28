@@ -67,8 +67,10 @@ function documentRoleLabel(role) {
   return DOCUMENT_ROLE_LABELS[role] || "研究文件";
 }
 
-function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onContentConfirm }) {
+function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onContentConfirm, onIdentityConfirm }) {
   const [choices, setChoices] = useState({});
+  const [identityNote, setIdentityNote] = useState("");
+  const [identityBusy, setIdentityBusy] = useState(false);
   if (!state || (state.phase === "loading" && !state.payload)) {
     return <p className="monitoring-admission-loading" role="status">正在核对研究文档…</p>;
   }
@@ -81,6 +83,24 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
   const allAnswered = userChoices.every(
     (choice) => typeof choices[choice.role] === "string",
   );
+  // 身份门人工裁决（R1循环）：双盲核对无法自动建立文件与项目的对应
+  // 关系（如项目代号≠方案研究编号、药物命名不一致）时，给出人工确认
+  // 入口；确认后系统记录裁决并继续角色核对。未确认前仍不采用该批文件。
+  const identityBlocked = ["project_mismatch", "project_identity_incomplete"].includes(state.phase)
+    || ["project_mismatch", "project_identity_incomplete"].includes(payload.state);
+  const submitIdentityConfirmation = async () => {
+    if (identityBusy) return;
+    setIdentityBusy(true);
+    try {
+      await onIdentityConfirm?.({
+        confirmed: true,
+        reason: identityNote.trim()
+          || `人工确认${(payload.files || []).join("、") || "本批研究文件"}属于当前项目并继续核对。`,
+      });
+    } finally {
+      setIdentityBusy(false);
+    }
+  };
   return (
     <section className="monitoring-admission-documents" aria-label="研究文档准备情况">
       <header>
@@ -170,6 +190,33 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
             title={allAnswered ? "保存选择并继续" : "请先完成上方选择"}
           >
             保存选择并继续
+          </button>
+        </fieldset>
+      ) : null}
+      {identityBlocked && !processing ? (
+        <fieldset className="monitoring-admission-user-choices">
+          <legend>资料归属需要人工确认</legend>
+          <small style={{ display: "block", marginBottom: "6px" }}>
+            系统未能在文件与当前项目信息之间自动建立对应关系。请核对上方文件确属本研究后确认；
+            确认结果会记入裁决记录。若文件不属于本研究，请更换文件后重新上传。
+          </small>
+          <label style={{ display: "block", marginBottom: "6px" }}>
+            <textarea
+              aria-label="归属确认说明（可选）"
+              value={identityNote}
+              placeholder="可补充说明确认依据（如：本项目即RUX-03-002研究，项目代号为管理编号）"
+              onChange={(event) => setIdentityNote(event.target.value)}
+              disabled={identityBusy}
+            />
+          </label>
+          <button
+            type="button"
+            className="monitoring-admission-secondary"
+            disabled={identityBusy}
+            onClick={submitIdentityConfirmation}
+            title="确认这组研究文件属于当前项目，继续文件角色核对"
+          >
+            {identityBusy ? "正在提交确认…" : "确认属于当前项目并继续"}
           </button>
         </fieldset>
       ) : null}
@@ -388,6 +435,7 @@ export function MedicalMonitoringAdmissionWizardView({
   onDocumentRetry,
   onDocumentAdjudicate,
   onDocumentContentConfirm,
+  onDocumentIdentityConfirm,
 }) {
   const phase = state?.phase || "input";
   const stepIndex = state?.stepIndex || 0;
@@ -404,7 +452,22 @@ export function MedicalMonitoringAdmissionWizardView({
           ? { key: "generate-facts", label: "重试生成监查数据", disabled: false }
           : { key: "generating-facts", label: "正在生成监查数据…", disabled: true }
       : stepIndex === 2 && phase !== "done" && documentState?.payload?.ready !== true
-      ? { key: "documents-required", label: "请先添加所需文件", disabled: true }
+      ? (() => {
+        // R1循环：研究文件未就绪时主按钮保持禁用，但文案必须如实
+        // 反映当前所处环节（核对中/待人工确认/待补充文件），不再
+        // 一律显示「请先添加所需文件」。
+        const documentPhase = documentState?.phase || "";
+        const processingDocuments = ["uploading", "analyzing", "reviewing", "adjudicating", "cross_checking"].includes(documentPhase);
+        const identityBlocked = ["project_mismatch", "project_identity_incomplete"].includes(documentPhase)
+          || ["project_mismatch", "project_identity_incomplete"].includes(documentState?.payload?.state);
+        if (processingDocuments) {
+          return { key: "documents-required", label: "正在核对研究文件…", disabled: true };
+        }
+        if (identityBlocked) {
+          return { key: "documents-required", label: "请先确认资料归属", disabled: true };
+        }
+        return { key: "documents-required", label: "请先添加所需文件", disabled: true };
+      })()
       : stepIndex === 2 && phase !== "done"
       ? admissionMappingPrimaryAction(resolvedMappingState)
       : admissionPrimaryAction(state)
@@ -558,6 +621,7 @@ export function MedicalMonitoringAdmissionWizardView({
               onRetry={onDocumentRetry}
               onAdjudicate={onDocumentAdjudicate}
               onContentConfirm={onDocumentContentConfirm}
+              onIdentityConfirm={onDocumentIdentityConfirm}
             />
             {documentState?.payload?.ready ? (
               <MappingConfirmPanel
@@ -804,6 +868,37 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         setDocumentState((current) => ({
           ...current,
           error: error?.detail?.message || error?.message || "内容确认失败，请重试。",
+        }));
+      }
+    }
+  }, [api, documentState.payload?.analysis_token, state.attemptId, state.projectId]);
+
+  const submitIdentityConfirmation = useCallback(async (confirmation) => {
+    if (!state.projectId || !state.attemptId) return;
+    if (confirmation?.confirmed !== true) return;
+    const generation = documentRequestGeneration.current + 1;
+    documentRequestGeneration.current = generation;
+    setDocumentState((current) => ({ ...current, phase: "analyzing", error: null }));
+    try {
+      const payload = await api.resolveStudyDocuments(
+        state.projectId,
+        state.attemptId,
+        documentState.payload?.analysis_token,
+        { identityConfirmation: confirmation },
+      );
+      if (documentRequestGeneration.current === generation) {
+        setDocumentState({
+          phase: payload.ready ? "ready" : (payload.state || "analyzing"),
+          payload,
+          error: null,
+        });
+      }
+    } catch (error) {
+      if (documentRequestGeneration.current === generation) {
+        setDocumentState((current) => ({
+          ...current,
+          phase: current.payload?.state || "failed",
+          error: error?.detail?.message || error?.message || "归属确认提交失败，请重试。",
         }));
       }
     }
@@ -1202,6 +1297,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onDocumentRetry={loadDocumentReadiness}
       onDocumentAdjudicate={submitDocumentAdjudication}
       onDocumentContentConfirm={submitContentConfirmation}
+      onDocumentIdentityConfirm={submitIdentityConfirmation}
     />
     </>
   );

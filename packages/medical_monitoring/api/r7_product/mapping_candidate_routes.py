@@ -89,8 +89,9 @@ _MAPPING_MESSAGES = {
         "请先补充这两类文件，系统会自行核对，无需逐字段确认。"
     ),
     "mapping_document_evidence_incomplete": (
-        "研究方案或电子病例报告表尚未通过完整性核对。"
-        "请按页面提示补充或更换文件，系统会自动重新识别。"
+        "研究文件未通过完整性核对：未能从这组文件中读取到可核对的内容"
+        "（如全部为扫描版或文件损坏）。请更换为可读取的文件版本后"
+        "重新上传；若批内仅个别文件无法读取，其余文件仍会正常核对。"
     ),
     "document_packet_project_mismatch": (
         "研究文档与当前项目不一致，本次未发送数据。请返回项目首页重新选择文件。"
@@ -228,6 +229,15 @@ class MappingDraftConfirmRequest(BaseModel):
     automatic: bool = False
 
 
+class DocumentAuthorityIdentityConfirmation(BaseModel):
+    """人工确认上传资料归属当前项目（R1循环：身份门的人工裁决出口）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    confirmed: bool
+    reason: str = Field(min_length=2, max_length=2_000)
+
+
 class DocumentAuthorityPromotionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -236,6 +246,8 @@ class DocumentAuthorityPromotionRequest(BaseModel):
     # （candidate_id为空=该角色缺失）。校验在workflow层fail-closed。
     user_role_selections: List[Dict[str, str]] = Field(default_factory=list)
     expected_decision_version: Optional[StrictInt] = Field(default=None, ge=0)
+    # 身份门人工裁决：confirmed=true时落盘审计并放行该批次的角色核对。
+    identity_confirmation: Optional[DocumentAuthorityIdentityConfirmation] = None
 
 
 @dataclass(frozen=True)
@@ -674,11 +686,14 @@ def register_mapping_candidate_routes(
             return _run_entry_error_response(exc)
         try:
             actor = getattr(auth, "principal_id", None) or "medical_manager"
+            request_fields = payload.model_dump()
+            confirmation_payload = request_fields.pop("identity_confirmation", None)
             result = context.monitoring_document_authority_promoter(
                 project_id=canonical,
                 workspace_dir=context.workspace_dir(context.root, canonical),
                 actor=str(actor),
-                **payload.model_dump(),
+                identity_confirmation=confirmation_payload,
+                **request_fields,
             )
             if result.get("state") == "failed":
                 # V5会商L2-1：失败必须可诊断。作业级failure_code/message
@@ -708,14 +723,20 @@ def register_mapping_candidate_routes(
                 if state == "project_mismatch":
                     headline = "研究资料与当前项目不一致"
                     guidance = (
-                        "系统已识别这组资料属于另一项研究，本次不会用于"
-                        "当前项目。请重新选择当前项目的研究方案和病例报告表。"
+                        "系统未能在文件与当前项目信息之间自动建立对应关系"
+                        "（常见原因：项目代号与方案研究编号不同、或药物"
+                        "命名不一致）。未经您确认前，本次不会用于"
+                        "当前项目；若您确认这些文件属于本研究，请点击"
+                        "“确认属于当前项目并继续”，或重新选择文件。"
                     )
                 elif state == "project_identity_incomplete":
                     headline = "系统还无法确认资料归属"
                     guidance = (
-                        "当前资料缺少可用于核对研究编号或适应症的内容。"
-                        "请补充能明确标识当前项目的方案或病例报告表。"
+                        "文件中的研究编号、药物或适应症信息与当前项目"
+                        "信息无法自动对应（当前项目可能尚未登记方案编号，"
+                        "因此系统缺少可比对的基准，并不代表文件缺少内容）。"
+                        "请核对文件确属本研究后点击“确认属于当前项目并"
+                        "继续”，或在项目中补充登记方案编号后重新上传。"
                     )
                 elif state == "needs_user_input":
                     headline = "还差一项关键信息"
