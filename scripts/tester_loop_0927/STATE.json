@@ -1,11 +1,12 @@
 {
-  "round": 1,
-  "updatedAt": "2026-09-28T11:20:00+08:00",
-  "openFindings": 15,
-  "openBreakdown": { "待复测": 6, "待修复": 9 },
+  "round": 2,
+  "updatedAt": "2026-09-28T16:05:00+08:00",
+  "openFindings": 24,
+  "openBreakdown": { "待复测": 8, "待修复": 16 },
   "openP1": 5,
   "cleanStreak": 0,
-  "fixCommit": "1007d24",
+  "stagnatedIds": ["R1-01", "R1-02", "R1-05", "R1-07", "R1-08", "R1-09", "R1-10", "R1-11", "R1-12", "R1-13", "R1-14", "R1-15"],
+  "fixCommit": "555df12",
   "rounds": [
     {
       "round": 1,
@@ -18,6 +19,18 @@
       "cleanStreak": 0,
       "note": "4/4 全部阻断在研究文件门禁+字段映射挂起；监查引擎从未运行，合成植入对照未开考（不可评估，不记 0）；修复 1007d24 已落地未复测；4 个 MX循R1* 测试项目已软删除归档",
       "report": "scripts/tester_loop_0927/round_01/REPORT.md"
+    },
+    {
+      "round": 2,
+      "date": "2026-09-28",
+      "testers": 4,
+      "testersPassed": 0,
+      "newFindings": 12,
+      "fixed": 5,
+      "openP1": 5,
+      "cleanStreak": 0,
+      "note": "4/4 仍未跑通但阻断点后移：人工放行主路径双源验证可用（B/D），新主阻断=字段识别无法完成（B停EX表>75min、D 4h34m/49表、确认按钮永不激活）；最严重新发现=差异面板虚构文件内容（R2-02）；监查引擎连续第二轮未运行、植入对照未开考；R1-03/04/06 关闭（R1-06 与三人再观察矛盾，R3 必查）；12 条 R1 发现满两轮未决触发换策略（查遗专项位+体验债打包+预置状态并行）；修复 555df12 落地未复测；A 报告二度被通道覆盖、已自 slotA.log 恢复；4 个 MX循R2* 项目已软删除归档",
+      "report": "scripts/tester_loop_0927/round_02/REPORT.md"
     }
   ]
 }
