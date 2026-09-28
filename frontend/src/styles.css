@@ -11742,6 +11742,13 @@ textarea {
   line-height: 1.35;
 }
 
+.new-project-field-hint {
+  color: var(--muted, #7a8699);
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 400;
+}
+
 .new-project-dialog > footer {
   justify-content: flex-end;
   margin-top: 18px;

@@ -1208,6 +1208,7 @@ function AppShell({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...newProjectDraft,
+          project_name: newProjectDraft.project_name.trim(),
           product_name: newProjectDraft.product_name.trim(),
           modules: newProjectMonitoring ? ["medical_writing", "medical_monitoring"] : ["medical_writing"],
           actor: "medical_manager",
@@ -1346,11 +1347,11 @@ function AppShell({
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget && !newProjectBusy) setNewProjectOpen(false);
         }}>
-          <form className="panel new-project-dialog" onSubmit={createNewProject} noValidate role="dialog" aria-modal="true" aria-label="新建医学写作项目">
+          <form className="panel new-project-dialog" onSubmit={createNewProject} noValidate role="dialog" aria-modal="true" aria-label="新建研究项目">
             <header>
               <div>
-                <span>医学写作</span>
-                <h2>新建研究方案项目</h2>
+                <span>{newProjectMonitoring ? "医学写作 · 医学监查" : "医学写作"}</span>
+                <h2>新建研究项目</h2>
               </div>
               <button type="button" className="icon-button" onClick={() => setNewProjectOpen(false)} disabled={newProjectBusy} title="关闭">
                 <XCircle size={18} />
@@ -1376,7 +1377,8 @@ function AppShell({
             ) : (
               <>
                 <div className="new-project-fields">
-                  <label>试验药物<input required aria-required="true" aria-invalid={Boolean(newProjectErrors.product_name)} aria-describedby={newProjectErrors.product_name ? "new-project-product-error" : undefined} maxLength={160} value={newProjectDraft.product_name} onChange={(event) => updateNewProjectField("product_name", event.target.value)} placeholder="药物代号或通用名" />{newProjectErrors.product_name && <small id="new-project-product-error" className="new-project-field-error">{newProjectErrors.product_name}</small>}</label>
+                  <label>项目名称<input aria-describedby="new-project-name-hint" maxLength={200} value={newProjectDraft.project_name} onChange={(event) => updateNewProjectField("project_name", event.target.value)} placeholder="项目代号或管理名称，如 MX循R1D-RUX" /><small id="new-project-name-hint" className="new-project-field-hint">用于项目列表与研究文件归属核对；不填则按试验药物与适应症自动生成。管理代号请填在这里，不要填入试验药物。</small></label>
+                  <label>试验药物<input required aria-required="true" aria-invalid={Boolean(newProjectErrors.product_name)} aria-describedby={newProjectErrors.product_name ? "new-project-product-error" : "new-project-product-hint"} maxLength={160} value={newProjectDraft.product_name} onChange={(event) => updateNewProjectField("product_name", event.target.value)} placeholder="药物代号或通用名，如 磷酸芦可替尼乳膏" />{newProjectErrors.product_name ? <small id="new-project-product-error" className="new-project-field-error">{newProjectErrors.product_name}</small> : <small id="new-project-product-hint" className="new-project-field-hint">填写研究药物本身；管理代号请填“项目名称”。</small>}</label>
                   <label>适应症<input required aria-required="true" aria-invalid={Boolean(newProjectErrors.indication)} aria-describedby={newProjectErrors.indication ? "new-project-indication-error" : undefined} maxLength={120} value={newProjectDraft.indication} onChange={(event) => updateNewProjectField("indication", event.target.value)} placeholder="例如 类风湿关节炎" />{newProjectErrors.indication && <small id="new-project-indication-error" className="new-project-field-error">{newProjectErrors.indication}</small>}</label>
                   <label>研究分期<select required aria-required="true" aria-invalid={Boolean(newProjectErrors.study_phase)} aria-describedby={newProjectErrors.study_phase ? "new-project-phase-error" : undefined} value={newProjectDraft.study_phase} onChange={(event) => updateNewProjectField("study_phase", event.target.value)}><option value="">请选择</option><option value="I期">I期</option><option value="I/II期">I/II期</option><option value="II期">II期</option><option value="II/III期">II/III期</option><option value="III期">III期</option></select>{newProjectErrors.study_phase && <small id="new-project-phase-error" className="new-project-field-error">{newProjectErrors.study_phase}</small>}</label>
                 </div>
