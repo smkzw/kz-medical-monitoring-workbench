@@ -658,6 +658,30 @@ class AdmissionMappingConfirmationService:
                     workspace_dir=workspace_dir,
                 )["reconciliation"]
             except AdmissionMappingPipelineError as exc:
+                if exc.code == "mapping_verifier_job_failed":
+                    # R5冲刺（收敛性家族）：失败上报+幂等重跑——对终态
+                    # 失败的分片执行retry_terminal重新排队（周期兜底
+                    # poller会在15s内拾起，无需显式wake）；重跑成功后
+                    # 复核自然收敛。不可重试时如实blocked并给人工指引。
+                    retried = self._retry_failed_mapping_jobs(
+                        project_id=project_id,
+                        attempt_id=attempt_id,
+                    )
+                    projected = self._draft_payload(draft)
+                    projected["adjudication"] = {
+                        "state": "blocked",
+                        "resolved_count": 0,
+                        "remaining_question_count": len(unresolved),
+                        "failure_code": "mapping_verifier_job_failed",
+                        "failure_message": (
+                            f"复核分片失败，已重新排队重跑{retried}个；"
+                            "请稍候再次查询。"
+                            if retried
+                            else "复核分片失败且未能重新排队（可能已达重试"
+                                 "上限）；请重新发起字段识别或联系管理员。"
+                        ),
+                    }
+                    return projected
                 if exc.code != "mapping_verifier_incomplete":
                     raise
                 projected = self._draft_payload(draft)
@@ -1554,6 +1578,46 @@ class AdmissionMappingConfirmationService:
         projected["reconciliation"] = dict(report)
         return projected
 
+    def _retry_failed_mapping_jobs(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+    ) -> int:
+        """R5冲刺（收敛性家族）：把终态失败的映射分片重新排队一次。
+
+        重试依赖repository.retry_terminal；重新排队后由周期兜底
+        poller拾起执行，无需本服务持有wake通道。返回成功重新排队的
+        分片数；不可重试（超上限/契约退役）的分片被跳过并计数为0。
+        """
+
+        retried = 0
+        if self.ai_repository is None:
+            return retried
+        for prefix in (
+            MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX,
+            MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX,
+        ):
+            try:
+                jobs = self._mapping_jobs(project_id, attempt_id, prefix)
+            except AdmissionMappingPipelineError:
+                continue
+            for job in jobs:
+                if str(_value(job.status)) not in {
+                    "failed", "blocked", "cancelled", "stale_input",
+                }:
+                    continue
+                try:
+                    self.ai_repository.retry_terminal(
+                        project_id,
+                        job.job_id,
+                        current_input_revision_sha256=job.input_revision_sha256,
+                    )
+                    retried += 1
+                except Exception:
+                    continue
+        return retried
+
     def _mapping_jobs(
         self,
         project_id: str,
@@ -1583,7 +1647,16 @@ class AdmissionMappingConfirmationService:
         candidates: list[Any] = []
         current_revisions: dict[str, str] = {}
         for job in jobs:
-            if str(_value(job.status)) != "completed":
+            status = str(_value(job.status))
+            if status != "completed":
+                if status in {"failed", "blocked", "cancelled", "stale_input"}:
+                    # R5冲刺（收敛性家族）：终态失败分片必须与「仍在运行」
+                    # 区分上报——原实现一律报verifier_incomplete，使复核
+                    # 状态机在全部job终态后仍恒running、确认接口409死循环
+                    # （R4验收实测实证：19完成+1失败下adjudication永不收敛）。
+                    raise AdmissionMappingPipelineError(
+                        "mapping_verifier_job_failed"
+                    )
                 raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
             if workspace_dir is not None:
                 revision_key = str(job.input_revision_sha256)

@@ -12984,7 +12984,7 @@ function SourceRegistryPage({ projectId, onOpenModule }) {
                   )}
                 </div>
               </header>
-              <p className="source-ledger-boundary">仅核验技术可读性、文件角色、项目/研究标识及当前任务所需内容结构。确认沿用只改变使用状态，不会把原警告或不一致改为匹配。</p>
+              <p className="source-ledger-boundary">仅核验技术可读性、文件角色、项目/研究标识及当前任务所需内容结构。确认沿用只改变使用状态，不会把原警告或不一致改为匹配。R5口径说明：「匹配/可使用」仅代表文件内容核验通过；医学监查读取与「方案事实与规则发布」还需研究文件核对与字段映射确认（前往「医学监查 → 数据接入」完成）。</p>
               <div className="source-ledger-checks">
                 {(selected.validation?.checks || []).map((check) => (
                   <div key={check.check_code}><span>{check.label}</span><b>{sourceAdmissionStatusLabel(check.outcome)}</b><small title={check.observed_value}>{check.observed_value || "未识别到可核对内容"}</small></div>
