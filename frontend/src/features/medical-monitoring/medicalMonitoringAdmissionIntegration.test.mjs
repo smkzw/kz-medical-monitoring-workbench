@@ -190,11 +190,23 @@ const needle = (text) => compact(text);
     "admission open state is declared beside the wizard state",
   );
   check(
-    src.includes(needle(`{!loadingBody && !resultLoaded && !publicRunToken ? (\n        <>\n          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError?.text : startSurfaceCopy}</span></section>\n          <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />\n          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={retryPage} /> : null}\n        </>\n      ) : null}`)),
+    src.includes(needle(`{!loadingBody && !resultLoaded && !publicRunToken ? (\n        <>\n          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError?.text : startSurfaceCopy}</span></section>\n          <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />\n          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={(payload) => {
+            retryPage();
+            // R5冲刺（R3-12）：接入完成后同步刷新全局顶栏的数据批次/
+            // 方案版本元数据，消除「向导内已识别、顶栏仍显示未登记
+            // 批次」的脱节。
+            globalThis.dispatchEvent?.(new CustomEvent("workbench:refresh-dashboard"));
+          }} /> : null}\n        </>\n      ) : null}`)),
     "card and wizard mount only on the project start-surface gate",
   );
   check(
-    src.includes(needle(`<MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={retryPage} />`)),
+    src.includes(needle(`<MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={(payload) => {
+            retryPage();
+            // R5冲刺（R3-12）：接入完成后同步刷新全局顶栏的数据批次/
+            // 方案版本元数据，消除「向导内已识别、顶栏仍显示未登记
+            // 批次」的脱节。
+            globalThis.dispatchEvent?.(new CustomEvent("workbench:refresh-dashboard"));
+          }} />`)),
     "wizard receives the project identity and refreshes when monitor-ready data is complete",
   );
   passed += 4;

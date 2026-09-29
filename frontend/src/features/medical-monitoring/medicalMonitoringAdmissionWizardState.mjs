@@ -227,7 +227,7 @@ export function admissionWizardReducer(state, action) {
         const recovery = admissionRecovery({ code: "admission_project_missing" });
         return { ...state, phase: "failed", error: { ...recovery, retryTarget: null }, retryTarget: null };
       }
-      return { ...state, phase: "creating", error: null, retryTarget: null };
+      return { ...state, phase: "creating", error: null, retryTarget: null, importElapsedSeconds: 0 };
     case "import-created": {
       const attemptId = cleanText(action.payload?.attempt_id);
       if (!ATTEMPT_ID_PATTERN.test(attemptId)) return responseInvalidFailure(state);
@@ -259,8 +259,12 @@ export function admissionWizardReducer(state, action) {
       return { ...state, phase: "done" };
     case "retry": {
       const target = state.retryTarget || (state.attemptId ? "read" : "create");
-      return { ...state, phase: target === "create" ? "creating" : "reading", error: null, retryTarget: target };
+      return { ...state, phase: target === "create" ? "creating" : "reading", error: null, retryTarget: target, importElapsedSeconds: 0 };
     }
+    case "import-tick":
+      // R5冲刺（R2-10）：导入进行中的已用时秒表。
+      if (state.phase !== "creating") return state;
+      return { ...state, importElapsedSeconds: (Number(state.importElapsedSeconds) || 0) + 1 };
     case "restart":
       return createAdmissionWizardState({ projectId: state.projectId });
     case "error": {
@@ -278,7 +282,13 @@ export function admissionWizardReducer(state, action) {
 export function admissionPrimaryAction(state) {
   switch (state?.phase) {
     case "creating":
-      return { key: "creating", label: "正在导入…", disabled: true };
+      // R5冲刺（R2-10）：导入为同步复制+解析（大文件可达数分钟），
+      // 静态文案无法区分「进行中/已卡死」——附已用时秒数让等待可感知。
+      return {
+        key: "creating",
+        label: `正在导入…（已用时 ${Number(state.importElapsedSeconds) || 0} 秒；大文件复制与解析可能需要数分钟）`,
+        disabled: true,
+      };
     case "reading":
       return { key: "reading", label: "正在识别数据结构…", disabled: true };
     case "ready":
@@ -331,6 +341,38 @@ export function formatAdmissionByteSize(size) {
   return `${mb} MB`;
 }
 
+// R5冲刺（R1-15）：表结构中文标注兜底字典——数据文件sheet名自带
+// 「域代码--中文」标注时原样使用；缺标注的已知域代码/代码表补齐，
+// 统一口径（R1-D报告：54表中LBHCV与Code_List两表无中文后缀）。
+const SHEET_LABEL_FALLBACK = Object.freeze({
+  LBHCV: "实验室检查-丙型肝炎病毒",
+  LBHBV: "实验室检查-乙型肝炎病毒",
+  LBHIV: "实验室检查-人类免疫缺陷病毒",
+  Code_List: "代码对照表",
+  CODE_LIST: "代码对照表",
+  DM: "人口学",
+  MH: "既往及现病史",
+  AE: "不良事件",
+  CM: "既往及合并用药治疗",
+  EX: "试验用药",
+  SV: "访视",
+  VS: "生命体征",
+  LB: "实验室检查",
+  DS: "退出研究",
+  IC: "知情同意",
+  SU: "外科手术史",
+  QS: "问卷",
+});
+
+export function labelSheetName(name) {
+  const raw = cleanText(name);
+  if (!raw || raw.includes("--")) return raw;
+  const base = raw.split("$")[0].trim();
+  return Object.hasOwn(SHEET_LABEL_FALLBACK, base)
+    ? `${raw}--${SHEET_LABEL_FALLBACK[base]}`
+    : raw;
+}
+
 // Structure summary first: counts, per-table plain-language rows, and the
 // pending human-judgement columns. `technical_details` is carried separately
 // and may only be rendered inside the collapsed region.
@@ -350,7 +392,7 @@ export function projectAdmissionProfile(payload) {
         : "",
     }));
     return {
-      name: cleanText(table?.name),
+      name: labelSheetName(table?.name),
       sourceFile: cleanText(table?.source_file),
       rowCount: toCount(table?.row_count),
       rowsText: `${toCount(table?.row_count)} 行`,

@@ -66,6 +66,8 @@ _TECHNICAL_CONTAINER_KEY = "technical_details"
 
 _ADMISSION_STATUS_CODES = {
     "admission_source_invalid": 422,
+    "admission_no_data_files": 422,
+    "admission_file_type_unsupported": 422,
     "admission_copy_rejected": 409,
     "admission_profile_unavailable": 409,
     "admission_project_identity_conflict": 409,
@@ -77,7 +79,18 @@ _ADMISSION_STATUS_CODES = {
 }
 
 _ADMISSION_MESSAGES = {
-    "admission_source_invalid": "未找到可导入的数据目录。请确认所选数据位置存在且包含数据文件后重试。",
+    "admission_source_invalid": (
+        "未找到该数据位置：目录不存在或路径不可访问。请核对路径后重试。"
+    ),
+    "admission_no_data_files": (
+        "该目录存在，但其中没有可导入的数据文件"
+        "（.csv / .xls / .xlsx / .xlsm）。若研究方案等文档也在该目录，"
+        "它们不参与数据导入，请在向导后续步骤单独上传。"
+    ),
+    "admission_file_type_unsupported": (
+        "该文件不是受支持的数据文件格式（.csv / .xls / .xlsx / .xlsm）。"
+        "研究方案、eCRF等文档请在向导后续步骤上传，不作为数据文件导入。"
+    ),
     "admission_copy_rejected": "数据复制校验未通过，系统已拒绝本次导入，原始数据未受影响。请重新发起导入；如再次失败，请检查数据来源是否完整。",
     "admission_profile_unavailable": "系统暂时无法识别这批数据的结构，本次导入未完成。请确认文件格式受支持后重新导入。",
     "admission_project_identity_conflict": (

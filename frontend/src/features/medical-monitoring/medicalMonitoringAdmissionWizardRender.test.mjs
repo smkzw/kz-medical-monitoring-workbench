@@ -102,7 +102,7 @@ check(
   renders.inputWarning.includes("数据位置开头或结尾不能包含空格"),
   "edge-space warning rendered",
 );
-check(renders.creating.includes(">正在导入…</button>") && renders.creating.includes('disabled=""'),
+check(renders.creating.includes(">正在导入…（已用时 0 秒；大文件复制与解析可能需要数分钟）</button>") && renders.creating.includes('disabled=""'),
   "creating keeps a single disabled primary");
 check(renders.creating.includes("monitoring-admission-warning") === false, "no validation noise while importing");
 

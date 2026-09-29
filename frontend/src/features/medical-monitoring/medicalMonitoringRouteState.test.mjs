@@ -236,8 +236,19 @@ const malformedProjects = resolveMedicalMonitoringProjectRoute(
   "missing-fallback",
 );
 check(
-  malformedProjects.status === "default" && malformedProjects.projectId === "proj-my009",
-  "ignores malformed and duplicate project candidates",
+  malformedProjects.status === "unselected" && malformedProjects.projectId === "",
+  "ignores malformed and duplicate project candidates and selects nobody by default (R1-07)",
+);
+const rememberedProjects = resolveMedicalMonitoringProjectRoute(
+  "",
+  [{ project_id: "proj-theirs" }, { project_id: "proj-mine" }],
+  "",
+  "",
+  "proj-mine",
+);
+check(
+  rememberedProjects.status === "remembered" && rememberedProjects.projectId === "proj-mine",
+  "cold start returns to this browser's last project instead of the newest one (R1-07)",
 );
 
 const matchedRisk = resolveMedicalMonitoringRiskRoute(

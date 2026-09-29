@@ -105,6 +105,11 @@ class MonitoringDocumentAuthorityWorkflow:
             candidate.get("role_hypotheses")
             for candidate in parsable_candidates
         ):
+            self._record_last_check_note(
+                workspace_dir,
+                "最近一次研究文件核对结论：未能从这组文件中读取到可核对的内容"
+                "（如全部为扫描版或文件损坏），本次未进入自动核对。",
+            )
             raise DocumentAuthorityError("document_authority_evidence_incomplete")
         revision = self._input_revision(project_id, batch)
         # R3循环（报告B）：批次指纹是内容确定性的——同一组文件重传会
@@ -207,6 +212,28 @@ class MonitoringDocumentAuthorityWorkflow:
                     )
                     for item in batch["candidates"]
                 }
+                attention_files = [
+                    filenames[candidate_id]
+                    for candidate_id in identity["attention_candidate_ids"]
+                    if filenames.get(candidate_id)
+                ]
+                self._record_last_check_note(
+                    workspace_dir,
+                    (
+                        "最近一次研究文件核对结论："
+                        + (
+                            "系统未能自动确认这组资料属于当前项目"
+                            if identity["status"] == "mismatch"
+                            else "系统还无法确认资料归属（缺少可比对的项目标识）"
+                        )
+                        + (
+                            f"；涉及文件：{'、'.join(attention_files)}"
+                            if attention_files
+                            else ""
+                        )
+                        + "。可在向导第3步人工确认归属或更换文件。"
+                    ),
+                )
                 return {
                     "state": (
                         "project_mismatch"
@@ -216,11 +243,7 @@ class MonitoringDocumentAuthorityWorkflow:
                     "authority_status": "not_promoted",
                     "batch_id": batch_id,
                     "identity_status": identity["status"],
-                    "attention_files": [
-                        filenames[candidate_id]
-                        for candidate_id in identity["attention_candidate_ids"]
-                        if filenames.get(candidate_id)
-                    ],
+                    "attention_files": attention_files,
                 }
         # 只有资料已通过研究身份门，才合并持久化裁决（文件中已有）与
         # 本次显式提交（落盘）。错研究或归属不明的资料不得留下角色选择。
@@ -434,6 +457,38 @@ class MonitoringDocumentAuthorityWorkflow:
             user_role_selections=user_role_selections,
             decision_record=decision_record,
         )
+
+    @classmethod
+    def _record_last_check_note(
+        cls, workspace_dir: Path, note: str
+    ) -> None:
+        """R5冲刺（R1-11）：持久化最近一次核对结论，刷新后仍可读。"""
+
+        text = str(note or "").strip()
+        path = (
+            cls._candidate_root(workspace_dir) / "last_document_check_note.json"
+        )
+        try:
+            if not text:
+                path.unlink(missing_ok=True)
+                return
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(".json.tmp")
+            temporary.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "monitoring-document-check-note-v1",
+                        "note": text[:1_000],
+                        "recorded_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            temporary.replace(path)
+        except OSError:
+            # 留痕失败不阻断核对主链路。
+            return
 
     @staticmethod
     def _candidate_root(workspace_dir: Path) -> Path:

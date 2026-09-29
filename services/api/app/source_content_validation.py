@@ -540,8 +540,16 @@ class SourceContentValidationService:
                 check_code="technical_readability",
                 label="文件技术可读性",
                 observed_value=(
-                    f"{len(document.paragraphs)}个段落，{len(document.tables)}张表，"
-                    f"{len(document.spans)}个内容片段"
+                    # R5冲刺（R2-09②④）：术语统一为「证据片段」；0段落
+                    # 0表但spans可读=正文以纯文本流存储，补解释性文案
+                    # 消除「0段落仍判匹配」的困惑。
+                    f"DOCX可读取：{len(document.spans)}个证据片段"
+                    + (
+                        f"（含{len(document.paragraphs)}个段落、"
+                        f"{len(document.tables)}张表）"
+                        if document.paragraphs or document.tables
+                        else "（正文以纯文本流存储，无分节段落结构，不影响可读性判定）"
+                    )
                 ),
                 outcome="match",
                 overridable=False,

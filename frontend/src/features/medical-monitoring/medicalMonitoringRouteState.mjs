@@ -128,6 +128,7 @@ export function resolveMedicalMonitoringProjectRoute(
   projects = [],
   currentProjectId = "",
   fallbackProjectId = "",
+  rememberedProjectId = "",
 ) {
   const requested = cleanValue(requestedProjectId);
   const available = [];
@@ -154,9 +155,17 @@ export function resolveMedicalMonitoringProjectRoute(
   if (fallback && available.includes(fallback)) {
     return Object.freeze({ status: "fallback", projectId: fallback, requestedProjectId: "" });
   }
+  // R5冲刺（R1-07）：关标签重进（无URL、无当前项目）时原逻辑落到全实
+  // 例最新创建的项目——多人共用实例下可能是他人的项目，上下文随之
+  // 静默切换。优先回到本浏览器上次选择的项目；没有记忆时停留在项目
+  // 全览（空选中），绝不默认选中他人项目。
+  const remembered = cleanValue(rememberedProjectId);
+  if (remembered && available.includes(remembered)) {
+    return Object.freeze({ status: "remembered", projectId: remembered, requestedProjectId: "" });
+  }
   return Object.freeze({
-    status: available.length ? "default" : "empty",
-    projectId: available[0] || "",
+    status: available.length ? "unselected" : "empty",
+    projectId: "",
     requestedProjectId: "",
   });
 }

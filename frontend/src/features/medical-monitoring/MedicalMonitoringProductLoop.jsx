@@ -1548,7 +1548,13 @@ export function MedicalMonitoringProductLoop({
         <>
           <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError?.text : startSurfaceCopy}</span></section>
           <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />
-          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={retryPage} /> : null}
+          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={(payload) => {
+            retryPage();
+            // R5冲刺（R3-12）：接入完成后同步刷新全局顶栏的数据批次/
+            // 方案版本元数据，消除「向导内已识别、顶栏仍显示未登记
+            // 批次」的脱节。
+            globalThis.dispatchEvent?.(new CustomEvent("workbench:refresh-dashboard"));
+          }} /> : null}
         </>
       ) : null}
       {historyOpen ? <MonitoringHistoryDrawer history={history} selectedPublicRunToken={productState.selectedPublicRunToken} onSelect={selectHistoryRow} onClose={() => setHistoryOpen(false)} /> : null}

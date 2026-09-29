@@ -126,7 +126,7 @@ check(picked.selectedFiles.length === 1 && picked.selectedFolderName === "本期
 check(admissionPrimaryAction(picked).disabled === false, "selected files enable import without a manual path");
 
 state = admissionWizardReducer(state, { type: "import-start" });
-check(state.phase === "creating" && admissionPrimaryAction(state).label === "正在导入…", "creating phase primary");
+check(state.phase === "creating" && admissionPrimaryAction(state).label.startsWith("正在导入…（已用时"), "creating phase primary");
 
 const createdPayload = generatedAdmissionFixture();
 state = admissionWizardReducer(state, { type: "import-created", payload: createdPayload });

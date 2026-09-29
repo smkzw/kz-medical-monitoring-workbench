@@ -65,22 +65,36 @@ class AdmissionPipelineError(RuntimeError):
         super().__init__(self.code)
 
 
-def _relative_listing_paths(source: Path, suffixes: frozenset[str]) -> tuple[Path, tuple[str, ...]]:
+def _relative_listing_paths(
+    source: Path, suffixes: frozenset[str]
+) -> tuple[Path, tuple[str, ...], tuple[str, ...]]:
+    """Resolve the listing directory; also report non-data files it skips.
+
+    R5冲刺（R1-10/R4-06）：错误分层——目录不存在、目录无数据文件、
+    单文件格式不支持分别报错；目录内非数据文件（如docx研究文档）
+    记入skipped并随导入概况透出，不再静默忽略。
+    """
+
     resolved = source.expanduser().resolve()
     if resolved.is_file():
         if resolved.suffix.lower() not in suffixes:
-            raise AdmissionPipelineError("admission_profile_unavailable")
-        return resolved.parent, (resolved.name,)
+            raise AdmissionPipelineError("admission_file_type_unsupported")
+        return resolved.parent, (resolved.name,), ()
     if not resolved.is_dir():
         raise AdmissionPipelineError("admission_source_invalid")
-    files = tuple(
-        path.relative_to(resolved).as_posix()
-        for path in sorted(resolved.rglob("*"))
-        if path.is_file() and path.suffix.lower() in suffixes
-    )
+    files: list[str] = []
+    skipped: list[str] = []
+    for path in sorted(resolved.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(resolved).as_posix()
+        if path.suffix.lower() in suffixes:
+            files.append(relative)
+        else:
+            skipped.append(relative)
     if not files:
-        raise AdmissionPipelineError("admission_profile_unavailable")
-    return resolved, files
+        raise AdmissionPipelineError("admission_no_data_files")
+    return resolved, tuple(files), tuple(skipped[:50])
 
 
 def _store(workspace_dir: Path) -> Store:
@@ -329,7 +343,9 @@ class DataAdmissionPipeline:
     def create_attempt(
         self, *, project_id: str, source_dir: Path, workspace_dir: Path
     ) -> Mapping[str, Any]:
-        root, relative_paths = _relative_listing_paths(Path(source_dir), self._suffixes)
+        root, relative_paths, skipped_files = _relative_listing_paths(
+            Path(source_dir), self._suffixes
+        )
         admission_workspace = self._admission_workspace(workspace_dir)
         try:
             attempt = stage_copy(root, relative_paths, admission_workspace)
@@ -521,6 +537,7 @@ class DataAdmissionPipeline:
                 "technical_details": {
                     "manifest_hash": attempt.manifest_hash,
                     "files": staged_file_payloads,
+                    "skipped_non_data_files": list(skipped_files),
                     "revision_ids": revision_ids,
                     "snapshot_ids": snapshot_ids,
                     "locator_index_ids": locator_index_ids,
