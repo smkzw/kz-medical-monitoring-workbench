@@ -88,6 +88,23 @@ interface PrecheckResult {
   channels: { model: string; ok: boolean; note: string }[];
 }
 
+interface ClarifyResult {
+  /** R4-03 口径澄清结论：一句话说明 22 张表数字的来历 */
+  verdict: string;
+  /** true=漏识别（缺陷）；false=正确剔除（正面证据） */
+  isDefect: boolean;
+  note: string;
+}
+
+interface SeedResult {
+  /** 预置的开考项目ID */
+  projectId: string;
+  /** 各步状态证据摘要 */
+  stateNote: string;
+  /** 受阻时写清卡点；空=未受阻 */
+  blockedNote: string;
+}
+
 // ===== 常量 =====
 const WB = "implementation/workbench";
 const PY = "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python";
@@ -303,6 +320,54 @@ function buildPromptIso(round: number, slot: string, ds: Dataset, reportPath: st
   );
 }
 
+// ===== R5 开考位专属提示词（用户拍板：开赛门槛——接手已备好的项目，从运行监查起步考主考题） =====
+function buildPromptSeeded(round: number, slot: string, ds: Dataset, reportPath: string): string {
+  const projName = "MX循R" + round + slot + "-" + ds.key;
+  return (
+    "【第" + round + "轮·" + slot + "号测试任务·开考位】（提示词编号 R" + round + "-" + slot + "-开考，与以往任何一轮都不同）\n\n" +
+    "你是一线医学监查专员。在中心做过多年 onsite 监查，习惯从受试者旅程逐访视核对，最在意证据链能不能从结论一路点回原始记录。\n" +
+    "本轮以真实用户身份，独立验收「康哲 AI 医学经理工作台」的医学监查子系统。与其他三位从零建项的测试者不同：**你接手的是一个已由同事完成全部准备工作的研究项目**（数据已接入、研究文件已核对、字段对应已确认），你的任务是从「开始运行监查」起步，把这套系统最核心的价值考到底。\n\n" +
+    "## 进入方式\n" +
+    "- 浏览器打开 http://localhost:5178/ ，确认页面标题是「康哲 AI 医学经理工作台」\n" +
+    "- 只准使用 5178 这个入口；若页面打不开、或打开后发现端口/应用不对，立即停止并作为发现记录\n" +
+    "- 在项目选择器中选择项目「" + projName + "」（如该项目不存在或准备状态不符——例如字段未确认、无法开始运行监查——如实记录，这本身就是本轮最重要的发现，不要自己动手补准备工作）\n" +
+    "- 浏览器工具：ego-browser（先读 /Users/smkzw/.zcode/skills/ego-browser/SKILL.md 学用法；整个任务只用一个 TaskSpace）\n\n" +
+    "## 铁律（违反即测试作废）\n" +
+    "1. 只通过浏览器界面操作。严禁 curl/API/直连后端/读写数据库/读日志/修改任何文件\n" +
+    "2. 严禁重启或触碰任何服务；监查运行必须由系统自己推进——你不是运维\n" +
+    "3. 系统卡住不动本身就是最重要的发现：记录当时页面、状态与已等待时长\n" +
+    "4. 只操作分给你的项目；页面上如有别人的项目，一律不点开\n" +
+    "5. 报告里不要复制患者身份信息（受试者编号可用，姓名/生日等不可）\n\n" +
+    "## 你的研究项目背景（仅供理解，无需重新上传）\n" +
+    ds.brief + "\n\n" +
+    "## 任务（从运行监查开始，走完为止）\n" +
+    "1. 核对项目准备状态（数据、研究文件、字段对应均已就绪）\n" +
+    "2. 在界面发起监查运行，跟随系统走完：运行→发布→结果视图\n" +
+    "3. 结果验收（本轮重头戏）：\n" +
+    "   - 概览数字自洽性：受试者数、发现数、风险分布互相之间、以及与详情列表是否对得上\n" +
+    "   - 抽至少 3 名受试者做证据链深挖：从发现卡片→受试者旅程→原始记录行，每一步都要点得下去、内容对得上号\n" +
+    "   - 以你的医学判断逐条评估发现质量，三分类计数并各举一例：真问题（该抓）/存疑（说不清）/误报（冤枉好人）\n" +
+    "   - 界面的易用性、逻辑性、美观性各写一段具体评价（必测项）\n" +
+    "4. 系统长时间运行时保持浏览器开着（真实用户会等），每隔几分钟刷新观察进展；单一步骤 ≥" + STALLMIN + " 分钟无任何进展，或总时长 ≥5 小时：停止操作，按当前状态交报告（这本身计为发现）\n\n" +
+    "## 交付\n" +
+    "把最终测试报告（Markdown）写入：" + reportPath + "\n" +
+    "报告必含：\n" +
+    "- 旅程清单（起点=运行监查，走到了哪些阶段，在哪个阶段停住）\n" +
+    "- 总结论：pass / fail（fail注明卡点）\n" +
+    "- 发现清单：每条含【页面】【问题】【严重度 critical|high|medium|low】【类别 product_bug|medical_accuracy|ux_issue|cosmetic】【证据（你看到的现象）】【复现步骤】\n" +
+    "- 发现质量三分类：真问题/存疑/误报的计数与各一例详述\n" +
+    "- 界面评价：易用性/逻辑性/美观性各一小段（具体事例，不写空话）\n" +
+    "- 等待与卡点时长\n" +
+    "- 对「这套系统能否由一名真实用户独立跑通并信任其产出」的一句话判断\n" +
+    "- 收尾清理：说明你做了什么清理\n\n" +
+    "## 收尾清理（报告写完并保存后必做）\n" +
+    "1. 关闭并删除本轮使用的浏览器任务空间（ego-browser：对本次 TaskSpace 调用 delete()；确认浏览器会话完全退出）\n" +
+    "2. 删除测试过程中产生的下载副本、截图与临时缓存文件\n" +
+    "3. 把清理结果追加写在报告的『收尾清理』一节\n" +
+    HONESTY
+  );
+}
+
 // ===== 仪表盘（开赛即声明） =====
 artifact.board("findings-board", {
   title: "发现看板",
@@ -403,6 +468,7 @@ async function runSlot(
   specialIdx: number,
   externalUsable: boolean,
   strategyNote: string,
+  seeded: boolean,
 ): Promise<TesterOutcome> {
   const ch = CHANNELS[slotIdx];
   const slot = ch.slot;
@@ -415,7 +481,9 @@ async function runSlot(
   const promptText =
     round <= 2
       ? buildPrompt(round, slot, ds, personaIdx, focusIdx, specialIdx, reportPath) + strategyAppend
-      : buildPromptIso(round, slot, ds, reportPath) + strategyAppend;
+      : seeded
+        ? buildPromptSeeded(round, slot, ds, reportPath) + strategyAppend
+        : buildPromptIso(round, slot, ds, reportPath) + strategyAppend;
   const useExternal = ch.kind === "external" && externalUsable;
   const projName = "MX循R" + round + slot + "-" + ds.key;
   const fallback: TesterOutcome = {
@@ -624,10 +692,103 @@ for (let round = 1; round <= MAXROUNDS; round++) {
     }
     log("隔离测试环境就绪（独立API 8911 + 独立vite 5178，写作舰队 8910/5177 不受影响），开始派发");
   }
+  if (round === 5) {
+    phase("批量修复冲刺：清存量与修病根");
+    let sprintBatch = 0;
+    while (sprintBatch < 8) {
+      const sprintTargets = registry.filter((f) => f.status === "待修复");
+      if (sprintTargets.length === 0) break;
+      sprintBatch += 1;
+      const sr = await fixer.ask<FixResult>(
+        "第5轮开考前·批量修复冲刺（第" + sprintBatch + "批）。任务所有者已拍板：授权一次性批修全部存量（含轻微项），不再「量力而为」。\n\n" +
+        "剩余待修复 " + sprintTargets.length + " 条。优先级顺序（用户拍板）：\n" +
+        "① 病根最优先——后台长任务「不推进、不报错、不超时」（R4四个卡点同源：方案核对45/109分钟挂起、字段识别124字段冻结、字段确认接口409死循环而后台队列实际空闲）。验收标准：CSU合成数据（591行）从导入到字段确认 ≤15分钟自动完成、全程无需人工盯守，用隔离环境实测计时证明。\n" +
+        "② R3-09 比对基准失真：安全门不得用系统内部随机流水号（MW-III-xxx/-DRAFT）作为研究编号比对基准。\n" +
+        "③ R1 老问题中的中等项（R1-07/08/09/10 与 R1-05 收尾）。\n" +
+        "④ 其余按严重度降序；轻微项（文案/标注/布局类）最后打包收尾。\n\n" +
+        "清单：\n" + JSON.stringify(sprintTargets.map((f) => ({ id: f.id, title: f.title, severity: f.severity, where: f.where, what: f.what, evidence: f.evidence, repro: f.repro, fixHint: f.fixHint }))) + "\n\n" +
+        "每批修完跑相关 pytest 并 git 提交（信息前缀『测试循环R5冲刺:』，不 push）。重启只允许动隔离环境（8911/5178）：\n" +
+        "API：" + ISO_RESTART_API + "\nvite：" + ISO_RESTART_VITE + "\n" +
+        "（两个都要重启时先双双重启再自检 8911 ready + 5178 200 + 指纹一致；严禁重启或触碰 8910/5177；留痕 ISO_ENV_LOG.md）\n" +
+        "skipped 仅允许「修不动需升级」并写明原因，不允许「时间不够」。返回 FixResult。",
+      );
+      for (const id of sr.fixedIds ?? []) {
+        const f = registry.find((x) => x.id === id);
+        if (f) f.status = "待复测";
+      }
+      for (const sk of sr.skipped ?? []) {
+        const f = registry.find((x) => x.id === sk.id);
+        if (f && f.status === "待修复") f.status = "搁置";
+      }
+      const sGate = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
+        "-c",
+        "import os,subprocess,sys\nos.chdir('implementation/workbench')\nr=subprocess.run([sys.executable,'-m','pytest','tests/medical_monitoring','-q','-p','no:cacheprovider'],capture_output=True,text=True)\nsys.stdout.write(r.stdout[-30000:])\nsys.stderr.write(r.stderr[-4000:])\nsys.exit(r.returncode)",
+      ], { timeoutMs: 3600000 });
+      const sNewly = newFailures(failedSet(sGate.stdout), baselineFailures);
+      if (sNewly.length > 0) {
+        await fixer.ask("冲刺修复引入新测试失败（相对第0轮基线），必须处理（修好或回滚）：\n" + sNewly.join("\n") + "\n失败输出尾部：\n" + sGate.stdout.slice(-4000));
+        const sGate2 = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
+          "-c",
+          "import os,subprocess,sys\nos.chdir('implementation/workbench')\nr=subprocess.run([sys.executable,'-m','pytest','tests/medical_monitoring','-q','-p','no:cacheprovider'],capture_output=True,text=True)\nsys.stdout.write(r.stdout[-30000:])\nsys.stderr.write(r.stderr[-4000:])\nsys.exit(r.returncode)",
+        ], { timeoutMs: 3600000 });
+        if (newFailures(failedSet(sGate2.stdout), baselineFailures).length > 0) {
+          for (const id of sr.fixedIds ?? []) {
+            const f = registry.find((x) => x.id === id);
+            if (f && f.status === "待复测") f.status = "待修复";
+          }
+          log("冲刺第" + sprintBatch + "批回归门二次拦截，本批修复退回待修复");
+        }
+      }
+      log("冲刺第" + sprintBatch + "批完成：修复 " + (sr.fixedIds ?? []).length + " 条，剩余待修复 " + registry.filter((f) => f.status === "待修复").length + " 条");
+      if ((sr.fixedIds ?? []).length === 0 && (sr.skipped ?? []).length === 0) {
+        log("冲刺批次零进展，提前结束修复交由开赛准备");
+        break;
+      }
+    }
+    log("批量修复冲刺收账：剩余待修复 " + registry.filter((f) => f.status === "待修复").length + " 条，搁置 " + registry.filter((f) => f.status === "搁置").length + " 条，待复测 " + registry.filter((f) => f.status === "待复测").length + " 条");
+
+    phase("开赛准备：修测试工具、澄清口径、预置项目");
+    await agent("测试工具修理工", {
+      system:
+        "你负责修复测试派发工具的两个反复发作缺陷（任务所有者已授权的跨系统公共工具小修）。只改指定文件、最小修复、先读代码再动手、修完必须实测验证。向后兼容：绝对路径调用方式行为不得改变。没做到就直说，不夸大不编造。",
+    }).ask(
+      "修复 /Users/smkzw/.codex/tools/conference_session_runner.py 两个缺陷：\n" +
+      "① 路径解析：--prompt/--output/--stdout/--workdir 等收相对路径时解析基座错误，导致外部测试者启动即失败（四轮里四次复发）。应在启动外部会话前把相对路径按 --workdir（若提供）或启动时工作目录解析为绝对路径后再使用。\n" +
+      "② 报告覆盖：会话收尾时把 --output 指定的测试者报告文件覆盖成一段收尾消息（前三轮三次发生，靠人工从日志抢救）。收尾消息必须写到独立文件（如 <output>.closing.txt 或 stdout 日志），绝不允许写入 --output 本身。\n" +
+      "验证：在临时目录构造一个最小探针任务（提示文件与输出都用相对路径），实际运行一次 runner，证明 ①相对路径正确解析 ②收尾后 --output 内容保持为测试者写入的原文。把改动说明与验证证据写入 implementation/workbench/scripts/tester_loop_0927/TOOL_FIX_20260929.md。",
+    );
+    const clar = await agent("口径澄清员", {
+      system:
+        "你负责查清一个数字疑案并按任务所有者拍板落地界面口径说明。只做这一件事；结论必须有代码级与数据级依据；改前端走最小改动并 git 提交（不 push）。查不清就如实说查不清。",
+    }).ask<ClarifyResult>(
+      "查清第4轮发现 R4-03：同一页面「导入 59 张数据表」vs 字段识别区「已识别 22 张数据表」的口径差（证据：scripts/tester_loop_0927/round_04/report_B.md）。两种可能：22 是正确剔除了代码对照表/名册页等非临床表（反过拟合排除逻辑生效——若是，这是系统泛化能力的第一个正面证据，用户已拍板在界面加口径说明）；或 22 是漏识别（新缺陷，按严重度修复）。\n" +
+      "步骤：①读数据导入与字段识别的排除/分类逻辑代码（提示：反过拟合名册排除、表形态分类相关模块）②逐表核对 59-22=37 张表每一张的被排除理由（用 round_04 记录或本地重算）③按结果落地：正确→前端两处数字旁各加一句口径说明（例如「其中 N 张为临床数据表，其余为代码对照表/名册页等辅助表，已按规则排除」）并提交；缺陷→修复或如实登记。\n" +
+      "把结论与证据写入 scripts/tester_loop_0927/R4_03_CLARIFY.md，返回 {verdict, isDefect, note}。",
+    );
+    log("口径澄清（R4-03）：" + clar.verdict + (clar.isDefect ? "——按缺陷处理" : "——排除逻辑方向"));
+    const seeder = await agent("开赛门槛预置员", {
+      system:
+        "你负责在隔离测试环境上为第5轮开考位预置一个「字段映射已确认、可开始运行监查」的项目。你是运维/工程师身份，允许且只允许用 API 与脚本操作隔离环境 http://127.0.0.1:8911（严禁碰 8910/5177）。过程遇到产品缺陷阻断就如实记录并停止——不要绕过或造假，阻断本身就是发现。所有操作留痕。没做到就直说。",
+    }).ask<SeedResult>(
+      "任务：在隔离环境（API http://127.0.0.1:8911；运行时目录 runs/tester_loop_iso_20260928/runtime；环境说明与启动命令见 scripts/tester_loop_0927/ISO_ENV_LOG.md）预置项目：\n" +
+      "1. 创建项目：project_name=「MX循R5D-CSU」、indication=慢性自发性荨麻疹、product_name=MG-K10、modules 含 medical_monitoring、idempotency_key 唯一\n" +
+      "2. 上传材料：tester_staging_0927/synth_csu/ 三件套（合成测试数据xlsx+临床研究方案docx+eCRF填写指南docx，绝对路径在 implementation/workbench 下）\n" +
+      "3. 以 API 推进全链至「字段映射 confirmed + facts 物化完成、界面可开始运行监查」停住。API 序列参考 scripts/fullchain_sar_rerun_20260926/HANDOFF_SAR_RERUN_20260926.md 与同目录幂等脚本；文档权威与映射的 AI 作业会真实产生（双队列），等待其自然完成，严禁人为跳过质量门或伪造状态。\n" +
+      "4. 全链若耗时较长，轮询等待并在 ISO_ENV_LOG.md 留痕（起止时间、作业数）。\n" +
+      "5. 完成后自验：字段确认状态=已确认、facts 就绪、无待人工处理项；把项目ID与各步状态证据写入 scripts/tester_loop_0927/R5_SEEDED_PROJECT.md，返回 {projectId, stateNote, blockedNote}（受阻时 blockedNote 写清卡在哪一步、界面/接口现象）。",
+    );
+    log("开赛门槛预置：" + (seeder.blockedNote ? "受阻——" + seeder.blockedNote : "项目已就绪（" + seeder.stateNote + "）"));
+    const postSprintApi = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + ISOAPI + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
+    if (!(postSprintApi.exitCode === 0 && postSprintApi.stdout.includes("READY"))) {
+      await agent("隔离环境守护员-R5冲刺后", { system: ISO_GUARD_RULE }).ask("冲刺与预置后隔离API(8911)未就绪，请恢复：" + ISO_RESTART_API + " ；随后自检 ready:true；严禁动 8910/5177");
+    }
+  }
   const outcomesP = CHANNELS.map((ch, s) => {
-    const ds = DATASETS[(round + s) % DATASETS.length];
+    const seeded = round >= 5 && ch.slot === "D";
+    const csuDs = DATASETS.find((x) => x.key === "CSU");
+    const ds = seeded && csuDs ? csuDs : DATASETS[(round + s) % DATASETS.length];
     const externalUsable = ch.kind !== "external" || (channelOk.get(ch.model) ?? false);
-    return runSlot(round, s, ds, (round + s) % PERSONAS.length, (round * 2 + s) % FOCUSES.length, (round * 3 + s) % SPECIALS.length, externalUsable, strategyNote);
+    return runSlot(round, s, ds, (round + s) % PERSONAS.length, (round * 2 + s) % FOCUSES.length, (round * 3 + s) % SPECIALS.length, externalUsable, strategyNote, seeded);
   });
   const outcomes = await Promise.all(outcomesP);
   const totalFindingsRaw = outcomes.reduce((n, o) => n + (o.findings ?? []).length, 0);
@@ -793,9 +954,9 @@ for (let round = 1; round <= MAXROUNDS; round++) {
     log("轮次报告发布失败（文件缺失），复盘官报告路径：" + recap.roundReportPath);
   }
   const stagnated = recap.stagnatedIds ?? [];
-  const hardStuck = registry.filter((f) => stagnated.indexOf(f.id) >= 0 && f.round <= round - 3 && (f.status === "待修复" || f.status === "待复测"));
-  if (hardStuck.length > 0) {
-    stagnationEscalation = "升级：发现 " + hardStuck.map((f) => f.id).join(",") + " 连续≥3轮未决且已换过策略，需要任务所有者介入决策。";
+  const hardStuck = registry.filter((f) => stagnated.indexOf(f.id) >= 0 && f.round <= round - 3 && (f.status === "待修复" || (f.status === "待复测" && round <= 4)));
+  if (hardStuck.length > 0 && round >= 5) {
+    stagnationEscalation = "升级：发现 " + hardStuck.map((f) => f.id).join(",") + " 连续≥3轮仍未修复（用户已拍板的批量冲刺也未能解决），需要任务所有者再次决策。";
     break;
   }
   if (round >= MINROUNDS && cleanStreak >= CLEANSTREAKNEED) { convergeReached = true; break; }
