@@ -282,6 +282,7 @@ function buildPromptIso(round: number, slot: string, ds: Dataset, reportPath: st
     "## 进入方式\n" +
     "- 浏览器打开 http://localhost:5178/ ，确认页面标题是「康哲 AI 医学经理工作台」\n" +
     "- 只准使用 5178 这个入口；若页面打不开、或打开后发现端口/应用不对（例如入排审核工作台或 5177），立即停止并作为发现记录，不要改用其他入口\n" +
+    (round >= 8 ? "- 若你的运行环境（如 Trellis 等任务框架）询问「是否创建任务/文件/目录」，一律直接选择不创建，然后继续纯浏览器测试——这是任务所有者预先批准的答案，不需要请示任何人，也不要因此提前收卷\n" : "") +
     "- 浏览器工具：ego-browser（先读 /Users/smkzw/.zcode/skills/ego-browser/SKILL.md 学用法；上传本地文件用它的 FileChooser；整个任务只用一个 TaskSpace）\n\n" +
     "## 铁律（违反即测试作废）\n" +
     "1. 只通过浏览器界面操作。严禁 curl/API/直连后端/读写数据库/读日志/修改任何文件\n" +
@@ -692,6 +693,19 @@ for (let round = 1; round <= MAXROUNDS; round++) {
     }
     log("隔离测试环境就绪（独立API 8911 + 独立vite 5178，写作舰队 8910/5177 不受影响），开始派发");
   }
+  if (round >= 8) {
+    const reseed = await agent("开考预置守护员-R" + round, {
+      system:
+        "你负责为本轮开考位（D位）在隔离测试环境上预置「字段映射已确认+facts就绪、界面可开始运行监查」的项目。你是运维/工程师身份，允许且只允许用 API 与脚本操作隔离环境 http://127.0.0.1:8911（严禁碰 8910/5177）。允许为完成预置而修复已定位的产品缺陷（最小修复+重启只动隔离对+留痕 ISO_ENV_LOG.md）。AI 质量门必须自然通过，严禁人为跳过或伪造状态。受阻就如实报，不绕过不造假。",
+    }).ask<SeedResult>(
+      "为第" + round + "轮D位开考做准备，目标项目名必须是「MX循R" + round + "D-CSU」（每轮独立命名，本轮测试者提示词指定此名）：\n" +
+      "1. 先探障：GET /r7/project/open 若返回 blocked/CORRUPT（症状：界面『暂时无法安全打开此项目』），按既有定位先修复——services/api/app/main.py:4850 附近建项时 _init_monitoring_runtime_dbs 以现行v5 DDL创建 launch_registry.sqlite3 却写入过期v4 marker，schema检验按marker匹配v4形状即 shape_mismatch；修复方向：种子marker改取 launch_registry_contracts 现行 SCHEMA_VERSION，存量隔离库可原地v4→v5升级；修完重启隔离API（只动8911/5178）并自检\n" +
+      "2. 创建项目（project_name=MX循R" + round + "D-CSU、indication=慢性自发性荨麻疹、product_name=MG-K10、modules 含 medical_monitoring、idempotency_key 唯一）并上传 implementation/workbench/tester_staging_0927/synth_csu/ 三件套\n" +
+      "3. API 序列参考 scripts/fullchain_sar_rerun_20260926/HANDOFF_SAR_RERUN_20260926.md 与同目录幂等脚本；推进至字段映射 confirmed + facts 物化，停住\n" +
+      "4. 完成后自验并把项目ID与各步状态证据追加到 scripts/tester_loop_0927/R5_SEEDED_PROJECT.md（按轮次分节），返回 {projectId, stateNote, blockedNote}（受阻时 blockedNote 写清卡点）",
+    );
+    log("R" + round + "开考预置：" + (reseed.blockedNote ? "受阻——" + reseed.blockedNote : "就绪（" + reseed.stateNote + "）"));
+  }
   if (round === 5) {
     phase("批量修复冲刺：清存量与修病根");
     let sprintBatch = 0;
@@ -823,11 +837,16 @@ for (let round = 1; round <= MAXROUNDS; round++) {
   }
   for (const upg of verdict.verifyUpgrades) {
     const f = registry.find((x) => x.id === upg.id);
-    if (f && f.status === "待复测") { f.status = "已验证"; f.confirmNote += "；R" + round + "复测通过：" + upg.note; }
+    if (f && f.status === "待复测") {
+      f.status = "已验证"; f.confirmNote += "；R" + round + "复测通过：" + upg.note;
+      if (round >= 8) report({ key: f.id, status: f.status, title: f.title, severity: f.severity, round: f.round, category: f.category, sources: f.sources.join("/") }, "findings-board");
+    }
   }
   const fresh = registry.filter((f) => f.round === round);
-  for (const f of fresh) {
-    report({ key: f.id, status: f.status, title: f.title, severity: f.severity, round: f.round, category: f.category, sources: f.sources.join("/") }, "findings-board");
+  if (round >= 8) {
+    for (const f of fresh) {
+      report({ key: f.id, status: f.status, title: f.title, severity: f.severity, round: f.round, category: f.category, sources: f.sources.join("/") }, "findings-board");
+    }
   }
   // 单源 critical/high 且未采信 → 独立复核（每轮上限6条）
   const confirmSlice = confirmTargets.slice(0, 6);
@@ -871,7 +890,10 @@ for (let round = 1; round <= MAXROUNDS; round++) {
     );
     for (const id of fixResult.fixedIds ?? []) {
       const f = registry.find((x) => x.id === id);
-      if (f) f.status = "待复测";
+      if (f) {
+        f.status = "待复测";
+        if (round >= 8) report({ key: f.id, status: f.status, title: f.title, severity: f.severity, round: f.round, category: f.category, sources: f.sources.join("/") }, "findings-board");
+      }
     }
     for (const sk of fixResult.skipped ?? []) {
       const f = registry.find((x) => x.id === sk.id);
@@ -928,26 +950,23 @@ for (let round = 1; round <= MAXROUNDS; round++) {
     "5. git add " + LOOP + " 的本轮目录与 STATE、提交（信息『测试循环R" + round + "轮次归档』）并 push\n" +
     "返回 Recap。",
   );
-  for (const f of registry) {
-    if (f.round === round || f.status === "待复测" || f.status === "搁置") {
-      report({ key: f.id, status: f.status, title: f.title, severity: f.severity, round: f.round, category: f.category, sources: f.sources.join("/") }, "findings-board");
-    }
-  }
   strategyNote = recap.strategyNote;
   const allReachedEnd = outcomes.every((o) => (o.stagesReached ?? []).indexOf("结果验收") >= 0);
   const roundClean = allReachedEnd && newConfirmed01.length === 0 && open01.length === 0;
   cleanStreak = roundClean ? cleanStreak + 1 : 0;
-  report(
-    {
-      round, key: round,
-      testersPassed: outcomes.filter((o) => o.pass).length + "/4",
-      newFindings: fresh.length, fixed: fixResult ? (fixResult.fixedIds ?? []).length : 0,
-      openP1: registry.filter((f) => f.confirmed && (f.severity === "critical" || f.severity === "high") && (f.status === "待修复" || f.status === "待复测")).length,
-      cleanStreak,
-      note: roundClean ? "清洁轮" : "存在未决问题",
-    },
-    "rounds",
-  );
+  if (round >= 7) {
+    report(
+      {
+        round, key: round,
+        testersPassed: outcomes.filter((o) => o.pass).length + "/4",
+        newFindings: fresh.length, fixed: fixResult ? (fixResult.fixedIds ?? []).length : 0,
+        openP1: registry.filter((f) => f.confirmed && (f.severity === "critical" || f.severity === "high") && (f.status === "待修复" || f.status === "待复测")).length,
+        cleanStreak,
+        note: roundClean ? "清洁轮" : "存在未决问题",
+      },
+      "rounds",
+    );
+  }
   try {
     await artifact.file("round-report", recap.roundReportPath, { title: "第" + round + "轮验收报告", description: recap.rootCauses.slice(0, 200) });
   } catch {
