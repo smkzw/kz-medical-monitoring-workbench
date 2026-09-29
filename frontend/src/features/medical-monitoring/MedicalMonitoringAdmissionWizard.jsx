@@ -287,7 +287,10 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
   const [noteKey, setNoteKey] = useState("");
   const [noteText, setNoteText] = useState("");
   // R5冲刺（R2-12）：全字段列表曾一次性渲染上千条DOM（两次CDP截图均
-  // 超时）；改为展开才渲染+分批加载。R5冲刺（R4-03）：表数口径注记。
+  // 超时）；改为展开才渲染+分批加载。
+  // R4-03口径澄清（20260929，数据级核实后修正）：本页「已识别 N 张表」
+  // 是已完成识别作业的去重表数，识别未收敛时小于导入概况的全部工作表数
+  // ——系统没有任何「代码对照表/名册页」排除规则，勿再按排除口径表述。
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const [fieldBatch, setFieldBatch] = useState(100);
   const candidates = mappingState.payload?.candidates || [];
@@ -308,6 +311,18 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
   return (
     <div className="monitoring-admission-confirm monitoring-admission-mapping">
       <p className="monitoring-admission-big monitoring-admission-summary">{headline}</p>
+      {/* R4-03口径澄清：表数=已产出识别结果的表数（进行中口径），
+          与导入概况「全部工作表」口径不同，见上注释。 */}
+      <p className="monitoring-admission-minor" style={{ margin: "2px 0 8px" }}>
+        口径：下方表数只统计已产出识别结果的数据表，
+        {payload?.state === "generating"
+          ? "识别仍在生成中，"
+          : payload?.state === "needs_attention"
+            ? "部分识别任务尚未完成，"
+            : ""}
+        识别完成前可能小于导入概况的表数；系统不会把代码对照表、名册页等
+        辅助表静默排除在识别之外。
+      </p>
       {tables.length ? (
         <details className="monitoring-admission-table-details">
           <summary>
@@ -436,8 +451,10 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
       >
         <summary>查看全部字段的识别结果（{candidates.length} 项，按数据域归并列出）</summary>
         <p className="monitoring-admission-minor" style={{ margin: "4px 0 8px" }}>
-          注：此处为参与医学分析的数据域表；导入的工作表中代码对照表、名册页等
-          非数据域表不在此列（与导入概况的“全部工作表”口径不同）。
+          注：此处仅列出已产出识别结果的数据表，尚未识别完成的表暂不在列。
+          导入概况统计的是文件内全部工作表（含代码对照表、名册页等辅助表），
+          识别完成前两处数字可能不同；除有明确忽略原因的工作表外，
+          系统不静默排除任何表。
         </p>
         {fieldsOpen ? (
           <>
@@ -670,6 +687,12 @@ export function MedicalMonitoringAdmissionWizardView({
           <div className="monitoring-admission-review">
             <p className="monitoring-admission-big monitoring-admission-summary">
               {profile.summaryText}
+            </p>
+            {/* R4-03口径澄清：本步表数=文件内全部工作表（含辅助表），
+                识别阶段逐表处理，两步口径不同由此而来。 */}
+            <p className="monitoring-admission-minor" style={{ margin: "2px 0 8px" }}>
+              表数按文件内的全部工作表统计，可能包含代码对照表、名册页等
+              辅助表；下一步字段识别会逐表进行，不在此处预先剔除任何表。
             </p>
             {(state.profile?.technical?.skipped_non_data_files || []).length ? (
               <p className="monitoring-admission-warning" role="status">
