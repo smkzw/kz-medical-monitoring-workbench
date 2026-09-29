@@ -1040,7 +1040,17 @@ function MedicalMonitoringProtocolPreparationPanelForProject({
                 正在读取
               </span>
             ) : versions.length === 0 ? (
-              <p>当前项目尚无已确认且可解析的方案版本。</p>
+              <div>
+                <p>当前项目尚无已确认且可解析的方案版本。</p>
+                {/* R5循环（R5-03）：来源台账的「匹配/可使用」只代表文件内容
+                    核验通过；此处需要整条监查准备链完成。把判定链与下一步
+                    说清，消除两处界面结论相反且无从自助打通的困惑。 */}
+                <small style={{ display: "block", marginTop: 4, color: "var(--monitoring-muted, #6b7785)", lineHeight: 1.5 }}>
+                  方案版本在此出现的完整前置链：文件上传与内容核验（见「来源台账」，已完成时显示匹配/可使用）
+                  → 数据接入向导第3步研究文件核对与角色确认 → 字段映射确认。
+                  请前往「医学监查 → 数据接入」完成剩余步骤，完成后本列表会自动出现方案版本。
+                </small>
+              </div>
             ) : versions.length === 1 && versions[0].displayIdentityState === "ready" ? (
               <strong>{versionOptionLabel(versions[0])}</strong>
             ) : versions.length === 1 ? (

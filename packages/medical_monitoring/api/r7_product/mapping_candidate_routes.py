@@ -30,6 +30,7 @@ _MAPPING_STATUS_CODES = {
     "mapping_cohort_invalid": 422,
     "mapping_cohort_legacy_route": 409,
     "mapping_verifier_incomplete": 409,
+    "mapping_verifier_job_failed": 409,
     "mapping_reconciliation_required": 409,
     "mapping_adjudication_failed_payload_unreadable": 409,
     "mapping_draft_unconfigured": 503,
@@ -70,6 +71,10 @@ _MAPPING_MESSAGES = {    "mapping_admission_not_found": "未找到对应的数�
         "请点击重试。"
     ),
     "mapping_verifier_incomplete": "系统仍在复核，当前不需要您确认。",
+    "mapping_verifier_job_failed": (
+        "字段复核的分片任务失败，系统已将其重新排队重跑；请稍候再次查询。"
+        "若持续失败，请重新发起字段识别。"
+    ),
     "mapping_reconciliation_required": (
         "资料或核对结果已变化，系统会重新核实，不需要您逐项确认；"
         "您此前的回答已保留。"

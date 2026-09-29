@@ -98,11 +98,18 @@ def source_readiness_block_detail(
         code = "medical_monitoring_source_not_activated"
         message = (
             "当前项目仅完成医学监查来源登记，尚未完成结构解析、适配器与独立AI激活；"
-            "医学监查读取与执行已阻断。"
+            "医学监查读取与执行已阻断。前置链：文件核验（来源台账）→ 研究文件"
+            "核对与字段映射确认（数据接入向导）→ 监查来源激活；请先在"
+            "「医学监查 → 数据接入」完成字段确认。"
         )
     else:
         code = "medical_monitoring_source_readiness_unconfirmed"
-        message = "当前项目医学监查来源状态未确认，读取与执行已阻断。"
+        message = (
+            "当前项目医学监查来源状态未确认，读取与执行已阻断。"
+            "注意：来源台账的「匹配/可使用」仅代表文件内容核验通过；"
+            "监查读取还需研究文件核对与字段映射确认（见「医学监查 → "
+            "数据接入」），完成前此阻断为预期状态。"
+        )
     return {
         "code": code,
         "message": message,
