@@ -5,6 +5,12 @@
   padding: 14px 18px;
   margin-bottom: 16px;
   color: var(--monitoring-ink, #17212b);
+  /* R6-03：1920px宽屏下向导曾无约束拉伸至1708px、左右空旷松散
+     （测试者明言不敢投影演示）——限制最大宽度并居中，保持专业
+     凝练的可读行宽。 */
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .monitoring-admission-head h2 {

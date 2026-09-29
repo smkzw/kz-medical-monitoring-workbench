@@ -25,6 +25,18 @@ import {
 import { semanticQualityPresentation } from "./medicalMonitoringFieldMappingState.mjs";
 import "./medicalMonitoringAdmissionWizard.css";
 
+// R6-01：resolve既可能返回核对流程载荷（含state/analysis_token），
+// 也可能返回readiness快照（只有ready/roles）。旧写法把快照当
+// "analyzing"遗留——轮询useEffect因无analysis_token停振，按钮永久
+// 挂起「正在核对研究文件…」只能F5。快照态无流程在跑，落ready_snapshot。
+function documentPhaseFromPayload(payload) {
+  if (!payload || typeof payload !== "object") return "failed";
+  if (payload.ready) return "ready";
+  const flowState = String(payload.state || "");
+  if (flowState) return flowState;
+  return payload.analysis_token ? "analyzing" : "ready_snapshot";
+}
+
 function requestKey(prefix) {
   const random = globalThis.crypto?.randomUUID?.()
     || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -180,15 +192,26 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
                 // R5冲刺（R3-07）：「该角色缺失」选项candidate_id为空串，
                 // 原checked表达式未选择时也判true（假选中），而保存按钮
                 // 仍禁用——须先切其它项再切回。改为显式键存在性判定。
+                // R6-02：不可解析/不可选候选以禁用态可见（附原因），
+                // 与「涉及文件」清单一致，不凭空消失。
                 const hasChoice = Object.prototype.hasOwnProperty.call(choices, choice.role);
                 const optionChecked = hasChoice
                   && (choices[choice.role] || "") === option.candidate_id;
+                const optionDisabled = option.selectable === false;
                 return (
-                  <label key={option.candidate_id || "__missing__"} style={{ display: "block" }}>
+                  <label
+                    key={option.candidate_id || "__missing__"}
+                    style={{
+                      display: "block",
+                      opacity: optionDisabled ? 0.55 : 1,
+                    }}
+                    title={optionDisabled ? option.unselectable_reason || "该文件不可作为此角色的权威文件" : undefined}
+                  >
                     <input
                       type="radio"
                       name={`doc-role-${choice.role}`}
                       checked={optionChecked}
+                      disabled={optionDisabled}
                       onChange={() => setChoices((current) => ({
                         ...current,
                         [choice.role]: option.candidate_id,
@@ -198,6 +221,11 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
                     {option.candidate_id
                       ? option.filename
                       : `本次未提供${documentRoleLabel(choice.role)}`}
+                    {optionDisabled ? (
+                      <small style={{ display: "block", marginLeft: 22 }}>
+                        {option.unselectable_reason || "不可作为权威文件"}
+                      </small>
+                    ) : null}
                   </label>
                 );
               })}
@@ -956,7 +984,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       );
       if (documentRequestGeneration.current === generation) {
         setDocumentState({
-          phase: payload.ready ? "ready" : (payload.state || "analyzing"),
+          phase: documentPhaseFromPayload(payload),
           payload,
           error: null,
         });
@@ -991,7 +1019,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       );
       if (documentRequestGeneration.current === generation) {
         setDocumentState({
-          phase: payload.ready ? "ready" : (payload.state || "analyzing"),
+          phase: documentPhaseFromPayload(payload),
           payload,
           error: null,
         });
@@ -1022,7 +1050,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         );
         if (documentRequestGeneration.current === generation) {
           setDocumentState({
-            phase: payload.ready ? "ready" : (payload.state || "analyzing"),
+            phase: documentPhaseFromPayload(payload),
             payload,
             error: null,
           });
@@ -1057,7 +1085,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       );
       if (documentRequestGeneration.current === generation) {
         setDocumentState({
-          phase: payload.ready ? "ready" : (payload.state || "analyzing"),
+          phase: documentPhaseFromPayload(payload),
           payload,
           error: null,
         });
@@ -1110,8 +1138,13 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     if (
       !["analyzing", "reviewing", "adjudicating", "cross_checking"]
         .includes(documentState.phase)
-      || !documentState.payload?.analysis_token
     ) return undefined;
+    if (!documentState.payload?.analysis_token) {
+      // R6-01自愈防御：analyzing态但token缺失（历史遗留状态）时主动
+      // 拉取一次readiness快照恢复真实状态，而非停振挂死。
+      const timer = setTimeout(() => loadDocumentReadiness(), 1500);
+      return () => clearTimeout(timer);
+    }
     const timer = setTimeout(async () => {
       const generation = documentRequestGeneration.current + 1;
       documentRequestGeneration.current = generation;
@@ -1123,7 +1156,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         );
         if (documentRequestGeneration.current === generation) {
           setDocumentState({
-            phase: payload.ready ? "ready" : (payload.state || "analyzing"),
+            phase: documentPhaseFromPayload(payload),
             payload,
             error: null,
           });
