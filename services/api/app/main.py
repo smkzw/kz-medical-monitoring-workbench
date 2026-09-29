@@ -1003,13 +1003,26 @@ def _expected_source_context(
     user_identifiers = _study_code_tokens(
         f"{header.product_name} {header.project_name}"
     )
+    # R5冲刺（R3-09补）：不含连字符的药物代号（如MY008211A）也是用户
+    # 断言的研究标识，与连字符token一并作为比对基准。
+    if header.product_name and any(ch.isdigit() for ch in header.product_name) and len(header.product_name) >= 3:
+        user_identifiers = tuple(
+            dict.fromkeys((header.product_name.strip(), *user_identifiers))
+        )
+    # R5冲刺/R3-09：绿地空壳项目的project_code/protocol_id是系统随机
+    # 生成的内部draft流水号（MW-III-xxx/-DRAFT），真实申办方方案绝不
+    # 可能包含——以其为比对基准必然100%触发无意义差异人工裁决。与
+    # 身份门同一哲学：greenfield只保留用户断言的标识（药物/名称中的
+    # 研究代号token）；无用户基准时按R2口径not_assessed（明说缺少
+    # 基准），不判差异。
+    system_generated_baseline = _project_is_greenfield_shell(project_id)
     return SourceExpectedContext(
         project_identifiers=tuple(
             dict.fromkeys(
                 value
                 for value in (
-                    header.project_code,
-                    header.protocol_id,
+                    "" if system_generated_baseline else header.project_code,
+                    "" if system_generated_baseline else header.protocol_id,
                     *user_identifiers,
                 )
                 if value
@@ -1017,7 +1030,7 @@ def _expected_source_context(
         ),
         indication_terms=(header.indication,) if header.indication else (),
         expected_file_role=expected_role,
-        # 绿地空壳项目的“草案”是平台占位版本，不是用户断言的方案版本；
+        # 绿地空壳项目的"草案"是平台占位版本，不是用户断言的方案版本；
         # 真实方案正文永远无法包含它，作为期望值只会制造必然的确认负担。
         expected_protocol_version=(
             "" if _project_is_greenfield_shell(project_id)
@@ -1430,6 +1443,13 @@ monitoring_ai_verifier_worker = MonitoringAiWorker(
 def _wake_monitoring_mapping_workers() -> None:
     monitoring_ai_worker.wake()
     monitoring_ai_verifier_worker.wake()
+
+
+# R5冲刺（病根兜底）：wake-only worker在drain线程意外死亡或retire后，
+# 后续入队任务无人再wake会永久滞留（R4四个「不推进、不报错、不超时」
+# 卡点同源）。周期兜底轮询：有pending任务即重新唤醒worker池。
+monitoring_ai_worker.start_background_polling(15.0)
+monitoring_ai_verifier_worker.start_background_polling(15.0)
 
 
 monitoring_doc_auth_primary_service = MonitoringAiService(

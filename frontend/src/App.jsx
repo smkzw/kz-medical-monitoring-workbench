@@ -493,6 +493,14 @@ const SourceTableHeader = TableHeader.extend({
 });
 
 const INITIAL_PROJECT_ID = import.meta.env.VITE_PROJECT_ID || "";
+// R5冲刺（R1-07）：本浏览器最后选择的项目（关标签重进的回落基准）。
+function readRememberedProjectId() {
+  try {
+    return String(globalThis.localStorage?.getItem("workbench:last-project-id") || "");
+  } catch {
+    return "";
+  }
+}
 const DEFAULT_SUBJECT_ID = import.meta.env.VITE_SUBJECT_ID || "";
 
 const navItems = [
@@ -760,6 +768,10 @@ function sourceKindLabel(kind) {
   return {
     listing_file: "列表数据",
     protocol_docx: "研究方案",
+    ecrf_document: "电子病例报告表",
+    ecrf_supplement: "电子病例报告表（补充）",
+    investigator_brochure: "研究者手册",
+    sap_document: "统计分析计划",
     raw_subject_bundle_inventory: "受试者资料清单",
     tfl_dataset_package_inventory: "TFL数据包清单",
     tfl_output_package_inventory: "TFL输出包清单",
@@ -1159,6 +1171,15 @@ function AppShell({
   const hasActiveProject = Boolean(
     activeProjectId && projects.some((item) => item.project_id === activeProjectId),
   );
+  // R5冲刺（R1-13）：「最后更新」原为硬编码09:00全程冻结；现随项目
+  // 清单/看板/收件箱任一数据引用变化（即每次真实拉取回填）刷新。
+  const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
+  useEffect(() => {
+    setLastRefreshedAt(new Date());
+  }, [projects, dashboard, workbenchInbox]);
+  const lastRefreshedText = lastRefreshedAt
+    ? `${String(lastRefreshedAt.getHours()).padStart(2, "0")}:${String(lastRefreshedAt.getMinutes()).padStart(2, "0")}`
+    : "—";
   const sourceContext = sourceContextForPage(activePage, sourceManifests, activeProjectId);
   const project = hasActiveProject ? (dashboard.project || sourceContext.header || {
     project_code: "项目未加载",
@@ -1210,6 +1231,11 @@ function AppShell({
     setNewProjectBusy(true);
     setNewProjectMessage("");
     setNewProjectErrors({});
+    // R5冲刺（R3-10）：创建请求曾停滞「创建中」45-60秒以上无反馈（后端
+    // 实际已创建）。10秒仍未返回时给出可操作提示，不无限静默等待。
+    const createSlowTimer = setTimeout(() => {
+      setNewProjectMessage("创建请求仍在处理中（服务器初始化项目可能需要一些时间）。您可以继续等待，或关闭本对话框后刷新页面查看项目是否已创建。");
+    }, 10000);
     try {
       const response = await fetch("/api/projects", {
         method: "POST",
@@ -1239,6 +1265,7 @@ function AppShell({
     } catch (error) {
       setNewProjectMessage(`创建失败：${apiErrorText(error)}`);
     } finally {
+      clearTimeout(createSlowTimer);
       setNewProjectBusy(false);
     }
   };
@@ -1267,7 +1294,7 @@ function AppShell({
         </nav>
         <div className="sidebar-footer">
           <span>最后更新</span>
-          <strong>{hasActiveProject ? "09:00" : projectsLoadError ? "连接失败" : "暂无数据"}</strong>
+          <strong>{hasActiveProject ? lastRefreshedText : projectsLoadError ? "连接失败" : "暂无数据"}</strong>
         </div>
       </aside>
       <section className="workspace">
@@ -1413,10 +1440,19 @@ function AppShell({
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget && !newProjectBusy) setNewProjectOpen(false);
         }}>
-          <form className="panel new-project-dialog" onSubmit={createNewProject} noValidate role="dialog" aria-modal="true" aria-label="新建研究项目">
+          <form className="panel new-project-dialog" onSubmit={createNewProject} noValidate role="dialog" aria-modal="true" aria-label="新建研究项目" ref={(node) => {
+            // R5冲刺（R4-04）：对话框打开时聚焦首个输入字段（项目名称），
+            // 键盘用户不再落在触发按钮上。
+            if (node && !node.dataset.focusedOnce) {
+              node.dataset.focusedOnce = "true";
+              globalThis.requestAnimationFrame?.(() => {
+                node.querySelector(".new-project-fields input")?.focus();
+              });
+            }
+          }}>
             <header>
               <div>
-                <span>{newProjectMonitoring ? "医学写作 · 医学监查" : "医学写作"}</span>
+                <span>{newProjectMonitoring ? "研究项目 · 医学写作 · 医学监查" : "研究项目"}</span>
                 <h2>新建研究项目</h2>
               </div>
               <button type="button" className="icon-button" onClick={() => setNewProjectOpen(false)} disabled={newProjectBusy} title="关闭">
@@ -1444,9 +1480,9 @@ function AppShell({
               <>
                 <div className="new-project-fields">
                   <label>项目名称<input aria-describedby="new-project-name-hint" maxLength={200} value={newProjectDraft.project_name} onChange={(event) => updateNewProjectField("project_name", event.target.value)} placeholder="项目代号或管理名称，如 MX循R1D-RUX" /><small id="new-project-name-hint" className="new-project-field-hint">用于项目列表与研究文件归属核对；不填则按试验药物与适应症自动生成。管理代号请填在这里，不要填入试验药物。</small></label>
-                  <label>试验药物<input required aria-required="true" aria-invalid={Boolean(newProjectErrors.product_name)} aria-describedby={newProjectErrors.product_name ? "new-project-product-error" : "new-project-product-hint"} maxLength={160} value={newProjectDraft.product_name} onChange={(event) => updateNewProjectField("product_name", event.target.value)} placeholder="药物代号或通用名，如 磷酸芦可替尼乳膏" />{newProjectErrors.product_name ? <small id="new-project-product-error" className="new-project-field-error">{newProjectErrors.product_name}</small> : <small id="new-project-product-hint" className="new-project-field-hint">填写研究药物本身；管理代号请填“项目名称”。</small>}</label>
-                  <label>适应症<input required aria-required="true" aria-invalid={Boolean(newProjectErrors.indication)} aria-describedby={newProjectErrors.indication ? "new-project-indication-error" : undefined} maxLength={120} value={newProjectDraft.indication} onChange={(event) => updateNewProjectField("indication", event.target.value)} placeholder="例如 类风湿关节炎" />{newProjectErrors.indication && <small id="new-project-indication-error" className="new-project-field-error">{newProjectErrors.indication}</small>}</label>
-                  <label>研究分期<select required aria-required="true" aria-invalid={Boolean(newProjectErrors.study_phase)} aria-describedby={newProjectErrors.study_phase ? "new-project-phase-error" : undefined} value={newProjectDraft.study_phase} onChange={(event) => updateNewProjectField("study_phase", event.target.value)}><option value="">请选择</option><option value="I期">I期</option><option value="I/II期">I/II期</option><option value="II期">II期</option><option value="II/III期">II/III期</option><option value="III期">III期</option></select>{newProjectErrors.study_phase && <small id="new-project-phase-error" className="new-project-field-error">{newProjectErrors.study_phase}</small>}</label>
+                  <label><span className="new-project-required">试验药物<i aria-hidden="true">*</i></span><input required aria-required="true" aria-invalid={Boolean(newProjectErrors.product_name)} aria-describedby={newProjectErrors.product_name ? "new-project-product-error" : "new-project-product-hint"} maxLength={160} value={newProjectDraft.product_name} onChange={(event) => updateNewProjectField("product_name", event.target.value)} placeholder="药物代号或通用名，如 磷酸芦可替尼乳膏" />{newProjectErrors.product_name ? <small id="new-project-product-error" className="new-project-field-error">{newProjectErrors.product_name}</small> : <small id="new-project-product-hint" className="new-project-field-hint">填写研究药物本身；管理代号请填“项目名称”。</small>}</label>
+                  <label><span className="new-project-required">适应症<i aria-hidden="true">*</i></span><input required aria-required="true" aria-invalid={Boolean(newProjectErrors.indication)} aria-describedby={newProjectErrors.indication ? "new-project-indication-error" : undefined} maxLength={120} value={newProjectDraft.indication} onChange={(event) => updateNewProjectField("indication", event.target.value)} placeholder="例如 类风湿关节炎" />{newProjectErrors.indication && <small id="new-project-indication-error" className="new-project-field-error">{newProjectErrors.indication}</small>}</label>
+                  <label><span className="new-project-required">研究分期<i aria-hidden="true">*</i></span><select required aria-required="true" aria-invalid={Boolean(newProjectErrors.study_phase)} aria-describedby={newProjectErrors.study_phase ? "new-project-phase-error" : undefined} value={newProjectDraft.study_phase} onChange={(event) => updateNewProjectField("study_phase", event.target.value)}><option value="">请选择</option><option value="I期">I期</option><option value="I/II期">I/II期</option><option value="II期">II期</option><option value="II/III期">II/III期</option><option value="III期">III期</option><option value="待核实">分期未知（待核实，不作为已核实事实）</option></select>{newProjectErrors.study_phase && <small id="new-project-phase-error" className="new-project-field-error">{newProjectErrors.study_phase}</small>}</label>
                 </div>
                 <label className="new-project-monitoring-toggle" style={{display:"flex",alignItems:"center",gap:"8px",margin:"8px 0"}}>
                   <input type="checkbox" checked={newProjectMonitoring} onChange={(e) => setNewProjectMonitoring(e.target.checked)} />
@@ -13101,7 +13137,17 @@ export function App() {
   const [projectsLoadError, setProjectsLoadError] = useState("");
   const [monitoringProjectRouteError, setMonitoringProjectRouteError] = useState("");
   const [projectsRequestNonce, setProjectsRequestNonce] = useState(0);
+  const rememberedProjectIdRef = useRef(readRememberedProjectId());
   const [activeProjectId, setActiveProjectId] = useState(monitoringBrowserState.initialProjectId);
+  // 切换项目时持久记住，供下次冷启动回落（R1-07）。
+  useEffect(() => {
+    if (!activeProjectId) return;
+    if (rememberedProjectIdRef.current === activeProjectId) return;
+    rememberedProjectIdRef.current = activeProjectId;
+    try {
+      globalThis.localStorage?.setItem("workbench:last-project-id", activeProjectId);
+    } catch { /* ignore */ }
+  }, [activeProjectId]);
   const [dashboard, setDashboard] = useState({ project: null, modules: [], latest_batch: null, pending_approvals: [], recent_risks: [] });
   const [dashboardReadError, setDashboardReadError] = useState(null);
   const [sourceManifests, setSourceManifests] = useState({});
@@ -13230,7 +13276,9 @@ export function App() {
   const returnFromMedicalMonitoringProduct = useCallback(() => {
     setMedicalMonitoringProductRouteState({ isProduct: false, status: "legacy", valid: false, canonical: {} });
     setMonitoringFocusRiskId("");
-    setActivePage("overview");
+    // R5冲刺（R1-09）：按钮名为「医学监查首页」，原却跳到全站项目
+    // 总看板把用户甩出模块；回到医学监查模块页。
+    setActivePage("monitoring");
   }, []);
 
   const requestProjectChange = useCallback((nextProjectId, nextPage = "overview") => {
@@ -13291,12 +13339,22 @@ export function App() {
         setActiveProjectId((current) => {
           if (initialMedicalMonitoringProductRouteRef.current.isProduct) return requestedProductProjectId || current;
           if (!canonicalProjects.length) return "";
-          return resolveMedicalMonitoringProjectRoute(
+          const resolved = resolveMedicalMonitoringProjectRoute(
             requestedMonitoringProjectId,
             canonicalProjects,
             current,
             INITIAL_PROJECT_ID,
-          ).projectId;
+            rememberedProjectIdRef.current,
+          );
+          if (resolved.projectId && resolved.projectId !== current) {
+            // R5冲刺（R1-07）：记录本浏览器最后选择的项目，关标签重进
+            // 时回到它而非全实例最新创建（可能是他人的）项目。
+            try {
+              globalThis.localStorage?.setItem("workbench:last-project-id", resolved.projectId);
+              rememberedProjectIdRef.current = resolved.projectId;
+            } catch { /* storage unavailable — selection just won't persist */ }
+          }
+          return resolved.projectId;
         });
         setProjectsLoaded(true);
       })
@@ -13434,8 +13492,13 @@ export function App() {
     };
   }, [activeProjectId, isMedicalMonitoringProductRoute]);
 
-  const refreshDashboard = () => {
-    if (isMedicalMonitoringProductRoute || !activeProjectId) return Promise.resolve();
+  const refreshDashboard = (options = {}) => {
+    // R5冲刺（R3-12）：force=true用于数据接入完成等全局事件——顶栏
+    // 元数据（数据批次/方案版本）需要刷新，即便当前在医学监查子路由。
+    if (
+      (!options.force && isMedicalMonitoringProductRoute)
+      || !activeProjectId
+    ) return Promise.resolve();
     setDashboardReadError(null);
     return fetch(`/api/projects/${activeProjectId}/dashboard`)
       .then((response) => readJsonOrThrow(response))
@@ -13481,6 +13544,14 @@ export function App() {
       .catch((error) => setWorkbenchInboxReadError(error));
   };
 
+  // R5冲刺（R3-12）：医学监查数据接入完成事件 → 强制刷新全局看板，
+  // 顶栏的数据批次/方案版本随之更新。
+  useEffect(() => {
+    const handler = () => { refreshDashboard({ force: true }); };
+    globalThis.addEventListener?.("workbench:refresh-dashboard", handler);
+    return () => globalThis.removeEventListener?.("workbench:refresh-dashboard", handler);
+  });
+
   useEffect(() => {
     setWorkbenchInbox(null);
     setWorkbenchInboxReadError(null);
@@ -13523,6 +13594,7 @@ export function App() {
             // 补开模块后刷新整页，让项目清单与模块路由重新加载。
             globalThis.location?.reload?.();
           }}
+          projectsLoaded={projectsLoaded && !projectsLoadError}
         />
       );
     }

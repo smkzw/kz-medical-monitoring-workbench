@@ -216,7 +216,9 @@ button:disabled {
 
 .project-meta {
   display: grid;
-  grid-template-columns: 118px 112px 130px 105px 145px minmax(150px, 180px);
+  /* R5冲刺（R4-02）：首列为项目选择器，原118px固定宽使项目名截断
+     （MX循R4A-R…）；加宽并弹性，长名悬停可见完整title。 */
+  grid-template-columns: minmax(180px, 240px) 112px 130px 105px 145px minmax(150px, 180px);
   gap: 0;
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -11788,6 +11790,13 @@ textarea {
   font-weight: 400;
 }
 
+/* R5冲刺（R2-07）：必填项红星预标记。 */
+.new-project-required i {
+  color: var(--danger, #c53730);
+  font-style: normal;
+  margin-left: 2px;
+}
+
 .new-project-dialog > footer {
   justify-content: flex-end;
   margin-top: 18px;
@@ -20238,7 +20247,7 @@ textarea {
   }
 
   .project-meta {
-    grid-template-columns: 100px 96px 110px 82px 108px minmax(126px, 1fr);
+    grid-template-columns: minmax(150px, 200px) 96px 110px 82px 108px minmax(126px, 1fr);
   }
 
   .metric {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from threading import Lock, Thread, current_thread
 from uuid import uuid4
 
@@ -7,7 +8,14 @@ from .monitoring_ai_service import MonitoringAiService
 
 
 class MonitoringAiWorker:
-    """Wake-only local worker over the durable monitoring AI queue."""
+    """Wake-only local worker over the durable monitoring AI queue.
+
+    R5冲刺（用户拍板病根）：wake-only模型在drain线程因意外异常死亡或
+    在队列瞬时清空后retire时，后续入队任务若无人再wake将永久滞留——
+    表现为「不推进、不报错、不超时」（R4四个卡点同源）。两层兜底：
+    ①_drain循环体全异常保护（意外异常不再杀死线程）；②可选周期性
+    兜底轮询（start_background_polling）：有pending任务即重新wake。
+    """
 
     def __init__(
         self,
@@ -24,6 +32,8 @@ class MonitoringAiWorker:
         self._lock = Lock()
         self._threads: list[Thread] = []
         self._wake_generation = 0
+        self._poller: Thread | None = None
+        self._poller_lock = Lock()
 
     def wake(self) -> int:
         with self._lock:
@@ -40,6 +50,30 @@ class MonitoringAiWorker:
                 thread.start()
                 started += 1
             return started
+
+    def start_background_polling(self, interval_seconds: float = 15.0) -> None:
+        """Start one daemon poller that re-wakes the pool when work is pending."""
+
+        with self._poller_lock:
+            if self._poller is not None and self._poller.is_alive():
+                return
+
+            def poll() -> None:
+                while True:
+                    time.sleep(max(1.0, interval_seconds))
+                    try:
+                        if self.service.pending_job_count() > 0:
+                            self.wake()
+                    except Exception:
+                        # 兜底线程自身绝不因查询异常退出。
+                        continue
+
+            self._poller = Thread(
+                target=poll,
+                name="monitoring-ai-worker-poller",
+                daemon=True,
+            )
+            self._poller.start()
 
     def running(self) -> int:
         with self._lock:
@@ -62,10 +96,16 @@ class MonitoringAiWorker:
         while True:
             with self._lock:
                 wake_generation = self._wake_generation
-            if self.identity_bound:
-                result = self.service.run_next(owner, claim_identity=claim_identity)
-            else:
-                result = self.service.run_next(owner)
+            try:
+                if self.identity_bound:
+                    result = self.service.run_next(owner, claim_identity=claim_identity)
+                else:
+                    result = self.service.run_next(owner)
+            except Exception:
+                # 意外异常不得杀死drain线程：任务要么已被run_next内部
+                # 失败路径落账、要么仍queued等待重试；小睡后继续排空。
+                time.sleep(0.5)
+                continue
             if getattr(result, "lease_lost", False):
                 # A newer prompt/input can supersede an in-flight job while
                 # the provider call is still returning. That lost lease is
@@ -79,4 +119,4 @@ class MonitoringAiWorker:
                     # resume arriving as an idle drain exits must not strand
                     # queued work behind an apparently still-live thread.
                     self._threads = [thread for thread in self._threads if thread is not current_thread()]
-                    return
+                return

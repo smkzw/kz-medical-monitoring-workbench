@@ -117,7 +117,13 @@ class UserProjectCreateRequest(WorkbenchModel):
             "III": "III期",
         }.get(self.study_phase, self.study_phase)
         if not self.project_code:
-            phase_token = re.sub(r"[^A-Za-z0-9]+", "", self.study_phase).upper()
+            # R5冲刺/R2-08：组合分期（II/III期）曾被去符号直拼为IIIII
+            # （五个连续I不可辨读）；先映射为可读的II-III形式。
+            phase_token = re.sub(
+                r"[^A-Za-z0-9-]+",
+                "",
+                self.study_phase.replace("/", "-"),
+            ).upper()
             phase_token = phase_token or "PHASE"
             identity = "|".join(
                 (
@@ -135,6 +141,16 @@ class UserProjectCreateRequest(WorkbenchModel):
                 f"{self.product_name}用于治疗{self.indication}的"
                 f"{phase_label}临床研究"
             )
+        # R5冲刺/R3-06：项目名（含合成名中的药物/适应症成分）拒绝反
+        # 斜杠与路径非法字符、尖括号/引号——曾原样接受并渲染于下拉/
+        # 顶栏，污染实例且构成注入面。斜杠保留（组合分期如II/III期会
+        # 进入合成名）；中文与常规标点不受影响。
+        for field_name in ("project_name", "product_name", "indication"):
+            value = str(getattr(self, field_name) or "")
+            if re.search(r'[\\|:*?"<>]', value):
+                raise ValueError(
+                    f"{field_name} 不能包含 \\ | : * ? \" < > 这些字符；请调整后重试。"
+                )
         if not self.protocol_id:
             self.protocol_id = f"{self.project_code}-DRAFT"
         return self

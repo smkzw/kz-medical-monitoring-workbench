@@ -2105,9 +2105,9 @@ def _public_title(title: str) -> str:
 
 
 def _document_public_title(document_title: str, filename: str) -> str:
-    title = _public_title(document_title).strip()
-    if len(title) >= 4 and not title.isdigit():
-        return title
+    # R5冲刺（R2-09③）：台账显示上传文件名；docx内部文档标题（常为
+    # 供应商模板名，如"Microsoft Word - Protocol-Template-…"）不再
+    # 作为对外显示名——模板名比文件名更难辨认归属。
     return Path(filename).name
 
 

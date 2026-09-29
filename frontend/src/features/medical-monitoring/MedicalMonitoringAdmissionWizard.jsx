@@ -120,6 +120,11 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
           </li>
         ))}
       </ul>
+      {payload.last_check_note && !payload.ready ? (
+        <p className="monitoring-admission-warning" role="status">
+          {payload.last_check_note}
+        </p>
+      ) : null}
       {(payload.content_confirmations || []).length ? (
         <fieldset className="monitoring-admission-user-choices">
           <legend>系统发现以下内容差异</legend>
@@ -164,23 +169,38 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
           {userChoices.map((choice) => (
             <div key={choice.role} role="group" aria-label={`文件类型：${documentRoleLabel(choice.role)}`}>
               <strong>哪份是{documentRoleLabel(choice.role)}？</strong>
-              {choice.options.map((option) => (
-                <label key={option.candidate_id || "__missing__"} style={{ display: "block" }}>
-                  <input
-                    type="radio"
-                    name={`doc-role-${choice.role}`}
-                    checked={(choices[choice.role] || "") === option.candidate_id}
-                    onChange={() => setChoices((current) => ({
-                      ...current,
-                      [choice.role]: option.candidate_id,
-                    }))}
-                  />
-                  {" "}
-                  {option.candidate_id
-                    ? option.filename
-                    : `本次未提供${documentRoleLabel(choice.role)}`}
-                </label>
-              ))}
+              {/* R5冲刺（R4-05）：裁决前说明该选择的解析口径与下游影响，
+                  以及事后更换路径，避免信息不足时作出不可逆决定。 */}
+              <small style={{ display: "block", margin: "2px 0 6px", color: "var(--monitoring-muted, #6b7785)" }}>
+                选择后系统将按{documentRoleLabel(choice.role)}的口径解析该文件的全部内容，
+                用于后续字段映射与核对；标记缺失表示本研究无此类文件。
+                如需更换，可在保存后重新上传文件并重新核对。
+              </small>
+              {choice.options.map((option) => {
+                // R5冲刺（R3-07）：「该角色缺失」选项candidate_id为空串，
+                // 原checked表达式未选择时也判true（假选中），而保存按钮
+                // 仍禁用——须先切其它项再切回。改为显式键存在性判定。
+                const hasChoice = Object.prototype.hasOwnProperty.call(choices, choice.role);
+                const optionChecked = hasChoice
+                  && (choices[choice.role] || "") === option.candidate_id;
+                return (
+                  <label key={option.candidate_id || "__missing__"} style={{ display: "block" }}>
+                    <input
+                      type="radio"
+                      name={`doc-role-${choice.role}`}
+                      checked={optionChecked}
+                      onChange={() => setChoices((current) => ({
+                        ...current,
+                        [choice.role]: option.candidate_id,
+                      }))}
+                    />
+                    {" "}
+                    {option.candidate_id
+                      ? option.filename
+                      : `本次未提供${documentRoleLabel(choice.role)}`}
+                  </label>
+                );
+              })}
             </div>
           ))}
           <button
@@ -204,7 +224,8 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
           <legend>资料归属需要人工确认</legend>
           <small style={{ display: "block", marginBottom: "6px" }}>
             系统未能在文件与当前项目信息之间自动建立对应关系。请核对上方文件确属本研究后确认；
-            确认结果会记入裁决记录。若文件不属于本研究，请更换文件后重新上传。
+            确认将写入项目工作区的裁决档案（identity_overrides，含操作者、时间、理由与系统原判定），
+            可由管理员检索复核。若文件不属于本研究，请更换文件后重新上传。
           </small>
           <label style={{ display: "block", marginBottom: "6px" }}>
             <textarea
@@ -265,6 +286,10 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
 export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
   const [noteKey, setNoteKey] = useState("");
   const [noteText, setNoteText] = useState("");
+  // R5冲刺（R2-12）：全字段列表曾一次性渲染上千条DOM（两次CDP截图均
+  // 超时）；改为展开才渲染+分批加载。R5冲刺（R4-03）：表数口径注记。
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [fieldBatch, setFieldBatch] = useState(100);
   const candidates = mappingState.payload?.candidates || [];
   const questions = mappingQuestionCards(mappingState);
   const answeredKeys = mappingState.answeredKeys || {};
@@ -278,6 +303,7 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
     : payload?.headline || "正在读取系统识别结果…";
   const tables = payload?.tableSummaries || [];
   const questionTableCount = tables.filter((table) => table.questionCount > 0).length;
+  const visibleCandidates = candidates.slice(0, fieldBatch);
 
   return (
     <div className="monitoring-admission-confirm monitoring-admission-mapping">
@@ -403,25 +429,46 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
           系统已完成判断，正在自动保存字段对应关系，无需您逐项核对。
         </p>
       ) : null}
-      <details className="monitoring-admission-technical">
-        <summary>查看全部字段的识别结果</summary>
-        <ul className="monitoring-admission-field-digest">
-          {candidates.map((item) => {
-            const evidence = (item.evidenceSummary || [])[0];
-            return (
-              <li
-                key={mappingCandidateKey({ domain: item.domain, source_field: item.sourceField })}
+      <details
+        className="monitoring-admission-technical"
+        open={fieldsOpen}
+        onToggle={(event) => setFieldsOpen(event.currentTarget.open)}
+      >
+        <summary>查看全部字段的识别结果（{candidates.length} 项，按数据域归并列出）</summary>
+        <p className="monitoring-admission-minor" style={{ margin: "4px 0 8px" }}>
+          注：此处为参与医学分析的数据域表；导入的工作表中代码对照表、名册页等
+          非数据域表不在此列（与导入概况的“全部工作表”口径不同）。
+        </p>
+        {fieldsOpen ? (
+          <>
+            <ul className="monitoring-admission-field-digest">
+              {visibleCandidates.map((item) => {
+                const evidence = (item.evidenceSummary || [])[0];
+                return (
+                  <li
+                    key={mappingCandidateKey({ domain: item.domain, source_field: item.sourceField })}
+                  >
+                    <span className="monitoring-admission-column-name">
+                      {item.domain} · {item.sourceField}
+                    </span>
+                    <span className="monitoring-admission-column-meta">
+                      {evidence ? mappingTypeText(evidence.inferred_type) : "系统已识别"}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            {candidates.length > visibleCandidates.length ? (
+              <button
+                type="button"
+                className="monitoring-admission-secondary"
+                onClick={() => setFieldBatch((current) => current + 200)}
               >
-                <span className="monitoring-admission-column-name">
-                  {item.domain} · {item.sourceField}
-                </span>
-                <span className="monitoring-admission-column-meta">
-                  {evidence ? mappingTypeText(evidence.inferred_type) : "系统已识别"}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+                继续展示后续 {Math.min(200, candidates.length - visibleCandidates.length)} 项（剩余 {candidates.length - visibleCandidates.length}）
+              </button>
+            ) : null}
+          </>
+        ) : null}
       </details>
     </div>
   );
@@ -624,6 +671,14 @@ export function MedicalMonitoringAdmissionWizardView({
             <p className="monitoring-admission-big monitoring-admission-summary">
               {profile.summaryText}
             </p>
+            {(state.profile?.technical?.skipped_non_data_files || []).length ? (
+              <p className="monitoring-admission-warning" role="status">
+                已忽略 {state.profile.technical.skipped_non_data_files.length}
+                个非数据文件（{state.profile.technical.skipped_non_data_files.slice(0, 5).join("、")}
+                {state.profile.technical.skipped_non_data_files.length > 5 ? " 等" : ""}）：
+                研究方案、eCRF 等文档请在第3步单独上传，不参与数据导入。
+              </p>
+            ) : null}
             <details className="monitoring-admission-table-details">
               <summary>
                 查看 {profile.tables.length} 张表的结构
@@ -767,6 +822,15 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       controller.abort();
     };
   }, [api, state.attemptId, state.phase, state.projectId]);
+
+  // R5冲刺（R2-10）：导入进行中的已用时秒表（creating态按钮展示）。
+  useEffect(() => {
+    if (state.phase !== "creating") return undefined;
+    const timer = setInterval(() => {
+      dispatch({ type: "import-tick" });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [state.phase]);
 
   const submitImport = useCallback(async () => {
     const generation = importRequestGeneration.current + 1;
@@ -1079,6 +1143,38 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       cancelled = true;
     };
   }, [api, state.phase, state.attemptId, state.projectId]);
+
+  // R5冲刺（R1-12）：向导步骤位置记忆——进入第3步后写入，回退到第2步
+  // 清除；刷新/关标签重进时恢复到用户上次所在步骤，不再总是从第2步
+  // （数据摘要）重新开始。
+  useEffect(() => {
+    if (!state.attemptId) return undefined;
+    const key = `admission-step:${state.projectId}:${state.attemptId}`;
+    try {
+      if (state.stepIndex === 2 && state.phase !== "done") {
+        globalThis.localStorage?.setItem(key, "2");
+      } else if (state.stepIndex === 1) {
+        globalThis.localStorage?.removeItem(key);
+      }
+    } catch { /* storage unavailable — step just won't be remembered */ }
+    return undefined;
+  }, [state.attemptId, state.phase, state.projectId, state.stepIndex]);
+
+  useEffect(() => {
+    if (state.phase !== "ready" || state.stepIndex !== 1 || !state.attemptId) return undefined;
+    let cancelled = false;
+    try {
+      const remembered = globalThis.localStorage?.getItem(
+        `admission-step:${state.projectId}:${state.attemptId}`,
+      );
+      if (remembered === "2" && !cancelled) {
+        dispatch({ type: "advance" });
+      }
+    } catch { /* ignore */ }
+    return () => {
+      cancelled = true;
+    };
+  }, [state.attemptId, state.phase, state.projectId, state.stepIndex]);
 
   useEffect(() => {
     if (state.phase !== "ready" || state.stepIndex !== 2) return undefined;

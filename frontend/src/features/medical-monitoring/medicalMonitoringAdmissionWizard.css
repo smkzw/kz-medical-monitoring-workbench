@@ -404,6 +404,14 @@ div.monitoring-admission-manual {
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
+  /* R5冲刺（R1-14/R3-11）：操作栏改为吸底（sticky）——长表单下主按钮
+     不再沉在页面绝对底部，也不再与上方内容发生覆盖/拦截。 */
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 12px 0;
+  background: #fff;
+  border-top: 1px solid var(--monitoring-line, #dce3e9);
 }
 
 .monitoring-admission-primary,

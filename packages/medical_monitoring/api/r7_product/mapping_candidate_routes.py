@@ -58,8 +58,7 @@ _MAPPING_STATUS_CODES = {
     "mapping_questions_unresolved": 422,
 }
 
-_MAPPING_MESSAGES = {
-    "mapping_admission_not_found": "未找到对应的数据导入记录。请先完成数据导入后再生成字段对应建议。",
+_MAPPING_MESSAGES = {    "mapping_admission_not_found": "未找到对应的数据导入记录。请先完成数据导入后再生成字段对应建议。",
     "mapping_candidates_not_found": "尚未生成字段对应建议。请先发起生成。",
     "mapping_profile_not_ready": "数据结构识别尚未完成，暂时无法生成字段对应建议。请等待导入完成后再试。",
     "mapping_bridge_unconfigured": "系统识别服务暂不可用，请稍后重试。",
@@ -141,6 +140,31 @@ _MAPPING_MESSAGES = {
         "（或在修订中给出对应关系和核对结论），再进行整体确认。"
     ),
 }
+
+_LAST_CHECK_NOTE_FILENAME = "last_document_check_note.json"
+
+
+def _read_last_document_check_note(workspace_dir: Any) -> str:
+    """R5冲刺（R1-11）：读最近一次文档核对结论（workflow层写入）。"""
+
+    import json as _json
+    from pathlib import Path as _Path
+
+    try:
+        value = _json.loads(
+            (
+                _Path(workspace_dir)
+                / "document_authority_candidates"
+                / _LAST_CHECK_NOTE_FILENAME
+            ).read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(value, dict):
+        return ""
+    note = str(value.get("note") or "").strip()
+    when = str(value.get("recorded_at") or "").strip()
+    return f"{note}（记录于 {when[:19]}）" if note and when else note
 
 
 class AdmissionMappingPipeline(Protocol):
@@ -230,7 +254,7 @@ class MappingDraftConfirmRequest(BaseModel):
 
 
 class DocumentAuthorityIdentityConfirmation(BaseModel):
-    """人工确认上传资料归属当前项目（R1循环：身份门的人工裁决出口）。"""
+    """R1循环：身份门的人工裁决出口（R5复用为核对结论留痕载体）。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -588,7 +612,15 @@ def register_mapping_candidate_routes(
                 attempt_id=validated_attempt,
                 workspace_dir=context.workspace_dir(context.root, canonical),
             )
-            return {"project_id": canonical, **dict(result)}
+            # R5冲刺（R1-11）：最近一次核对结论随readiness带回——刷新后
+            # 「尚未添加」不再吞掉此前数分钟核对得出的拒收/待确认原因。
+            note = _read_last_document_check_note(
+                context.workspace_dir(context.root, canonical)
+            )
+            payload = {"project_id": canonical, **dict(result)}
+            if note and not payload.get("ready"):
+                payload["last_check_note"] = note
+            return payload
         except AdmissionMappingPipelineError as exc:
             return _mapping_error(exc.code)
         except Exception:

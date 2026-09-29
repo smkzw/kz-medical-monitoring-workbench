@@ -695,6 +695,29 @@ class MonitoringAiRepository:
         # identity path in ``get``/``input_payload``.
         return tuple(self._job(row, strict_input_identity=False, validate_payload=not lightweight, repository=self) for row in rows)
 
+    def pending_job_count(self) -> int:
+        """R5冲刺（病根兜底）：全库可认领任务数（queued + 租约过期的running）。
+
+        供worker周期兜底线程判断是否需要重新wake——wake-only模型下
+        drain线程全部retire后，新入队任务若无人再wake会永久滞留。
+        """
+
+        now = self.clock()
+        query = (
+            "SELECT count(*) FROM monitoring_ai_jobs WHERE "
+            "status = ? OR (status = ? AND lease_expires_at != '' AND lease_expires_at < ?)"
+        )
+        with self._connect() as connection:
+            row = connection.execute(
+                query,
+                (
+                    MonitoringAiJobStatus.QUEUED.value,
+                    MonitoringAiJobStatus.RUNNING.value,
+                    _iso(now),
+                ),
+            ).fetchone()
+        return int(row[0]) if row else 0
+
     def set_queue_paused(self, project_id: str, *, paused: bool) -> None:
         """Persist the project stop boundary without cancelling in-flight work."""
         project_id = project_id.strip()

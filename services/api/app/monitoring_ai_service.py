@@ -2439,6 +2439,11 @@ class MonitoringAiService:
             return None
         return (runtime.profile_id, runtime.provider, runtime.model)
 
+    def pending_job_count(self) -> int:
+        """R5冲刺（病根兜底）：worker周期轮询用，见MonitoringAiWorker."""
+
+        return self.repository.pending_job_count()
+
     def run_next(
         self,
         owner: str,
