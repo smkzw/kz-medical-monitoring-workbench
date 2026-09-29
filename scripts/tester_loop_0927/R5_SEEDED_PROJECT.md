@@ -1,0 +1,47 @@
+# R5D 开考位预置结果 — MX循R5D-CSU（2026-09-29）
+
+隔离环境：API `http://127.0.0.1:8911`（build api-39dd6f40246a95ce，runtime `runs/tester_loop_iso_20260928/runtime`），全程未触碰 8910/5177。
+操作者：开考门槛预置员（R5D）。起止：2026-09-29 12:50 → 17:37（本地 CST，约 4 小时 47 分，含轮询等待）。
+
+## 项目
+
+| 项 | 值 |
+|---|---|
+| project_id | **proj_user_9ce08d6a722d** |
+| project_name | MX循R5D-CSU |
+| indication / product_name | 慢性自发性荨麻疹 / MG-K10 |
+| modules | ["medical_monitoring"] |
+| 幂等键 | r5d-seed-20260929T045029Z-444e1a1a（唯一） |
+| data admission | stg-68d7a08f01b3472196931402184b53c4（合成listing 591行/10表，同步解析） |
+| 文档权威批次 | mmbatch_b941ebb0895ff818a59fae94（方案V1.3 docx + eCRF指南V1.0 docx 双VLM） |
+
+## 全链状态（自验实测，2026-09-29 17:4x）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| 建项 | ✅ 201 | POST /api/projects；state r5d_seed_state.json |
+| 数据接入 | ✅ | data-admissions/upload → attempt，591行 |
+| 文档权威 | ✅ ready=true | 6个AI作业完成；文件角色人工裁决（ecrf→eCRF指南docx；IB/SAP缺失如实标记）+身份归属确认一次 |
+| 映射双队列 | ✅ candidates_ready | 第一轮10主+10盲核全完成，60字段候选 |
+| 医学问题卡 | ✅ 已答 | EX/EXTRT（依据数据实测：两臂128行同值，治疗身份以DM.试验分组为准）+ 最终8张两轮分歧裁决卡，全部决策前缀留痕 |
+| 复核收敛 | ✅ complete | 分歧 46→32→27→23→8→0，4轮第二轮双队列；失败分片自动恢复+bounded-gap |
+| **字段映射确认** | ✅ **confirmed** | GET mapping-candidates：confirmation_status=confirmed，draft status=confirmed（v57），user_questions=0 |
+| **facts 物化** | ✅ **ready** | GET facts：state=ready，facts_generated=true，10表/591行/2400值全核验，message「可用于监查的数据已生成，可以开始监查。」 |
+| 界面可开始运行监查 | ⚠️ **被缺陷阻断** | `GET /r7/project/open` → blocked/dataCoverage=incomplete；`GET /r7/run-setup/options` → **409 project_open_blocked**（见下） |
+
+AI 台账：92 作业（87完成/5失败：provider_reasoning_only×4、invalid_ai_output×1，均按设计自动恢复预算与 bounded-gap 收敛）；183 次调用，2,653,827 tokens。
+
+## 阻断缺陷（新发现，如实上报，未绕过）
+
+**建项种子写入过期 launch_registry schema marker → 全部 API 建项的监查项目被判 CORRUPT → 运行监查入口全挡。**
+
+- 界面/接口现象：项目打开被拒（"暂时无法安全打开此项目，请保留原项目并联系支持"，canView=false）；`/r7/run-setup/options` 409 project_open_blocked；运行入口（runs/prepare-and-start 等）经同一 mutable gate（packages/medical_monitoring/api/r7_product/project_operations.py:786-805）。
+- 根因：`services/api/app/main.py:4850`（`_init_monitoring_runtime_dbs`）以 manifest 现行 **v5 DDL** 创建 `launch_registry.sqlite3`，却写 marker **mm-r7-slice08b-launch-registry-v4**（`main.py:4849-4851`）。schema 检验按 marker 匹配 v4 形状 → shape_mismatch → CORRUPT。
+- 实证：隔离 runtime **全部 14 个** workspace 的 launch_registry 同样 shape_mismatch（含并行会话 MX循R5-CSU-c2ae 等）；用当前 `LaunchRegistry` 代码新建文件出生即 v5 且检验 CURRENT（packages/medical_monitoring/runtime/launch_registry_core_mixin.py:171 写 SCHEMA_VERSION=v5）——写入方自洽，仅建项种子 marker 过期（R24 于 0923V1 修过同类漂移，W01-R26 升 v5 后再落后一版）。
+- 影响范围：本次全链（文档权威→映射→确认→facts）不受影响、已全部真实完成；仅「开始运行监查」的门面被挡。修复需后端将种子 marker 改为 v5（建议直接取 launch_registry_contracts.SCHEMA_VERSION），存量库可走 launch_registry 自身的 v4→v5 原地升级路径。本轮未改任何库、未跳任何质量门。
+
+## 留痕文件（同目录）
+
+- 驱动脚本：`r5d_seed_csu.py`（建项→接入→文档→映射→adopt→adjudicate→confirm→facts，幂等）、`r5d_question_cards.py`、`r5d_final_cards.py`（医学卡作答）、`r5d_converge.py`（复核收敛驱动）
+- 证据：`r5d_seed_evidence.jsonl`（每步请求/响应摘要）、`r5d_seed_state.json`（幂等状态）
+- 环境日志：`ISO_ENV_LOG.md`（R5D 起止与作业数条目）

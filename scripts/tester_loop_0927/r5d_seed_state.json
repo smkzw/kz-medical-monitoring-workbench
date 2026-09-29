@@ -1,0 +1,27 @@
+{
+ "project_id": "proj_user_9ce08d6a722d",
+ "create_key": "r5d-seed-20260929T045029Z-444e1a1a",
+ "project_name": "MX循R5D-CSU",
+ "updated_at": "2026-09-29T06:37:16.034845+00:00",
+ "attempt_id": "stg-68d7a08f01b3472196931402184b53c4",
+ "docs_batch_id": "mmbatch_b941ebb0895ff818a59fae94",
+ "role_selections": [
+  {
+   "role": "ecrf",
+   "candidate_id": "mmcandidate_482be842cc410fa47a0c8ca2"
+  },
+  {
+   "role": "investigator_brochure",
+   "candidate_id": ""
+  },
+  {
+   "role": "sap",
+   "candidate_id": ""
+  }
+ ],
+ "documents_ready": true,
+ "mapping_state": "candidates_ready",
+ "draft_id": "monmapdraft_0173cdeeed8a9196d4bfc37edd6e",
+ "draft_version": 1,
+ "adjudication_state": "running"
+}
