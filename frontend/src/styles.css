@@ -217,8 +217,11 @@ button:disabled {
 .project-meta {
   display: grid;
   /* R5冲刺（R4-02）：首列为项目选择器，原118px固定宽使项目名截断
-     （MX循R4A-R…）；加宽并弹性，长名悬停可见完整title。 */
-  grid-template-columns: minmax(180px, 240px) 112px 130px 105px 145px minmax(150px, 180px);
+     （MX循R4A-R…）；加宽并弹性，长名悬停可见完整title。
+     R6-03：其余各列由固定px改为minmax(0, Nfr)——六列固定宽总和822px
+     在1440/1280视口下超出容器导致贴边与适应症截断；可收缩列+strong
+     既有ellipsis保证窄屏优雅截断、宽屏按比例舒展。 */
+  grid-template-columns: minmax(170px, 1.6fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 0.9fr) minmax(0, 1.2fr) minmax(0, 1.2fr);
   gap: 0;
   border: 1px solid var(--line);
   border-radius: 4px;

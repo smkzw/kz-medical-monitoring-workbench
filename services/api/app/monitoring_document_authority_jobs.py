@@ -605,25 +605,62 @@ def _user_choices_for_unresolved(
     unresolved = list(resolved.get("unresolved_roles", ()))
     if not unresolved:
         return []
-    # R2测试循环：裁决选项只允许「可作为权威文件」的候选（ready+parsed）。
-    # 原实现把needs_ocr的扫描件也列为选项，用户按提示裁决后promote仍会
-    # 拒绝（document_authority_candidate_not_promotable），文案承诺的
-    # 「可裁决后重试」变成死循环——从源头排除不可解析候选。
-    candidates = [
-        {
+    # R2测试循环：可裁决选项只允许「可作为权威文件」的候选（ready+
+    # parsed）。R6-02补两刀：①已被其它角色绑定的候选（如方案docx已定
+    # protocol）不得再作为本角色（ecrf）的可选项——曾诱导监查员把研
+    # 究方案指认为eCRF；②不可解析候选（如扫描版pdf）以「不可选但
+    # 可见」的形式纳入（附原因），与「涉及文件」清单一致，不再凭空
+    # 消失或错误顶替。
+    bound_candidate_ids = {
+        str(item.get("candidate_id") or "")
+        for item in resolved.get("resolved_roles", ())
+        if str(item.get("candidate_id") or "")
+    }
+    candidates: list[dict[str, Any]] = []
+    unselectable: list[dict[str, Any]] = []
+    for item in candidate_batch.get("candidates", ()):
+        entry = {
             "candidate_id": str(item.get("candidate_id")),
             "filename": str(item.get("filename") or ""),
         }
-        for item in candidate_batch.get("candidates", ())
-        if item.get("technical_status", "ready") == "ready"
-        and item.get("extraction_status", "parsed") == "parsed"
-    ]
+        selectable = (
+            item.get("technical_status", "ready") == "ready"
+            and item.get("extraction_status", "parsed") == "parsed"
+            and str(item.get("candidate_id")) not in bound_candidate_ids
+        )
+        if selectable:
+            candidates.append(entry)
+            continue
+        if str(item.get("candidate_id")) in bound_candidate_ids:
+            # 已被其它角色使用：不再出现在任何未决角色的选项里。
+            continue
+        reason = (
+            "内容未完整解析（如扫描版PDF），不能作为权威研究文件"
+            if not (
+                item.get("technical_status", "ready") == "ready"
+                and item.get("extraction_status", "parsed") == "parsed"
+            )
+            else "已被其它文件角色使用"
+        )
+        unselectable.append({
+            **entry,
+            "selectable": False,
+            "unselectable_reason": reason,
+        })
     return [
         {
             "role": str(role),
             "options": [
-                *candidates,
-                {"candidate_id": "", "filename": "（该角色缺失，无此文件）"},
+                *(
+                    {**candidate, "selectable": True}
+                    for candidate in candidates
+                ),
+                *unselectable,
+                {
+                    "candidate_id": "",
+                    "filename": "（该角色缺失，无此文件）",
+                    "selectable": True,
+                },
             ],
         }
         for role in unresolved
