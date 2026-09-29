@@ -847,6 +847,9 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   const confirmInFlight = useRef(false);
   const CONFIRM_STALE_MS = 5 * 60 * 1000;
   const documentUploadInFlight = useRef(false);
+  // R7-01：resolve轮询的在途去重与退避计数。
+  const documentResolveInFlight = useRef(false);
+  const documentResolveWaitStreak = useRef(0);
   const importRequestGeneration = useRef(0);
   const documentRequestGeneration = useRef(0);
   const mappingRequestGeneration = useRef(0);
@@ -1145,7 +1148,15 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       const timer = setTimeout(() => loadDocumentReadiness(), 1500);
       return () => clearTimeout(timer);
     }
+    // R7-01：resolve可达20-30秒——固定1.5秒轮询曾无并发去重，在途
+    // 请求堆积占满后端同步线程池致整站假死。两层防护：①在途去重
+    // （上一次resolve未返回绝不发起新的）；②连续等待退避1.5s→3s→5s
+    // （封顶），拿到新状态即复位。
+    if (documentResolveInFlight.current) return undefined;
+    const backoffMs = Math.min(1500 * 2 ** Math.min(documentResolveWaitStreak.current, 2), 5000);
     const timer = setTimeout(async () => {
+      if (documentResolveInFlight.current) return;
+      documentResolveInFlight.current = true;
       const generation = documentRequestGeneration.current + 1;
       documentRequestGeneration.current = generation;
       try {
@@ -1155,6 +1166,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           documentState.payload.analysis_token,
         );
         if (documentRequestGeneration.current === generation) {
+          documentResolveWaitStreak.current = 0;
           setDocumentState({
             phase: documentPhaseFromPayload(payload),
             payload,
@@ -1163,6 +1175,14 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         }
       } catch (error) {
         if (documentRequestGeneration.current === generation) {
+          if (error?.detail?.code === "document_resolve_in_progress") {
+            // 后端在途防重入的引导：保持当前态，退避后再查。
+            documentResolveWaitStreak.current = Math.min(
+              documentResolveWaitStreak.current + 1, 2,
+            );
+            setDocumentState((current) => ({ ...current, error: null }));
+            return;
+          }
           // R2循环：失败分支必须保留payload——user_choices/analysis_token
           // 都取自payload，清空会让「可裁决」提示与裁决控件同时消失，
           // 把用户锁死在第3步（报告C的document_authority_candidate_
@@ -1173,8 +1193,10 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
             error: error?.detail?.message || error?.message || "研究文件核对失败。",
           }));
         }
+      } finally {
+        documentResolveInFlight.current = false;
       }
-    }, 1500);
+    }, backoffMs);
     return () => clearTimeout(timer);
   }, [api, documentState, state.attemptId, state.projectId]);
 

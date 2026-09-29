@@ -658,6 +658,22 @@ class AdmissionMappingConfirmationService:
                     workspace_dir=workspace_dir,
                 )["reconciliation"]
             except AdmissionMappingPipelineError as exc:
+                if exc.code == "mapping_verifier_revision_drift":
+                    # R7轮（R3-01显式化）：revision漂移不可自愈——收敛为
+                    # blocked并指引用户重新发起字段识别，不再永久running。
+                    projected = self._draft_payload(draft)
+                    projected["adjudication"] = {
+                        "state": "blocked",
+                        "resolved_count": 0,
+                        "remaining_question_count": len(unresolved),
+                        "failure_code": "mapping_verifier_revision_drift",
+                        "failure_message": (
+                            "字段复核的输入证据已与当前数据版本不一致"
+                            "（研究文件或数据在识别后被重新提交）。复核无法"
+                            "自动收敛，请重新发起字段识别。"
+                        ),
+                    }
+                    return projected
                 if exc.code == "mapping_verifier_job_failed":
                     # R5冲刺（收敛性家族）：失败上报+幂等重跑——对终态
                     # 失败的分片执行retry_terminal重新排队（周期兜底
@@ -1671,8 +1687,13 @@ class AdmissionMappingConfirmationService:
                     )
                     current_revisions[revision_key] = current_revision
                 if current_revision != revision_key:
+                    # R7轮（R3-01显式化）：输入revision漂移不可自愈
+                    # （重算恒不同）——原实现恒报verifier_incomplete使
+                    # adjudication永久running、确认接口409死循环（B实测
+                    # 「答完题后复核不收敛」分支）。显式区分并收敛为
+                    # blocked+重新识别指引。
                     raise AdmissionMappingPipelineError(
-                        "mapping_verifier_incomplete"
+                        "mapping_verifier_revision_drift"
                     )
             rows = self.ai_repository.candidates(project_id, job.job_id)
             if len(rows) != 1:

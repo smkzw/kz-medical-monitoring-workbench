@@ -112,6 +112,8 @@ _REMOTE_UNAVAILABLE_FAILURES = frozenset({
     "provider_runtime_error",
 })
 DOCUMENT_SELECTION_KIND = "monitoring_document_selection"
+# R7轮（R1-02）：用户显式声明某文件角色本次未提供的持久记录。
+DOCUMENT_MISSING_DECLARATION_KIND = "monitoring_document_missing_declaration"
 _DOCUMENT_ROLE_LABELS = {
     "protocol": "研究方案",
     "investigator_brochure": "研究者手册",
@@ -732,26 +734,41 @@ class AdmissionMappingPipeline:
             "ambiguous": "系统正在核对版本",
             "incomplete": "需要重新识别",
         }
-        roles = [
-            {
+        # R7轮（R1-02收口）：用户在角色裁决中显式声明「本次未提供」的
+        # 角色不再阻断required门——原实现用户如实选「未提供eCRF」后
+        # readiness仍恒missing/required，ready永不转true，出口死锁。
+        declared_missing = self._declared_missing_roles(workspace_dir, attempt_id)
+        roles = []
+        for item in packet.roles:
+            declared = item.role in declared_missing and item.status == "missing"
+            required = item.role in MAPPING_REQUIRED_DOCUMENT_ROLES and not declared
+            roles.append({
                 "role": item.role,
                 "label": _DOCUMENT_ROLE_LABELS[item.role],
-                "required_now": item.role in MAPPING_REQUIRED_DOCUMENT_ROLES,
+                "required_now": required,
                 "status": item.status,
+                "user_declared_missing": declared,
                 "status_text": (
-                    "可稍后添加"
+                    "已由用户确认未提供"
+                    if declared
+                    else "可稍后添加"
                     if item.status == "missing"
                     and item.role not in MAPPING_REQUIRED_DOCUMENT_ROLES
                     else status_text[item.status]
                 ),
-            }
-            for item in packet.roles
-        ]
-        ready = bool(packet.mapping_context_ready)
+            })
+        ready = bool(packet.mapping_context_ready) or all(
+            (
+                item["status"] == "current"
+                or item["user_declared_missing"]
+                or not item["required_now"]
+            )
+            for item in roles
+        )
         return {
             "ready": ready,
             "headline": (
-                "研究方案和电子病例报告表已准备好"
+                "研究文件已准备好"
                 if ready
                 else "还需补充研究方案或电子病例报告表"
             ),
@@ -762,6 +779,62 @@ class AdmissionMappingPipeline:
             ),
             "roles": roles,
         }
+
+    @staticmethod
+    def _declared_missing_roles(workspace_dir: Path, attempt_id: str) -> set[str]:
+        """Roles the user explicitly declared missing for this attempt."""
+
+        store = _store(workspace_dir)
+        try:
+            declared: set[str] = set()
+            for role in DOCUMENT_ROLES:
+                row = store.get_domain_object(
+                    DOCUMENT_MISSING_DECLARATION_KIND,
+                    f"{attempt_id}::{role}",
+                )
+                if row is None or not isinstance(row[1], Mapping):
+                    continue
+                payload = row[1]
+                if (
+                    payload.get("attempt_id") == attempt_id
+                    and payload.get("role") == role
+                ):
+                    declared.add(role)
+            return declared
+        finally:
+            store.close()
+
+    def declare_document_missing(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Path,
+        role: str,
+        actor: str = "medical_manager",
+    ) -> int:
+        """Persist one explicit user declaration that a role is absent."""
+
+        role = str(role or "").strip()
+        if role not in DOCUMENT_ROLES:
+            raise AdmissionMappingPipelineError(
+                "mapping_document_selection_invalid"
+            )
+        store = _store(workspace_dir)
+        try:
+            return store.put_domain_object(
+                DOCUMENT_MISSING_DECLARATION_KIND,
+                f"{attempt_id}::{role}",
+                {
+                    "schema_version": "mm-c3-document-missing-declaration-v1",
+                    "project_id": project_id,
+                    "attempt_id": attempt_id,
+                    "role": role,
+                    "actor": str(actor or "medical_manager")[:160],
+                },
+            )
+        finally:
+            store.close()
 
     def _cohort_contract(self, cohort: str) -> MonitoringMappingCohortContract:
         try:
