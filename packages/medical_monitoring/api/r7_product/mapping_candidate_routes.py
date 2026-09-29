@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Protocol
 
@@ -20,6 +22,29 @@ from .admission_routes import _validated_attempt_id
 MAPPING_CANDIDATE_SCHEMA_VERSION = "mm-c3-mapping-candidate-v1"
 MAPPING_CONFIRMATION_SCHEMA_VERSION = "mm-c3-mapping-confirmation-v1"
 
+# R7-01：resolve是同步长请求（推进双盲核对链可达20-30秒）。前端1.5秒
+# 轮询曾无并发去重，堆积的resolve占满FastAPI同步线程池，期间
+# /api/projects等全部请求排队超时——整站假死。按项目做在途防重入：
+# 同一项目的并发resolve立即返回409引导稍候，不再排队占线程。
+_RESOLVE_INFLIGHT: Dict[str, float] = {}
+_RESOLVE_INFLIGHT_LOCK = threading.Lock()
+_RESOLVE_INFLIGHT_TTL_SECONDS = 120.0
+
+
+def _try_begin_resolve(project_id: str) -> bool:
+    now = time.monotonic()
+    with _RESOLVE_INFLIGHT_LOCK:
+        started = _RESOLVE_INFLIGHT.get(project_id)
+        if started is not None and now - started < _RESOLVE_INFLIGHT_TTL_SECONDS:
+            return False
+        _RESOLVE_INFLIGHT[project_id] = now
+        return True
+
+
+def _end_resolve(project_id: str) -> None:
+    with _RESOLVE_INFLIGHT_LOCK:
+        _RESOLVE_INFLIGHT.pop(project_id, None)
+
 _MAPPING_STATUS_CODES = {
     "mapping_admission_not_found": 404,
     "mapping_candidates_not_found": 404,
@@ -31,6 +56,7 @@ _MAPPING_STATUS_CODES = {
     "mapping_cohort_legacy_route": 409,
     "mapping_verifier_incomplete": 409,
     "mapping_verifier_job_failed": 409,
+    "mapping_verifier_revision_drift": 409,
     "mapping_reconciliation_required": 409,
     "mapping_adjudication_failed_payload_unreadable": 409,
     "mapping_draft_unconfigured": 503,
@@ -74,6 +100,10 @@ _MAPPING_MESSAGES = {    "mapping_admission_not_found": "未找到对应的数�
     "mapping_verifier_job_failed": (
         "字段复核的分片任务失败，系统已将其重新排队重跑；请稍候再次查询。"
         "若持续失败，请重新发起字段识别。"
+    ),
+    "mapping_verifier_revision_drift": (
+        "字段复核的输入证据已与当前数据版本不一致（研究文件或数据在"
+        "识别后被重新提交），复核无法自动收敛；请重新发起字段识别。"
     ),
     "mapping_reconciliation_required": (
         "资料或核对结果已变化，系统会重新核实，不需要您逐项确认；"
@@ -725,9 +755,25 @@ def register_mapping_candidate_routes(
             return pipeline
         if context.monitoring_document_authority_promoter is None:
             return _mapping_error("mapping_document_authority_unavailable")
+        # R7-01在途防重入：同项目已有resolve在跑时立即返回，不排队
+        # 占用同步线程池（原堆积曾致整站假死）。
+        if not _try_begin_resolve(canonical):
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "code": "document_resolve_in_progress",
+                    "message": (
+                        "研究文件核对正在推进中（单次最长约30秒）；"
+                        "请稍候再查询，无需密集重试。"
+                    ),
+                    "project_id": canonical,
+                    "state": "analyzing",
+                },
+            )
         try:
             write_permit = context.acquire_product_write_gate(canonical)
         except pb.ProjectBackupError as exc:
+            _end_resolve(canonical)
             return _run_entry_error_response(exc)
         try:
             actor = getattr(auth, "principal_id", None) or "medical_manager"
@@ -845,6 +891,7 @@ def register_mapping_candidate_routes(
                         "确认沿用，或更换文件后重新上传。"
                     )
                 return response_payload
+            registered_roles: set[str] = set()
             for registration in result.get("registrations", ()):
                 pipeline.select_document(
                     project_id=canonical,
@@ -853,6 +900,28 @@ def register_mapping_candidate_routes(
                     role=str(registration["role"]),
                     source_entry_id=str(registration["source_entry_id"]),
                 )
+                registered_roles.add(str(registration["role"]))
+            # R7轮（R1-02收口）：用户裁决「该角色缺失」（空candidate_id）
+            # 落显式缺失声明——readiness据此不再把该角色算作required，
+            # 「选未提供」后ready可转true，出口不再死锁。
+            for selection in request_fields.get("user_role_selections") or ():
+                if not isinstance(selection, Mapping):
+                    continue
+                role = str(selection.get("role") or "").strip()
+                if (
+                    role in registered_roles
+                    or not role
+                    or str(selection.get("candidate_id") or "").strip()
+                ):
+                    continue
+                if hasattr(pipeline, "declare_document_missing"):
+                    pipeline.declare_document_missing(
+                        project_id=canonical,
+                        attempt_id=validated_attempt,
+                        workspace_dir=context.workspace_dir(context.root, canonical),
+                        role=role,
+                        actor=str(actor),
+                    )
             readiness = pipeline.document_readiness(
                 project_id=canonical,
                 attempt_id=validated_attempt,
@@ -906,6 +975,7 @@ def register_mapping_candidate_routes(
                 },
             )
         finally:
+            _end_resolve(canonical)
             write_permit.release()
 
     @router.post("/data-admissions/{attempt_id}/mapping-candidates", status_code=201)
