@@ -1,0 +1,22 @@
+{
+ "project_id": "proj_user_6ae946bc497a",
+ "create_key": "r8d-seed-20260929T180648Z-80a50af6",
+ "project_name": "MX循R8D-CSU",
+ "updated_at": "2026-09-29T21:06:32.663905+00:00",
+ "attempt_id": "stg-dcc4681ae6b44cf49db24922eb29b6bf",
+ "docs_batch_id": "mmbatch_b5dd4c1eb2e15b22b114559a",
+ "role_selections": [
+  {
+   "role": "ecrf",
+   "candidate_id": "mmcandidate_482be842cc410fa47a0c8ca2"
+  }
+ ],
+ "documents_ready": true,
+ "mapping_state": "candidates_ready",
+ "draft_id": "monmapdraft_29eee7020e2914df87f3a5dc5897",
+ "draft_version": 1,
+ "adjudication_state": "complete",
+ "confirmed": true,
+ "confirm_idempotency_key": "r8d-confirm-d296a2b1be1349c88fd76975778fad74",
+ "facts_materialized": true
+}

@@ -45,3 +45,52 @@ AI 台账：92 作业（87完成/5失败：provider_reasoning_only×4、invalid_
 - 驱动脚本：`r5d_seed_csu.py`（建项→接入→文档→映射→adopt→adjudicate→confirm→facts，幂等）、`r5d_question_cards.py`、`r5d_final_cards.py`（医学卡作答）、`r5d_converge.py`（复核收敛驱动）
 - 证据：`r5d_seed_evidence.jsonl`（每步请求/响应摘要）、`r5d_seed_state.json`（幂等状态）
 - 环境日志：`ISO_ENV_LOG.md`（R5D 起止与作业数条目）
+
+---
+
+# R8D 开考位预置结果 — MX循R8D-CSU（2026-09-30）
+
+隔离环境：API `http://127.0.0.1:8911`（build api-700a1dd6ecebb56e，runtime `runs/tester_loop_iso_20260928/runtime`），全程未触碰 8910/5177。
+操作者：开考预置守护员-R8D。起止：2026-09-30 02:06 → 05:07（本地 CST，约 3 小时，含约 1 小时裁决卡依据核对）。
+
+## 探障与修复（本轮前置，R5D 遗留阻断缺陷）
+
+- 探障实测：R5D 项目 `GET /r7/project/open` → `state=blocked / dataCoverage=incomplete / canView=false`（「暂时无法安全打开此项目」）；`run-setup/options` → 409 project_open_blocked。产品 `inspect_member` 实证隔离 runtime **21/21** workspace 的 launch_registry 均 corrupt/shape_mismatch（v4 marker + v5 形状）。
+- 修复①（产品代码）：`services/api/app/main.py` `_init_monitoring_runtime_dbs` 种子 marker 由硬编码 v4 改取 `launch_registry_contracts.SCHEMA_VERSION`；临时 runtime 实测新种子 inspect → current/current_shape。
+- 修复②（存量库）：`r8d_repair_launch_registry.py` 按 `LaunchRegistry.open()` 同语义守卫式原地升级，21 个库 corrupt→current（证据 r8d_repair_evidence.jsonl）。
+- 重启隔离对 8911/5178（只动隔离对）：ready:true、指纹配对 api-700a1dd6ecebb56e、8910/5177 复核 200。重启后 R5D 项目 project/open → **current/complete**、run-setup/options **200**（409 消除）。
+
+## 项目
+
+| 项 | 值 |
+|---|---|
+| project_id | **proj_user_6ae946bc497a** |
+| project_name | MX循R8D-CSU |
+| indication / product_name | 慢性自发性荨麻疹 / MG-K10 |
+| modules | ["medical_monitoring"] |
+| 幂等键 | r8d-seed-20260929T180648Z-80a50af6（唯一） |
+| data admission | stg-dcc4681ae6b44cf49db24922eb29b6bf（合成listing 591行/10表） |
+| 文档权威批次 | mmbatch_b5dd4c1eb2e15b22b114559a（方案V1.3 docx + eCRF指南V1.0 docx 双VLM） |
+
+## 全链状态（自验实测，2026-09-30 05:0x CST）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| 建项 | ✅ 201 | POST /api/projects；state r8d_seed_state.json |
+| 数据接入 | ✅ | data-admissions/upload → attempt，591行 |
+| 文档权威 | ✅ ready=true | 8个AI作业（2分析+6复核）；ecrf→eCRF填写指南docx 按文件名裁决 + 身份归属确认一次（IB/SAP缺失如实标记） |
+| 映射双队列 | ✅ candidates_ready | 10主+10盲核全完成，60字段候选 |
+| 复核收敛 | ✅ complete | 分歧 46→36→21→0，3轮双队列；失败分片自动恢复重排（R5-03修复生效） |
+| 裁决卡 | ✅ 已答 | 21张两轮分歧卡逐卡作答：15张R8新卡（AE域×8、DM.ARM、LB_HEM.LBUNIT、MH.MHTERM、UAS×4）以 R5D 同数据已确认版 monmaprev_e4c1fe85a816792f0814cbec2179 的已确认角色 + 列值实测为依据；6张R5D同款卡按既有数据实测决策；首次遇未知卡时脚本 fail-closed 诚实退出留痕后再答 |
+| **字段映射确认** | ✅ **confirmed** | GET mapping-candidates：draft status=confirmed（v68），user_questions=0，60字段 |
+| **facts 物化** | ✅ **ready** | GET facts：state=ready，facts_generated=true，10表/591行/2834值全核验，message「可用于监查的数据已生成，可以开始监查。」 |
+| **界面可开始运行监查** | ✅ | `GET /r7/project/open` → state=current/dataCoverage=complete/canView/canEdit=true「项目格式正常」；`run-setup/options` 200（含已核验事实快照与运行模式） |
+| 停在 facts（未启动监查） | ✅ | GET runs → {"runs":[]} |
+
+AI 台账：64 作业（61完成/3终态失败：invalid_ai_output×1、provider_runtime_error×2——经自动恢复与后续轮次收敛，adjudication remaining=0 全字段闭合）；105 次调用，1,942,073 tokens。全程 AI 质量门自然通过，未跳门、未伪造状态。
+
+## 留痕文件（同目录）
+
+- 驱动：`r8d_seed_csu.py`（幂等全链驱动，含 fail-closed 未知卡防护）、`r8d_repair_launch_registry.py`（存量库 v4→v5 原地升级）
+- 证据：`r8d_seed_evidence.jsonl`（每步请求/响应摘要）、`r8d_seed_state.json`（幂等状态）、`r8d_repair_evidence.jsonl`（21库修复前后检验）
+- 环境日志：`ISO_ENV_LOG.md`（R8D 探障修复+重启+预置条目）
