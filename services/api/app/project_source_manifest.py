@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -168,6 +169,29 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parents[5]
 
 
+def _monitoring_runtime_root() -> Path:
+    """Resolve the monitoring R7 runtime root for THIS process.
+
+    R10预检拦截根因：本函数曾硬编码舰队runtime路径（runs/phase_c_
+    mgk10_authority_v2_20260905），不读WORKBENCH_RUNTIME_DIR——隔离
+    实例（8911）下facts-manifest.json实际存在于tester_loop_iso_
+    20260928/runtime，硬编码路径不存在→绑定永留intake_pending→
+    prepare-and-start被来源就绪门409，六阶段全绿后的运行阶段永阻。
+    现与main.py的RUNTIME_DIR同源解析：优先WORKBENCH_RUNTIME_DIR
+    环境变量，缺省回退原舰队路径（8910行为不变）。
+    """
+    configured = os.environ.get("WORKBENCH_RUNTIME_DIR", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve() / "medical_monitoring_r7"
+    return (
+        Path(__file__).resolve().parents[3]
+        / "runs"
+        / "phase_c_mgk10_authority_v2_20260905"
+        / "runtime"
+        / "medical_monitoring_r7"
+    )
+
+
 def _monitoring_facts_materialized(project_id: str) -> bool:
     """Check whether the R7 facts lane has materialized data for a project.
 
@@ -177,11 +201,7 @@ def _monitoring_facts_materialized(project_id: str) -> bool:
     ``real_source_slice`` so the R5 rule-authoring lane unlocks naturally.
     """
     ws = (
-        Path(__file__).resolve().parents[3]
-        / "runs"
-        / "phase_c_mgk10_authority_v2_20260905"
-        / "runtime"
-        / "medical_monitoring_r7"
+        _monitoring_runtime_root()
         / project_id
         / "runtime"
         / "artifacts"
