@@ -423,6 +423,8 @@ def create_medical_monitoring_r7_product_router(
     admission_fact_materializer: Any = None,
     real_setup_inputs: Optional[Callable[[str], Any]] = None,
     audit_ledger_factory: Optional[Callable[..., Any]] = None,
+    ensure_source_ready: Optional[Callable[..., None]] = None,
+    source_block_message: Optional[Callable[[str], str]] = None,
 ) -> APIRouter:
     """Create the project-scoped R7 product router; no workspace I/O here."""
     # Publication never synthesizes authority.  A caller must inject one
@@ -903,6 +905,8 @@ def create_medical_monitoring_r7_product_router(
         workspace_dir=_workspace_dir,
         workspace_is_ready=_workspace_is_ready,
         monitoring_action=MonitoringAction,
+        ensure_source_ready=ensure_source_ready,
+        source_block_message=source_block_message,
     )
     register_run_launch_routes(router, run_route_context)
 

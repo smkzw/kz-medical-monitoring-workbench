@@ -94,3 +94,22 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 操作者：修复员（R7轮次）
 - 原因：R7-01（resolve防重入+前端轮询退避）、R1-02（未提供eCRF缺失声明→readiness清除required）、R3-01（复核revision漂移显式化）涉及后端routes/pipeline/confirmation+前端向导。
 - 自检：8911 ready:true（build api-713057f57b434486）；5178/monitoring=200；指纹配对一致；8910/5177复核均200未受影响。
+
+## 2026-09-30 凌晨（R8轮次·开考预置守护员：探障修复 launch_registry 种子marker + 预置 MX循R8D-CSU）
+
+- 操作者：开考预置守护员-R8D。起止：2026-09-30 02:0x → 05:0x（本地 CST）。
+- **探障确认**：`GET /r7/project/open`（R5D项目 proj_user_9ce08d6a722d）→ `state=blocked / dataCoverage=incomplete / canView=false`（界面症状「暂时无法安全打开此项目」）；`run-setup/options` 409 project_open_blocked。用产品自身 `inspect_member` 实证：隔离 runtime 全部 **21个** workspace 的 launch_registry 均 corrupt/shape_mismatch（marker=mm-r7-slice08b-launch-registry-v4 但形状为v5，其余成员均 current）。
+- **修复1（产品缺陷，最小修复）**：`services/api/app/main.py` `_init_monitoring_runtime_dbs` 建项种子 launch_registry marker 原硬编码 v4（W01-R26 升 v5 后落后一版）→ 改为直接取 `launch_registry_contracts.SCHEMA_VERSION`（mm-r7-w01r26-launch-registry-v5），杜绝再落后。临时 runtime 实测：新种子文件 inspect_member → current/current_shape。
+- **修复2（存量隔离库原地 v4→v5 升级）**：`scripts/tester_loop_0927/r8d_repair_launch_registry.py` 按 `LaunchRegistry.open()` 同语义守卫式原地升级（查PRAGMA列→缺列才ALTER→同事务推进marker），对隔离 runtime（runs/tester_loop_iso_20260928/runtime）**21个** launch_registry.sqlite3 全部 corrupt→current（v5列已存在，ALTER为no-op仅推进marker）；证据 r8d_repair_evidence.jsonl。未触碰 8910 舰队 runtime。
+- **重启（只动 8911/5178）**：按本文件标准命令双重启。自检：8911 ready:true（build **api-700a1dd6ecebb56e**）；5178 /monitoring=200；runtime-build.json 与 backend_build_id 指纹配对一致；8910/5177 复核均 200 未受影响。重启后 R5D 项目 project/open → **current/complete/canView/canEdit=true**，run-setup/options 200（原409消除）。
+- **预置 MX循R8D-CSU**（proj_user_6ae946bc497a，幂等键 r8d-seed-20260929T180648Z-80a50af6）：三件套上传→文档权威双VLM（mmbatch_b5dd4c1eb2e15b22b114559a，~16min ready，ecrf角色按文件名裁决+身份归属确认）→映射双队列（10主+10盲核，60候选）→adopt→复核收敛 46→36→21→0（3轮，失败分片自动恢复重排）→21张两轮分歧裁决卡逐卡按数据实测作答（15张R8新卡以R5D已确认版 monmaprev_e4c1fe85a816792f0814cbec2179 同数据已确认角色+列值实测为依据；首次遇到15张未知卡时驱动脚本 fail-closed 诚实退出留痕，未虚构作答）→**confirm 200（draft v68 confirmed，user_questions=0）→ facts 201（10表/591行/2834值全核验，state=ready「可用于监查的数据已生成，可以开始监查。」）**，停住未启动监查运行（runs=[]）。project/open → current/complete/canView/canEdit=true。
+- AI 台账：64作业（61完成/3终态失败：invalid_ai_output×1、provider_runtime_error×2，经自动恢复与后续轮次收敛，adjudication remaining=0）；105次调用，1,942,073 tokens。全程未跳任何质量门。
+- 驱动与留痕：`r8d_seed_csu.py`（幂等，状态 r8d_seed_state.json、留痕 r8d_seed_evidence.jsonl）、`r8d_repair_launch_registry.py`（r8d_repair_evidence.jsonl）。
+2026-09-30 10:05 ZCode宿主崩溃后恢复：隔离对8911/5178与共享对8910/5177双双拉起，指纹配对api-700a1dd6ecebb56e（含R8修复代码）
+
+## 2026-09-30 下午（R8轮次·修复员：R8三修复后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R8轮次）
+- 原因：R8-01（prepare-and-start前置来源就绪门fail-fast）、R8-02（存量waiting_start运行历史行blocked_reason注入+进度页指引文案）、R8-03（来源阻断码不再被「监查范围已更新」误译）。
+- 自检：8911 ready:true（build api-ff4268b99214365a）；5178/monitoring=200；指纹配对一致；8910/5177复核均200未受影响。
+- ⚠️ 旁注：项目根默认runtime（PROJECT_ROOT/runtime/ai_task_runs.jsonl，非8910/8911所用目录）今日09:24被并行会话写入含 route_thinking/fallback_* 新字段的记录，本仓库AiTaskRun模型extra_forbid——裸跑（无WORKBENCH_RUNTIME_DIR）import main会迁移报错；8910/8911均显式指定runtime不受影响，但任何裸跑进程会失败，提请循环侧关注该文件来源与口径。
