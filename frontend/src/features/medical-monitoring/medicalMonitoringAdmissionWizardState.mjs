@@ -362,6 +362,22 @@ const SHEET_LABEL_FALLBACK = Object.freeze({
   IC: "知情同意",
   SU: "外科手术史",
   QS: "问卷",
+  // R9轮（R6-04）：字段识别视图实测出现而字典缺失的域。
+  ICF_TRACK: "知情同意跟踪",
+  LB_HEM: "实验室检查-血液学",
+  LBUCOL: "实验室检查-尿液颜色",
+  PASI: "银屑病皮损面积与严重程度指数",
+  EASI: "特应性皮炎皮损面积与严重程度指数",
+  BSA: "体表受累面积",
+  IGA: "研究者整体评估",
+  DLQI: "皮肤病生活质量指数",
+  CDLQI: "儿童皮肤病生活质量指数",
+  SCORAD: "特应性皮炎评分",
+  NRS: "数字评定量表",
+  UAS: "荨麻疹活动度评分",
+  UAS7: "荨麻疹活动度评分(7天)",
+  PROMIS: "患者报告结局测量信息系统",
+  NRSD: "数字评定量表-日记卡",
 });
 
 export function labelSheetName(name) {

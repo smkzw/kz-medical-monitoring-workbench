@@ -565,6 +565,18 @@ function MedicalMonitoringProtocolPreparationPanelForProject({
   const [ruleTemplateStates, setRuleTemplateStates] = useState({});
   const independentAiReady = aiStatus?.semantic_ai_tasks_enabled === true;
 
+  // R9轮（R9-04）：Escape关闭抽屉——键盘用户的标准退出路径。
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose?.();
+      }
+    };
+    globalThis.addEventListener?.("keydown", onKeyDown);
+    return () => globalThis.removeEventListener?.("keydown", onKeyDown);
+  }, [onClose]);
+
   useEffect(() => {
     requestScope.activate();
     return () => requestScope.dispose();

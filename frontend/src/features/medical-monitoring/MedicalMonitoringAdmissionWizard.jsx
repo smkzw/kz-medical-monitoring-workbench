@@ -8,6 +8,7 @@ import {
   admissionStepView,
   admissionWizardReducer,
   createAdmissionWizardState,
+  labelSheetName,
   readAdmissionProfile,
   validateAdmissionSourceDir,
 } from "./medicalMonitoringAdmissionWizardState.mjs";
@@ -360,8 +361,9 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
           </summary>
           <ul className="monitoring-admission-table-summary" aria-label="数据表识别摘要">
             {tables.map((table) => (
+              // R9轮（R6-04）：表概况同样复用域代码中文字典。
               <li key={table.name}>
-                <strong>{table.name}</strong>
+                <strong>{labelSheetName(table.name)}</strong>
                 <span>
                   {table.fieldCount} 个字段
                   {table.questionCount ? ` · ${table.questionCount} 个待确认` : ""}
@@ -489,12 +491,15 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
             <ul className="monitoring-admission-field-digest">
               {visibleCandidates.map((item) => {
                 const evidence = (item.evidenceSummary || [])[0];
+                // R9轮（R6-04）：域代码复用导入层的中文字典（labelSheetName
+                // 会给已知域补「代码--中文」），同一信息不再两种口径。
+                const domainLabel = labelSheetName(item.domain);
                 return (
                   <li
                     key={mappingCandidateKey({ domain: item.domain, source_field: item.sourceField })}
                   >
                     <span className="monitoring-admission-column-name">
-                      {item.domain} · {item.sourceField}
+                      {domainLabel} · {item.sourceField}
                     </span>
                     <span className="monitoring-admission-column-meta">
                       {evidence ? mappingTypeText(evidence.inferred_type) : "系统已识别"}

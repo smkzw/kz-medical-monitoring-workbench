@@ -112,6 +112,10 @@ class MonitoringDocumentAuthorityWorkflow:
             )
             raise DocumentAuthorityError("document_authority_evidence_incomplete")
         revision = self._input_revision(project_id, batch)
+        # R9轮（R7-03跨档案组污染）：开新批次核对即清除上一组的结论
+        # 留痕——原实现仅PDF组的失败结论会在重传完整文件组后继续挂
+        # 在readiness上误导可用性判断（新组还在核对中≠旧组失败）。
+        self._record_last_check_note(workspace_dir, "")
         # R3循环（报告B）：批次指纹是内容确定性的——同一组文件重传会
         # 得到同一batch_id并复用已完成的判定（表现为"缓存秒回"）。
         # 向界面透传该事实，让"重复上传秒出结论"与"新文件全量核对"
