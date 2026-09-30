@@ -154,3 +154,9 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 根因修复：project_source_manifest._monitoring_facts_materialized硬编码舰队runtime路径→改为WORKBENCH_RUNTIME_DIR感知（_monitoring_runtime_root），缺省回退原舰队路径（8910行为不变）。
 - 复验（对预检项目proj_user_cae1decd4224原地重放）：①绑定intake_pending→real_source_slice（source-manifest API核对）；②prepare-and-start不再409 readiness——经workspace/bootstrap一次初始化后运行创建成功（runs列表run:09d074a46e284a870b4d8e36，waiting_start，幂等重试得in_flight_conflict证明registry已有run）；③监听分析0作业派发的原因（运行未启动执行）不再是本缺陷。
 - 自检：8911 ready:true（build api-ce1c512e7a64adf5）；5178=200；指纹配对一致；8910/5177复核均200未受影响。
+
+## 2026-10-01 凌晨（R10预检第2次·修复员：部分采纳域完整性门打通后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R10预检第2次拦截：首遍主分片终态失败→adopt 422）
+- 修复：mapping_draft_repository域完整性门新增allowed_missing_domains豁免（仅限cohort中该域全部分片终态失败且无completed覆盖）；在场域计数和替代全量full_field_count核对；adopt_draft计算合法缺席域并作为domain_gaps物化到draft响应。
+- 自检：8911 ready:true（build api-9b827e5405b94cea）；5178=200；指纹配对一致；8910/5177复核均200未受影响。
