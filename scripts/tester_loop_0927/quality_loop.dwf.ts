@@ -105,6 +105,33 @@ interface SeedResult {
   blockedNote: string;
 }
 
+interface PreflightStage {
+  /** 阶段名：建项/上传/文档权威/映射/事实/运行/发布/结果 */
+  stage: string;
+  ok: boolean;
+  seconds: number;
+  note: string;
+}
+
+interface PreflightAiNode {
+  /** AI节点名：文档权威主/文档权威盲核/映射主/映射盲核/裁决/监查分析等 */
+  node: string;
+  /** 该节点实际路由到的 provider/model（从台账读） */
+  providerModel: string;
+  ok: boolean;
+  note: string;
+}
+
+interface PreflightResult {
+  /** 端到端全链是否真正跑通（运行完成+发布可用+结果可读） */
+  chainOk: boolean;
+  /** chainOk=false 时写清卡在哪个阶段、什么现象 */
+  blockedAt: string;
+  stages: PreflightStage[];
+  aiNodes: PreflightAiNode[];
+  evidenceNote: string;
+}
+
 // ===== 常量 =====
 const WB = "implementation/workbench";
 const PY = "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python";
@@ -713,6 +740,41 @@ for (let round = 1; round <= MAXROUNDS; round++) {
       "4. 完成后自验并把项目ID与各步状态证据追加到 scripts/tester_loop_0927/R5_SEEDED_PROJECT.md（按轮次分节），返回 {projectId, stateNote, blockedNote}（受阻时 blockedNote 写清卡点）",
     );
     log("R" + round + "开考预置：" + (reseed.blockedNote ? "受阻——" + reseed.blockedNote : "就绪（" + reseed.stateNote + "）"));
+  }
+  if (round >= 10) {
+    phase("全链预检：链路不绿不外派（用户0930指令）");
+    let preflightOk = false;
+    let preflightBlock = "";
+    for (let pfAttempt = 1; pfAttempt <= 3 && !preflightOk; pfAttempt++) {
+      const pf = await agent("全链预检工程师-R" + round + "-第" + pfAttempt + "次", {
+        system:
+          "你是全链预检工程师（任务所有者指令：链路端到端跑通之前不派发任何测试者）。你在隔离环境 http://127.0.0.1:8911 上以运维/工程师身份（允许API与脚本，严禁碰 8910/5177）用一次性预检项目把整条链从零真跑一遍，逐阶段计时、逐AI节点核路由。遇到缺陷如实记录卡点——你的职责是证明链路通或不通，不是修复；不许绕过或伪造状态。所有证据写入 scripts/tester_loop_0927/PREFLIGHT_LOG.md（按轮次分节）。",
+      }).ask<PreflightResult>(
+        "第" + round + "轮全链预检（第" + pfAttempt + "次）。要求：\n" +
+        "1. 新建一次性预检项目：project_name=「MX循R" + round + "P-CSU」（P=预检，会被复盘归档），indication=慢性自发性荨麻疹、product_name=MG-K10、modules 含 medical_monitoring、幂等键唯一\n" +
+        "2. 用 tester_staging_0927/synth_csu 三件套，按 scripts/fullchain_sar_rerun_20260926/HANDOFF_SAR_RERUN_20260926.md 的API序列把全链跑到底：建项→上传→文档权威→映射确认→facts→**运行监查（必须真正完成，不是创建即算）→发布（必须 available）→结果可读（overview 非空、受试者/发现数>0）**\n" +
+        "3. 每个阶段记录 ok/秒数/备注（stages）；已知状态碎片化家族（后端confirmed vs 监查侧unconfirmed）大概率在运行启动处拦截——若命中，把 console/API 双侧状态证据记入 blockedAt\n" +
+        "4. 逐个AI节点核路由（aiNodes）：文档权威主+盲核、映射主+盲核、裁决、监查分析——从AI台账（/api/ai/queue 或 sqlite）读各节点实际 provider/model 与终态，确认无作业滞留、无静默失败\n" +
+        "5. chainOk 仅当：八阶段全ok 且 运行完成且发布available且结果可读；否则 blockedAt 写清阶段+现象\n" +
+        "6. 返回 PreflightResult（stages/aiNodes 全填）。跑完把项目留在原地（归档交给复盘官）。",
+      );
+      preflightOk = pf.chainOk;
+      preflightBlock = pf.blockedAt;
+      if (pf.chainOk) {
+        log("全链预检通过（第" + pfAttempt + "次）：端到端跑通+AI节点正常，" + pf.evidenceNote);
+      } else {
+        log("全链预检第" + pfAttempt + "次未通过：" + pf.blockedAt + " ——先修再检，本轮测试者暂不派发");
+        await fixer.ask<FixResult>(
+          "全链预检拦截（第" + round + "轮第" + pfAttempt + "次，任务所有者指令：链路不通不外派测试者）。请修复以下阻断点后交预检复验：\n" +
+          JSON.stringify({ blockedAt: pf.blockedAt, stages: pf.stages, aiNodes: pf.aiNodes }) + "\n" +
+          "修复纪律见你的角色设定；最小根因修复+相关pytest+git提交（『测试循环R" + round + "预检:』）；重启只动隔离对（8911/5178）：\nAPI：" + ISO_RESTART_API + "\nvite：" + ISO_RESTART_VITE + "\n返回FixResult。",
+        );
+      }
+    }
+    if (!preflightOk) {
+      stagnationEscalation = "升级：第" + round + "轮全链预检三次未通过（" + preflightBlock + "）——链路端到端跑通前不派发测试者（用户0930指令），需要任务所有者决策。";
+      break;
+    }
   }
   if (round === 5) {
     phase("批量修复冲刺：清存量与修病根");
