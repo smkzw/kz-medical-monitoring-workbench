@@ -302,7 +302,12 @@ test("generating state offers refresh instead of adoption", () => {
     },
   });
 
-  assert.equal(admissionMappingPrimaryAction(state).key, "reload");
+  // R9轮（R5-05）：生成期间主按钮保持单一稳定禁用文案（自动轮询推进），
+  // 不再提供会与轮询闪换的可点刷新入口。
+  const action = admissionMappingPrimaryAction(state);
+  assert.equal(action.key, "busy");
+  assert.equal(action.disabled, true);
+  assert.match(action.label, /正在生成字段识别结果/);
   assert.match(state.message, /生成中/);
 });
 

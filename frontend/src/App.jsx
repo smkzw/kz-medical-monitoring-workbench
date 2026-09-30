@@ -13137,6 +13137,8 @@ export function App() {
   const [projectsLoadError, setProjectsLoadError] = useState("");
   const [monitoringProjectRouteError, setMonitoringProjectRouteError] = useState("");
   const [projectsRequestNonce, setProjectsRequestNonce] = useState(0);
+  // R9轮（R7-02）：空列表自动重拉计数（防启动/预置写入期误显「暂无项目」）。
+  const emptyListRetriesRef = useRef(0);
   const rememberedProjectIdRef = useRef(readRememberedProjectId());
   const [activeProjectId, setActiveProjectId] = useState(monitoringBrowserState.initialProjectId);
   // 切换项目时持久记住，供下次冷启动回落（R1-07）。
@@ -13320,12 +13322,32 @@ export function App() {
     let cancelled = false;
     setProjectsLoaded(false);
     setProjectsLoadError("");
-    fetch("/api/projects")
+    // R9轮（R7-02/R6-06）：请求超时兜底——后端挂起时（R6-D实测12分钟
+    // 不返回）不得让「正在加载项目」无限盲等，20秒转错误态+重试入口。
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    fetch("/api/projects", { signal: controller.signal })
       .then(readJsonOrThrow)
       .then((payload) => {
         if (cancelled) return;
+        clearTimeout(timeout);
         const canonicalProjects = Array.isArray(payload) ? payload : [];
         setProjects(canonicalProjects);
+        // R9轮（R7-02）：启动/预置写入期后端可能短暂返回空列表（D实测
+        // 首开显示「暂无项目」30秒+、刷新后项目立即出现）。空列表时
+        // 自动重拉（最多3次、间隔5秒），不把瞬时空窗渲染成系统无项目。
+        if (
+          canonicalProjects.length === 0
+          && emptyListRetriesRef.current < 3
+          && !initialMedicalMonitoringProductRouteRef.current.isProduct
+        ) {
+          emptyListRetriesRef.current += 1;
+          setTimeout(() => {
+            if (!cancelled) setProjectsRequestNonce((value) => value + 1);
+          }, 5000);
+        } else if (canonicalProjects.length > 0) {
+          emptyListRetriesRef.current = 0;
+        }
         const requestedProductProjectId = initialMedicalMonitoringProductRouteRef.current.canonical?.project_ref || "";
         const requestedMonitoringProjectId = initialMonitoringRouteRef.current.project_id || "";
         const requestedProjectAvailable = requestedMonitoringProjectId
@@ -13360,15 +13382,18 @@ export function App() {
       })
       .catch(() => {
         if (!cancelled) {
+          clearTimeout(timeout);
           setProjects([]);
           setActiveProjectId((current) => initialMedicalMonitoringProductRouteRef.current.isProduct ? current : "");
           setMonitoringProjectRouteError("");
-          setProjectsLoadError("工作台服务未连接或项目列表暂不可用；未将未知状态当作“无项目”。");
+          setProjectsLoadError("项目列表加载失败或超时（超过20秒未返回）。请点击重试；若持续失败请检查服务状态。");
           setProjectsLoaded(true);
         }
       });
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
+      controller.abort();
     };
   }, [projectsRequestNonce, isMedicalMonitoringProductRoute, medicalMonitoringProductRouteState]);
 

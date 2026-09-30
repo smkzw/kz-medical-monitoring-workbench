@@ -433,7 +433,15 @@ export function admissionMappingPrimaryAction(state) {
       return { key: "reload", label: "识别任务未成功，重新加载", disabled: false };
     }
     if (payloadState === "generating") {
-      return { key: "reload", label: "刷新识别进度", disabled: false };
+      // R9轮（R5-05）：识别生成期间按钮曾在禁用/启用间每数秒闪换
+      // （轮询load-start→ready→…循环改写主按钮），点击瞬间被禁用。
+      // 自动轮询已持续拉取（R2-05修复），按钮保持单一稳定禁用文案，
+      // 不再提供会闪换的手动刷新入口。
+      return {
+        key: "busy",
+        label: "正在生成字段识别结果…（自动刷新进度，无需手动刷新）",
+        disabled: true,
+      };
     }
   }
   if (state.phase === "failed") {

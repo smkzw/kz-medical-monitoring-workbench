@@ -115,3 +115,17 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - ⚠️ 旁注：项目根默认runtime（PROJECT_ROOT/runtime/ai_task_runs.jsonl，非8910/8911所用目录）今日09:24被并行会话写入含 route_thinking/fallback_* 新字段的记录，本仓库AiTaskRun模型extra_forbid——裸跑（无WORKBENCH_RUNTIME_DIR）import main会迁移报错；8910/8911均显式指定runtime不受影响，但任何裸跑进程会失败，提请循环侧关注该文件来源与口径。
 2026-09-30 10:46 循环收尾：隔离测试环境已停止（运行时目录保留取证）
 2026-09-30 10:57 R9前手工拉起隔离对（第二次升级后用户未答，按常设指示以推荐方案续跑）
+
+## 2026-09-30 中午（R9轮次·开考预置守护员：探障无障碍 + 预置 MX循R9D-CSU）
+
+- 操作者：开考预置守护员-R9D。起止：11:02 → 15:00（本地 CST）。
+- **探障**：`GET /r7/project/open`（R8D项目）→ current/complete/canView/canEdit=true，无 blocked/CORRUPT；R8D 修复代码在位（main.py:4883-4884,4893-4894 种子marker取 launch_registry_contracts.SCHEMA_VERSION，现行build api-ff4268b99214365a）；R9D 新建 workspace 的 launch_registry 经产品 inspect_member 实测 current/current_shape（v5）。**本轮无缺陷需修，未做任何重启（8911/5178/8910/5177 均未动）。**
+- **预置 MX循R9D-CSU**（proj_user_f650151b5a42，幂等键 r9d-seed-20260930T030202Z-9b9b988e）：三件套上传 → 文档权威双VLM ~19min ready（身份归属确认一次）→ 映射双队列（10主+10盲核，60候选，1失败分片自动恢复）→ adopt → 复核收敛 46→37→33→28→12→0（5轮adjudicate/4轮双队列）→ 第4轮后浮现6张R9新裁决卡（CM×4+LB_HEM×2），驱动脚本首次遇未知卡 fail-closed 退出留痕后，按 openpyxl 直读合成文件列值实测+两轮队列同判结论逐卡作答 → **confirm 200（draft v59 confirmed，user_questions=0）→ facts 201（10表/591行/2724值全核验，state=ready）**，停住未启动监查（runs=[]）。project/open → current/complete。
+- AI 台账（本项目）：88作业（84完成/4终态failed均为mapping分片，经自动恢复收敛 remaining=0）；139次调用，2,471,717 tokens。全程未跳任何质量门。
+- 驱动与留痕：`r9d_seed_csu.py`、`r9d_seed_state.json`、`r9d_seed_evidence.jsonl`。
+
+## 2026-09-30 傍晚（R9轮次·修复员：七项修复后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R9轮次）
+- 原因：R7-03（新批次清旧核对结论，后端workflow）、R7-02/R6-06（项目列表20s超时错误态+空列表自动重拉，App.jsx）、R5-05（generating主按钮稳定禁用）、R6-04（域代码中文字典扩充+两视图复用）、R5-02（抽屉backdrop让出侧栏顶栏）、R9-04（三个弹层Escape，ref-callback实现避免SSR测试hook崩溃）。
+- 自检：8911 ready:true（build api-439b9e81187f0da4）；5178/monitoring=200；指纹配对一致；8910/5177复核均200未受影响。

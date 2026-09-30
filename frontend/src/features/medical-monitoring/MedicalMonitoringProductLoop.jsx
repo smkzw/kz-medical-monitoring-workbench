@@ -562,10 +562,34 @@ export function MonitoringFactsRuleEntry({ onOpen }) {
   );
 }
 
+// R9轮（R9-04）：Escape关闭弹层——不用hook（该组件被SSR快照测试直接
+// 渲染，跨React实例的hook会崩），改用ref callback挂全局keydown。
+function escapeCloser(onClose, { skipWhen } = {}) {
+  return (node) => {
+    if (!node || typeof globalThis.document === "undefined") return undefined;
+    let active = true;
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      if (skipWhen && skipWhen()) return;
+      event.preventDefault();
+      onClose?.();
+    };
+    globalThis.document.addEventListener("keydown", onKeyDown);
+    return () => {
+      active = false;
+      globalThis.document.removeEventListener("keydown", onKeyDown);
+    };
+  };
+}
+
 export function MonitoringHistoryDrawer({ history, selectedPublicRunToken = "", onSelect, onClose }) {
   const rows = Array.isArray(history?.rows) ? history.rows : [];
   return (
-    <div className="monitoring-product-overlay" role="presentation">
+    <div
+      className="monitoring-product-overlay"
+      role="presentation"
+      ref={escapeCloser(onClose)}
+    >
       <aside className="monitoring-history-drawer" role="dialog" aria-modal="true" aria-label="监查历史" data-monitoring-history-drawer>
         <header className="monitoring-drawer-head">
           <div><span className="monitoring-eyebrow">监查记录</span><h2>历史</h2><p>按开始时间显示最近记录。</p></div>
@@ -618,7 +642,11 @@ export function MonitoringWizardView({
   const candidates = Array.isArray(preview?.candidates) ? preview.candidates.slice(0, 5) : [];
   const setField = (field, value) => onSelect?.(field, value);
   return (
-    <div className="monitoring-product-overlay" role="presentation">
+    <div
+      className="monitoring-product-overlay"
+      role="presentation"
+      ref={escapeCloser(onClose, { skipWhen: () => Boolean(previewOpen) })}
+    >
       <section className="monitoring-product-dialog" role="dialog" aria-modal="true" aria-label="开始一次监查" data-monitoring-wizard data-monitoring-wizard-step={step}>
         <header className="monitoring-dialog-head">
           <div><span className="monitoring-eyebrow">本次监查</span><h2>开始一次监查</h2><p>在当前项目内确认监查方式、数据范围和特殊关注。</p></div>

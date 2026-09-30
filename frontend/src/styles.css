@@ -3598,6 +3598,11 @@ button:disabled {
   position: fixed;
   inset: 0;
   z-index: 64;
+  /* R9轮（R5-02）：host曾整屏拦截指针，左栏导航与「返回项目总看板」
+     在抽屉打开期间不可点。遮罩语义只覆盖内容区（.app首列180px侧栏
+     让出）——侧栏与顶栏可正常点击。 */
+  left: 180px;
+  pointer-events: none;
 }
 
 .monitoring-protocol-prep-backdrop {
@@ -3609,6 +3614,7 @@ button:disabled {
   border: 0;
   border-radius: 0;
   background: rgba(28, 37, 45, 0.3);
+  pointer-events: auto;
 }
 
 .monitoring-protocol-prep-drawer {
@@ -3623,6 +3629,7 @@ button:disabled {
   background: #fff;
   box-shadow: -14px 0 32px rgba(28, 37, 45, 0.16);
   overflow: hidden;
+  pointer-events: auto;
 }
 
 .monitoring-protocol-prep-head {
