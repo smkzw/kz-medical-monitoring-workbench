@@ -129,3 +129,28 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 操作者：修复员（R9轮次）
 - 原因：R7-03（新批次清旧核对结论，后端workflow）、R7-02/R6-06（项目列表20s超时错误态+空列表自动重拉，App.jsx）、R5-05（generating主按钮稳定禁用）、R6-04（域代码中文字典扩充+两视图复用）、R5-02（抽屉backdrop让出侧栏顶栏）、R9-04（三个弹层Escape，ref-callback实现避免SSR测试hook崩溃）。
 - 自检：8911 ready:true（build api-439b9e81187f0da4）；5178/monitoring=200；指纹配对一致；8910/5177复核均200未受影响。
+2026-09-30 17:44 循环收尾：隔离测试环境已停止（运行时目录保留取证）
+
+## 2026-09-30 傍晚（R10轮次·隔离环境守护员：探针失败后恢复 8911+5178）
+
+- 操作者：隔离环境守护员-R10。起止：17:46:59 → 17:48:29（本地 CST）。
+- 触发：API探针 exit=1、前端探针 exit=1。排查：8911/5178 均无监听进程（lsof 空），系 17:44 循环收尾主动停止所致，非损坏；隔离 runtime 目录（runs/tester_loop_iso_20260928/runtime）完整在位，**未重建**（仅整目录丢失才按规程从 phase_c_mgk10_authority_v2_20260905 重建）。
+- 恢复：按标准命令双重启——API：`WORKBENCH_RUNTIME_DIR=runs/tester_loop_iso_20260928/runtime WORKBENCH_LOCAL_SINGLE_USER=1 WORKBENCH_AI_RUNTIME=api WORKBENCH_MONITORING_AI_PARALLELISM=2 nohup .venv/bin/python -m uvicorn services.api.app.main:app --host 127.0.0.1 --port 8911`（pid 39061，日志 /tmp/mm_api_8911.log）；vite：`VITE_API_PROXY_TARGET=http://127.0.0.1:8911 nohup npx vite --port 5178 --strictPort`（日志 /tmp/mm_vite_5178.log，ready in 145ms）。
+- 旁注：API 启动耗时略超 15 秒，17:47:17 首探 curl exit 7（连接被拒），此时进程存活、随后 17:47:59 监听就绪探针即通过——属启动竞态非故障，未触发第二次重启。
+- 自检：8911 `/api/runtime-readiness` → 200 ready:true，backend_build_id=**api-439b9e81187f0da4**（与 R9 傍晚修复员轮次同 build，本轮无代码变更）；5178 `/monitoring` → 200；`runtime-build.json` expectedBackendBuildId=api-439b9e81187f0da4 与 backend_build_id 配对一致；17:48:29 复探 ready 稳定；8910/5177 只读复核均 200 未触碰未受影响。
+
+## 2026-10-01 凌晨（R10轮次·开考预置守护员：探障无障碍+5178复活 + 预置 MX循R10D-CSU）
+
+- 操作者：开考预置守护员-R10D。起止：2026-09-30 17:53 → 2026-10-01 02:03（本地 CST）。
+- **探障（旧项目全被循环收尾软归档，改三路替代）**：① R8D 修复在位——main.py:4883-4884,4893-4894 种子 marker 仍取 `launch_registry_contracts.SCHEMA_VERSION`（=V5，contracts.py:54）；② 隔离 runtime 存量 29 个 workspace 的 launch_registry marker 逐库直查全 v5；③ 新建项目 4 个种子成员经产品 `inspect_member` 实测全 CURRENT。**R5D marker 缺陷未复发，本轮未修任何产品代码、未重启 8911。** 建项瞬间 project/open 的 blocked 为 `required_member_missing`（runtime/monitoring_runtime.sqlite3 bootstrap 前不存在，R1 已知瞬态同款），facts 物化后即 current——非损坏，未绕过。
+- **5178 复活（只动隔离对）**：本轮中途发现隔离 vite 5178 掉线（连接拒绝），按本文件标准命令重启（`VITE_API_PROXY_TARGET=http://127.0.0.1:8911 npx vite --port 5178 --strictPort`，v6.4.2 ready in 290ms）；自检 /monitoring=200、runtime-build.json expectedBackendBuildId=api-439b9e81187f0da4 与 8911 配对一致。8911 全程未动；8910 复核 200；**5177 复核时连接拒绝（已停）——非本轮所致（对 8910/5177 仅只读 curl），按铁律未触碰拉起，如实记录**。
+- **预置 MX循R10D-CSU**（proj_user_ad685a18f853，幂等键 r10d-seed-20260930T095343Z-a18f7bd1）：三件套上传 → 文档权威双VLM 约14min ready（本轮无人工门触发）→ 映射双队列（10主+10盲核，60候选）→ adopt → 复核收敛 46→38→27→20→12→0（系统裁决34；v19-tools-v7.2 工具型裁决作业，收敛约7.2h，驱动两次预算耗尽按幂等续跑）→ EX/EXTRT 卡按数据实测作答一次 → **confirm 200（draft v60 confirmed，user_questions=0）→ facts 201（10表/591行/2290值全核验，state=ready）**，停住未启动监查（runs=[]）。project/open → current/complete/canView/canEdit=true。
+- AI 台账（本项目）：82作业（76完成/6终态failed均为mapping分片，经自动恢复收敛 remaining=0）；149次调用，2,267,750 tokens。全程未跳任何质量门。
+- 驱动与留痕：`r10d_seed_csu.py`、`r10d_seed_state.json`、`r10d_seed_evidence.jsonl`；轮次分节见 `R5_SEEDED_PROJECT.md`。
+
+## 2026-09-30 晚（R10预检·修复员：runtime路径根因修复后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R10预检第1次拦截）
+- 根因修复：project_source_manifest._monitoring_facts_materialized硬编码舰队runtime路径→改为WORKBENCH_RUNTIME_DIR感知（_monitoring_runtime_root），缺省回退原舰队路径（8910行为不变）。
+- 复验（对预检项目proj_user_cae1decd4224原地重放）：①绑定intake_pending→real_source_slice（source-manifest API核对）；②prepare-and-start不再409 readiness——经workspace/bootstrap一次初始化后运行创建成功（runs列表run:09d074a46e284a870b4d8e36，waiting_start，幂等重试得in_flight_conflict证明registry已有run）；③监听分析0作业派发的原因（运行未启动执行）不再是本缺陷。
+- 自检：8911 ready:true（build api-ce1c512e7a64adf5）；5178=200；指纹配对一致；8910/5177复核均200未受影响。
