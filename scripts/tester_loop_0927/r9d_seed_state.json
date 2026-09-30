@@ -1,0 +1,17 @@
+{
+ "project_id": "proj_user_f650151b5a42",
+ "create_key": "r9d-seed-20260930T030202Z-9b9b988e",
+ "project_name": "MX循R9D-CSU",
+ "updated_at": "2026-09-30T06:59:55.761316+00:00",
+ "attempt_id": "stg-0c60b04f735c441ca6330224d7892b47",
+ "docs_batch_id": "mmbatch_6683c5dcf63c33745580994c",
+ "identity_confirmed": true,
+ "documents_ready": true,
+ "mapping_state": "candidates_ready",
+ "draft_id": "monmapdraft_0d96f0e78f54ff69a6bb6e32a41f",
+ "draft_version": 1,
+ "adjudication_state": "complete",
+ "confirmed": true,
+ "confirm_idempotency_key": "r9d-confirm-901c2d8fe5b541429c6a6b8809c13008",
+ "facts_materialized": true
+}

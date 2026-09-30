@@ -94,3 +94,56 @@ AI 台账：64 作业（61完成/3终态失败：invalid_ai_output×1、provider
 - 驱动：`r8d_seed_csu.py`（幂等全链驱动，含 fail-closed 未知卡防护）、`r8d_repair_launch_registry.py`（存量库 v4→v5 原地升级）
 - 证据：`r8d_seed_evidence.jsonl`（每步请求/响应摘要）、`r8d_seed_state.json`（幂等状态）、`r8d_repair_evidence.jsonl`（21库修复前后检验）
 - 环境日志：`ISO_ENV_LOG.md`（R8D 探障修复+重启+预置条目）
+
+---
+
+# R9D 开考位预置结果 — MX循R9D-CSU（2026-09-30）
+
+隔离环境：API `http://127.0.0.1:8911`（build api-ff4268b99214365a，runtime `runs/tester_loop_iso_20260928/runtime`），全程未触碰 8910/5177。
+操作者：开考预置守护员-R9D。起止：2026-09-30 11:02 → 15:00（本地 CST，约 3 小时 58 分，含 AI 等待与 12 分钟裁决卡依据核对）。
+
+## 探障（本轮前置）
+
+- `GET /r7/project/open`（R8D 项目 proj_user_6ae946bc497a）→ **state=current / dataCoverage=complete / canView/canEdit=true**「项目格式正常」——无 blocked/CORRUPT，R5D 遗留缺陷未复发。
+- 修复在位确认：`services/api/app/main.py:4883-4884,4893-4894` `_init_monitoring_runtime_dbs` 种子 marker 仍取 `launch_registry_contracts.SCHEMA_VERSION`（R8D 修复，现行 build api-ff4268b99214365a 含之）。本轮 R9D 新建 workspace 的 launch_registry 经产品 `inspect_member` 实测 **current/current_shape（mm-r7-w01r26-launch-registry-v5）**——新种子出生即合格。
+- 结论：无需修复、无需重启（本轮对 8911/5178 无任何启停操作）。
+
+## 项目
+
+| 项 | 值 |
+|---|---|
+| project_id | **proj_user_f650151b5a42** |
+| project_name | MX循R9D-CSU |
+| indication / product_name | 慢性自发性荨麻疹 / MG-K10 |
+| modules | ["medical_monitoring"] |
+| 幂等键 | r9d-seed-20260930T030202Z-9b9b988e（唯一） |
+| data admission | stg-0c60b04f735c441ca6330224d7892b47（合成listing 591行/10表） |
+| 文档权威批次 | mmbatch_6683c5dcf63c33745580994c（方案V1.3 docx + eCRF指南V1.0 docx 双VLM） |
+
+## 全链状态（自验实测，2026-09-30 15:0x CST）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| 建项 | ✅ 201 | POST /api/projects（幂等键唯一）；state r9d_seed_state.json |
+| 数据接入 | ✅ | data-admissions/upload → attempt，591行 |
+| 文档权威 | ✅ ready=true | 11:02→11:21 约19分钟；身份归属确认一次（project_identity_incomplete 门，等价界面一次点击） |
+| 映射双队列 | ✅ candidates_ready | 10主+10盲核（含1失败分片自动恢复重排），60字段候选 |
+| 复核收敛 | ✅ complete | 分歧 46→37→33→28→12→0，5轮 adjudicate（4轮双队列复核）；失败分片（listing_field_mapping×4终态failed）经自动恢复预算与后续轮次收敛 |
+| 裁决卡 | ✅ 已答 | 首轮无卡；第4轮后浮现 **6张R9新卡**（CM.CMINDC/CMNUM/CMONGO/CMTRT + LB_HEM.LBREF/LBTEST），首次遇到未知卡时脚本 fail-closed 诚实退出留痕（06:47Z），随后按 openpyxl 直读同三份合成文件列值实测 + 两轮队列同判结论逐卡作答（06:59Z） |
+| **字段映射确认** | ✅ **confirmed** | GET mapping-candidates：confirmation_status=confirmed，draft status=confirmed（v59），user_questions=0，60字段 |
+| **facts 物化** | ✅ **ready** | GET facts：state=ready，facts_generated=true，10表/591行/2724值全核验（source_values_verified=2724），message「可用于监查的数据已生成，可以开始监查。」 |
+| 界面可开始运行监查 | ✅ | `GET /r7/project/open` → current/complete/canView/canEdit=true；`run-setup/options` 200 |
+| 停在 facts（未启动监查） | ✅ | GET runs → {"runs":[]} |
+
+AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）：88 作业（84完成/4终态失败，均为 listing_field_mapping 分片，经自动恢复与后续轮次收敛，adjudication remaining=0 全字段闭合）；139 次调用，2,471,717 tokens。全程 AI 质量门自然通过，未跳门、未伪造状态。
+
+## 本轮观察（如实记录，非阻断）
+
+- **角色词汇换代**：R9 草稿词汇相对 R8D 确认版整体换代（如 `medication_name`→`cm_treatment_name`、`ae_outcome`→`adverse_event_outcome`、`treatment_arm_assignment`→`treatment_arm`）。6张新卡按当前草稿 token 作答，语义与列值实测一致；R5D/R8D 旧卡表沿用旧 token，若后续轮次旧字段再浮现卡片需按当轮词汇换算（本轮未触发，fail-closed 防护在位）。
+
+## 留痕文件（同目录）
+
+- 驱动：`r9d_seed_csu.py`（幂等全链驱动，由 r8d_seed_csu.py 适配 + R9_ROUND4_CARDS 六卡表）
+- 证据：`r9d_seed_evidence.jsonl`（每步请求/响应摘要，含 06:47Z unknown_questions_fail_closed 留痕）、`r9d_seed_state.json`（幂等状态）
+- 环境日志：`ISO_ENV_LOG.md`（R9D 探障+预置条目）
+
