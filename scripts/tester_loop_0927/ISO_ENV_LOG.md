@@ -113,3 +113,4 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 原因：R8-01（prepare-and-start前置来源就绪门fail-fast）、R8-02（存量waiting_start运行历史行blocked_reason注入+进度页指引文案）、R8-03（来源阻断码不再被「监查范围已更新」误译）。
 - 自检：8911 ready:true（build api-ff4268b99214365a）；5178/monitoring=200；指纹配对一致；8910/5177复核均200未受影响。
 - ⚠️ 旁注：项目根默认runtime（PROJECT_ROOT/runtime/ai_task_runs.jsonl，非8910/8911所用目录）今日09:24被并行会话写入含 route_thinking/fallback_* 新字段的记录，本仓库AiTaskRun模型extra_forbid——裸跑（无WORKBENCH_RUNTIME_DIR）import main会迁移报错；8910/8911均显式指定runtime不受影响，但任何裸跑进程会失败，提请循环侧关注该文件来源与口径。
+2026-09-30 10:46 循环收尾：隔离测试环境已停止（运行时目录保留取证）
