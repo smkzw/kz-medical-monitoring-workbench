@@ -1027,6 +1027,19 @@ const isoTeardown = await world.run("bash", [
 ]);
 log("隔离测试环境收尾：" + isoTeardown.stdout.trim().split("\n").join("，"));
 
+// ===== 收尾清理（用户2026-09-30指令：测试素材与运行时用完即清，防磁盘堆积） =====
+phase("收尾：清理测试素材与运行时");
+const cleanupRun = await world.run("bash", [
+  "-c",
+  "before=$(df -k / | awk 'NR==2{print $3}')\n" +
+  "rm -rf 'implementation/workbench/runs/tester_loop_iso_20260928' '/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/tester_staging_0927' 'implementation/workbench/tester_staging_0927' /tmp/tester_channel_probe /tmp/channel_probe_final 2>/dev/null || true\n" +
+  "rm -f /tmp/mm_api_8911.log /tmp/mm_vite_5178.log 2>/dev/null || true\n" +
+  "find implementation/workbench/scripts/tester_loop_0927/logs -maxdepth 1 -type d -name 'round_*' 2>/dev/null | sort | head -n -3 | xargs rm -rf 2>/dev/null || true\n" +
+  "after=$(df -k / | awk 'NR==2{print $3}')\n" +
+  "echo \"清理完成，约释放 $(( (before - after) / 1024 )) MB；保留：各轮报告/台账/证据（scripts/tester_loop_0927/round_*与*.md/json/jsonl）与最近三轮过程日志\"",
+]);
+log("测试素材清理：" + cleanupRun.stdout.trim());
+
 return {
   conclusion: convergeReached
     ? "质量循环收敛：历经 " + roundsDone + " 轮（最少" + MINROUNDS + "轮、连续" + CLEANSTREAKNEED + "轮清洁），全部测试者从零建项走通全链且无未决P0/P1。详见 " + LOOP + "/DELIVERY.md"
