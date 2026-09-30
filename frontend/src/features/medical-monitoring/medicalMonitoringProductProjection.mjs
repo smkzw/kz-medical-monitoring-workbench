@@ -422,6 +422,8 @@ function normalizeHistoryRow(value, index) {
     resultAvailable: value.result_available,
     mainAction: requiredText(value.main_action, `runs[${index}].main_action`, "invalid_history"),
     statusText: requiredText(value.status_text, `runs[${index}].status_text`, "invalid_history"),
+    // R8轮（R8-02）：waiting_start运行被来源就绪门阻断时的原因注入。
+    blockedReason: typeof value.blocked_reason === "string" ? value.blocked_reason : "",
   });
 }
 
@@ -600,7 +602,26 @@ export function projectMonitoringPublicProgressError(error) {
     return freeze({
       kind: "unavailable",
       code,
-      text: "本次监查暂不可读取，请返回项目概览",
+      // R8轮（R8-02）：waiting_start运行的进度读取不可用时，给出
+      // 可操作的指引而非一句「暂不可读取」。
+      text: "本次监查暂不可读取。若该监查仍显示「等待开始」，其执行可能"
+        + "被前置条件阻断（研究文件核对/字段映射确认/来源激活，见"
+        + "「方案事实与规则发布」面板或监查历史中的原因说明）；完成后"
+        + "再次打开即可读取。",
+    });
+  }
+  if (
+    code === "medical_monitoring_source_readiness_unconfirmed"
+    || code === "medical_monitoring_source_not_activated"
+  ) {
+    return freeze({
+      kind: "unavailable",
+      code,
+      // R8轮（R8-03）：来源阻断不再被翻译成「监查范围已更新，请重新
+      // 确认」——如实呈现前置链与去向。
+      text: "本次监查的执行被前置条件阻断：来源台账的「匹配/可使用」仅"
+        + "代表文件内容核验通过；还需完成研究文件核对与字段映射确认"
+        + "（前往「医学监查 → 数据接入」）。完成后本监查将继续执行。",
     });
   }
   if (code === "global_default_missing" || code === "invalid_snapshot") {

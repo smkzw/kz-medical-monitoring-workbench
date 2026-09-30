@@ -60,6 +60,13 @@ class RunRouteContext:
     workspace_dir: Any
     workspace_is_ready: Any
     monitoring_action: Any
+    # R8轮（R8-01）：运行创建前的监查来源就绪门——未激活时fail-fast
+    # 拒绝创建（原实现创建waiting_start僵尸运行后执行侧才阻断，
+    # 用户拿到「创建成功」假象而运行永不执行）。
+    ensure_source_ready: Any = None
+    # R8轮（R8-02）：非抛错的就绪查询——历史中存量waiting_start僵尸
+    # 运行据此在行内暴露阻断原因（R5-03前置链文案）。
+    source_block_message: Any = None
 
 
 def register_run_launch_routes(router: APIRouter, context: RunRouteContext) -> None:
@@ -79,6 +86,8 @@ def register_run_launch_routes(router: APIRouter, context: RunRouteContext) -> N
     _workspace_dir = context.workspace_dir
     _workspace_is_ready = context.workspace_is_ready
     MonitoringAction = context.monitoring_action
+    ensure_source_ready = context.ensure_source_ready
+    _source_block_message = context.source_block_message
 
     @router.post("/runs/prepare-and-start")
     async def prepare_and_start(project_id: str, request: Request) -> Any:
@@ -100,6 +109,11 @@ def register_run_launch_routes(router: APIRouter, context: RunRouteContext) -> N
         )
         if compatibility_error is not None:
             return compatibility_error
+        # R8轮（R8-01）：来源未激活时fail-fast——不创建注定无法执行的
+        # 运行；409详情携带R5-03的前置链文案（文件核验→字段映射确认
+        # →来源激活），向导把阻断原因如实呈现给用户。
+        if ensure_source_ready is not None:
+            ensure_source_ready(canonical, operation="prepare-and-start")
 
         body = await _read_json_object(request)
         if isinstance(body, JSONResponse):
@@ -273,9 +287,25 @@ def register_run_launch_routes(router: APIRouter, context: RunRouteContext) -> N
                 if history_limit is not None:
                     rows = rows[:history_limit]
                 records = [_legacy_launch_record(row) for row in rows]
-                return {
-                    "runs": [record.public_projection() for record in records]
-                }
+                projections = [
+                    record.public_projection() for record in records
+                ]
+                # R8轮（R8-02）：存量waiting_start运行若被来源就绪门
+                # 阻断，在历史行内如实暴露原因（此前45分钟停滞零反馈，
+                # 阻断原因藏在需20秒加载的抽屉里）。
+                if (
+                    _source_block_message is not None
+                    and any(
+                        item.get("run_state") == lr.STATE_WAITING_START
+                        for item in projections
+                    )
+                ):
+                    block = _source_block_message(canonical)
+                    if block:
+                        for item in projections:
+                            if item.get("run_state") == lr.STATE_WAITING_START:
+                                item["blocked_reason"] = block
+                return {"runs": projections}
             except Exception as exc:
                 return _run_entry_error_response(exc)
             finally:

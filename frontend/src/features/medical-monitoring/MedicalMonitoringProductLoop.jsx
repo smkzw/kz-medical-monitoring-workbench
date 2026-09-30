@@ -579,6 +579,13 @@ export function MonitoringHistoryDrawer({ history, selectedPublicRunToken = "", 
               <p>{row.dataCutoffText}</p>
               <p>{row.comparisonRangeText}</p>
               <p className="monitoring-history-status">{row.statusText}</p>
+              {/* R8轮（R8-02）：停滞运行的阻断原因在历史行直接可见，
+                  不再藏在需20秒加载的抽屉里。 */}
+              {row.blockedReason ? (
+                <p className="monitoring-product-state-text" role="alert" style={{ color: "#c53730", fontSize: 12 }}>
+                  {row.blockedReason}
+                </p>
+              ) : null}
               <button type="button" className="monitoring-product-button is-small" onClick={() => onSelect?.(row)}>{row.mainAction}</button>
             </article>
           ))}

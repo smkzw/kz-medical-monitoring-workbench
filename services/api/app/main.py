@@ -3096,6 +3096,36 @@ def _legacy_monitoring_source_route(
     }
 
 
+def _monitoring_source_block_detail(project_id: str) -> Optional[dict]:
+    """R8轮（R8-02）：非抛错的就绪查询——返回阻断详情或None。"""
+
+    try:
+        canonical_id = project_source_manifest_service.canonical_project_id(project_id)
+        binding = project_source_manifest_service.module_binding(
+            canonical_id,
+            "medical_monitoring",
+        )
+    except KeyError:
+        return None
+    readiness = resolve_monitoring_source_readiness(binding)
+    if readiness is None or readiness.can_read:
+        return None
+    return source_readiness_block_detail(
+        canonical_id,
+        readiness,
+        operation="run-history",
+    )
+
+
+def _monitoring_source_block_message(project_id: str) -> str:
+    detail = _monitoring_source_block_detail(project_id)
+    if not detail:
+        return ""
+    message = str(detail.get("message") or "")
+    code = str(detail.get("code") or "")
+    return f"{message}（{code}）" if code else message
+
+
 def _ensure_legacy_monitoring_source_ready(
     project_id: str,
     *,
@@ -3916,12 +3946,13 @@ def _r7_real_setup_inputs(canonical_project_id: str):
                 fact_summary = dict(_persisted[1].get("summary") or {})
     except Exception:
         imported_at = ""
-    counts_text = "已核验事实快照"
+    counts_text = "数据层事实快照已核验"
     if fact_summary:
         counts_text = (
-            f"已核验事实快照：{fact_summary.get('tables', '?')}表/"
+            f"数据层事实快照已核验：{fact_summary.get('tables', '?')}表/"
             f"{fact_summary.get('rows', '?')}行/"
             f"{fact_summary.get('values', '?')}值100%往返校验"
+            "（仅代表数据校验完成；监查执行还需研究文件核对与字段映射确认）"
         )
     snapshot = _rs.DataSnapshot(
         snapshot_ref=packet.snapshot_ref,
@@ -4204,6 +4235,11 @@ app.include_router(
         admission_fact_materializer=_r7_admission_fact_materializer,
         real_setup_inputs=_r7_real_setup_inputs,
         synthetic_fixture_mode=_r5_s7_fixture_mode,
+        # R8轮（R8-01）：运行创建前的来源就绪门（fail-fast，409详情
+        # 带R5-03前置链文案），不再创建waiting_start僵尸运行。
+        ensure_source_ready=_ensure_legacy_monitoring_source_ready,
+        # R8轮（R8-02）：存量waiting_start运行的历史行阻断原因注入。
+        source_block_message=_monitoring_source_block_message,
     )
 )
 app.include_router(
@@ -4837,9 +4873,16 @@ def _init_monitoring_runtime_dbs(project_id: str) -> None:
     marker、profile缺索引），导致shape_mismatch/unsupported_schema_version
     →project_future_version阻断execution/start。现一律取manifest权威DDL
     与现行marker，只建新文件、不碰已存在文件（迁移归升级流程管）。
+    R8（20260930）校正：launch_registry的marker曾硬编码slice08b-v4，
+    W01-R26升v5后落后一版，导致v5形状文件配v4 marker→shape_mismatch
+    →CORRUPT→project open全挡。现直接取launch_registry_contracts现行
+    SCHEMA_VERSION，杜绝再次落后。
     """
     import sqlite3
     from packages.medical_monitoring.runtime import schema_manifest as _sm
+    from packages.medical_monitoring.runtime.launch_registry_contracts import (
+        SCHEMA_VERSION as _LAUNCH_REGISTRY_SCHEMA_VERSION,
+    )
     ws = RUNTIME_DIR / "medical_monitoring_r7" / project_id
     ws.mkdir(parents=True, exist_ok=True)
     jobs = [
@@ -4848,7 +4891,7 @@ def _init_monitoring_runtime_dbs(project_id: str) -> None:
         ("monitoring_run_bindings.sqlite3", _sm._BINDING_DDL,
          None, None),
         ("launch_registry.sqlite3", _sm._LAUNCH_DDL,
-         "r7_launch_registry_meta", "mm-r7-slice08b-launch-registry-v4"),
+         "r7_launch_registry_meta", _LAUNCH_REGISTRY_SCHEMA_VERSION),
         ("risk_rules.sqlite3", _sm._RISK_DDL,
          None, None),
     ]
