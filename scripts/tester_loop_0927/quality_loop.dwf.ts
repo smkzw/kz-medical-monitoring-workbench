@@ -693,6 +693,14 @@ for (let round = 1; round <= MAXROUNDS; round++) {
     }
     log("隔离测试环境就绪（独立API 8911 + 独立vite 5178，写作舰队 8910/5177 不受影响），开始派发");
   }
+  if (round === 9) {
+    const shelvedPolish = registry.filter((f) => f.status === "待修复" && f.severity === "low");
+    for (const f of shelvedPolish) {
+      f.status = "搁置";
+      f.confirmNote += "；R9分类处置（用户拍板）：纯打磨低级类打包搁置，上线前统一清";
+    }
+    log("R9分类处置：纯打磨低级类 " + shelvedPolish.length + " 条打包搁置（上线前统一清）");
+  }
   if (round >= 8) {
     const reseed = await agent("开考预置守护员-R" + round, {
       system:
@@ -868,7 +876,14 @@ for (let round = 1; round <= MAXROUNDS; round++) {
 
   const newConfirmed01 = fresh.filter((f) => f.confirmed && (f.severity === "critical" || f.severity === "high"));
   const open01 = registry.filter((f) => f.confirmed && (f.severity === "critical" || f.severity === "high") && (f.status === "待修复" || f.status === "待复测"));
-  const fixTargets = registry.filter((f) => f.confirmed && f.status === "待修复" && (f.severity === "critical" || f.severity === "high" || f.severity === "medium"));
+  const agedFix = (f: Finding) => round - f.round >= 2;
+  const fixTargets = round <= 8
+    ? registry.filter((f) => f.confirmed && f.status === "待修复" && (f.severity === "critical" || f.severity === "high" || f.severity === "medium"))
+    : registry.filter((f) => f.status === "待修复" && f.severity !== "low" && (f.confirmed || agedFix(f)))
+        .sort((a, b) => {
+          const rank = (x: Finding) => (x.severity === "critical" ? 0 : x.severity === "high" ? 1 : agedFix(x) ? 2 : 3);
+          return rank(a) - rank(b) || b.round - a.round;
+        });
   log("分诊完成：新发现 " + fresh.length + " 条（已确认P0/P1 " + newConfirmed01.length + "）；未决P0/P1 累计 " + open01.length + " 条");
 
   phase("修复缺陷并守住回归门");
@@ -883,7 +898,9 @@ for (let round = 1; round <= MAXROUNDS; round++) {
         "并核对 http://localhost:5178/runtime-build.json 与 8911 的 backend_build_id 一致；" +
         "严禁重启或触碰 8910/5177——那是医学写作舰队正在使用的服务；重启留痕写入 " + LOOP + "/ISO_ENV_LOG.md）";
     fixResult = await fixer.ask<FixResult>(
-      "第" + round + "轮分诊后待修复清单（按严重度优先，量力而为，critical/high 必须处理）：\n" +
+      (round <= 8
+        ? "第" + round + "轮分诊后待修复清单（按严重度优先，量力而为，critical/high 必须处理）：\n"
+        : "第" + round + "轮分诊后待修复清单（任务所有者已拍板新机制：①每轮修复配额约 6 条 ②清单中轮龄≥2轮未轮到的条目自动插队、已排在前面 ③critical/high 必须处理 ④纯打磨 low 级已批量搁置不进本清单）：\n") +
       JSON.stringify(fixTargets.map((f) => ({ id: f.id, title: f.title, severity: f.severity, where: f.where, what: f.what, evidence: f.evidence, repro: f.repro, fixHint: f.fixHint }))) + "\n" +
       (strategyNote ? "上轮复盘策略提示：" + strategyNote + "\n" : "") +
       "修复纪律见你的角色设定。修完把 fixedIds/skipped/commitHash/testsRun/frontendTouched 如实返回。" + restartBlock,
@@ -974,8 +991,8 @@ for (let round = 1; round <= MAXROUNDS; round++) {
   }
   const stagnated = recap.stagnatedIds ?? [];
   const hardStuck = registry.filter((f) => stagnated.indexOf(f.id) >= 0 && f.round <= round - 3 && (f.status === "待修复" || (f.status === "待复测" && round <= 4)));
-  if (hardStuck.length > 0 && round >= 5) {
-    stagnationEscalation = "升级：发现 " + hardStuck.map((f) => f.id).join(",") + " 连续≥3轮仍未修复（用户已拍板的批量冲刺也未能解决），需要任务所有者再次决策。";
+  if (hardStuck.length > 0 && round >= 9) {
+    stagnationEscalation = "升级：发现 " + hardStuck.map((f) => f.id).join(",") + " 连续≥3轮仍未修复（轮龄插队机制也未能消化），需要任务所有者再次决策。";
     break;
   }
   if (round >= MINROUNDS && cleanStreak >= CLEANSTREAKNEED) { convergeReached = true; break; }
