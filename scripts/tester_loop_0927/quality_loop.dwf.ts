@@ -900,7 +900,7 @@ for (let round = 1; round <= MAXROUNDS; round++) {
     fixResult = await fixer.ask<FixResult>(
       (round <= 8
         ? "第" + round + "轮分诊后待修复清单（按严重度优先，量力而为，critical/high 必须处理）：\n"
-        : "第" + round + "轮分诊后待修复清单（任务所有者已拍板新机制：①每轮修复配额约 6 条 ②清单中轮龄≥2轮未轮到的条目自动插队、已排在前面 ③critical/high 必须处理 ④纯打磨 low 级已批量搁置不进本清单）：\n") +
+        : "第" + round + "轮分诊后待修复清单（任务所有者已拍板新机制：①每轮修复配额约 6 条 ②清单中轮龄≥2轮未轮到的条目自动插队、已排在前面 ③critical/high 必须处理 ④纯打磨 low 级已批量搁置不进本清单" + (round >= 10 ? " ⑤R9复盘锁定的『状态碎片化』家族为最高优先——后端已确认(confirmed/ready)与监查侧未确认(unconfirmed)并存，R8/R9双证、R9预置台console 15:00全绿→15:08界面unconfirmed；它是引擎首跑的唯一拦路虎，修通它主考题即开考" : "") + "）：\n") +
       JSON.stringify(fixTargets.map((f) => ({ id: f.id, title: f.title, severity: f.severity, where: f.where, what: f.what, evidence: f.evidence, repro: f.repro, fixHint: f.fixHint }))) + "\n" +
       (strategyNote ? "上轮复盘策略提示：" + strategyNote + "\n" : "") +
       "修复纪律见你的角色设定。修完把 fixedIds/skipped/commitHash/testsRun/frontendTouched 如实返回。" + restartBlock,
@@ -990,9 +990,9 @@ for (let round = 1; round <= MAXROUNDS; round++) {
     log("轮次报告发布失败（文件缺失），复盘官报告路径：" + recap.roundReportPath);
   }
   const stagnated = recap.stagnatedIds ?? [];
-  const hardStuck = registry.filter((f) => stagnated.indexOf(f.id) >= 0 && f.round <= round - 3 && (f.status === "待修复" || (f.status === "待复测" && round <= 4)));
-  if (hardStuck.length > 0 && round >= 9) {
-    stagnationEscalation = "升级：发现 " + hardStuck.map((f) => f.id).join(",") + " 连续≥3轮仍未修复（轮龄插队机制也未能消化），需要任务所有者再次决策。";
+  const hardStuck = registry.filter((f) => stagnated.indexOf(f.id) >= 0 && f.round <= round - 3 && (f.status === "待修复" || (f.status === "待复测" && round <= 4)) && (round <= 9 || f.severity === "critical" || f.severity === "high"));
+  if (hardStuck.length > 0 && round >= 10) {
+    stagnationEscalation = "升级：发现 " + hardStuck.map((f) => f.id).join(",") + " 连续≥3轮仍未修复（轮龄插队机制也未能解决的最重级问题），需要任务所有者再次决策。";
     break;
   }
   if (round >= MINROUNDS && cleanStreak >= CLEANSTREAKNEED) { convergeReached = true; break; }
