@@ -1120,6 +1120,7 @@ class MonitoringMappingDraftRepository:
         candidate_acceptances: tuple[Mapping[str, str], ...] = (),
         decision_actor: str = "",
         decision_reason: str = "",
+        allowed_missing_domains: tuple[str, ...] = (),
     ) -> MonitoringMappingDraft:
         project_id = _require_safe_identifier(project_id, "project_id")
         batch_id = _require_safe_identifier(batch_id, "batch_id")
@@ -1146,6 +1147,7 @@ class MonitoringMappingDraftRepository:
                 full_profile_sha256=full_profile_sha256,
                 prompt_version=prompt_version,
                 expected_job_ids=expected_job_ids,
+                allowed_missing_domains=frozenset(allowed_missing_domains),
             )
             existing = connection.execute(
                 """
@@ -2424,6 +2426,7 @@ class MonitoringMappingDraftRepository:
         full_profile_sha256: str,
         prompt_version: str = "",
         expected_job_ids: tuple[str, ...] = (),
+        allowed_missing_domains: frozenset[str] = frozenset(),
     ) -> dict[str, Any]:
         source_tables = {
             row["name"]
@@ -2760,11 +2763,15 @@ class MonitoringMappingDraftRepository:
                 "field mapping chunks disagree on expected domains"
             )
         expected_domains = next(iter(expected_domain_sets))
-        if set(domain_totals) != set(expected_domains):
-            missing = sorted(set(expected_domains).difference(domain_totals))
+        missing = sorted(set(expected_domains).difference(domain_totals))
+        if missing and not set(missing).issubset(allowed_missing_domains):
             raise MonitoringMappingSourceStateError(
                 "expected field mapping domains are missing: " + ", ".join(missing)
             )
+        # R10预检第2次：允许的缺席域（其全部主分片终态失败）在场域计数
+        # 之替代全量full_field_count做覆盖核对——否则部分采纳的55/60
+        # 永远过不了「assembled fields do not match」校验。
+        present_expected_total = 0
         for domain, total in domain_totals.items():
             present = {index for seen_domain, index in slots if seen_domain == domain}
             expected = set(range(1, total + 1))
@@ -2781,6 +2788,7 @@ class MonitoringMappingDraftRepository:
                 raise MonitoringMappingSourceStateError(
                     f"domain {domain} has inconsistent field counts"
                 )
+            present_expected_total += next(iter(domain_count_values))
             actual_domain_count = sum(
                 len(profile["fields"])
                 for (seen_domain, _), (_, profile) in slots.items()
@@ -2791,7 +2799,12 @@ class MonitoringMappingDraftRepository:
                     f"domain {domain} field coverage is incomplete"
                 )
         full_field_count = next(iter(full_field_counts))
-        if len(fields) != full_field_count or len(field_pairs) != full_field_count:
+        expected_total = (
+            present_expected_total
+            if set(expected_domains).difference(domain_totals)
+            else full_field_count
+        )
+        if len(fields) != expected_total or len(field_pairs) != expected_total:
             raise MonitoringMappingSourceStateError(
                 "assembled fields do not match the declared full field count"
             )

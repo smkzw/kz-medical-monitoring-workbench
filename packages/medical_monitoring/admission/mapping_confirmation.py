@@ -576,6 +576,25 @@ class AdmissionMappingConfirmationService:
         if not candidate_acceptances:
             # 没有任何可采纳的已完成结果：与运行未完成同样拒绝。
             raise AdmissionMappingPipelineError("mapping_run_incomplete")
+        # R10预检第2次：首遍主分片终态失败（如invalid_ai_output两次、
+        # 重排预算耗尽）曾使部分采纳被库层域完整性门422硬拒（EX域0候选
+        # →expected domains are missing），与确认层部分采纳设计矛盾、
+        # 首遍阶段无吸收通道。计算「合法缺席域」=cohort中该域的全部
+        # 主命名空间分片都终态失败且无任何completed覆盖，把这些域豁免
+        # 出域完整性门并作为domain_gaps物化到draft——字段覆盖55/60、
+        # 缺席域如实可见，链路继续（盲核侧若有该域结果仍参与复核）。
+        allowed_missing_domains: tuple[str, ...] = ()
+        domain_gaps: list[dict[str, str]] = []
+        if partial_adoption:
+            allowed_missing_domains, domain_gaps = (
+                self._terminal_failure_domain_gaps(
+                    project_id=project_id,
+                    jobs=jobs,
+                    accepted_job_ids={
+                        str(item["job_id"]) for item in candidate_acceptances
+                    },
+                )
+            )
         draft = self.mapping_repository.assemble(
             project_id,
             attempt_id,
@@ -587,8 +606,11 @@ class AdmissionMappingConfirmationService:
             candidate_acceptances=tuple(candidate_acceptances),
             decision_actor=actor,
             decision_reason=reason,
+            allowed_missing_domains=allowed_missing_domains,
         )
         payload = self._draft_payload(draft)
+        if domain_gaps:
+            payload["domain_gaps"] = domain_gaps
         # Durable record of how the first pass actually ran: downstream
         # reconciliation reads this instead of re-deriving it, so a local
         # fallback run can never be presented as dual-model agreement.
@@ -1593,6 +1615,64 @@ class AdmissionMappingConfirmationService:
         projected = self._draft_payload(draft)
         projected["reconciliation"] = dict(report)
         return projected
+
+    def _terminal_failure_domain_gaps(
+        self,
+        *,
+        project_id: str,
+        jobs: Iterable[Any],
+        accepted_job_ids: set[str],
+    ) -> tuple[tuple[str, ...], list[dict[str, str]]]:
+        """Domains whose every shard is terminally failed and uncovered.
+
+        R10预检第2次：仅当某域在cohort中没有任何completed分片、且其
+        失败分片全部终态（failed/blocked/cancelled/stale_input）时，
+        该域才算合法缺席——绝不凭空豁免域完整性门。缺口域与原因返回
+        供assemble豁免与draft物化。
+        """
+
+        covered: set[str] = set()
+        failed_only: dict[str, list[str]] = {}
+        for job in jobs:
+            job_id = str(getattr(job, "job_id", "") or "")
+            domain = self._job_profile_domain(project_id, job)
+            if not domain:
+                continue
+            if job_id in accepted_job_ids or str(
+                _value(getattr(job, "status", ""))
+            ) == "completed":
+                covered.add(domain)
+                failed_only.pop(domain, None)
+                continue
+            if str(_value(getattr(job, "status", ""))) in {
+                "failed", "blocked", "cancelled", "stale_input",
+            }:
+                failed_only.setdefault(domain, []).append(job_id)
+        gaps = sorted(set(failed_only).difference(covered))
+        reasons = []
+        for domain in gaps:
+            first_job_id = failed_only[domain][0]
+            reasons.append({
+                "domain": domain,
+                "reason": (
+                    "该数据域的识别分片全部终态失败（自动重排预算耗尽），"
+                    "本批字段映射不覆盖此域；如需覆盖请重新发起字段识别。"
+                ),
+                "source_job_id": first_job_id,
+            })
+        return tuple(gaps), reasons
+
+    def _job_profile_domain(self, project_id: str, job: Any) -> str:
+        if self.ai_repository is None:
+            return ""
+        try:
+            payload = self.ai_repository.input_payload(
+                project_id, str(getattr(job, "job_id", "") or "")
+            )
+        except Exception:
+            return ""
+        profile = payload.get("field_profile") or {}
+        return str(profile.get("domain") or "").strip()
 
     def _retry_failed_mapping_jobs(
         self,
