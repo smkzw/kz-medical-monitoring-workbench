@@ -3428,7 +3428,11 @@ def _source_manifest_dashboard(project_id: str) -> DashboardSummary:
             module=binding.module,
             label=binding.label,
             status=binding.implementation_status,
-            completion_rate=0.35 if binding.implementation_status == "real_source_slice" else 0.1,
+            # R10轮（R8-05）：0.1/0.35是占位值而非真实进度——对空/新建
+            # 项目显示「10%」与同页「不使用固定示例值替代项目风险数据」
+            # 的诚实声明矛盾。改为0（前端渲染为「未开始 —」），进度
+            # 只在能从事实计算时才有值。
+            completion_rate=0.0,
             open_risk_count=0,
             pending_task_count=0,
             pending_approval_count=approval_counts.get(binding.module, 0),
@@ -4843,6 +4847,44 @@ class UserProjectModulesRequest(BaseModel):
         max_length=3,
     )
     actor: str = Field(default="medical_manager", min_length=2, max_length=80)
+
+
+@app.get("/api/projects/{project_id}/admission-events")
+def get_admission_events(project_id: str):
+    """R10轮（R8-07）：准入事件流水（成功+失败留痕）只读端点。
+
+    数据接入（目录/上传）每次成败都追加 workspace 下
+    admissions/admission_events.jsonl——失败路径此前零留痕（台账全0、
+    列表空白），QA稽查无法追溯导入过什么、为何未通过。
+    """
+    import json as _json
+
+    canonical_id = user_project_store.get(project_id)
+    target_id = (
+        canonical_id.project_id
+        if canonical_id is not None
+        else _canonical_project_id(project_id)
+    )
+    path = (
+        RUNTIME_DIR / "medical_monitoring_r7" / target_id
+        / "admissions" / "admission_events.jsonl"
+    )
+    events: list[dict[str, object]] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        lines = []
+    for line in lines[-200:]:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            value = _json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            events.append(value)
+    return {"project_id": target_id, "events": events}
 
 
 @app.post("/api/projects/{project_id}/modules")

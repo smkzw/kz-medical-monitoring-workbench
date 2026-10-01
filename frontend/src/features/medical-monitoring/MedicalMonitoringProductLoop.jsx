@@ -1142,7 +1142,11 @@ export function MedicalMonitoringProductLoop({
     setPreviewOpen(false);
     setRuleConfirmOpen(false);
     setWizardError("");
-  }, []);
+    // R10轮（R8-04）：向导关闭即刷新工作区——运行可能已创建（含「创建
+    // 成功但响应异常」后用户手动关闭的场景），主区不得仍显示「尚无
+    // 已选择的监查记录」等用户手动reload才更新的旧状态。
+    refreshAll();
+  }, [refreshAll]);
   const changeWizard = useCallback((field, value) => {
     setWizardError("");
     setWizard((current) => {

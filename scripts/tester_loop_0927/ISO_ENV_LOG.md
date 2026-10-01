@@ -160,3 +160,9 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 操作者：修复员（R10预检第2次拦截：首遍主分片终态失败→adopt 422）
 - 修复：mapping_draft_repository域完整性门新增allowed_missing_domains豁免（仅限cohort中该域全部分片终态失败且无completed覆盖）；在场域计数和替代全量full_field_count核对；adopt_draft计算合法缺席域并作为domain_gaps物化到draft响应。
 - 自检：8911 ready:true（build api-9b827e5405b94cea）；5178=200；指纹配对一致；8910/5177复核均200未受影响。
+
+## 2026-10-01 上午（R10轮次·修复员：四项修复后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R10轮次：R8-04/05/07、R5-06）
+- 修复：closeWizard刷新工作区；completion_rate占位归零+Progress「未开始」态；准入事件流水（jsonl+GET /api/projects/{id}/admission-events+台账展示区）；顶栏适应症/方案版本加载态「读取中…」区分。
+- 自检：8911 ready:true（build api-807dff49e5ad28ec）；5178=200；指纹配对一致；8910/5177复核均200；新admission-events端点在8911上返回合法空列表。
