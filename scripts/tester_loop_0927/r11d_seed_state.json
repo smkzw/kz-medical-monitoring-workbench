@@ -1,0 +1,16 @@
+{
+ "project_id": "proj_user_175b6374dcd6",
+ "create_key": "r11d-seed-20261001T064001Z-ae6864d3",
+ "project_name": "MX循R11D-CSU",
+ "updated_at": "2026-10-01T09:04:09.424518+00:00",
+ "attempt_id": "stg-e32cb7ad0e744cedb6013ebbd9cb820c",
+ "docs_batch_id": "mmbatch_894c24548d5828b5c639886c",
+ "documents_ready": true,
+ "mapping_state": "candidates_ready",
+ "draft_id": "monmapdraft_0f8105505291681767f13de5d504",
+ "draft_version": 1,
+ "adjudication_state": "complete",
+ "confirmed": true,
+ "confirm_idempotency_key": "r11d-confirm-f082d229a71e4917a7f48252bcf27672",
+ "facts_materialized": true
+}

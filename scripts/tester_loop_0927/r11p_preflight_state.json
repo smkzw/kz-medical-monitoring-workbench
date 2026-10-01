@@ -1,0 +1,35 @@
+{
+ "project_id": "proj_user_d029b0208f85",
+ "create_key": "r11p-preflight-20261001T091433Z-9af7eeec",
+ "project_name": "MX循R11P-CSU",
+ "updated_at": "2026-10-01T09:58:39.022636+00:00",
+ "stages": {
+  "建项": {
+   "ok": true,
+   "seconds": 0.0,
+   "note": "project_id=proj_user_d029b0208f85 name=MX循R11P-CSU"
+  },
+  "上传": {
+   "ok": true,
+   "seconds": 0.0,
+   "note": "attempt=stg-0d8b4989793b4ebd811ba37b7f7962d2 summary={'files': 1, 'rows': 591, 'tables': 10}"
+  },
+  "文档权威": {
+   "ok": true,
+   "seconds": 11.4,
+   "note": "ready=True headline=研究文件已准备好"
+  }
+ },
+ "attempt_id": "stg-0d8b4989793b4ebd811ba37b7f7962d2",
+ "docs_batch_id": "mmbatch_36ddbae554ce3daf7301c35b",
+ "role_selections": [
+  {
+   "role": "ecrf",
+   "candidate_id": "mmcandidate_482be842cc410fa47a0c8ca2"
+  }
+ ],
+ "documents_ready": true,
+ "mapping_state": "needs_attention",
+ "draft_id": "monmapdraft_0d3bed9fecaa34b498ac2e708c8e",
+ "draft_version": 1
+}

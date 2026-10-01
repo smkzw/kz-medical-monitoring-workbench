@@ -182,3 +182,4 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 修复：mapping_reconciliation新增exempt_domains贯通（_index_cohort对豁免域映射跳过而非判unexpected硬violation）；reconcile_with_verifier用adopt同款_terminal_failure_domain_gaps计算豁免域并传入对账+domain_gaps投射到reconciliation响应。
 - 验证（脚本）：51字段draft+60字段盲核含9个AE域外字段——无豁免blocked（unexpected_in_verifier×9），豁免['AE']后agreed；主侧豁免域字段同样跳过。
 - 自检：8911 ready:true；5178=200；指纹配对一致（注：build id按合同只哈希services/api/app，本轮改动在packages/故id不变api-807dff49e5ad28ec——进程确已重启加载新代码）；8910/5177复核均200。
+2026-10-01 19:43 用户指示彻底暂停：R11预检第2次执行1h08m未止→按指示TaskStop（无损，191步已沉淀）；隔离对8911/5178已停（恢复命令见本文件顶部）；舰队8910未触碰
