@@ -313,6 +313,7 @@ def _index_cohort(
     cohort: str,
     mappings: Sequence[Mapping[str, Any]],
     profile_set: set[tuple[str, str]],
+    exempt_domains: frozenset[str] = frozenset(),
 ) -> tuple[
     dict[tuple[str, str], dict[str, Any]],
     dict[tuple[str, str], list[dict[str, str]]],
@@ -341,6 +342,13 @@ def _index_cohort(
                 "domain": identity[0],
                 "source_field": identity[1],
             })
+            continue
+        # R11预检：域缺席豁免（allowed_missing_domains）——该域主分片
+        # 全部终态失败、draft以domain_gaps部分采纳后，双队列中该域的
+        # 对侧映射不得判unexpected硬violation（曾使reconciliation恒
+        # blocked、裁决/确认全链死锁）。豁免域的映射跳过对账：单侧
+        # 结果不构成双模型比对，如实不计入而非判死。
+        if identity[0] in exempt_domains:
             continue
         if identity in by_identity:
             violations.append({
@@ -407,6 +415,7 @@ def reconcile_mapping_cohorts(
     verifier_evidence_ids: Collection[str] = (),
     primary_execution_route: str = MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY,
     comparison_policy_version: str = RECONCILIATION_SCHEMA_VERSION,
+    exempt_domains: Collection[str] = (),
 ) -> Mapping[str, Any]:
     """Reconcile the primary and verifier cohorts field by field.
 
@@ -430,15 +439,18 @@ def reconcile_mapping_cohorts(
 
     identities = _profile_identities(profile_fields)
     profile_set = set(identities)
+    exempt = frozenset(str(item).strip() for item in exempt_domains if str(item).strip())
     primary_index, primary_conclusions, primary_violations = _index_cohort(
         cohort=COHORT_PRIMARY,
         mappings=primary_mappings,
         profile_set=profile_set,
+        exempt_domains=exempt,
     )
     verifier_index, verifier_conclusions, verifier_violations = _index_cohort(
         cohort=COHORT_VERIFIER,
         mappings=verifier_mappings,
         profile_set=profile_set,
+        exempt_domains=exempt,
     )
     primary_available = frozenset(primary_evidence_ids)
     verifier_available = frozenset(verifier_evidence_ids)
