@@ -1601,6 +1601,21 @@ class AdmissionMappingConfirmationService:
                 allow_profile_evidence_upgrade=True,
             )
         verifier = cohort_payload_from_candidates(verifier_candidates or ())
+        # R11预检：部分采纳（domain_gaps）的缺席域传入确定性对账——
+        # 对侧该域的completed映射跳过（单侧结果不构成双模型比对），
+        # 不再判unexpected硬violation致reconciliation恒blocked。
+        gap_domains: tuple[str, ...] = ()
+        if can_load_cohorts:
+            accepted_ids = {
+                str(job.job_id)
+                for job in primary_jobs
+                if str(_value(job.status)) == "completed"
+            }
+            gap_domains, _gap_reasons = self._terminal_failure_domain_gaps(
+                project_id=project_id,
+                jobs=primary_jobs,
+                accepted_job_ids=accepted_ids,
+            )
         report = reconcile_mapping_cohorts(
             profile_fields=profile_fields,
             primary_mappings=primary_mappings,
@@ -1611,9 +1626,15 @@ class AdmissionMappingConfirmationService:
                 str(primary_execution_route).strip()
                 or MONITORING_C3_MAPPING_EXECUTION_ROUTE_PRIMARY
             ),
+            exempt_domains=gap_domains,
         )
         projected = self._draft_payload(draft)
         projected["reconciliation"] = dict(report)
+        if gap_domains:
+            projected["domain_gaps"] = [
+                {"domain": domain, "reason": "主分片终态失败，该域不参与对账"}
+                for domain in gap_domains
+            ]
         return projected
 
     def _terminal_failure_domain_gaps(

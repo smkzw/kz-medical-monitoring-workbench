@@ -166,3 +166,19 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 操作者：修复员（R10轮次：R8-04/05/07、R5-06）
 - 修复：closeWizard刷新工作区；completion_rate占位归零+Progress「未开始」态；准入事件流水（jsonl+GET /api/projects/{id}/admission-events+台账展示区）；顶栏适应症/方案版本加载态「读取中…」区分。
 - 自检：8911 ready:true（build api-807dff49e5ad28ec）；5178=200；指纹配对一致；8910/5177复核均200；新admission-events端点在8911上返回合法空列表。
+
+## 2026-10-01 下午（R11轮次·开考预置守护员：探障无障碍+5178复活 + 预置 MX循R11D-CSU）
+
+- 操作者：开考预置守护员-R11D。起止：14:31 → 17:09（本地 CST）。
+- **探障（旧项目全被循环收尾软归档，GET /api/projects→[]，但 R10D 项目路由仍可探）**：`GET /r7/project/open`（R10D项目 proj_user_ad685a18f853）→ current/complete/canView/canEdit=true，无 blocked/CORRUPT；修复代码在位（main.py:4925-4936 种子 marker 取 launch_registry_contracts.SCHEMA_VERSION=V5）；存量 36 个 workspace 的 launch_registry marker 逐库 sqlite 直查全 v5；R11D 新建项目 4 个种子成员经产品 `inspect_member` 实测全 current/current_shape（launch_registry marker=v5）。**R5D marker 缺陷未复发，本轮未修任何产品代码、未重启 8911。** 建项瞬间 project/open 的 blocked 为 required_member_missing（bootstrap 前瞬态，R1 已知同款），非损坏。
+- **5178 复活（只动隔离对）**：本轮开始时隔离 vite 5178 掉线（lsof 无监听），按本文件标准命令重启（`VITE_API_PROXY_TARGET=http://127.0.0.1:8911 npx vite --port 5178 --strictPort`，v6.4.2 ready in 180ms）；自检 /monitoring=200、runtime-build.json expectedBackendBuildId=api-807dff49e5ad28ec 与 8911 backend_build_id 配对一致。8911 全程未动；8910 复核 200；**5177 复核连接拒绝（已停）——非本轮所致（对 8910/5177 仅只读 curl），按铁律未去拉起，如实记录**。
+- **预置 MX循R11D-CSU**（proj_user_175b6374dcd6，幂等键 r11d-seed-20261001T064001Z-ae6864d3）：三件套上传 → 文档权威双VLM 约4min ready（protocol/ecrf 自动识别，无人工门）→ 映射双队列（10主+10盲核，60候选，约17分钟）→ adopt → 复核收敛 46→37→24→0（系统裁决22，约2小时；2个分片 provider_runtime_error 经 bounded-gap 收敛）→ 24张裁决卡：21张按既有数据实测表作答 + 3张R11新卡（CM.CMENDAT/CM.CMSTDAT/ICF_TRACK.ICFVER）首次浮现时 fail-closed 诚实退出留痕（09:01:57Z），按 openpyxl 直读列值实测+两轮同判角色补答（09:03:24Z）→ **confirm 200（draft v71 confirmed，user_questions=0）→ facts 201（10表/591行/2958值全核验，state=ready）**，停住未启动监查（runs=[]）。project/open → current/complete/canView/canEdit=true。
+- AI 台账（本项目）：60作业（58完成/2终态failed均为mapping分片，经收敛 remaining=0）；89次调用，1,726,840 tokens。全程未跳任何质量门。
+- 驱动与留痕：`r11d_seed_csu.py`（幂等，状态 r11d_seed_state.json、留痕 r11d_seed_evidence.jsonl）；轮次分节见 `R5_SEEDED_PROJECT.md`。
+
+## 2026-10-01 午间（R11预检第1次·修复员：确定性对账域豁免后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R11预检第1次拦截：对账门把domain_gaps对侧字段判死）
+- 修复：mapping_reconciliation新增exempt_domains贯通（_index_cohort对豁免域映射跳过而非判unexpected硬violation）；reconcile_with_verifier用adopt同款_terminal_failure_domain_gaps计算豁免域并传入对账+domain_gaps投射到reconciliation响应。
+- 验证（脚本）：51字段draft+60字段盲核含9个AE域外字段——无豁免blocked（unexpected_in_verifier×9），豁免['AE']后agreed；主侧豁免域字段同样跳过。
+- 自检：8911 ready:true；5178=200；指纹配对一致（注：build id按合同只哈希services/api/app，本轮改动在packages/故id不变api-807dff49e5ad28ec——进程确已重启加载新代码）；8910/5177复核均200。
