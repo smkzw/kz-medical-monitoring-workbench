@@ -23,7 +23,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional, Protocol, Union
+from typing import Any, Mapping, Optional, Protocol, Sequence, Union
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -225,6 +225,7 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
     _read_json_object = context.read_json_object
     acquire_product_write_gate = context.acquire_product_write_gate
     _workspace_dir = context.workspace_dir
+    root = context.root
     MonitoringAction = context.monitoring_action
     admission_pipeline = context.admission_pipeline
 
@@ -232,6 +233,46 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
         if admission_pipeline is None:
             return _admission_error("admission_pipeline_unconfigured")
         return admission_pipeline
+
+    def _admission_event(
+        canonical: str,
+        outcome: str,
+        *,
+        stage: str,
+        files: Sequence[str] = (),
+        reason: str = "",
+        detail: str = "",
+    ) -> None:
+        """R10轮（R8-07）：准入事件流水——失败路径零留痕曾使QA稽查
+        无法追溯导入过什么、为何未通过（台账全0、列表空白）。成功与
+        失败都追加（时间/阶段/文件/结果/原因），存workspace下
+        admissions/admission_events.jsonl；写入失败不阻断主链路。
+        """
+        import json as _json
+        from datetime import datetime, timezone as _tz
+
+        try:
+            path = (
+                _workspace_dir(root, canonical)
+                / "admissions"
+                / "admission_events.jsonl"
+            )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            event = {
+                "schema_version": "mm-admission-event-v1",
+                "ts": datetime.now(_tz.utc).isoformat(),
+                "stage": str(stage),
+                "outcome": str(outcome),
+                "files": [str(item)[:200] for item in files][:50],
+            }
+            if reason:
+                event["reason"] = str(reason)[:200]
+            if detail:
+                event["detail"] = str(detail)[:400]
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(_json.dumps(event, ensure_ascii=False) + "\n")
+        except Exception:
+            return
 
     @router.post("/data-admissions")
     async def create_data_admission(project_id: str, request: Request) -> Any:
@@ -257,6 +298,13 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
             return _validation_error_response(exc)
         source_dir = _validated_source_dir(parsed.source_dir)
         if source_dir is None:
+            _admission_event(
+                canonical,
+                "failed",
+                stage="data_admission_create",
+                files=[str(parsed.source_dir)[:200]],
+                reason="admission_source_invalid",
+            )
             return _admission_error("admission_source_invalid")
         try:
             write_permit = acquire_product_write_gate(canonical)
@@ -271,14 +319,35 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
             public = _public_admission_projection(result, required_keys=("attempt_id", "state"))
             if isinstance(public, JSONResponse):
                 return public
+            _admission_event(
+                canonical,
+                "created",
+                stage="data_admission_create",
+                files=[str(parsed.source_dir)[:200]],
+                reason=str(public.get("attempt_id") or ""),
+            )
             return {
                 "schema_version": ADMISSION_SCHEMA_VERSION,
                 "project_id": canonical,
                 **public,
             }
         except AdmissionPipelineError as exc:
+            _admission_event(
+                canonical,
+                "failed",
+                stage="data_admission_create",
+                files=[str(parsed.source_dir)[:200]],
+                reason=str(exc.code),
+            )
             return _admission_error(exc.code)
         except Exception:
+            _admission_event(
+                canonical,
+                "failed",
+                stage="data_admission_create",
+                files=[str(parsed.source_dir)[:200]],
+                reason="admission_pipeline_failed",
+            )
             return _admission_error("admission_pipeline_failed")
         finally:
             write_permit.release()
@@ -304,11 +373,22 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
         if isinstance(pipeline, JSONResponse):
             return pipeline
         if not files or len(files) != len(relative_paths):
+            _admission_event(
+                canonical,
+                "failed",
+                stage="data_admission_upload",
+                files=[str(upload.filename or "") for upload in files][:50],
+                reason="admission_source_invalid",
+                detail="files与relative_paths数量不一致或为空",
+            )
             return _admission_error("admission_source_invalid")
         try:
             write_permit = acquire_product_write_gate(canonical)
         except pb.ProjectBackupError as exc:
             return _run_entry_error_response(exc)
+        upload_names = [
+            str(upload.filename or "") for upload in files
+        ][:50]
         try:
             result = pipeline.create_uploaded_attempt(
                 project_id=canonical,
@@ -323,14 +403,35 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
             )
             if isinstance(public, JSONResponse):
                 return public
+            _admission_event(
+                canonical,
+                "created",
+                stage="data_admission_upload",
+                files=upload_names,
+                reason=str(public.get("attempt_id") or ""),
+            )
             return {
                 "schema_version": ADMISSION_SCHEMA_VERSION,
                 "project_id": canonical,
                 **public,
             }
         except AdmissionPipelineError as exc:
+            _admission_event(
+                canonical,
+                "failed",
+                stage="data_admission_upload",
+                files=upload_names,
+                reason=str(exc.code),
+            )
             return _admission_error(exc.code)
         except Exception:
+            _admission_event(
+                canonical,
+                "failed",
+                stage="data_admission_upload",
+                files=upload_names,
+                reason="admission_pipeline_failed",
+            )
             return _admission_error("admission_pipeline_failed")
         finally:
             write_permit.release()

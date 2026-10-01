@@ -1381,11 +1381,14 @@ function AppShell({
             ) : null}
             <div>
               <span className="meta-label">适应症</span>
-              <strong>{hasActiveProject ? project?.indication : "暂无项目数据"}</strong>
+              {/* R10轮（R5-06）：元数据加载中以「读取中」呈现而非「-」/
+                  「暂无项目数据」的缺失态——两者语义不同，缺失态会加重
+                  「系统状态不可知」观感。 */}
+              <strong>{hasActiveProject ? (project?.indication && project.indication !== "-" ? project.indication : "读取中…") : "暂无项目数据"}</strong>
             </div>
             <div>
               <span className="meta-label">方案版本</span>
-              <strong>{hasActiveProject ? project?.protocol_version : "暂无项目数据"}</strong>
+              <strong>{hasActiveProject ? (project?.protocol_version && project.protocol_version !== "-" ? project.protocol_version : "读取中…") : "暂无项目数据"}</strong>
             </div>
             <div>
               <span className="meta-label">数据批次</span>
@@ -1529,10 +1532,20 @@ function Tag({ children, tone = "neutral" }) {
 }
 
 function Progress({ value }) {
+  // R10轮（R8-05）：无事实依据的进度不显示百分比——0渲染为「未开始」，
+  // 与「不使用固定示例值」的诚实声明对齐。
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return (
+      <div className="progress progress-not-started" title="该模块尚无可计量的进展">
+        <em>未开始</em>
+      </div>
+    );
+  }
   return (
     <div className="progress">
-      <span style={{ width: `${Math.round(value * 100)}%` }} />
-      <em>{Math.round(value * 100)}%</em>
+      <span style={{ width: `${Math.round(numeric * 100)}%` }} />
+      <em>{Math.round(numeric * 100)}%</em>
     </div>
   );
 }
@@ -12831,6 +12844,9 @@ function ApprovalPage({ projectId, dashboard, refreshDashboard }) {
 
 function SourceRegistryPage({ projectId, onOpenModule }) {
   const [registry, setRegistry] = useState({ entries: [], content_validations: [], content_validation_histories: {} });
+  // R10轮（R8-07）：准入事件流水——数据接入的成功与失败留痕（含被
+  // 拒收/未通过的文件与原因），失败路径在资料治理中可见可追溯。
+  const [admissionEvents, setAdmissionEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [moduleFilter, setModuleFilter] = useState("all");
@@ -12844,6 +12860,12 @@ function SourceRegistryPage({ projectId, onOpenModule }) {
   const refresh = async () => {
     setLoading(true);
     setMessage("");
+    fetch(`/api/projects/${projectId}/admission-events`)
+      .then((response) => response.json().catch(() => ({})))
+      .then((payload) => {
+        if (Array.isArray(payload?.events)) setAdmissionEvents(payload.events);
+      })
+      .catch(() => {});
     try {
       const response = await fetch(`/api/projects/${projectId}/sources`);
       const payload = await response.json().catch(() => ({}));
@@ -12946,6 +12968,27 @@ function SourceRegistryPage({ projectId, onOpenModule }) {
         <div><strong>{confirmedCount}</strong><span>已确认沿用</span></div>
         <div className={failedCount ? "danger" : ""}><strong>{failedCount}</strong><span>技术读取失败</span></div>
       </section>
+      {admissionEvents.length ? (
+        <section className="panel" aria-label="数据准入事件流水">
+          <h3 style={{ margin: "0 0 6px", fontSize: 14 }}>数据准入事件流水（含未通过）</h3>
+          <p className="quiet-text" style={{ margin: "0 0 8px" }}>数据接入每次尝试的留痕（成功与失败都记录：文件、时间、结果与原因）——失败路径同样可追溯，供QA稽查与监管审计核对。</p>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+            {admissionEvents.slice().reverse().slice(0, 30).map((event, index) => (
+              <li key={`${event.ts}-${index}`} style={{ marginBottom: 4 }}>
+                <span style={{ color: event.outcome === "failed" ? "#c53730" : "#2f6b52", fontWeight: 600 }}>
+                  {event.outcome === "failed" ? "未通过" : "已登记"}
+                </span>
+                {" "}
+                {String(event.ts || "").slice(0, 19).replace("T", " ")}
+                {" · "}
+                {(event.files || []).join("、") || "（无文件）"}
+                {event.reason ? ` · ${event.outcome === "created" ? "attempt " : "原因："}${event.reason}` : ""}
+                {event.detail ? ` · ${event.detail}` : ""}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {message && <div className="source-registry-message">{message}</div>}
       <section className="panel source-ledger-workspace">
         <div className="source-ledger-index">

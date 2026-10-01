@@ -1179,8 +1179,17 @@ def test_create_leaves_generated_source_tree_unmodified(tmp_path: Path) -> None:
     _assert_error_body(response.json(), status_code=409)
     assert response.json()["code"] == "admission_copy_rejected"
     assert _snapshot_tree(source) == before
-    # A rejected attempt leaves no runtime workspace behind from this route.
-    assert not (runtime_dir / "medical_monitoring_r7" / PROJECT_A).exists()
+    # R10轮（R8-07）：被拒的导入不再零留痕——workspace下允许存在
+    # 唯一的审计流水文件（admission_events.jsonl），除此之外不得留
+    # 下任何staged attempt产物。
+    workspace = runtime_dir / "medical_monitoring_r7" / PROJECT_A
+    if workspace.exists():
+        leftover = sorted(
+            str(item.relative_to(workspace))
+            for item in workspace.rglob("*")
+            if item.is_file()
+        )
+        assert leftover == ["admissions/admission_events.jsonl"], leftover
 
 
 def test_unconfigured_pipeline_fails_closed_without_writes(tmp_path: Path) -> None:
