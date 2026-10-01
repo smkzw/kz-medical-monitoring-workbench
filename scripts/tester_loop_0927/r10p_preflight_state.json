@@ -1,0 +1,90 @@
+{
+ "project_id": "proj_user_cae1decd4224",
+ "create_key": "r10p-preflight-20260930T181225Z-ee3db712",
+ "project_name": "MX循R10P-CSU",
+ "updated_at": "2026-09-30T22:03:26.342609+00:00",
+ "stages": {
+  "建项": {
+   "ok": true,
+   "seconds": 0.0,
+   "note": "project_id=proj_user_cae1decd4224 name=MX循R10P-CSU"
+  },
+  "上传": {
+   "ok": true,
+   "seconds": 0.0,
+   "note": "attempt=stg-5ed938de954d48a0aa5def87bf7cef4b summary={'files': 1, 'rows': 591, 'tables': 10}"
+  },
+  "文档权威": {
+   "ok": true,
+   "seconds": 6.1,
+   "note": "ready=True headline=研究文件已准备好"
+  },
+  "映射确认": {
+   "ok": true,
+   "seconds": 26.2,
+   "note": "state=candidates_ready draft.status=confirmed adj=complete candidates=60"
+  },
+  "facts": {
+   "ok": true,
+   "seconds": 0.2,
+   "note": "state=ready summary={'tables': 10, 'rows': 591, 'values': 2548, 'source_values_verified': 2548}"
+  },
+  "运行": {
+   "ok": false,
+   "seconds": 0.3,
+   "note": "prepare-and-start http=409 code=medical_monitoring_source_readiness_unconfirmed msg={'code': 'medical_monitoring_source_readiness_unconfirmed', 'message': '当前项目医学监查来源状态未确认，读取与执行已阻断。注意：来源台账的「匹配/可使用」仅代表文件内容核验通过；监查读取还需研究文件核对与字段映射确认（见「医学监查 → 数据接入」），完成前此阻断为预期状态。', 'project_id': 'proj_user（状态碎片化拦截，证据已留痕）"
+  }
+ },
+ "attempt_id": "stg-5ed938de954d48a0aa5def87bf7cef4b",
+ "docs_batch_id": "mmbatch_6c9bf97918b41666b52d28e5",
+ "role_selections": [
+  {
+   "role": "ecrf",
+   "candidate_id": "mmcandidate_482be842cc410fa47a0c8ca2"
+  },
+  {
+   "role": "investigator_brochure",
+   "candidate_id": ""
+  },
+  {
+   "role": "sap",
+   "candidate_id": ""
+  }
+ ],
+ "documents_ready": true,
+ "mapping_state": "candidates_ready",
+ "draft_id": "monmapdraft_b3952e2e210556ca055e209069cd",
+ "draft_version": 1,
+ "confirmed": true,
+ "confirm_idempotency_key": "r10p-confirm-6c75986ddbe647cda34d1b5e1e9bda38",
+ "facts_materialized": true,
+ "run_start_idem": null,
+ "blocked_at": "运行启动",
+ "blocked_detail": {
+  "gate": {
+   "step": "prepare-and-start",
+   "http_status": 409,
+   "code": "medical_monitoring_source_readiness_unconfirmed",
+   "readiness": {
+    "kind": "unconfirmed",
+    "implementation_status": "intake_pending",
+    "can_read": false,
+    "can_start": false,
+    "reason_code": "readiness_unconfirmed"
+   }
+  },
+  "api_side_r7_pipeline": {
+   "mapping_state": "candidates_ready",
+   "draft_status": "confirmed",
+   "draft_id": "monmapdraft_b3952e2e210556ca055e209069cd",
+   "facts_state": "ready"
+  },
+  "api_side_source_manifest_bindings": [
+   {
+    "module": "medical_monitoring",
+    "implementation_status": "intake_pending"
+   }
+  ],
+  "console_tail_mm_api_8911": ""
+ }
+}

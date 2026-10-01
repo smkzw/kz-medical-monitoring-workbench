@@ -1,0 +1,33 @@
+{
+ "project_id": "proj_user_525e635e5fb1",
+ "create_key": "r10p-preflight-20260930T221704Z-3c903847",
+ "project_name": "MX循R10P-CSU-2",
+ "updated_at": "2026-09-30T22:39:53.827149+00:00",
+ "stages": {
+  "建项": {
+   "ok": true,
+   "seconds": 0.0,
+   "note": "project_id=proj_user_525e635e5fb1 name=MX循R10P-CSU-2"
+  },
+  "上传": {
+   "ok": true,
+   "seconds": 0.2,
+   "note": "attempt=stg-c41043d09c3646a78b16dd3e15aa8647 summary={'files': 1, 'rows': 591, 'tables': 10}"
+  },
+  "文档权威": {
+   "ok": true,
+   "seconds": 560.7,
+   "note": "ready=True headline=研究文件已准备好"
+  },
+  "映射确认": {
+   "ok": false,
+   "seconds": 808.4,
+   "note": "adopt http=422 body={'code': 'mapping_draft_invalid', 'message': '字段修订内容无效。请检查填写内容后重试。'}"
+  }
+ },
+ "attempt_id": "stg-c41043d09c3646a78b16dd3e15aa8647",
+ "docs_batch_id": "mmbatch_7dabe3e68764dda338ede3ea",
+ "identity_confirmed": true,
+ "documents_ready": true,
+ "mapping_state": "needs_attention"
+}
