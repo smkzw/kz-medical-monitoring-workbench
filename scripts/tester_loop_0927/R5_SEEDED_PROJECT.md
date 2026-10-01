@@ -200,3 +200,59 @@ AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）�
 - 驱动：`r10d_seed_csu.py`（由 r9d_seed_csu.py 适配：R10D 命名/幂等键/留痕文件 + 建项后 project/open 探针留痕 + 终态硬断言 confirmed/ready/非blocked）
 - 证据：`r10d_seed_evidence.jsonl`（每步请求/响应摘要）、`r10d_seed_state.json`（幂等状态）
 - 环境日志：`ISO_ENV_LOG.md`（R10D 探障+5178重启+预置条目）
+
+---
+
+# R11D 开考位预置结果 — MX循R11D-CSU（2026-10-01）
+
+隔离环境：API `http://127.0.0.1:8911`（build api-807dff49e5ad28ec，runtime `runs/tester_loop_iso_20260928/runtime`），全程未触碰 8910/5177。
+操作者：开考预置守护员-R11D。起止：2026-10-01 14:31 → 17:09（本地 CST，约 2 小时 38 分，含探障/5178复活/AI 等待与裁决卡核对）。
+
+## 探障（本轮前置）
+
+- 循环收尾已归档全部旧项目（`GET /api/projects` → `[]`），但 R10D 项目路由仍可探：`GET /r7/project/open`（proj_user_ad685a18f853）→ **state=current / openMode=edit / dataCoverage=complete / canView/canEdit=true**「项目格式正常，可以继续使用。」——无 blocked/CORRUPT，R5D marker 缺陷未复发。
+- 修复代码在位：`services/api/app/main.py:4925-4936` `_init_monitoring_runtime_dbs` 种子 marker 仍取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54 `SCHEMA_VERSION = SCHEMA_VERSION_V5` = mm-r7-w01r26-launch-registry-v5）。
+- 存量库直查：隔离 runtime **36 个** workspace 的 launch_registry.sqlite3 marker 逐库 sqlite 直查**全部 v5**（0 个非 v5）。
+- R11D 建项后即时用产品 `inspect_member` 实证 4 个种子成员（profile_store/run_binding/launch_registry/risk_rules）**全 current/current_shape**（launch_registry marker=v5）；建项瞬间 project/open 的 blocked 为 `required_member_missing`（monitoring_runtime.sqlite3 在流水线 bootstrap 前不存在，R1 已知瞬态同款）——非损坏，facts 物化前该库已在流水线中建立（复跑探针 09:03:10Z 即 current）。**本轮无缺陷需修、未改任何产品代码、未重启 8911。**
+- 环境侧：8911 存活（ready:true，api-807dff49e5ad28ec）；隔离 vite 5178 掉线（连接拒绝，lsof 无监听），按本文件标准命令复活（`VITE_API_PROXY_TARGET=http://127.0.0.1:8911 npx vite --port 5178 --strictPort`，v6.4.2 ready in 180ms）；自检 /monitoring=200、runtime-build.json expectedBackendBuildId=api-807dff49e5ad28ec 与 8911 backend_build_id 配对一致。8910 复核 200；**5177 复核连接拒绝（已停）——非本轮所致（对 8910/5177 仅只读 curl），按铁律未去拉起，如实记录**。
+
+## 项目
+
+| 项 | 值 |
+|---|---|
+| project_id | **proj_user_175b6374dcd6** |
+| project_name | MX循R11D-CSU |
+| indication / product_name | 慢性自发性荨麻疹 / MG-K10 |
+| modules | ["medical_monitoring"] |
+| 幂等键 | r11d-seed-20261001T064001Z-ae6864d3（唯一） |
+| data admission | stg-e32cb7ad0e744cedb6013ebbd9cb820c（合成listing 591行/10表） |
+| 文档权威批次 | mmbatch_894c24548d5828b5c639886c（方案V1.3 docx + eCRF指南V1.0 docx 双VLM） |
+
+## 全链状态（自验实测，2026-10-01 17:0x CST）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| 建项 | ✅ 201 | POST /api/projects（幂等键唯一）；state r11d_seed_state.json |
+| 数据接入 | ✅ | data-admissions/upload → attempt，591行/10表 |
+| 文档权威 | ✅ ready=true | 06:40:03Z 提交→06:44:05Z ready 约4分钟；protocol/ecrf 两角色自动识别 current（IB/SAP 缺失如实标记「可稍后添加」），本轮未触发身份归属/文件角色人工门，AI 质量门自然通过 |
+| 映射双队列 | ✅ candidates_ready | 10主+10盲核，60字段候选（约17分钟） |
+| 复核收敛 | ✅ complete | 分歧 46→37→24→0（系统裁决累计22，多轮双队列复核）；2个 listing_field_mapping 分片终态 failed（provider_runtime_error×2）经 bounded-gap 设计与系统裁决收敛，remaining=0 全字段闭合 |
+| 裁决卡 | ✅ 已答 | 共24张两轮分歧卡：21张按 R5/R8/R9 既有数据实测决策表作答（AE×7、CM×3、ICF_TRACK.ICFSTATE、LB_HEM×3、MH×3、UAS×4）；**3张R11新卡**（CM.CMENDAT/CM.CMSTDAT/ICF_TRACK.ICFVER）首次浮现时驱动脚本 fail-closed 诚实退出留痕（09:01:57Z），随后按 openpyxl 直读同三份合成文件列值实测（CM.开始日期/结束日期 33行数据全合法日期；ICF_TRACK.知情版本 16行全列唯一值 v2.1）+ 两轮队列同判角色逐卡作答（09:03:24Z）；EX/EXTRT 本轮未浮现（系统 v19 工具裁决自行闭合） |
+| **字段映射确认** | ✅ **confirmed** | GET mapping-candidates：confirmation_status=confirmed，draft monmapdraft_0f8105505291681767f13de5d504 status=confirmed（v71），user_questions=0，60字段 |
+| **facts 物化** | ✅ **ready** | GET facts：state=ready，facts_generated=true，10表/591行/2958值全核验（source_values_verified=2958），message「可用于监查的数据已生成，可以开始监查。」 |
+| 界面可开始运行监查 | ✅ | `GET /r7/project/open` → state=current/openMode=edit/dataCoverage=complete/canView/canEdit=true「项目格式正常，可以继续使用。」；`run-setup/options` 200；5178 /monitoring=200 且 runtime-build.json expectedBackendBuildId=api-807dff49e5ad28ec 与 8911 backend_build_id 配对一致 |
+| 停在 facts（未启动监查） | ✅ | GET runs → {"runs":[]} |
+
+AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）：60 作业（58完成/2终态失败，均为 listing_field_mapping 分片 provider_runtime_error，经自动恢复预算与系统裁决收敛，remaining=0 全字段闭合）；89 次调用，1,726,840 tokens。全程 AI 质量门自然通过，未跳门、未伪造状态。
+
+## 本轮观察（如实记录，非阻断）
+
+- **收敛耗时回落**：复核收敛全程约 2 小时（R10D 约 7.2 小时）；文档权威约 4 分钟（R10D 约 14 分钟）。驱动脚本收敛预算按 R10D 经验放宽至 9h，实际单次预算内完成。
+- **无人工门**：身份归属/文件角色门均未触发（自动裁决）；人工介入仅裁决卡作答一次 fail-closed→补答循环（设计内）。
+- **R11 新卡**：CM.CMENDAT/CM.CMSTDAT（合并用药起止日期）与 ICF_TRACK.ICFVER（知情同意书版本）为历轮首次浮现，两轮队列结论一致、列值实测支撑，已固化进 `r11d_seed_csu.py` 的 R11_ROUND3_CARDS 表供后续轮次复用。
+
+## 留痕文件（同目录）
+
+- 驱动：`r11d_seed_csu.py`（由 r10d_seed_csu.py 适配：R11D 命名/幂等键/留痕文件 + 收敛预算9h + R11_ROUND3_CARDS 三卡表；幂等，含 fail-closed 未知卡防护）
+- 证据：`r11d_seed_evidence.jsonl`（每步请求/响应摘要，含 09:01:57Z unknown_questions_fail_closed 留痕）、`r11d_seed_state.json`（幂等状态）
+- 环境日志：`ISO_ENV_LOG.md`（R11D 探障+5178复活+预置条目）

@@ -210,6 +210,113 @@ invalid_ai_output 失败发生在裁决阶段，被 bounded-gap 吸收后链路�
 
 ---
 
+## R11 第1次（20261001，run=r11p_preflight）
+
+- 驱动脚本：`scripts/tester_loop_0927/r11p_preflight_csu.py`（继承 R10P 第3次全绿驱动
+  r10p_preflight3_csu.py 并补 R11D 轮新裁决卡；幂等，状态
+  `r11p_preflight_state.json`，留痕 `r11p_preflight_evidence.jsonl`，
+  运行日志 logs/r11p_preflight_run1.log、run2.log）
+- 数据：`tester_staging_0927/synth_csu` 三件套（方案V1.3 docx + eCRF指南V1.0 docx +
+  合成listing V1.0 xlsx）
+- 项目：**MX循R11P-CSU**（proj_user_d029b0208f85，慢性自发性荨麻疹 / MG-K10 /
+  modules 含 medical_monitoring【source-manifest API 核对无误】，幂等键
+  r11p-preflight-20261001T091433Z-9af7eeec 唯一，精确名一次建项成功无需后缀，
+  status=active，**留在原地待复盘归档**）
+- 环境：8911 ready（build api-807dff49e5ad28ec），AI 网关
+  zhipu-coding-plan/glm-5.3-flash，隔离 runtime=runs/tester_loop_iso_20260928
+  （进程 env WORKBENCH_RUNTIME_DIR 实测确认，pid 27561）
+
+### 结论：chainOk = false
+
+**blockedAt = 映射确认（阶段4，裁决/确认永久 blocked）**——本轮**未到达运行启动**，
+已知状态碎片化家族（readiness 409）未被测试。拦截机理（代码级+数据级定位）：
+
+1. **AE 主分片终态失败**：`listing-field-mapping:stg-0d8b…:AE:0001-of-0001`
+   （cms-router/glm-5.3-flash）invalid_ai_output（「provider output contains
+   definitive approval language」）**连续 14 次**（首跑1次+重排恢复+adjudicate轮询
+   期间R5冲刺重排循环）。对照：台账历史同三份文件的 AE 主分片 22 个全部 attempt-1
+   完成——本 Attempt 冻结输入在当前模型态下确定性产出非法输出；
+2. **R10P第2次修复（allowed_missing_domains）在 adopt 门首次端到端生效**：
+   adopt 201（run1 的 422 是轮询提前触发——needs_attention 在队列仍在跑时即出现，
+   队列排干+重排恢复耗尽后 run2 adopt 成功），draft monmapdraft_0d3bed9fecaa34b4
+   98ac2e708c8e v1，51/60 字段，domain_gaps=[AE]，链路如修复注释所言「继续」了
+   **一步**；
+3. **但下一道门（双队列确定性对账）把修复意图反噬**：修复注释明言「盲核侧若有
+   该域结果仍参与复核」，而 `mapping_reconciliation.py:353-356 _index_cohort` 把
+   不在 draft profile 里的映射判为硬 violation——盲核侧 AE 分片恰好 completed
+   （10/10），其 9 个 AE 字段全部落在 51 字段 draft profile 之外 →
+   hard_violations>0 → reconciliation state=**blocked**（:598-600）→
+   `mapping_confirmation.py:732-738` adjudication 恒 blocked（无 failure_code、
+   remaining=0、无问题卡可答）；bounded-gap 通道不可达——它只覆盖 adjudication
+   代际作业的失败分片（:927-945），本 block 发生在其上游的确定性对账，无任何
+   可重试对象；
+4. **confirm 不可达**：`confirm_draft`（mapping_confirmation.py:1806-1814）要求
+   reconciliation auto_pass 或 diverged 态的 durable resolutions；blocked 两者
+   皆非 → mapping_reconciliation_required；
+5. **无自愈路径**：即使 AE 主分片最终成功（14次未成），既有 draft 的 51 字段
+   profile 与双侧 cohort 的 60 字段映射不对称依旧 → 换成 primary 侧 9 个域外
+   字段 → 仍 blocked；重采纳被 source-set 冲突拒绝
+   （monitoring_mapping_draft_repository.py:1150-1163「mapping draft source set
+   changed; create a new batch/profile」）→ 本 Attempt 死锁，无恢复路径。
+
+**缺陷定性**：R10P第2次修复只打通了 adopt 门，与紧随其后的确定性对账门直接矛盾
+（同一修复的注释承诺与对账门的硬 violation 判定不相容）——该修复此前从未被
+端到端验证过（R10P3 全 20 作业 completed 未走到此分支；修复员当时只原地验证了
+adopt 通过）。**单主命名空间分片终态失败 = 映射 lane 死锁**这一 R10P2 结论在
+修复后依然成立，只是死点从 adopt 422 后移到了对账 blocked。
+
+console 侧：`/tmp/mm_api_8911.log` 全程 0 字节（uvicorn --log-level warning）——
+block 只在 HTTP/台账层可见（与前几轮同现象）。
+
+### 八阶段计时
+
+| # | 阶段 | ok | 秒 | 备注 |
+|---|---|---|---|---|
+| 1 | 建项 | ✅ | 0.1 | proj_user_d029b0208f85，精确名一次成功；indication/product/modules 合同经 source-manifest 核对无误 |
+| 2 | 上传 | ✅ | 0.4 | attempt=stg-0d8b4989793b4ebd811ba37b7f7962d2，1文件/10表/591行 |
+| 3 | 文档权威 | ✅ | 724 | analyze→（身份归属确认1次，自动）→ready=true「研究文件已准备好」；8个AI作业全completed，无人工角色裁决 |
+| 4 | 映射确认 | ❌ | 2447（含恢复窗口） | run1 381s：needs_attention 出现时队列仍在跑（primary 1/10），adopt 422 mapping_draft_invalid 属轮询提前；队列排干后按产品 requeue-once 重入候选生成，AE 第2次同样终态失败（attempt=2、预算尽）；run2：adopt 201（51/60字段+domain_gaps=[AE]，allowed_missing_domains 首次端到端生效）→ adjudicate 恒 blocked（remaining=0、无 failure_code、无问题卡）→ 对账门硬 violation 死锁（见结论5条），498s 时以确定性证明停止驱动。adjudication/confirm 无恢复路径 |
+| 5 | facts | ❌ | — | 未到达（无 confirmed draft） |
+| 6 | 运行 | ❌ | — | 未到达（碎片化门本轮未被测试） |
+| 7 | 发布 | ❌ | — | 未到达 |
+| 8 | 结果 | ❌ | — | 未到达 |
+
+### AI 节点路由核验（台账：medical_monitoring_ai.sqlite3 直读；/api/ai/queue 仍404）
+
+本项目总量 28 作业（57 次调用，prompt 1,268,732 + completion 444,141 tokens），
+终态 23 completed + 4 completed(经1次重排) + 1 terminal failed；**0 queued/
+running（驱动停止后 ≥5 分钟无新重排——重排由 adjudicate/reconcile 轮询路径触发，
+无人轮询即停）**；唯一 failed（AE主分片）有显式 failure_code/failure_message/
+attempt=14（无静默失败），是本轮拦截点本身。
+
+| 节点 | provider/model（台账实测） | 作业数 | 终态 | ok |
+|---|---|---|---|---|
+| 文档权威主 | cms-router/glm-5.3-flash（analysis primary-v9、review primary-v7、adjudication primary-v8、critique primary-v2 各1） | 4 | 4 completed | ✅ |
+| 文档权威盲核 | ollama-cloud/deepseek-v4.1-flash（同上四族 verifier） | 4 | 4 completed | ✅ |
+| 映射主 | cms-router/glm-5.3-flash（listing-field-mapping-v19） | 10 | 9 completed + 1 terminal failed（AE 分片 invalid_ai_output×14） | ❌（该失败即拦截点） |
+| 映射盲核 | ollama-cloud/deepseek-v4.1-flash（mapping-verifier-v8-tools-v6） | 10 | 10 completed（CM 经1次重排） | ✅（其 AE 结果正是对账门硬 violation 的来源） |
+| 裁决（映射收敛） | 未派发（reconciliation 在 adjudication 代际创建之前即 blocked，无作业无路由可报） | 0 | — | ❌ 被阶段4拦截 |
+| 监查分析 | 未派发（运行未启动） | 0 | — | ❌ 被阶段4拦截 |
+
+### 过程事件（如实）
+- 17:14:33（本地）run1 启动：建项/上传全绿；文档权威 724s ready；映射双队列启动；
+  17:32:54 state=needs_attention（primary 1/10 时 AE 首败）→ adopt 422（轮询提前，
+  队列仍在跑）→ 驱动 fail-closed 退出（exit 2，381s）；
+- 17:41-17:53 被动等待队列排干（primary 9/10、verifier 10/10、候选 51）；期间读码
+  确认产品恢复路径（mapping_pipeline.py:1416 requeue-once）；
+- 17:54 按产品路径重入候选生成一次（POST mapping-candidates 201，留痕
+  manual_recovery_reenter_candidates）：AE 重排后第2次同样终态失败（attempt=2、
+  预算尽）→ needs_attention 定格；
+- 17:58 run2 幂等续跑：adopt 201（allowed_missing_domains 首次端到端生效，
+  domain_gaps=[AE] 物化）→ 收敛循环 11 轮 adjudicate 恒 blocked；18:0x 直读台账
+  （AE attempt 爬升至 12）+ 代码级定位对账门死锁（5条证据链）后，18:06 主动停止
+  驱动（继续循环只会重排 AE 燃烧预算，判定已确定性）；驱动停止后 AE 又执行 2 次
+  （12→14）后无新重排；
+- 全程未触碰 8910/5177；未改任何产品代码/数据库（驱动脚本与一次性预检项目自身
+  数据除外）；项目与全部留痕原地保留（归档交复盘官）。
+
+---
+
 ## R10 第3次（20261001，run=r10p_preflight3）——**chainOk = true，全链首次端到端跑通**
 
 - 前提：前两轮拦截根因均已修复——①runtime路径（api-ce1c512e7a64adf5）；
