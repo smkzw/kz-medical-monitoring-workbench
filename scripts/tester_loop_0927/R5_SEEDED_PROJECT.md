@@ -147,3 +147,56 @@ AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）�
 - 证据：`r9d_seed_evidence.jsonl`（每步请求/响应摘要，含 06:47Z unknown_questions_fail_closed 留痕）、`r9d_seed_state.json`（幂等状态）
 - 环境日志：`ISO_ENV_LOG.md`（R9D 探障+预置条目）
 
+
+---
+
+# R10D 开考位预置结果 — MX循R10D-CSU（2026-10-01）
+
+隔离环境：API `http://127.0.0.1:8911`（build api-439b9e81187f0da4，runtime `runs/tester_loop_iso_20260928/runtime`），全程未触碰 8910/5177。
+操作者：开考预置守护员-R10D。起止：2026-09-30 17:53 → 2026-10-01 02:03（本地 CST，约 8 小时 10 分，其中复核收敛约 7.2 小时——本轮裁决 prompt 升至 v19-tools-v7.2 工具版，单作业多轮工具调用，显著慢于 R9D）。
+
+## 探障（本轮前置）
+
+- 循环收尾已把全部旧项目软归档（user_projects.project_visibility 107 行含 R5D/R8D/R9D），`GET /api/projects` → `[]`；对归档项目 `GET /r7/project/open` 返回 `route_not_found`（模块路由不挂载），**非 blocked/CORRUPT**——旧项目无法按原样探障。
+- 改用三路替代探障：① 修复代码在位：`services/api/app/main.py:4883-4884,4893-4894` 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:54 `SCHEMA_VERSION = SCHEMA_VERSION_V5`）；② 存量 29 个 workspace 的 launch_registry marker 逐库 sqlite 直查全部 `mm-r7-w01r26-launch-registry-v5`；③ 新建项目（proj_user_ad685a18f853）后立即用产品 `inspect_member` 实证 4 个种子成员（profile_store/run_binding/launch_registry/risk_rules）**全 CURRENT**（launch_registry marker=v5）。**R5D 缺陷未复发。**
+- 建项瞬间 `GET /r7/project/open` → blocked/incomplete/canView=false「暂时无法安全打开此项目」——用产品 `ProjectSchemaInspector` 定位为 `required_member_missing`：`runtime/monitoring_runtime.sqlite3` 在流水线 bootstrap 前本就不存在（schema_manifest.py inspect_project_schema 注释记录的 R1 已知瞬态同款），非损坏；facts 物化后该库建立，project/open → current（见下）。**本轮无需修复、未重启 API。**
+- 环境侧：8911 存活（ready:true，api-439b9e81187f0da4）未动；隔离 vite 5178 中途掉线，按本文件标准命令重启（只动隔离对，8911 未重启）；8910 复核 200 未受影响；**5177 复核时连接拒绝（已停）——非本轮操作所致（本轮对 8910/5177 仅只读 curl），按铁律未去拉起，如实记录**。
+
+## 项目
+
+| 项 | 值 |
+|---|---|
+| project_id | **proj_user_ad685a18f853** |
+| project_name | MX循R10D-CSU |
+| indication / product_name | 慢性自发性荨麻疹 / MG-K10 |
+| modules | ["medical_monitoring"] |
+| 幂等键 | r10d-seed-20260930T095343Z-a18f7bd1（唯一） |
+| data admission | stg-102ee29d6bd749e0b9eaa6bc3bfaa902（合成listing 591行/10表） |
+| 文档权威批次 | mmbatch_0b9c34e8cd7261eeffaf22fa（方案V1.3 docx + eCRF指南V1.0 docx 双VLM） |
+
+## 全链状态（自验实测，2026-10-01 02:0x CST）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| 建项 | ✅ 201 | POST /api/projects；state r10d_seed_state.json |
+| 数据接入 | ✅ | data-admissions/upload → attempt，591行/10表 |
+| 文档权威 | ✅ ready=true | 09:57Z 提交→10:11Z ready 约14分钟；本轮未触发身份归属/文件角色人工门（R6-02/R1-02 修复后自动裁决），AI 质量门自然通过 |
+| 映射双队列 | ✅ candidates_ready | 10主+10盲核，60字段候选 |
+| 复核收敛 | ✅ complete | 分歧 46→38→27→20→12→0（系统裁决累计34），多轮双队列复核；失败分片自动恢复重排（本项目终态 failed 6 个 listing_field_mapping 分片，均经 bounded-gap 设计与后续轮次收敛，remaining=0 全字段闭合）；EX/EXTRT 问题卡按数据实测作答一次 |
+| **字段映射确认** | ✅ **confirmed** | GET mapping-candidates：confirmation_status=confirmed，draft monmapdraft_d98fb51959ccc93a119198332334 status=confirmed（v60），user_questions=0，60字段 |
+| **facts 物化** | ✅ **ready** | GET facts：state=ready，facts_generated=true，10表/591行/2290值全核验（source_values_verified=2290），message「可用于监查的数据已生成，可以开始监查。」 |
+| 界面可开始运行监查 | ✅ | `GET /r7/project/open` → state=current/openMode=edit/dataCoverage=complete/canView/canEdit=true「项目格式正常，可以继续使用。」；`run-setup/options` 200；5178 /monitoring=200 且 runtime-build.json expectedBackendBuildId=api-439b9e81187f0da4 与 8911 backend_build_id 配对一致 |
+| 停在 facts（未启动监查） | ✅ | GET runs → {"runs":[]} |
+
+AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）：82 作业（76完成/6终态失败，均为 listing_field_mapping 分片，经自动恢复与后续轮次收敛）；149 次调用，2,267,750 tokens。全程 AI 质量门自然通过，未跳门、未伪造状态。
+
+## 本轮观察（如实记录，非阻断）
+
+- **收敛耗时显著上升**：R10 裁决作业升级为 `monitoring-listing-field-mapping-adjudication-v19-tools-v7.2` 工具调用型（单作业多次成功调用，实测 EX 分片 3 次调用 337s/427s/196s），复核收敛全程约 7.2 小时（R9D 约 3 小时）。驱动脚本两次 3.5h 收敛预算耗尽后按幂等设计续跑（exit 10 → 重跑），第三次续跑 90 秒内完成收敛→确认→物化。
+- **无新人工裁决卡**：R9 的 CM/LB_HEM 六卡本轮未再浮现（系统 v19 工具裁决自行闭合）；驱动脚本 fail-closed 防护在位未触发（unknown_questions=0 全程）。
+
+## 留痕文件（同目录）
+
+- 驱动：`r10d_seed_csu.py`（由 r9d_seed_csu.py 适配：R10D 命名/幂等键/留痕文件 + 建项后 project/open 探针留痕 + 终态硬断言 confirmed/ready/非blocked）
+- 证据：`r10d_seed_evidence.jsonl`（每步请求/响应摘要）、`r10d_seed_state.json`（幂等状态）
+- 环境日志：`ISO_ENV_LOG.md`（R10D 探障+5178重启+预置条目）
