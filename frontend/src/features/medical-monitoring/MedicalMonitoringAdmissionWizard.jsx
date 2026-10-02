@@ -151,6 +151,14 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
                     <strong>{check.label}</strong>
                     <span>当前项目：{check.expected_value || "未提供"}</span>
                     <span>文件内容：{check.observed_value || "未识别"}</span>
+                    {/* R9-01：未识别项如实声明「无原文摘录可核对」，不做
+                        笼统的已核对暗示；确认动作保留未识别事实描述。 */}
+                    {!check.observed_value || /^未识别/.test(check.observed_value) ? (
+                      <small style={{ display: "block", color: "var(--monitoring-muted, #6b7785)" }}>
+                        系统未在文件中定位到该项内容——无原文摘录与页/段定位可核对；
+                        点「继续使用」即确认在未逐字核对的情况下接受该差异，请先人工核对原文。
+                      </small>
+                    ) : null}
                     {check.evidence_locators?.length ? (
                       <small>依据位置：{check.evidence_locators.join("；")}</small>
                     ) : null}
@@ -636,7 +644,7 @@ export function MedicalMonitoringAdmissionWizardView({
                 : "如需替换本批数据，请重新发起导入；已接入的数据版本不会被覆盖。"}
             </p>
           </div>
-        ) : stepIndex === 0 ? (
+        ) : stepIndex === 0 && phase === "input" ? (
           <div className="monitoring-admission-field">
             <span className="monitoring-admission-field-label">选择本机数据文件夹</span>
             <label className="monitoring-admission-picker" htmlFor="monitoring-admission-files">
@@ -783,7 +791,14 @@ export function MedicalMonitoringAdmissionWizardView({
               />
             ) : null}
           </>
-        ) : null}
+        ) : (
+          /* R9-02：步骤指示器与内容区同源——stepIndex>0但专属面板
+             （profile/attempt）尚未回填时渲染恢复中提示，绝不回落到
+             第1步表单造成状态机脱节。 */
+          <p className="monitoring-admission-loading" role="status">
+            正在恢复本项目的接入进度（第 {(stepIndex || 0) + 1} 步），请稍候…
+          </p>
+        )}
       </div>
 
       {error ? (

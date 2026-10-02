@@ -624,6 +624,7 @@ export function MonitoringWizardView({
   previewText = "",
   previewBusy = false,
   previewOpen = false,
+  submitting = false,
   onClose,
   onSelect,
   onAdvance,
@@ -701,7 +702,7 @@ export function MonitoringWizardView({
           ) : null}
           {wizard?.errorText ? <p className="monitoring-wizard-error" role="alert">{wizard.errorText}</p> : null}
         </div>
-        <footer className="monitoring-dialog-foot"><button type="button" className="monitoring-product-button is-quiet" onClick={step > 1 ? () => onAdvance?.(-1) : onClose}>{step > 1 ? "上一步" : "取消"}</button><button type="button" className="monitoring-product-button is-primary" onClick={() => onAdvance?.(1)}>{step === 4 ? "确认并开始监查" : "下一步"}</button></footer>
+        <footer className="monitoring-dialog-foot"><button type="button" className="monitoring-product-button is-quiet" disabled={submitting} onClick={step > 1 ? () => onAdvance?.(-1) : onClose}>{step > 1 ? "上一步" : "取消"}</button><button type="button" className="monitoring-product-button is-primary" disabled={submitting} aria-busy={submitting} onClick={() => onAdvance?.(1)}>{submitting ? "正在开始监查…" : step === 4 ? "确认并开始监查" : "下一步"}</button></footer>
       </section>
     </div>
   );
@@ -1176,9 +1177,13 @@ export function MedicalMonitoringProductLoop({
     refreshAll();
     navigate("overview", { public_run_token: token, result_context_token: "" });
   }, [closeWizard, navigate, refreshAll]);
+  // R11轮（R11-03）：确认按钮提交中状态——点击立即置loading/disabled
+  // 并防连点（D实测连点4次约2分钟零反馈）。
+  const [wizardSubmitting, setWizardSubmitting] = useState(false);
   const submitWizard = useCallback(async () => {
-    if (!wizard || !setup) return;
+    if (!wizard || !setup || wizardSubmitting) return;
     setWizardError("");
+    setWizardSubmitting(true);
     try {
       const response = await executePrepare(wizard);
       finishPrepare(response);
@@ -1211,8 +1216,10 @@ export function MedicalMonitoringProductLoop({
         }
       }
       setWizardError(publicErrorText(error, "本次监查未能开始，请保留当前设置后重试。"));
+    } finally {
+      setWizardSubmitting(false);
     }
-  }, [executePrepare, finishPrepare, setup, wizard]);
+  }, [executePrepare, finishPrepare, setup, wizard, wizardSubmitting]);
   const requestPreview = useCallback(async () => {
     if (!previewText.trim()) return;
     setPreviewBusy(true);
@@ -1548,7 +1555,7 @@ export function MedicalMonitoringProductLoop({
       ) : null}
       {resultLoaded ? <MonitoringPublicResultIdentityStrip identity={resultContext.identity} siteScopeText={resultSiteScopeText} /> : null}
       <ProductRouteTabs route={route} resultLoaded={resultLoaded} onOverview={() => navigate("overview")} onQueries={() => navigate("queries")} />
-      {wizardOpen && wizard ? <MonitoringWizardView wizard={{ ...wizard, dataBatches: setup?.dataBatches || [], serverSummary: setup?.serverSummary || {}, errorText: wizardError || wizard.errorText }} previewText={previewText} previewBusy={previewBusy} previewOpen={previewOpen} onClose={closeWizard} onSelect={changeWizard} onAdvance={(direction) => direction > 0 && wizard.step === 4 ? submitWizard() : advanceWizard(direction)} onPreviewTextChange={setPreviewText} onPreview={requestPreview} onClosePreview={() => { setPreviewOpen(false); changeWizard("preview", null); changeWizard("previewCandidateId", ""); }} onConfirmPreview={confirmPreview} canConfirmPreview={Boolean(wizard.previewCandidateId)} /> : null}
+      {wizardOpen && wizard ? <MonitoringWizardView submitting={wizardSubmitting} wizard={{ ...wizard, dataBatches: setup?.dataBatches || [], serverSummary: setup?.serverSummary || {}, errorText: wizardError || wizard.errorText }} previewText={previewText} previewBusy={previewBusy} previewOpen={previewOpen} onClose={closeWizard} onSelect={changeWizard} onAdvance={(direction) => direction > 0 && wizard.step === 4 ? submitWizard() : advanceWizard(direction)} onPreviewTextChange={setPreviewText} onPreview={requestPreview} onClosePreview={() => { setPreviewOpen(false); changeWizard("preview", null); changeWizard("previewCandidateId", ""); }} onConfirmPreview={confirmPreview} canConfirmPreview={Boolean(wizard.previewCandidateId)} /> : null}
       {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button></section> : null}
       {!loadingBody && !resultError && !setupHistoryError && publicRunToken && !resultToken ? <MonitoringPublicProgressSurface progress={progress} error={progressError} loading={progressLoading} onRefresh={() => setRefreshEpoch((value) => value + 1)} onBack={() => navigate("overview", { public_run_token: "" })} onOpenResult={() => openResult(publicRunToken)} /> : null}
       {!loadingBody && !resultError && !setupHistoryError && resultLoaded ? (

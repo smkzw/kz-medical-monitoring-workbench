@@ -82,6 +82,12 @@ button:disabled {
   box-shadow: 6px 0 18px rgba(29, 39, 49, 0.12);
 }
 
+/* R11轮（R9-06）：hover展开为悬浮态——不改变布局流（grid列宽不变），
+   避免指针停留在侧栏时nav挤压/覆盖内容区（D实测需刷新恢复）。 */
+.app.writing-active:has(.sidebar:hover) {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+
 .app.writing-active .nav-item {
   width: 56px;
   justify-content: center;
