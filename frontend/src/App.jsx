@@ -1363,6 +1363,7 @@ function AppShell({
               <button
                 type="button"
                 className="icon-button"
+                aria-label="归档当前项目"
                 title="归档当前项目（软删除：从列表隐藏，数据保留可恢复）"
                 onClick={async () => {
                   const projectName = project?.project_name || activeProjectId;
@@ -1408,7 +1409,7 @@ function AppShell({
             <Metric icon={AlertTriangle} label="高风险开放" value={highRiskCount} tone="danger" />
             <Metric icon={Sparkles} label="待交接" value={handoffDecisionCount} tone="info" />
             <Metric icon={FileCheck2} label="待审批" value={pendingApprovalCount} tone="success" />
-            <button className="icon-button" title="通知中心尚未开放" disabled>
+            <button className="icon-button" aria-label="通知中心尚未开放" title="通知中心尚未开放" disabled>
               <Bell size={18} />
             </button>
           </div>
@@ -1417,7 +1418,7 @@ function AppShell({
           <div className="project-created-notice" role="status" style={{ display: "flex", alignItems: "center", gap: "10px", margin: "0 16px 8px", padding: "8px 12px", borderRadius: "6px", background: "#f0f9f1", border: "1px solid #cfe8d2", color: "#256b32" }}>
             <CheckCircle2 size={15} />
             <span style={{ flex: 1 }}>{projectCreatedNotice}</span>
-            <button type="button" className="icon-button" title="关闭提示" onClick={() => setProjectCreatedNotice("")}>
+            <button type="button" className="icon-button" aria-label="关闭创建成功提示" title="关闭提示" onClick={() => setProjectCreatedNotice("")}>
               <XCircle size={14} />
             </button>
           </div>
@@ -1458,7 +1459,7 @@ function AppShell({
                 <span>{newProjectMonitoring ? "研究项目 · 医学写作 · 医学监查" : "研究项目"}</span>
                 <h2>新建研究项目</h2>
               </div>
-              <button type="button" className="icon-button" onClick={() => setNewProjectOpen(false)} disabled={newProjectBusy} title="关闭">
+              <button type="button" className="icon-button" aria-label="关闭新建项目对话框" onClick={() => setNewProjectOpen(false)} disabled={newProjectBusy} title="关闭">
                 <XCircle size={18} />
               </button>
             </header>

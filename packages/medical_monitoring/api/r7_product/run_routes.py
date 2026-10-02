@@ -226,8 +226,20 @@ def register_run_launch_routes(router: APIRouter, context: RunRouteContext) -> N
             record = registry.mark_running(run_id, project_id=canonical)
             return _launch_projection(record, replayed=reservation.replayed)
         except lr.LaunchRegistryError as exc:
+            _run_rejection_event(
+                canonical,
+                stage="run_prepare_and_start",
+                reason=str(getattr(exc, "code", "") or exc),
+                mode=parsed.mode,
+            )
             return _launch_error_response(exc)
         except Exception as exc:
+            _run_rejection_event(
+                canonical,
+                stage="run_prepare_and_start",
+                reason=str(getattr(exc, "code", "") or type(exc).__name__),
+                mode=parsed.mode,
+            )
             return _run_entry_error_response(exc)
         finally:
             try:
@@ -238,6 +250,43 @@ def register_run_launch_routes(router: APIRouter, context: RunRouteContext) -> N
                     registry.close()
                 finally:
                     write_permit.release()
+
+    def _run_rejection_event(
+        project: str,
+        *,
+        stage: str,
+        reason: str,
+        mode: str = "",
+    ) -> None:
+        """R9-05：被拒的监查启动尝试留痕（时间/拒绝原因）。
+
+        与R8-07准入事件流水同一文件同一口径——启动被拒是关键治理
+        事件，历史抽屉之外也必须有可追溯记录。
+        """
+        import json as _json
+        from datetime import datetime, timezone as _tz
+
+        try:
+            path = (
+                _workspace_dir(root, project)
+                / "admissions"
+                / "admission_events.jsonl"
+            )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            event = {
+                "schema_version": "mm-admission-event-v1",
+                "ts": datetime.now(_tz.utc).isoformat(),
+                "stage": str(stage),
+                "outcome": "rejected",
+                "files": [],
+                "reason": str(reason)[:200],
+            }
+            if mode:
+                event["detail"] = f"mode={mode}"
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(_json.dumps(event, ensure_ascii=False) + "\n")
+        except Exception:
+            return
 
     @router.get("/runs")
     async def get_runs(

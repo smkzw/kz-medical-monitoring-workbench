@@ -120,11 +120,20 @@ class MonitoringDocumentAuthorityWorkflow:
         # 得到同一batch_id并复用已完成的判定（表现为"缓存秒回"）。
         # 向界面透传该事实，让"重复上传秒出结论"与"新文件全量核对"
         # 两条路径都可预期。
-        previously_analyzed = self._optional_job(
+        # R11轮（R11-01）：仅当既有作业确实completed才声称"复用已有结论"
+        # ——infra类终态失败（代理503/SSE中断）不是内容性判定，重传
+        # 必须重新核对而非秒回同一失败。
+        existing_primary = self._optional_job(
             project_id,
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
             f"document-authority-analysis:primary:{_ANALYSIS_GENERATION}:{batch['batch_id']}",
-        ) is not None
+        )
+        previously_analyzed = (
+            existing_primary is not None
+            and str(getattr(existing_primary, "status", "").value
+                   if hasattr(getattr(existing_primary, "status", ""), "value")
+                   else getattr(existing_primary, "status", "")) == "completed"
+        )
         self.primary_service.submit_document_authority_analysis(
             project_id=project_id,
             input_revision=revision,
@@ -140,7 +149,8 @@ class MonitoringDocumentAuthorityWorkflow:
         self.worker_wake()
         result = {"state": "analyzing", "batch_id": batch["batch_id"]}
         if previously_analyzed:
-            # 仅在确为重复内容时附带该事实，保持既有返回契约不变。
+            # 仅在确为重复内容且已有完成结论时附带该事实，保持既有
+            # 返回契约不变。
             result["previously_analyzed"] = True
         return result
 
@@ -1052,18 +1062,42 @@ class MonitoringDocumentAuthorityWorkflow:
             }
         return None
 
+    # R11轮（R11-01）：基础设施/提供方类失败码——瞬时故障（代理503、
+    # SSE中断、上游5xx）不是内容性判定，不得被指纹去重或重试预算固化为
+    # 终态结论；这类失败可无限次自动重试。
+    _INFRA_FAILURE_CODES = frozenset({
+        "provider_runtime_error",
+        "provider_sse_error_event",
+        "provider_unavailable",
+        "provider_timeout",
+        "provider_rate_limited",
+        "provider_auth_error",
+        "provider_overloaded",
+        "ai_not_configured",
+        "network_error",
+        "proxy_error",
+    })
+
+    @classmethod
+    def _is_infra_failure(cls, job: Any) -> bool:
+        return str(getattr(job, "failure_code", "") or "") in cls._INFRA_FAILURE_CODES
+
     def _recover_failed_once(self, jobs: tuple[Any, Any]) -> bool:
-        retryable = [
-            job
-            for job in jobs
-            if job.status in {
+        retryable = []
+        for job in jobs:
+            if job.status not in {
                 MonitoringAiJobStatus.FAILED,
                 MonitoringAiJobStatus.BLOCKED,
                 MonitoringAiJobStatus.STALE_INPUT,
-            }
-            and job.max_attempts <= 2
-            and not job.contract_retirement_code
-        ]
+            }:
+                continue
+            if job.contract_retirement_code:
+                continue
+            # R11轮（R11-01）：infra类失败不受max_attempts<=2预算限制——
+            # 一次提供方抖动曾把项目锁死（同版重传被「复用已有结论」拒、
+            # 重新核对仍瞬间同409）。
+            if self._is_infra_failure(job) or job.max_attempts <= 2:
+                retryable.append(job)
         for job in retryable:
             self.repository.retry_terminal(
                 job.project_id,
