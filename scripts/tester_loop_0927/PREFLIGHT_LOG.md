@@ -210,6 +210,85 @@ invalid_ai_output 失败发生在裁决阶段，被 bounded-gap 吸收后链路�
 
 ---
 
+## R11 第2次（20261001-02，run=r11p2_preflight）——**chainOk = true，第二次全链端到端跑通**
+
+- 前提：R11第1次拦截根因（对账门把 domain_gaps 豁免域的对侧映射判 unexpected 硬
+  violation）已由修复员修复——`packages/medical_monitoring/admission/mapping_reconciliation.py`
+  :346-353 域缺席豁免（「R11预检：域缺席豁免（allowed_missing_domains）」注释在位），
+  `mapping_confirmation.py:1604-1632` 把 gap_domains 传入对账；文件 mtime 20261001
+  18:14、8911 进程 18:18 重启（pid 60895）实测确认。**注意：build id 仍为
+  api-807dff49e5ad28ec**（与R11第1次相同）——build 指纹只覆盖 services/api/app
+  （runtime_contract.json build_fingerprint.backend_source_root），packages/ 树不在
+  指纹内，同 id 不代表同码。
+- 驱动脚本：`scripts/tester_loop_0927/r11p2_preflight_csu.py`（R11第1次驱动的复本，
+  运行标签/幂等键前缀 r11p2-/状态 `r11p2_preflight_state.json`/留痕
+  `r11p2_preflight_evidence.jsonl`/日志 logs/r11p2_preflight_run1..run3.log 独立）
+- 数据：同 `tester_staging_0927/synth_csu` 三件套
+- 项目：**MX循R11P-CSU-2**（proj_user_ff6b552f8eef，慢性自发性荨麻疹 / MG-K10 /
+  modules 含 medical_monitoring，幂等键 r11p2-preflight-20261001T104209Z-5fe4c2d2
+  唯一）。**名称偏离说明**：精确名「MX循R11P-CSU」被R11第1次项目（proj_user_
+  d029b0208f85，按指令留在原地）409 占用，按 API 报错自指引加 -2 后缀，P=预检
+  语义不变。**留在原地待复盘归档**。
+- 运行：run:80d35162c4c39abbe6549016（daily/full，snapshot:d1feca1f066258c1e21ab699）
+- 结果：result-context:c9c8881a5d6545009a265d804b247a6e（overview 原始 778,126 字节）
+
+### 结论：chainOk = true（八阶段全ok；运行真完成10/10、发布available、结果可读）
+
+已知状态碎片化家族（readiness 409）**未命中**——本轮 prepare-and-start 一次 200，
+R10第1次的 runtime 路径修复持续有效；R11第1次的修复（对账域缺席豁免）在库但
+**未被行使**：本轮首遍映射双队列 20/20 全 completed（R11第1次的 AE 主分片
+invalid_ai_output 未复发，印证该失败属模型输出质量波动而非确定性缺陷）、60/60
+候选无 domain_gaps，走的是干净路径。
+
+### 八阶段计时（秒数=首次真实完成；映射确认为三段活跃驱动窗口合计）
+
+| # | 阶段 | ok | 秒 | 备注 |
+|---|---|---|---|---|
+| 1 | 建项 | ✅ | 0.2 | 精确名409（R11第1次占名）→按API指引-2后缀；indication/product/modules 合同核对无误 |
+| 2 | 上传 | ✅ | 0.4 | attempt=stg-88d7d5c3501f41afb1abfbcab5c1be15，1文件/10表/591行 |
+| 3 | 文档权威 | ✅ | 434.5 | analyze→（身份归属确认1次，自动）→ready=true「研究文件已准备好」；8个AI作业全completed，无人工角色裁决 |
+| 4 | 映射确认 | ✅ | 16342（run1 1952+run2 11304+run3 3085.9；壁钟28.6h含两次驱动被杀的24h空窗） | 首遍双队列20/20（主10/10无AE失败）→60候选→adopt 201（monmapdraft_e65f6ca44633c50e56169462dd82）→裁决多波收敛 remaining 46→41→31→26→0、system_adjudicated=46、**零用户问题卡**（本轮全系统裁决，R3-01 家族卡未浮现）→confirm 200（draft v47 confirmed）；11个裁决代际作业 provider_runtime_error（reasoning-only，att=4终态）被 bounded-gap 吸收，链路继续 |
+| 5 | facts | ✅ | 0.1 | state=ready：10表/591行/914值 source_values_verified=914（100%）。注：values 计数与 R10第3次的 2974 不同（计数口径/物化差异，state=ready 契约满足，未深究） |
+| 6 | 运行 | ✅ | 30.3 | workspace/bootstrap 200（既定步骤）→prepare-and-start 200（幂等键 r11p2-run-20261002T152442Z-9d915375，一次成功无孤儿）→run_state=completed，10/10项100%「本次医学监查已完成」，result_available=true（完成后复核） |
+| 7 | 发布 | ✅ | 0.3 | publication POST 200→publication_state=available「结果已整理完成」 |
+| 8 | 结果 | ✅ | 0.3 | result-entry 200；overview 原始778,126字节非空（驱动侧重序列化597,305）；finding_count=15（query_findings，meta.state=completed_with_findings）+current_risks=477；subject_count=16；identity.project_ref=proj_user_ff6b552f8eef 归属核对无误 |
+
+### AI 节点路由核验（台账：module `/ai/jobs` + sqlite 直读双核对；`/api/ai/queue` 本build仍404）
+
+本项目 92 作业（190 次调用，prompt 1,682,936 + completion 907,612 tokens），
+终态 81 completed + 11 failed，**0 queued/running（无滞留）**；11 个 failed 全部
+裁决代际、显式 failure_code=provider_runtime_error（reasoning-only，att=4 终态），
+无静默失败，经 bounded-gap 吸收后 adjudication remaining=0。
+
+| 节点 | provider/model（台账实测） | 作业数 | 终态 | ok |
+|---|---|---|---|---|
+| 文档权威主 | cms-router/glm-5.3-flash（analysis primary-v9、review primary-v7、adjudication primary-v8、critique primary-v2 各1） | 4 | 4 completed | ✅ |
+| 文档权威盲核 | ollama-cloud/deepseek-v4.1-flash（同上四族 verifier） | 4 | 4 completed | ✅ |
+| 映射主 | cms-router/glm-5.3-flash（listing-field-mapping-v19） | 10 | 10 completed（R11第1次 AE invalid_ai_output 未复发） | ✅ |
+| 映射盲核 | ollama-cloud/deepseek-v4.1-flash（mapping-verifier-v8-tools-v6） | 10 | 10 completed | ✅ |
+| 裁决（映射收敛） | 主 cms-router/glm-5.3-flash（adjudication-v19-tools-v7.2）32：26 completed+6 failed；盲核 ollama-cloud/deepseek-v4.1-flash（adjudication-verifier-v17-tools-v7.2）32：27 completed+5 failed | 64 | 53 completed + 11 terminal failed（全部 reasoning-only att=4，bounded-gap吸收，收敛 remaining=0/sys=46） | ✅（失败可见且按设计恢复为可见缺口） |
+| 监查分析 | 本build运行lane不经AI台账（实例全库 task_type 仅 document_authority_*/listing_field_mapping；FactsModeOutputProvider 事实回执确定性产出，同R10第3次发现3） | 0 | —（无作业=无滞留/无静默失败；15发现+477风险已产出） | ✅（机制核实，如实报0作业） |
+
+### 过程事件（如实）
+
+- 20261001 18:42 run1 启动：建项（-2后缀）/上传/文档权威434.5s全绿；18:49-19:42
+  映射首遍+adopt 201+裁决前两波；**19:42 驱动进程被宿主会话清理误杀**（轮询命令
+  取消时连带进程组，留痕 run1.conv 2160s 截止）；
+- 21:23 run2 幂等续跑（建项/上传/文档权威秒级复用）：裁决波 46→41→31；
+  **00:32（20261002）驱动再次被同样方式误杀**（run2.conv 11334s 截止）；两次误杀
+  均为宿主侧进程管理问题，非产品缺陷；后端 AI 队列独立于驱动轮询继续排干
+  （76C/4F 定格）；
+- 20261002 22:33 run3 续跑（改用宿主持有的后台任务方式防误杀）：15:23:27Z 一次
+  adjudicate 500（mapping_bridge_failed「生成字段对应建议时出现问题」，一次即恢复，
+  下一 tick 即 complete/remaining=0）→15:24:41 confirm 200→facts 201→
+  bootstrap/prepare 200→运行30.3s completed→发布available→结果可读，八阶段全绿；
+- console `/tmp/mm_api_8911.log` 全程 0 字节（uvicorn --log-level warning，与前几轮
+  同现象；本轮无门禁拒绝，无需 console 取证）；
+- 全程未触碰 8910/5177；未改任何产品代码/数据库（驱动脚本与一次性预检项目自身
+  数据除外）；项目与全部留痕原地保留（归档交复盘官）。
+
+---
+
 ## R11 第1次（20261001，run=r11p_preflight）
 
 - 驱动脚本：`scripts/tester_loop_0927/r11p_preflight_csu.py`（继承 R10P 第3次全绿驱动
