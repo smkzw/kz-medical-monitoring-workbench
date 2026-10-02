@@ -2,7 +2,7 @@
  "project_id": "proj_user_ff6b552f8eef",
  "create_key": "r11p2-preflight-20261001T104209Z-5fe4c2d2",
  "project_name": "MX循R11P-CSU-2",
- "updated_at": "2026-10-01T13:23:36.394889+00:00",
+ "updated_at": "2026-10-02T14:33:15.950744+00:00",
  "stages": {
   "建项": {
    "ok": true,
@@ -16,7 +16,7 @@
   },
   "文档权威": {
    "ok": true,
-   "seconds": 9.3,
+   "seconds": 6.8,
    "note": "ready=True headline=研究文件已准备好"
   }
  },
