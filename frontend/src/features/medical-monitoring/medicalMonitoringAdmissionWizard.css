@@ -789,3 +789,49 @@ div.monitoring-admission-manual {
 .monitoring-admission-queue-control [role="alert"] {
   color: #9f4219;
 }
+
+/* R12轮（R12-02）：跳过链接——键盘直达主操作，聚焦前视觉隐藏。 */
+.monitoring-admission-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.monitoring-admission-skip-link:focus,
+.monitoring-admission-skip-link:focus-visible {
+  position: static;
+  width: auto;
+  height: auto;
+  display: inline-block;
+  margin: 4px 0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #fff4ed;
+  color: #b4480c;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* R12轮（R12-06）：研究文件上传入口提升视觉层级——缺文档时作为
+   显式主引导（大按钮外观、边框强调），非小字号label。 */
+.monitoring-admission-document-picker {
+  display: block;
+  margin-top: 10px;
+  padding: 14px 16px;
+  border: 1.5px dashed #b9c6d2;
+  border-radius: 10px;
+  background: #f7fafc;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #17212b;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.monitoring-admission-document-picker:hover {
+  border-color: #e96828;
+  background: #fff8f2;
+}

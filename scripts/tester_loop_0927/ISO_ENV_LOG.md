@@ -225,3 +225,18 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 修复：导入错误分类（NotFoundError/NotAllowedError/422细分码→准确文案，网络兜底仅留给真传输错误）；方案准备抽屉errorText sanitize异常原文（Cannot read properties等→友好文案+console.warn留技术细节）；「增加特殊关注」死按钮修复（按钮改为打开输入面板，面板内「生成关注方向」才调API——原按钮直接调onPreview而预览文本为空时handler静默返回）。
 - 自检：8911 ready:true（build api-2ac4a3a5e6a1db40）；5178=200；指纹配对一致。
 - ⚠️舰队状态沿R11/R12记录：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；继续留痕提请舰队值班。
+
+## 2026-10-03 晚（R14轮次·开考预置守护员：探障无障碍 + 预置 MX循R14D-CSU）
+
+- 操作者：开考预置守护员-R14D。开始时间：2026-10-03 ~21:05（CST）。
+- **探障（无障碍，R5D marker 缺陷未复发，未修任何产品代码、未重启 8911/5178）**：本轮开始前 R13轮次修复员已重启隔离对（8911/5178 进程 12:56Z=20:56 CST 拉起，非 runtime 重建）。① `GET /r7/project/open`（R13D 项目 proj_user_bbcc5c21edfb）→ current/complete/canView/canEdit=true，无 blocked/CORRUPT；② 修复代码在位：main.py:4925-4936 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54 = mm-r7-w01r26-launch-registry-v5）；③ R14D 建项后产品 `inspect_project_schema` 实证成员全 current（launch_registry marker=v5），终态硬断言 Step10 通过。环境侧：8911 /api/health ok、/api/runtime-readiness ready:true（build api-2ac4a3a5e6a1db40）；5178 /monitoring=200（[::1]）且 runtime-build.json expectedBackendBuildId=api-2ac4a3a5e6a1db40 配对一致；8910/5177 无监听（连接拒绝）——非本轮所致（仅只读 lsof/curl 复核），按铁律未触碰，如实记录。
+- **主侧AI路由复核（本轮无需换绑）**：R12D/R13D 换绑的直连配置跨重启保持生效，产品 `/api/ai-gateway/probe` 四档案真实往返全 passed:true（两主侧 cms-router/glm-5.3-flash 3063/3211ms；两 verifier ollama-cloud/deepseek-v4.1-flash 681/608ms）。
+- **预置 MX循R14D-CSU**（proj_user_588084370b49，幂等键 r14d-seed-20261003T130929Z-174dc92d）：三件套上传（stg-77d9531264f249608bb0c013e208e930，591行/10表）→ 文档权威双VLM约9.5分钟 ready（mmbatch_501bf7540ce877aff57e0a70，自动归属确认，无身份门/角色门）→ 映射双队列（10主+10盲核，60候选，约14.5分钟）→ 复核收敛 46→（系统裁决16）→30→0（48/48 作业全 completed）→ 30张裁决卡（29张既有表 + **1张R14新卡 EX.EXDAT** 两轮分歧卡首次浮现 fail-closed 留痕后按 openpyxl 直读实测补答 treatment_administration_date：128行全合法ISO日期、16受试者×8条Q4W给药记录）→ **confirm 200（draft monmapdraft_df096d4513fe2f965946b6bc1530 v77 confirmed，user_questions=0）→ facts 201（10表/591行/3422值全核验，state=ready）**，停住未启动监查（runs=[]）；project/open → current/complete/canView/canEdit=true；run-setup/options 200。起止 13:09→14:39Z（21:09→22:39 CST，约1小时30分）。AI 台账：48作业全completed；63次调用，1,577,719 tokens。全程未跳任何质量门。轮次分节详见 `R5_SEEDED_PROJECT.md` R14D。
+- 驱动与留痕：`r14d_seed_csu.py`（由 r13d_seed_csu.py 机械适配 + R14_ROUND1_CARDS 一卡表）、`r14d_seed_state.json`、`r14d_seed_evidence.jsonl`、`r14d_seed_console.log`/`r14d_seed_console2.log`。
+
+## 2026-10-03 下午（R14轮次·修复员：三项可访问性/引导修复后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R14轮次：R12-02、R12-06、R12-07）
+- 修复：表结构区Tab焦点链收敛（外层details唯一焦点+内层summary tabindex=-1+跳到主操作跳过链接）；研究文件上传入口显式引导+视觉层级提升（dashed大按钮+缺什么说明）；导航禁用豁免（无项目时台账/审批中心仍可进入，台账页无项目态给出明确提示）。
+- 自检：8911 ready:true（build api-2ac4a3a5e6a1db40）；5178=200；指纹配对一致。
+- ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
