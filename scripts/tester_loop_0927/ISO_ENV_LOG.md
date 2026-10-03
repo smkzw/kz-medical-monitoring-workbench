@@ -210,3 +210,18 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - ⚠️舰队状态沿R11记录：8910（进程3150在跑）与5177仍无HTTP应答——本轮kill仅针对8911/5178未触碰舰队，继续留痕提请舰队值班处理。
 2026-10-03 10:53 循环收尾：隔离测试环境已停止（运行时目录保留取证）
 2026-10-03 14:37 R13重启前重建隔离运行时（347M快照）+拉起隔离对（指纹api-2ac4a3a5配对）+外来项目清零；任务所有者铁律生效（UI-only测试）
+
+## 2026-10-03 下午（R13轮次·开考预置守护员：探障无障碍+主侧AI路由界内换绑直连+数据暂存重建 + 预置 MX循R13D-CSU）
+
+- 操作者：开考预置守护员-R13D。开始时间：2026-10-03 ~14:45（本地 CST）。
+- **探障（无障碍，R5D marker 缺陷未复发，未修任何产品代码、未重启 8911）**：本轮开始时隔离 runtime 经 R13 重建（外来项目清零，GET /api/projects→[]），无存量项目可探 → 按 R5D 先例改为建项后探：R13D 新建项目建项瞬间 `GET /r7/project/open` blocked（bootstrap 前 monitoring_runtime.sqlite3 尚不存在的设计内瞬态，R1 已知同款）；随后产品 `inspect_project_schema` 实证 6 个成员全 current/current_shape（launch_registry marker=mm-r7-w01r26-launch-registry-v5，sqlite 直查同值）；修复代码在位：main.py:4925-4927,4935-4936 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54 = SCHEMA_VERSION_V5）。终态验收断言在驱动脚本 Step10（project/open 必须 current）。环境侧：8911 ready:true（build api-2ac4a3a5e6a1db40）；5178 /monitoring=200 且 runtime-build.json expectedBackendBuildId=api-2ac4a3a5e6a1db40 配对一致；8910/5177 无监听（连接拒绝）——非本轮所致（仅只读 lsof/curl 复核），按铁律未触碰，如实记录。
+- **主侧AI路由界内换绑直连（R12D 同款先例，host 代理故障的隔离实例侧规避；未跳任何质量门）**：R13 重建隔离 runtime 后，两个主侧角色档案 base_url 回到本机 omniroute LB 127.0.0.1:20128；LB 上游 Clash Verge 代理 127.0.0.1:7897 不可达（产品 /api/ai-gateway/probe 实证 `[Proxy Fast-Fail] Proxy unreachable (HTTP 503)`）。修复动作：`r13d_rebind_primary_ai.py` 用产品自有 AiRuntimeSettingsStore（经隔离 runtime 目录，非 API 亦非直改运行库）把 `medical_monitoring_ai__cms_router_glm53flash`（rev4→5）与 `document_authority_primary_ai__medical_monitoring_ai__cms_router_glm53flash`（rev1→2）的 base_url 改为智谱官方直连 `https://open.bigmodel.cn/api/coding/paas/v4`、extra_headers 清空、存储凭据改用隔离实例自有 zhipu coding-plan 直连密钥（取自同库 independent_ai 档案，密钥未落任何日志）；provider 身份串（cms-router）、模型（glm-5.3-flash）、推理档（high）、prompt 版本、全部质量门保持不变。改前四件配置备份至 `scripts/tester_loop_0927/r13d_provider_config_backup/`。生效实证：probe 两主侧档案真实往返 passed:true（2729ms/4354ms）；verifier 两侧（ollama-cloud/deepseek-v4.1-flash）未动且 probe passed:true（680ms/638ms）。
+- **数据暂存重建（环境侧动作，非产品缺陷）**：循环收尾后 workbench/tester_staging_0927/ 已不存在；从已验证字节一致来源重建 synth_csu 三件套：①合成listing ← runs/phase_c_mgk10_authority_v2_20260905 产品 admissions/staging 存档副本（sha256 4be08e9e…，openpyxl 实测 10 表/591 数据行，与 R5D/R12D 上传摘要一致）；②临床研究方案V1.3 ← 研究方案库/MG-K10-CSU-001_临床研究方案-V1.3-0212-clean-0211.docx（sha256 73024713…，与产品 document_authority_candidates 内容寻址存档逐字节一致）；③eCRF填写指南V1.0 ← 产品 document_authority_candidates/files/8109d25a….docx（word/document.xml 与另一存档副本 c1e2a9e6… 完全同哈希）。
+- **预置 MX循R13D-CSU**（proj_user_bbcc5c21edfb，幂等键 r13d-seed-20261003T064711Z-83d83077）：三件套上传（stg-ff9b4b097f334cbe87badede0a9da480）→ 身份门一次确认 → 文档权威双VLM约7分钟 ready（protocol/ecrf 自动识别）→ 映射双队列（10主+10盲核，60候选，约14分钟）→ 复核收敛 46→30→1→0（系统裁决16）→ 31张裁决卡（29张既有表 + 2张R13新卡：EX.EXFRQ 剂量/频次口径卡按 openpyxl 实测作答 ip_administered_dose_with_unit_text、EX.EXSTATE 同token分歧卡采纳 treatment_administration_status；两卡均首次浮现时 fail-closed 诚实退出留痕）→ **confirm 200（draft v79 confirmed，user_questions=0）→ facts 201（10表/591行/3422值全核验，state=ready）**，停住未启动监查（runs=[]）；project/open → current/complete/canView/canEdit=true；run-setup/options 200。起止 06:47→08:28Z（约1小时41分）。AI 台账：48作业（47完成/1终态failed=provider_runtime_error 经 bounded-gap 收敛）；63次调用，1,322,816 tokens。全程未跳任何质量门。轮次分节详见 `R5_SEEDED_PROJECT.md` R13D。
+
+## 2026-10-03（R13轮次·修复员：三项修复后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R13轮次：R13-01、R11-02、R11-04）
+- 修复：导入错误分类（NotFoundError/NotAllowedError/422细分码→准确文案，网络兜底仅留给真传输错误）；方案准备抽屉errorText sanitize异常原文（Cannot read properties等→友好文案+console.warn留技术细节）；「增加特殊关注」死按钮修复（按钮改为打开输入面板，面板内「生成关注方向」才调API——原按钮直接调onPreview而预览文本为空时handler静默返回）。
+- 自检：8911 ready:true（build api-2ac4a3a5e6a1db40）；5178=200；指纹配对一致。
+- ⚠️舰队状态沿R11/R12记录：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；继续留痕提请舰队值班。
