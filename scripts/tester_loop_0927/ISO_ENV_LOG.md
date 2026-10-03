@@ -187,9 +187,24 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 2026-10-02 00:32 用户指示尽快无损暂停：R11预检第2次因服务方限流3小时零进展（非死锁），TaskStop无损（191步沉淀全保）；隔离对8911/5178保持运行以便随时一条命令恢复；恢复=ResumeWorkflowRun dwfrun-ea87a585
 2026-10-02 22:29 第二次解除暂停：环境曾掉线重新拉起（指纹配对api-807dff49e5ad28ec一致），恢复循环
 
+## 2026-10-03 凌晨（R12轮次·开考预置守护员：探障无障碍 + 主侧AI路由界内换绑直连 + 预置 MX循R12D-CSU）
+
+- 操作者：开考预置守护员-R12D。开始时间：2026-10-03 ~01:02（本地 CST）。
+- **探障（三路全通过，R5D marker 缺陷未复发，未修任何产品代码、未重启 8911）**：① `GET /r7/project/open`（R11D项目 proj_user_175b6374dcd6）→ current/complete/canView/canEdit=true；② 修复代码在位：main.py:4925-4927,4935-4936 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54 = mm-r7-w01r26-launch-registry-v5）；③ 隔离 runtime **42 个** workspace 的 launch_registry marker 逐库 sqlite 直查**全部 v5**；④ R12D 建项后产品 `ProjectSchemaInspector` 实证 4 个种子成员全 current（launch_registry marker=v5）。环境侧：8911 ready:true（build api-21b0d9e61406a8e）；5178 存活（监听 [::1]）且 runtime-build.json expectedBackendBuildId=api-21b0d9e61406a8e 与 8911 配对一致；**8910/5177 无监听（连接拒绝）——非本轮所致（仅只读 lsof/curl 复核），按铁律未触碰，如实记录**。
+- **主侧AI路由界内修复（非产品代码缺陷，host 代理故障的隔离实例侧规避；未跳任何质量门）**：文档权威/映射主侧角色档案（cms-router/glm-5.3-flash）原经本机 omniroute LB 127.0.0.1:20128 → Clash Verge 代理 127.0.0.1:7897 → api.z.ai；Clash Verge 核心自 ≥2026-10-02T14:00Z 起未运行（仅特权 helper 在跑），主侧作业 provider_runtime_error 连续快速失败（本项目主分析累计 204 次失败；并行测试会话同故障；omp 自身日志同报）。**修复动作**：用产品自有 AiRuntimeSettingsStore（经隔离 runtime 目录，非 API 亦非直改运行库）把两个主侧角色档案 `medical_monitoring_ai__cms_router_glm53flash`（rev4→5）与 `document_authority_primary_ai__medical_monitoring_ai__cms_router_glm53flash`（rev1→2）的 base_url 由 LB 改为智谱官方直连 `https://open.bigmodel.cn/api/coding/paas/v4`、extra_headers 清空、存储凭据改用隔离实例自有 zhipu coding-plan 直连密钥（取自同库 independent_ai 档案，密钥未落任何日志）；**provider 身份串（cms-router）、模型（glm-5.3-flash）、推理档（high）、prompt 版本、全部质量门保持不变**。改前备份四件配置至 `scripts/tester_loop_0927/r12d_provider_config_backup/`（settings/secrets/master.key/role_bindings）。生效实证：卡住的主分析作业 17:38:20Z 最后一次代理失败后 **17:40:02Z 首次尝试即 success**（205 次尝试终态 completed）；产品 probe 端点对该档案完成真实往返（返回结构非探针期望形状，属探针形状校验，连通性与真实模型输出已实证）。verifier 侧（ollama-cloud/deepseek-v4.1-flash）全程未动。
+- **预置 MX循R12D-CSU**（proj_user_5bcd73dd2cf8，幂等键 r12d-seed-20261002T170213Z-fe436efb）：三件套上传（stg-b11c1e67bbe64da3bd83df6b6b2fc663）→ 文档权威双VLM（mmbatch_1d0b2221fbfc01b033af34ab）→ 映射双队列（10主+10盲核，60候选）→ 复核收敛 46→42→30→0（系统裁决16）→ 31张裁决卡（27张既有表 + 4张R12新卡 DM.AGE/COMPSTATUS/RANDDT/SEX 首次浮现 fail-closed 留痕后按 openpyxl 直读列值实测补答）→ **confirm 200（draft v77 confirmed，user_questions=0）→ facts 201（10表/591行/3038值全核验，state=ready）**，停住未启动监查（runs=[]）。project/open → current/complete/canView/canEdit=true；run-setup/options 200。结束时间 2026-10-03 04:05 CST。AI 台账：66作业（65完成/1终态failed经收敛 remaining=0）；303次调用，2,086,644 tokens。全程未跳任何质量门。轮次分节详见 `R5_SEEDED_PROJECT.md` R12D。
+- 驱动与留痕：`r12d_seed_csu.py`（由 r11d_seed_csu.py 机械适配：R12D 命名/幂等键/留痕文件；R5/R8/R9/R11 既有裁决卡决策表原样保留，未知卡 fail-closed 防护在位）、`r12d_seed_state.json`、`r12d_seed_evidence.jsonl`。
+
 ## 2026-10-01 下午（R11轮次·修复员：七项修复后隔离环境 8911+5178 双重启）
 
 - 操作者：修复员（R11轮次：R11-01/03、R9-01/02/03/05/06）
 - 修复：infra失败不受重试预算+previously_analyzed仅completed；确认按钮loading/disabled/防连点；被拒启动入事件流水；向导主体与步骤指示器同源+失配恢复提示；4个顶栏icon-button补aria-label；侧栏hover展开改为纯悬浮（不挤压布局流）；未识别差异项显式声明无原文摘录。
 - 自检：8911 ready:true（build api-21b0d9e614066a8e）；5178=200；指纹配对一致。
 - ⚠️ 舰队状态如实记录：本轮隔离对重启后复核，8910/5177 暂不响应（8910进程3150在跑但无HTTP应答；5177未见vite进程）。本轮所有kill命令仅针对8911/5178，未触碰舰队进程；按纪律不介入舰队，留痕提请循环所有者/舰队值班关注。
+
+## 2026-10-02（R12轮次·修复员：三项修复后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R12轮次：R12-01、R10-01、R10-02）
+- 修复：差异确认逐条pending/confirmed反馈+防连点；暂停整理乐观UI+8s超时回滚；映射AI提示词增加方案-vs-数据剂量/频次/给药途径交叉核对要求（EX域与AE给药术语口径矛盾必须提疑点）。
+- 自检：8911 ready:true（build api-2ac4a3a5e6a1db40）；5178=200；指纹配对一致。
+- ⚠️舰队状态沿R11记录：8910（进程3150在跑）与5177仍无HTTP应答——本轮kill仅针对8911/5178未触碰舰队，继续留痕提请舰队值班处理。

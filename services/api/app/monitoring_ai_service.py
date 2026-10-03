@@ -3492,6 +3492,17 @@ class MonitoringAiService:
                 " 字段映射必须遵守scientific_boundary：EDC listing不是SDTM；"
                 "CM只表示非试验用药/治疗，IP给药、剂量调整、停药、重启和"
                 "依从性必须作为独立角色；标准仅能作为reference_only参照。"
+                # R12轮（R10-02）：方案-vs-数据的剂量/频次/给药途径交叉
+                # 核对是医学监查核心场景——EX域（EXTRT/EXDOSE/EXFRQ/
+                # EXROUTE）与AE术语的口径若与方案正文（剂量、频次、
+                # 给药途径）存在实质性矛盾（如方案口服每日一次而数据为
+                # 注射每两周一次、口服方案下AE出现注射部位反应），
+                # 必须对相关EX/AE字段提出user_question疑点（说明两侧
+                # 口径与出处），不得只完成命名绑定。
+                "对EX域剂量/频次/给药途径字段（EXTRT/EXDOSE/EXFRQ/"
+                "EXROUTE）及AE域给药相关术语，若证据显示其口径与方案"
+                "正文的剂量、频次或给药途径不一致，必须设置"
+                "user_decision_required并提出中文疑点说明两侧口径。"
                 "field_kind必须按来源性质选择：source_collected为CRF/EDC直接"
                 "采集值，source_metadata为OID、重复序号等系统元数据，"
                 "standardized_coded仅用于具有源字段、编码体系及字典版本谱系的"
