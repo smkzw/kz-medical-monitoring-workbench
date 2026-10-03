@@ -1,0 +1,17 @@
+{
+ "project_id": "proj_user_bbcc5c21edfb",
+ "create_key": "r13d-seed-20261003T064711Z-83d83077",
+ "project_name": "MX循R13D-CSU",
+ "updated_at": "2026-10-03T08:28:08.437587+00:00",
+ "attempt_id": "stg-ff9b4b097f334cbe87badede0a9da480",
+ "docs_batch_id": "mmbatch_e0cf83877d3f55b911bb05ba",
+ "identity_confirmed": true,
+ "documents_ready": true,
+ "mapping_state": "candidates_ready",
+ "draft_id": "monmapdraft_3e2b91474bfaf4a8b01937dbe128",
+ "draft_version": 1,
+ "adjudication_state": "complete",
+ "confirmed": true,
+ "confirm_idempotency_key": "r13d-confirm-2d0a49a6c7eb4601bf5fe15d18cf76b6",
+ "facts_materialized": true
+}

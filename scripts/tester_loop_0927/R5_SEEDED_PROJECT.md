@@ -319,3 +319,56 @@ AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）�
 - 配置备份：`r12d_provider_config_backup/`（换绑前 ai_provider_settings/ai_provider_secrets/ai_provider_master.key/ai_role_bindings 四件）
 - 环境日志：`ISO_ENV_LOG.md`（R12D 探障+主侧AI路由界内修复+预置条目）
 
+
+# R13D 开考位预置结果 — MX循R13D-CSU（2026-10-03）
+
+## 探障（本轮前置，R5D marker 缺陷未复发，未修任何产品代码、未重启 8911）
+
+- R13 重建隔离运行时后外来项目清零（GET /api/projects→[]），无存量项目可探 → 按 R5D 先例改为建项后探：建项瞬间 `GET /r7/project/open` blocked（bootstrap 前 monitoring_runtime.sqlite3 不存在的设计内瞬态，R1 已知同款）；随后产品 `inspect_project_schema` 实证 6 成员全 current/current_shape（launch_registry marker=mm-r7-w01r26-launch-registry-v5，sqlite 直查同值）；修复代码在位（main.py:4925-4936 种子 marker 取 launch_registry_contracts.SCHEMA_VERSION，contracts.py:53-54=V5）。终态硬断言在本轮 Step10 通过（见下表）。
+- 环境侧：8911 ready:true（build api-2ac4a3a5e6a1db40）；5178 /monitoring=200 且 runtime-build.json expectedBackendBuildId 配对一致；8910/5177 无监听（非本轮所致，仅只读复核，未触碰）。
+- **主侧AI路由界内换绑直连（R12D 同款先例）**：重建后两主侧档案 base_url 回到本机 LB 127.0.0.1:20128，其上游 Clash Verge 7897 不可达（probe 实证 Proxy Fast-Fail 503）。用产品自有 AiRuntimeSettingsStore 换绑两档案（rev4→5/rev1→2）为智谱官方直连，凭据用隔离实例自有 zhipu key（密钥未落日志）；provider/模型/推理档/质量门不变。改前四件备份 `r13d_provider_config_backup/`。生效实证：两主侧 probe passed:true（2729/4354ms）；verifier 两侧（ollama-cloud deepseek-v4.1-flash，未动）probe passed:true（680/638ms）。
+- **数据暂存重建（环境侧，非产品缺陷）**：循环收尾后 tester_staging_0927/ 不存在，从字节一致来源重建 synth_csu 三件套（listing sha256 4be08e9e…/10表591行；方案 73024713…；eCRF 8109d25a…，详见 ISO_ENV_LOG R13D 条目）。
+
+## 项目
+
+| 项 | 值 |
+|---|---|
+| project_id | **proj_user_bbcc5c21edfb** |
+| project_name | MX循R13D-CSU |
+| indication / product_name | 慢性自发性荨麻疹 / MG-K10 |
+| modules | ["medical_monitoring"] |
+| 幂等键 | r13d-seed-20261003T064711Z-83d83077（唯一） |
+| data admission | stg-ff9b4b097f334cbe87badede0a9da480（合成listing 591行/10表） |
+| 文档权威批次 | mmbatch_e0cf83877d3f55b911bb05ba（方案V1.3 docx + eCRF指南V1.0 docx 双VLM） |
+
+## 全链状态（自验实测，2026-10-03 16:28 CST 独立复验）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| 建项 | ✅ 201 | POST /api/projects（幂等键唯一）；state r13d_seed_state.json |
+| 数据接入 | ✅ | data-admissions/upload → attempt，591行/10表（06:47:11Z） |
+| 身份门 | ✅ | project_identity_incomplete → 一次 identity_confirmation（06:49:14Z，等价界面一次点击） |
+| 文档权威 | ✅ ready=true | 06:47:12Z 提交→06:54:28Z ready（约7分钟）；protocol/ecrf 自动识别 current，无角色人工门 |
+| 映射双队列 | ✅ candidates_ready | 10主+10盲核，60字段候选（06:54:31Z→07:08:05Z 约14分钟） |
+| 复核收敛 | ✅ complete | 分歧 46→30→1→0（系统裁决16，多轮双队列复核；1个 listing_field_mapping 分片终态 failed=provider_runtime_error 经 bounded-gap 与系统裁决收敛，remaining=0；期间1次 adjudicate HTTP 500 瞬态，脚本重试后 200） |
+| 裁决卡 | ✅ 已答 | 共31张：29张按 R5/R8/R9/R11/R12 既有数据实测决策表作答；**2张R13新卡**——① EX.EXFRQ（需医学确认：列标题"给药频次"但128行全为"300mg"剂量值，Q4W仅在EXTRT文本中；R12新增方案-vs-数据剂量口径交叉核对提示词首次命中）首次浮现 fail-closed 诚实退出留痕（07:08:08Z），按 openpyxl 直读实测作答：按每次给药剂量口径采纳 `ip_administered_dose_with_unit_text`（两臂同值标签式记录不声明实际IP暴露，剂量语义交质量门保持可见受限；dose_semantics 为系统溯源键用户补丁不可直改，422→去掉后200）；② EX.EXSTATE（两轮分歧但显示同token）fail-closed 留痕后采纳 `treatment_administration_status`（128行二值：完成×86/延迟给药×42）（08:02:29Z） |
+| **字段映射确认** | ✅ **confirmed** | GET mapping-candidates：confirmation_status=confirmed，draft monmapdraft_3e2b91474bfaf4a8b01937dbe128 status=confirmed（**v79**），user_questions=0（08:28:08Z） |
+| **facts 物化** | ✅ **ready** | GET facts：state=ready，10表/591行/**3422值全核验**（source_values_verified=3422）（08:28:08Z） |
+| 界面可开始运行监查 | ✅ | `GET /r7/project/open` → state=current/openMode=edit/dataCoverage=complete/canView/canEdit=true；`run-setup/options` **200** |
+| 停在 facts（未启动监查） | ✅ | GET runs → {"runs":[]} |
+
+起止：06:47:11Z→08:28:10Z（14:47→16:28 CST，约1小时41分，含两次 fail-closed 退出后的补答重入）。AI 台账（medical_monitoring_ai.sqlite3 按 project_id 过滤）：48 作业（47完成/1终态failed=provider_runtime_error，经 bounded-gap 收敛 remaining=0）；63 次调用，tokens 合计 1,322,816（prompt 822,871 + completion 499,945）。全程 AI 质量门自然通过，未跳门、未伪造状态。
+
+## 本轮观察（如实记录，非阻断）
+
+- **R13 新卡 EX.EXFRQ 是 R12 修复（映射AI提示词增加方案-vs-数据剂量/频次/给药途径交叉核对要求）的首次正向命中**：合成数据 EX 域"给药频次"列标签与内容（剂量300mg）口径矛盾的固有脏点被 AI 主动提为需医学确认卡，历轮首次浮现。已按数据实测固化进 `r13d_seed_csu.py` 的 R13_ROUND1_CARDS 表供后续轮次复用。
+- **dose_semantics 溯源保护**：用户补丁直改 dose_semantics 会被仓库 edit_field 拒绝（422 mapping_draft_invalid，provenance 键仅 system_harness 可改）——本轮 422→改用 recommended_role+user_action 落答即通过，属设计内防护非缺陷。
+- **host 代理单点沿 R12 记录**：重建隔离 runtime 会使主侧档案 base_url 回退到 LB 快照值，代理故障即复发；R13D 已再次界内换绑直连并留痕。提请循环所有者关注（后续每次 runtime 重建后需复核该点）。
+- 8910/5177 无监听（沿 R11 起记录），本轮仅只读复核未触碰。
+
+## 留痕文件（同目录）
+
+- 驱动：`r13d_seed_csu.py`（由 r12d_seed_csu.py 机械适配：R13D 命名/幂等键/留痕文件 + R13_ROUND1_CARDS 两卡表；幂等，含 fail-closed 未知卡防护）+ `r13d_rebind_primary_ai.py`（主侧AI换绑）
+- 证据：`r13d_seed_evidence.jsonl`（每步请求/响应摘要，含两次 unknown_questions_fail_closed 留痕）、`r13d_seed_state.json`（幂等状态）
+- 配置备份：`r13d_provider_config_backup/`（换绑前 ai_provider_settings/ai_provider_secrets/ai_provider_master.key/ai_role_bindings 四件）
+- 环境日志：`ISO_ENV_LOG.md`（R13D 探障+主侧AI路由界内换绑+数据暂存重建+预置条目）
