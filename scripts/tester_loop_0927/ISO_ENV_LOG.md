@@ -208,3 +208,4 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 修复：差异确认逐条pending/confirmed反馈+防连点；暂停整理乐观UI+8s超时回滚；映射AI提示词增加方案-vs-数据剂量/频次/给药途径交叉核对要求（EX域与AE给药术语口径矛盾必须提疑点）。
 - 自检：8911 ready:true（build api-2ac4a3a5e6a1db40）；5178=200；指纹配对一致。
 - ⚠️舰队状态沿R11记录：8910（进程3150在跑）与5177仍无HTTP应答——本轮kill仅针对8911/5178未触碰舰队，继续留痕提请舰队值班处理。
+2026-10-03 10:53 循环收尾：隔离测试环境已停止（运行时目录保留取证）
