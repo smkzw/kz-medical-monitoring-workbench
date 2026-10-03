@@ -80,7 +80,7 @@ function documentRoleLabel(role) {
   return DOCUMENT_ROLE_LABELS[role] || "研究文件";
 }
 
-function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onContentConfirm, onIdentityConfirm }) {
+function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onContentConfirm, onIdentityConfirm, confirmingEntries = {}, confirmedEntries = {} }) {
   const [choices, setChoices] = useState({});
   const [identityNote, setIdentityNote] = useState("");
   const [identityBusy, setIdentityBusy] = useState(false);
@@ -166,15 +166,22 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
                 ))}
               </ul>
               {entry.can_confirm ? (
-                <button
-                  type="button"
-                  className="monitoring-admission-secondary"
-                  disabled={processing}
-                  onClick={() => onContentConfirm?.(entry)}
-                  title="确认差异不影响本次医学监查，继续使用该文件"
-                >
-                  差异不影响本次监查，继续使用
-                </button>
+                confirmedEntries?.[entry.source_entry_id] ? (
+                  <p role="status" style={{ margin: 0, fontSize: 12, color: "#2f6b52", fontWeight: 600 }}>
+                    ✓ 已记录确认（{entry.filename || "该文件"}）——台账「核验与确认记录」可查；如需复核请刷新来源台账。
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    className="monitoring-admission-secondary"
+                    disabled={processing || Boolean(confirmingEntries?.[entry.source_entry_id])}
+                    aria-busy={Boolean(confirmingEntries?.[entry.source_entry_id])}
+                    onClick={() => onContentConfirm?.(entry)}
+                    title="确认差异不影响本次医学监查，继续使用该文件"
+                  >
+                    {confirmingEntries?.[entry.source_entry_id] ? "正在记录确认…" : "差异不影响本次监查，继续使用"}
+                  </button>
+                )
               ) : (
                 <p className="monitoring-admission-warning">
                   该差异不能直接忽略，请更换正确文件后重新上传。
@@ -547,6 +554,8 @@ export function MedicalMonitoringAdmissionWizardView({
   onDocumentAdjudicate,
   onDocumentContentConfirm,
   onDocumentIdentityConfirm,
+  confirmingEntries = {},
+  confirmedEntries = {},
 }) {
   const phase = state?.phase || "input";
   const stepIndex = state?.stepIndex || 0;
@@ -783,6 +792,8 @@ export function MedicalMonitoringAdmissionWizardView({
               onAdjudicate={onDocumentAdjudicate}
               onContentConfirm={onDocumentContentConfirm}
               onIdentityConfirm={onDocumentIdentityConfirm}
+              confirmingEntries={confirmingEntries}
+              confirmedEntries={confirmedEntries}
             />
             {documentState?.payload?.ready ? (
               <MappingConfirmPanel
@@ -876,6 +887,10 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   const factsRequestGeneration = useRef(0);
   const factsInFlight = useRef(false);
   const [factState, setFactState] = useState({ phase: "idle", payload: null, error: null });
+  // R12轮（R12-01）：内容差异确认的逐条进行中/已确认反馈——点击后
+  // 立即可见（B实测确认已落台账但界面15分钟零反馈）。
+  const [confirmingEntries, setConfirmingEntries] = useState({});
+  const [confirmedEntries, setConfirmedEntries] = useState({});
 
   useEffect(() => {
     if (!state.projectId || state.attemptId || state.phase !== "input") return undefined;
@@ -1025,6 +1040,9 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
 
   const submitContentConfirmation = useCallback(async (entry) => {
     if (!state.projectId || !entry?.source_entry_id || !entry?.can_confirm) return;
+    const entryKey = String(entry.source_entry_id);
+    if (confirmingEntries[entryKey]) return;
+    setConfirmingEntries((current) => ({ ...current, [entryKey]: true }));
     const generation = documentRequestGeneration.current + 1;
     documentRequestGeneration.current = generation;
     try {
@@ -1047,6 +1065,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           error: null,
         });
       }
+      setConfirmedEntries((current) => ({ ...current, [entryKey]: true }));
     } catch (error) {
       if (documentRequestGeneration.current === generation) {
         setDocumentState((current) => ({
@@ -1054,8 +1073,10 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           error: error?.detail?.message || error?.message || "内容确认失败，请重试。",
         }));
       }
+    } finally {
+      setConfirmingEntries((current) => ({ ...current, [entryKey]: false }));
     }
-  }, [api, documentState.payload?.analysis_token, state.attemptId, state.projectId]);
+  }, [api, confirmingEntries, documentState.payload?.analysis_token, state.attemptId, state.projectId]);
 
   // R2循环：「重新核对研究文件」必须真正重发核对（有analysis_token时
   // 重新resolve推进链路），而不是只重读readiness快照——否则失败态下
@@ -1588,6 +1609,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onDocumentAdjudicate={submitDocumentAdjudication}
       onDocumentContentConfirm={submitContentConfirmation}
       onDocumentIdentityConfirm={submitIdentityConfirmation}
+      confirmingEntries={confirmingEntries}
+      confirmedEntries={confirmedEntries}
     />
     </>
   );

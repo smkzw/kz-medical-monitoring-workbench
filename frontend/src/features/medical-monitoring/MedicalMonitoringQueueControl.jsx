@@ -42,16 +42,28 @@ export default function MedicalMonitoringQueueControl({ api, projectId }) {
     if (!queue || changing.current) return;
     changing.current = true;
     setBusy(true);
+    const nextPaused = !queue.pause_requested;
+    // R12轮（R10-01）：乐观UI——点击立即翻转文案（≤1秒可见变化），
+    // 请求带8秒超时（实测后端曾挂起5分钟），失败回滚并明示。
+    setQueue((current) => current ? { ...current, pause_requested: nextPaused } : current);
     const version = ++requestVersion.current;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     try {
-      const result = await api.setQueuePaused(projectId, !queue.pause_requested);
+      const result = await api.setQueuePaused(projectId, nextPaused, { signal: controller.signal });
       if (alive.current && version === requestVersion.current) {
         setQueue(result);
         setError("");
       }
     } catch {
-      if (alive.current) setError("操作未能确认，请稍后重试；已整理的内容会保留。");
+      if (alive.current) {
+        setQueue((current) => current ? { ...current, pause_requested: !nextPaused } : current);
+        setError(nextPaused
+          ? "暂停请求未在8秒内确认，已还原状态；请稍后重试（已整理的内容会保留）。"
+          : "继续整理请求未在8秒内确认，已还原状态；请稍后重试。");
+      }
     } finally {
+      clearTimeout(timeout);
       changing.current = false;
       if (alive.current) setBusy(false);
     }
