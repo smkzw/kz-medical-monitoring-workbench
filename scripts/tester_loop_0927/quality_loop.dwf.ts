@@ -141,7 +141,7 @@ const FEURL = "http://localhost:5177/monitoring";
 const LOOP = WB + "/scripts/tester_loop_0927";
 const STAGE = "tester_staging_0927";
 const RUNNER = "/Users/smkzw/.codex/tools/conference_session_runner.py";
-const MAXROUNDS = 12;
+const MAXROUNDS = 24;
 const MINROUNDS = 3;
 const CLEANSTREAKNEED = 2;
 const STALLMIN = 45;
@@ -962,7 +962,7 @@ for (let round = 1; round <= MAXROUNDS; round++) {
     fixResult = await fixer.ask<FixResult>(
       (round <= 8
         ? "第" + round + "轮分诊后待修复清单（按严重度优先，量力而为，critical/high 必须处理）：\n"
-        : "第" + round + "轮分诊后待修复清单（任务所有者已拍板新机制：①每轮修复配额约 6 条 ②清单中轮龄≥2轮未轮到的条目自动插队、已排在前面 ③critical/high 必须处理 ④纯打磨 low 级已批量搁置不进本清单" + (round >= 10 ? " ⑤R9复盘锁定的『状态碎片化』家族为最高优先——后端已确认(confirmed/ready)与监查侧未确认(unconfirmed)并存，R8/R9双证、R9预置台console 15:00全绿→15:08界面unconfirmed；它是引擎首跑的唯一拦路虎，修通它主考题即开考" : "") + "）：\n") +
+        : "第" + round + "轮分诊后待修复清单（任务所有者已拍板新机制：①每轮修复配额约 6 条 ②清单中轮龄≥2轮未轮到的条目自动插队、已排在前面 ③critical/high 必须处理 ④纯打磨 low 级已批量搁置不进本清单" + (round >= 10 ? " ⑤R9复盘锁定的『状态碎片化』家族为最高优先——后端已确认(confirmed/ready)与监查侧未确认(unconfirmed)并存，R8/R9双证、R9预置台console 15:00全绿→15:08界面unconfirmed；它是引擎首跑的唯一拦路虎，修通它主考题即开考" : "") + (round >= 13 ? " ⑥任务所有者铁律（10-03）：测试永远以用户视角经界面进行，严禁以直连后端替代测试——界面不可用即修到走通，不得绕行；当前唯一主攻=运行层『等待开始』死锁族（R8/R10/R11/R12 四次创建零执行）及其上游复核死锁，修到测试者能从界面点通『运行→发布→结果』为止" : "") + "）：\n") +
       JSON.stringify(fixTargets.map((f) => ({ id: f.id, title: f.title, severity: f.severity, where: f.where, what: f.what, evidence: f.evidence, repro: f.repro, fixHint: f.fixHint }))) + "\n" +
       (strategyNote ? "上轮复盘策略提示：" + strategyNote + "\n" : "") +
       "修复纪律见你的角色设定。修完把 fixedIds/skipped/commitHash/testsRun/frontendTouched 如实返回。" + restartBlock,
