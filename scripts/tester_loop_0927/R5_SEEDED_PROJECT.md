@@ -256,3 +256,66 @@ AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）�
 - 驱动：`r11d_seed_csu.py`（由 r10d_seed_csu.py 适配：R11D 命名/幂等键/留痕文件 + 收敛预算9h + R11_ROUND3_CARDS 三卡表；幂等，含 fail-closed 未知卡防护）
 - 证据：`r11d_seed_evidence.jsonl`（每步请求/响应摘要，含 09:01:57Z unknown_questions_fail_closed 留痕）、`r11d_seed_state.json`（幂等状态）
 - 环境日志：`ISO_ENV_LOG.md`（R11D 探障+5178复活+预置条目）
+
+---
+
+# R12D 开考位预置结果 — MX循R12D-CSU（2026-10-03）
+
+隔离环境：API `http://127.0.0.1:8911`（build api-21b0d9e614066a8e，runtime `runs/tester_loop_iso_20260928/runtime`），全程未触碰 8910/5177。
+操作者：开考预置守护员-R12D。起止：2026-10-03 01:02 → 04:05（本地 CST，约 3 小时 3 分，其中约 38 分钟被 host 代理故障占用等待+修复）。
+
+## 探障（本轮前置，三路全通过，R5D marker 缺陷未复发）
+
+- `GET /r7/project/open`（R11D项目 proj_user_175b6374dcd6）→ **state=current / openMode=edit / dataCoverage=complete / canView/canEdit=true**「项目格式正常，可以继续使用。」——无 blocked/CORRUPT。
+- 修复代码在位：`services/api/app/main.py:4925-4927,4935-4936` 种子 marker 仍取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54 = mm-r7-w01r26-launch-registry-v5）。
+- 存量库直查：隔离 runtime **42 个** workspace 的 launch_registry.sqlite3 marker 逐库 sqlite 直查（`r7_launch_registry_meta.schema_version`）**全部 v5**（0 个非 v5）。
+- R12D 建项后即时用产品 `ProjectSchemaInspector` 实证 4 个种子成员（profile_store/run_binding/launch_registry/risk_rules）**全 current**（launch_registry marker=v5），project_state=current。建项瞬间 project/open 未出现 blocked。**本轮无缺陷需修（产品侧）、未改任何产品代码、未重启 8911。**
+- 环境侧：8911 存活（ready:true，api-21b0d9e614066a8e）；5178 存活（node 26733，监听 `[::1]:5178`，127.0.0.1 探测不通系仅绑 v6 回环——经 localhost 复核 /monitoring=200），runtime-build.json expectedBackendBuildId=api-21b0d9e61406a8e 与 8911 配对一致；**8910/5177 无监听（连接拒绝，lsof 复核）——非本轮所致（对二者仅只读 lsof/curl），按铁律未触碰，如实记录**。
+
+## 主侧 AI 路由故障与界内修复（本轮特记）
+
+- **故障**：文档权威/映射主侧角色（cms-router/glm-5.3-flash）原经本机 omniroute LB `127.0.0.1:20128` → Clash Verge 代理 `127.0.0.1:7897` → api.z.ai。Clash Verge 核心自 ≥2026-10-02T14:00Z 未运行（仅特权 helper 在跑；本机无任何常见代理端口监听；scutil 系统代理关闭），主侧作业全部 `[Proxy Fast-Fail] Proxy unreachable (HTTP 503)` 快速失败：本项目文档主分析连败 204 次，隔离实例今日全部 cms-router 主侧作业零成功（并行测试会话同故障，omp 自身日志同报）。api.z.ai 与 open.bigmodel.cn 直连均可达。
+- **修复（界内，最小，可逆，全程留痕）**：用产品自有 `AiRuntimeSettingsStore`（作用于隔离 runtime 目录，非 API、非直改运行库、未触碰共享 omniroute/Clash）把两个主侧角色档案 `medical_monitoring_ai__cms_router_glm53flash`（rev4→5）与 `document_authority_primary_ai__medical_monitoring_ai__cms_router_glm53flash`（rev1→2）的 base_url 由 LB 改为智谱官方直连 `https://open.bigmodel.cn/api/coding/paas/v4`、清空 LB 专用 extra header、存储凭据改用隔离实例自有 zhipu coding-plan 直连密钥（取自同库 `independent_ai__zhipu_coding_plan_glm_flash` 档案凭据，密钥未落任何日志）。**provider 身份串（cms-router）、模型（glm-5.3-flash）、推理档（high）、prompt 版本、全部 AI 质量门保持不变**；verifier 侧（ollama-cloud/deepseek-v4.1-flash）未动。改前四件配置备份于 `scripts/tester_loop_0927/r12d_provider_config_backup/`。
+- **生效实证**：换绑后卡住的主分析作业 17:38:20Z 最后一次代理失败 → **17:40:02Z 首次尝试即 success**（终态 completed）；此后主侧映射/裁决分片全部正常完成（换绑后 47 次成功尝试 vs 换绑前 204 连败）。产品 probe 端点对该档案完成真实模型往返（探针报「unexpected structured response」仅为其输出形状校验，连通性与真实 glm-5.3-flash 输出已实证）。
+
+## 项目
+
+| 项 | 值 |
+|---|---|
+| project_id | **proj_user_5bcd73dd2cf8** |
+| project_name | MX循R12D-CSU |
+| indication / product_name | 慢性自发性荨麻疹 / MG-K10 |
+| modules | ["medical_monitoring"] |
+| 幂等键 | r12d-seed-20261002T170213Z-fe436efb（唯一） |
+| data admission | stg-b11c1e67bbe64da3bd83df6b6b2fc663（合成listing 591行/10表） |
+| 文档权威批次 | mmbatch_1d0b2221fbfc01b033af34ab（方案V1.3 docx + eCRF指南V1.0 docx 双VLM） |
+
+## 全链状态（自验实测，2026-10-03 04:0x CST）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| 建项 | ✅ 201 | POST /api/projects（幂等键唯一）；state r12d_seed_state.json |
+| 数据接入 | ✅ | data-admissions/upload → attempt，591行/10表 |
+| 文档权威 | ✅ ready=true | 17:02:14Z 提交→17:45:17Z ready（含 38 分钟代理故障期+换绑修复）；protocol/ecrf 自动识别，无人工门 |
+| 映射双队列 | ✅ candidates_ready | 10主+10盲核，60字段候选（17:45:27Z→18:05:13Z 约20分钟） |
+| 复核收敛 | ✅ complete | 分歧 46→42→30→0（系统裁决16，多轮双队列复核；1个 listing_field_mapping 分片终态 failed=invalid_ai_output 经 bounded-gap 与系统裁决收敛，remaining=0 全字段闭合） |
+| 裁决卡 | ✅ 已答 | 共31张：27张按 R5/R8/R9/R11 既有数据实测决策表作答（19:57:01-04Z）；**4张R12新卡**（DM.AGE/COMPSTATUS/RANDDT/SEX）首次浮现时驱动脚本 fail-closed 诚实退出留痕（19:5xZ），随后按 openpyxl 直读 DM 表列值实测（年龄16行23-61数值/研究状态全列唯一值「完成」/随机日期16行合法日期/性别男8女8）+两轮同判角色逐卡作答（20:04:37Z） |
+| **字段映射确认** | ✅ **confirmed** | GET mapping-candidates：confirmation_status=confirmed，draft monmapdraft_3bc1f8d5f0fcd50a6e4c0293ecd8 status=confirmed（**v77**），user_questions=0，60字段 |
+| **facts 物化** | ✅ **ready** | GET facts：state=ready，facts_generated=true，10表/591行/**3038值全核验**（source_values_verified=3038），message「可用于监查的数据已生成，可以开始监查。」 |
+| 界面可开始运行监查 | ✅ | `GET /r7/project/open` → state=current/openMode=edit/dataCoverage=complete/canView/canEdit=true「项目格式正常，可以继续使用。」；`run-setup/options` **200**；5178 /monitoring=200 且 runtime-build.json expectedBackendBuildId=api-21b0d9e61406a8e 与 8911 backend_build_id 配对一致 |
+| 停在 facts（未启动监查） | ✅ | GET runs → {"runs":[]} |
+
+AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）：66 作业（65完成/1终态failed=listing_field_mapping invalid_ai_output，经自动恢复与系统裁决收敛 remaining=0）；303 次物理调用（88 成功调用；其余为代理故障期 204 连败与映射分片重试），tokens 合计 2,086,644。全程 AI 质量门自然通过，未跳门、未伪造状态。
+
+## 本轮观察（如实记录，非阻断）
+
+- **R12 新卡为 DM 域四卡**（受试者年龄/研究完成状态/随机化日期/受试者性别），历轮首次浮现（此前轮次 DM 域仅 ARM 浮现过）；两轮队列结论一致、列值实测支撑，已固化进 `r12d_seed_csu.py` 的 R12_ROUND4_CARDS 表供后续轮次复用。
+- **host 代理单点**：主侧 AI 链路对 Clash Verge 代理（127.0.0.1:7897）存在隐性单点依赖，代理停机即主侧全阻（R11C 测试轮曾同样中招）。本轮以界内 provider 档案直连规避并留痕；如后续 Clash Verge 恢复，可从 `r12d_provider_config_backup/` 还原或维持直连（直连同为 glm-5.3-flash 官方端点，语义等价）。提请循环所有者关注该 host 层依赖。
+
+## 留痕文件（同目录）
+
+- 驱动：`r12d_seed_csu.py`（由 r11d_seed_csu.py 机械适配：R12D 命名/幂等键/留痕文件 + R12_ROUND4_CARDS 四卡表；幂等，含 fail-closed 未知卡防护）
+- 证据：`r12d_seed_evidence.jsonl`（每步请求/响应摘要，含 19:5xZ unknown_questions_fail_closed 留痕）、`r12d_seed_state.json`（幂等状态）
+- 配置备份：`r12d_provider_config_backup/`（换绑前 ai_provider_settings/ai_provider_secrets/ai_provider_master.key/ai_role_bindings 四件）
+- 环境日志：`ISO_ENV_LOG.md`（R12D 探障+主侧AI路由界内修复+预置条目）
+
