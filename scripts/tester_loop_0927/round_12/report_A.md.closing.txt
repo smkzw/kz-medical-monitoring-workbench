@@ -1,0 +1,5 @@
+**R12-A 结论：fail。** 已在 5178 创建 `MX循R12A-RUX` 并导入 Data Listing；界面显示 54 张表、180793 行数据。研究文档核对返回 `document_authority_candidate_not_promotable`，且可见页面没有错误提示所要求的“标记角色缺失”操作。验收停在内容确认，未进入字段映射、运行、发布或结果视图；没有对医学发现作准确性判断。
+
+报告已保存至 [report_A.md](scripts/tester_loop_0927/round_12/report_A.md)，包含旅程、逐条发现、三档宽度检查、等待时长和界面评价。
+
+本轮 TaskSpace 已关闭并从列表移除；没有产生下载副本或截图。**共享浏览器会话未完全退出**：`ego-session stop` 因另有 6 个标签页而拒绝执行，未强制关闭他人的页面；这一清理限制已记入报告。
