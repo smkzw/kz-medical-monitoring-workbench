@@ -490,3 +490,112 @@ prompt 1,310,988 + completion 808,450 tokens。
 - 10:16 run5 修正计数后复验：八阶段全绿（ok=true）；
 - 全程未触碰 8910/5177；未改任何产品代码/数据库（驱动脚本与一次性预检
   项目自身数据除外）；项目与全部留痕原地保留（归档交复盘官）。
+
+---
+
+## R12 第1次（20261002-03，run=r12p_preflight）——**chainOk = true，第三次全链端到端跑通（R12轮主侧AI直连路由下首跑）**
+
+- 驱动脚本：`scripts/tester_loop_0927/r12p_preflight_csu.py`（由 R11P2 全绿驱动
+  r11p2_preflight_csu.py 机械适配 R12P 命名/幂等键/留痕文件，并并入 R12D 轮实测的
+  R12_ROUND4_CARDS；本轮收敛期新浮现3张EX卡 fail-closed 后按 openpyxl 直读实测
+  补答 R12P_ROUND1_CARDS——依据注释在位；幂等，状态 `r12p_preflight_state.json`，
+  留痕 `r12p_preflight_evidence.jsonl`（329事件），运行日志 logs/r12p_preflight_run1.log、
+  run2.log）
+- 数据：同 `tester_staging_0927/synth_csu` 三件套（方案V1.3 docx + eCRF指南V1.0 docx + 合成listing V1.0 xlsx）
+- 项目：**MX循R12P-CSU**（proj_user_21672090ff4a，慢性自发性荨麻疹 / MG-K10 /
+  modules 含 medical_monitoring【source-manifest API 核对：medical_monitoring →
+  real_source_slice】，幂等键 r12p-preflight-20261002T201545Z-916f5d4c 唯一，
+  精确名一次建项成功无需后缀，status=active，**留在原地待复盘归档**）
+- 运行：run:469f4c6dd1f628134fcca021（run_start_idem=r12p-run-20261002T223035Z-4718a3ff，
+  一次 prepare-and-start 200 首跑即完成，无孤儿预约，项目 runs 列表仅此1条）
+- 结果：result-context:803bfa537de54de（overview 原始 597,305 字节）
+
+### 结论：chainOk = true（八阶段全ok；运行真完成10/10项100%、发布available、结果可读）
+
+已知状态碎片化家族（readiness 409）**未命中**——本轮 prepare-and-start 一次 200（60ms），
+workspace/bootstrap 200 后首发即成功；source-manifest medical_monitoring →
+**real_source_slice**（建项起即非 intake_pending，R10第1次的 runtime 路径修复持续有效）。
+R11P2 的对账域缺席豁免本轮**未被行使**（首遍映射双队列 20/20 全 completed、60候选无
+domain_gaps，走干净路径）。R12D 界内修复的主侧AI直连路由（cms-router 身份串不变，
+base_url 由坏 LB 改智谱官方直连）首次承载全链：**主侧31作业（权威2+映射首遍10+
+裁决19）全completed零失败**；本轮全链仅1个AI终态失败（裁决盲核CM分片 reasoning-only，
+att=4，经bounded-gap按设计吸收，见下表），无503窗口——R11-01（infra错误按文件
+指纹缓存为终态结论）家族未复发：文档权威一次通过，无任何「复用已有结论」拒绝，
+该修复路径本轮未被触发（如实：修复在build内但未被行使）。
+
+### 八阶段计时（秒数=首次真实完成；映射确认为两段活跃驱动窗口合计，中间 fail-closed 间隙约4.5分钟不计入）
+
+| # | 阶段 | ok | 秒 | 备注 |
+|---|---|---|---|---|
+| 1 | 建项 | ✅ | 0.0 | proj_user_21672090ff4a，精确名一次成功（R12D 在册名为 MX循R12D-CSU，无同名冲突）；indication/product/modules 合同经 source-manifest+projects API 双核对无误 |
+| 2 | 上传 | ✅ | 0.3 | attempt=stg-f372f54041ac41398af7bdfecf461917，1文件/10表/591行 |
+| 3 | 文档权威 | ✅ | 325.1 | analyze→（身份归属确认1次，自动）→ready=true「研究文件已准备好」；4个AI作业全completed（analysis/review × 主/盲核），无文件角色人工裁决 |
+| 4 | 映射确认 | ✅ | 7477.9（run1 7440+run2 37.9；壁钟2h09m） | 首遍双队列20/20（主10/10+盲核10/10，无R10P2/R11P1的invalid_ai_output首遍失败）→60候选→adopt 201（monmapdraft_db98ebd2d0886dff4f368ba76d22）→裁决波收敛46→40(6sys)→27(19sys)→浮出3张未知EX卡 fail-closed（run1，第25+3张卡：25张既有决策表按实测作答+3张未知）→实测补答后续跑run2：3卡作答→adjudicate一次即complete/remaining=0/sys=19→confirm 200（draft v74 confirmed，user_questions=0） |
+| 5 | facts | ✅ | 0.2 | state=ready：10表/591行/3346值 source_values_verified=3346（100%） |
+| 6 | 运行 | ✅ | 30.3 | workspace/bootstrap 200→run-setup/options 200（snapshot:76af01be1ced01d276270a7c「10表/591行/3346值100%往返校验」）→prepare-and-start 200（幂等键 r12p-run-20261002T223035Z-4718a3ff，一次成功无孤儿）→run_state=completed，**10/10项100%「本次医学监查已完成」**（status_overview=已完成×10，percent=100.0，progress复核API独立确认） |
+| 7 | 发布 | ✅ | 0.3 | publication POST 200→publication_state=available「结果已整理完成」（progress侧publication_state=available双端点一致） |
+| 8 | 结果 | ✅ | 0.4 | result-entry 200；overview 原始597,305字节非空；**finding_count=15**（query_findings，projection.query_findings_meta.total）+current_risks=477；subject_count=16；identity.project_ref=proj_user_21672090ff4a 归属核对无误；data_cutoff=2026-08-19 |
+
+### 本轮新浮现的3张EX裁决卡（R12P_ROUND1_CARDS，fail-closed→实测作答→续跑）
+
+收敛期（run1，7440s）第4波浮出3张未知卡 fail-closed 退出（unknown_questions_fail_closed
+留痕）。openpyxl 直读 EX 表实测（128行=16名受试者×8次给药）后作答复跑：
+
+| 卡 | 表现 | 实测依据 | 作答 |
+|---|---|---|---|
+| EX·EXDAT | 主分析=独立复核=administration_date（两侧逐字相同，R3-01家族第5+次目击） | 给药日期列128行全为合法日期（2026-03-02~2026-07-08），同受试者相邻给药间隔实测全部恰为**14天** | 采纳两侧一致角色 administration_date |
+| EX·EXFRQ | 列标题'给药频次'但全列128行唯一值'300mg'（剂量值非频次）：列内容实为单次给药剂量 | 全列唯一值'300mg'（剂量+单位格式，与'给药药物'列'300mg'一致）；频次语义不在本列——实际给药间隔每14天一次 | 按单次给药剂量口径采纳 treatment_administration_dose（系统推荐一致），频次以给药日期列实测间隔为准 |
+| EX·EXSTATE | 主分析=独立复核=administration_status（两侧逐字相同） | 给药状态列完成×86/延迟给药×42二值分布 | 采纳两侧一致角色 administration_status |
+
+**如实留痕的合成数据观察（供复盘官，非链路阻断）**：EX域存在标签-内容双不一致——
+① EXFRQ列标题'给药频次'但内容是剂量'300mg'；② EXTRT列方案标签'300mg Q4W'（每4周）
+但实测给药间隔全部为每14天（Q2W）。系统浮出了①的标签-内容问题（EXFRQ卡），但
+未自行提出②的间隔-标签矛盾——与R10-02（PSO剂量/途径实质矛盾未被系统提出）同型：
+事实层可推导的实质性矛盾未转化为监查发现。作答文本已如实载明②的实测依据。
+
+### AI 节点路由核验（台账：medical_monitoring_ai.sqlite3 直读；/api/ai/queue 本build仍404）
+
+本项目总量 62 作业（权威4+映射首遍20+裁决主19+裁决盲核19），终态 61 completed +
+1 terminal failed，**0 queued/running（无滞留，项目级与实例级双查均0）**；唯一
+failed（裁决盲核CM分片）有显式 failure_code=provider_runtime_error/
+failure_message=「AI provider returned only reasoning tokens with no final answer
+channel; reasoning is not accepted as medical content (failure_code=
+provider_reasoning_only)」、attempt=4/4、automatic_recovery_count=1（无静默失败），
+经 bounded-gap 吸收后 adjudication complete/remaining=0/sys=19。调用89次，
+prompt 1,055,922 + completion 623,284 tokens。
+
+| 节点 | provider/model（台账实测） | 作业数 | 终态 | ok |
+|---|---|---|---|---|
+| 文档权威主 | cms-router/glm-5.3-flash（analysis primary-v9、review primary-v7 各1） | 2 | 2 completed | ✅ |
+| 文档权威盲核 | ollama-cloud/deepseek-v4.1-flash（analysis verifier-v9、review verifier-v7 各1） | 2 | 2 completed | ✅ |
+| 映射主 | cms-router/glm-5.3-flash（listing-field-mapping-v19） | 10 | 10 completed（R10P2/R11P1 的 EX/AE 分片 invalid_ai_output 首遍失败未复发） | ✅ |
+| 映射盲核 | ollama-cloud/deepseek-v4.1-flash（mapping-verifier-v8-tools-v6） | 10 | 10 completed | ✅ |
+| 裁决（映射收敛） | 主 cms-router/glm-5.3-flash（adjudication-v19-tools-v7.2）19：19 completed；盲核 ollama-cloud/deepseek-v4.1-flash（adjudication-verifier-v17-tools-v7.2）19：18 completed+1 failed | 38 | 37 completed + 1 terminal failed（reasoning-only att=4，bounded-gap吸收，收敛complete/remaining=0/sys=19） | ✅（失败可见且按设计恢复为可见缺口） |
+| 监查分析 | 本build运行lane不经AI台账（实例全库 task_type 仅 document_authority_*/listing_field_mapping 双核对；FactsModeOutputProvider 事实回执确定性产出，同R10P3发现3/R11P2） | 0 | —（无作业=无滞留/无静默失败；15发现+477风险已产出） | ✅（机制核实，如实报0作业） |
+
+### 过程事件（如实）
+- 20261002T20:15:45Z（本地04:15）run1 启动：精确名建项一次成功；上传/文档权威
+  325.1s全绿；映射双队列04:21启动，04:39首遍20/20全completed（无分片失败）；
+  adopt 201 后裁决波 46→40→27（sys 0→6→19），收敛期既有决策表25卡按实测作答
+  （06:25），第4波浮出3张未知EX卡 fail-closed 退出（exit 2，7440s）；
+- 06:26-06:29 openpyxl 实测 EX 表（上表依据），驱动补 R12P_ROUND1_CARDS（注释含
+  实测依据+fail-closed防护说明）；
+- 06:29:48 run2 幂等续跑：建项/上传/文档权威秒级复用，3卡作答06:29:57→adjudicate
+  一次即 complete/remaining=0/sys=19（run1 收敛期+fail-closed间隙约4.5分钟内后端
+  AI队列独立排干——与R11P2记载的驱动侧停止后队列继续排干同现象）→confirm 200
+  （draft v74，18.1s）→facts 201→bootstrap/prepare 200（60ms）→运行30.3s
+  10/10 completed→发布available→结果可读，八阶段全绿（exit 0）；
+- 后续为复盘归档做了API独立复核（非驱动日志自证）：progress端点10/10项100%+
+  已完成×10、publication端点available、result-entry/overview 597,305字节/
+  15发现/16受试者/477风险、identity归属、source-manifest real_source_slice、
+  runs列表仅1条（无孤儿）——全部一致；
+- console /tmp/mm_api_8911.log 全程 0 字节（uvicorn --log-level warning，与前几轮
+  同现象；本轮链路干净无门禁拒绝，无需 console 取证）；
+- 开赛前健康断言（按R11轮升级请求⑦落实于本轮预检）：8911 runtime-readiness
+  ready:true（build api-21b0d9e61406a8e）、5178 配对一致、AI网关 status
+  configured+route_validation_errors=[]、实例台账 0 queued/running、最近一次
+  provider_runtime_error 为 R12D 路由修复前（16:11Z，proj_user_d02f5371b45d）
+  ——503限流窗口未复发，R12D 主侧直连配置持续生效；
+- 全程未触碰 8910/5177（本轮开始/结束仅只读复核连接拒绝状态，二者无监听为
+  R12D 已记载的既有状态，非本轮所致）；未改任何产品代码/数据库（驱动脚本与
+  一次性预检项目自身数据除外）；项目与全部留痕原地保留（归档交复盘官）。
