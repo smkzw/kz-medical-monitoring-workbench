@@ -1,0 +1,84 @@
+[      0s] jobs={'completed': 28} inflight=0
+    adjudicate -> {'adj_state': 'running', 'remaining': 46, 'system_adjudicated': 0, 'http': 200}
+[     76s] jobs={'completed': 28, 'running': 3, 'queued': 17} inflight=20
+[    121s] jobs={'completed': 28, 'running': 3, 'queued': 17} inflight=20
+[    166s] jobs={'completed': 28, 'running': 3, 'queued': 17} inflight=20
+[    211s] jobs={'completed': 28, 'running': 3, 'queued': 17} inflight=20
+[    256s] jobs={'completed': 29, 'running': 3, 'queued': 16} inflight=19
+[    302s] jobs={'completed': 29, 'running': 3, 'queued': 16} inflight=19
+[    347s] jobs={'completed': 29, 'running': 3, 'queued': 16} inflight=19
+[    392s] jobs={'completed': 29, 'running': 3, 'queued': 16} inflight=19
+[    437s] jobs={'completed': 29, 'running': 3, 'queued': 16} inflight=19
+[    482s] jobs={'completed': 29, 'running': 3, 'queued': 16} inflight=19
+[    527s] jobs={'completed': 31, 'running': 3, 'queued': 14} inflight=17
+[    572s] jobs={'completed': 31, 'running': 3, 'queued': 14} inflight=17
+[    617s] jobs={'completed': 31, 'running': 3, 'queued': 14} inflight=17
+[    662s] jobs={'completed': 32, 'running': 3, 'queued': 13} inflight=16
+[    707s] jobs={'completed': 32, 'running': 3, 'queued': 13} inflight=16
+[    752s] jobs={'completed': 33, 'running': 3, 'queued': 12} inflight=15
+[    797s] jobs={'completed': 33, 'running': 3, 'queued': 12} inflight=15
+[    842s] jobs={'completed': 34, 'running': 3, 'queued': 11} inflight=14
+[    887s] jobs={'completed': 35, 'running': 3, 'queued': 10} inflight=13
+[    933s] jobs={'completed': 36, 'running': 3, 'queued': 9} inflight=12
+[    978s] jobs={'completed': 37, 'running': 3, 'queued': 8} inflight=11
+[   1023s] jobs={'completed': 37, 'running': 3, 'queued': 8} inflight=11
+[   1068s] jobs={'completed': 37, 'running': 3, 'queued': 8} inflight=11
+[   1113s] jobs={'completed': 38, 'running': 3, 'queued': 7} inflight=10
+[   1158s] jobs={'completed': 38, 'running': 3, 'queued': 7} inflight=10
+[   1203s] jobs={'completed': 38, 'running': 3, 'queued': 7} inflight=10
+[   1248s] jobs={'completed': 39, 'running': 3, 'queued': 6} inflight=9
+[   1294s] jobs={'completed': 39, 'running': 3, 'queued': 6} inflight=9
+[   1339s] jobs={'completed': 40, 'running': 3, 'queued': 5} inflight=8
+[   1384s] jobs={'completed': 41, 'running': 3, 'queued': 4} inflight=7
+[   1429s] jobs={'completed': 42, 'running': 3, 'queued': 3} inflight=6
+[   1474s] jobs={'completed': 43, 'running': 2, 'queued': 3} inflight=5
+[   1519s] jobs={'completed': 43, 'running': 2, 'queued': 3} inflight=5
+[   1565s] jobs={'completed': 44, 'running': 2, 'queued': 2} inflight=4
+[   1610s] jobs={'completed': 44, 'running': 2, 'queued': 2} inflight=4
+[   1655s] jobs={'completed': 44, 'running': 2, 'queued': 2} inflight=4
+[   1701s] jobs={'completed': 44, 'running': 2, 'queued': 2} inflight=4
+[   1746s] jobs={'completed': 44, 'running': 2, 'queued': 2} inflight=4
+[   1791s] jobs={'completed': 45, 'running': 2, 'queued': 1} inflight=3
+[   1836s] jobs={'completed': 45, 'running': 2, 'queued': 1} inflight=3
+[   1881s] jobs={'completed': 45, 'running': 2, 'queued': 1} inflight=3
+[   1926s] jobs={'completed': 45, 'failed': 1, 'running': 2} inflight=2
+[   1971s] jobs={'completed': 45, 'failed': 1, 'running': 2} inflight=2
+[   2016s] jobs={'completed': 46, 'failed': 1, 'running': 1} inflight=1
+[   2061s] jobs={'completed': 46, 'failed': 1, 'running': 1} inflight=1
+[   2106s] jobs={'completed': 46, 'failed': 1, 'running': 1} inflight=1
+[   2151s] jobs={'completed': 47, 'failed': 1} inflight=0
+    adjudicate -> {'adj_state': 'running', 'remaining': 46, 'system_adjudicated': 0, 'http': 200}
+[   2297s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2342s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2387s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2432s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2477s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2522s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2568s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2613s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2658s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2703s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2748s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2793s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2838s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2883s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2928s] jobs={'completed': 47, 'running': 1} inflight=1
+[   2973s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3018s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3064s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3109s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3154s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3199s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3244s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3290s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3335s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3380s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3425s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3470s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3515s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3560s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3605s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3650s] jobs={'completed': 47, 'running': 1} inflight=1
+[   3695s] jobs={'completed': 48} inflight=0
+    adjudicate -> {'adj_state': 'blocked', 'remaining': 30, 'system_adjudicated': 16, 'http': 200}
+{"ok": false, "step": "converge_cards", "unknown": [{"evidence_summary": [], "attention_reason": "需医学确认", "confidence": 0.55, "source_field": "EXDAT", "domain": "EX", "prior_user_action": "", "question_text": "系统两轮独立复核对本字段结论仍不一致，请裁决「EX·EXDAT」的实际语义：主分析判断为「treatment_administration_date」，独立复核判断为「administration_date」。可采纳任一方或给出其他结论", "recommended_role": "treatment_administration_date", "field_kind": "source_collected"}]}
