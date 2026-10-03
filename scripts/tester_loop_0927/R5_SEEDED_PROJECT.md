@@ -372,3 +372,56 @@ AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）�
 - 证据：`r13d_seed_evidence.jsonl`（每步请求/响应摘要，含两次 unknown_questions_fail_closed 留痕）、`r13d_seed_state.json`（幂等状态）
 - 配置备份：`r13d_provider_config_backup/`（换绑前 ai_provider_settings/ai_provider_secrets/ai_provider_master.key/ai_role_bindings 四件）
 - 环境日志：`ISO_ENV_LOG.md`（R13D 探障+主侧AI路由界内换绑+数据暂存重建+预置条目）
+
+
+# R14D 开考位预置结果 — MX循R14D-CSU（2026-10-03）
+
+## 探障（本轮前置，R5D marker 缺陷未复发，未修任何产品代码、未重启 8911/5178）
+
+- R13轮次修复员已于本轮开始前重启隔离对（8911/5178 进程 12:56Z 拉起，非 runtime 重建，R13D 项目仍在）。`GET /r7/project/open`（R13D 项目 proj_user_bbcc5c21edfb）→ **state=current/openMode=edit/dataCoverage=complete/canView/canEdit=true，无 blocked/CORRUPT** → 按本轮指令判定无需修复。修复代码在位复核：main.py:4925-4936 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:54 = mm-r7-w01r26-launch-registry-v5）。
+- R14D 建项瞬间 project/open blocked（bootstrap 前 monitoring_runtime.sqlite3 不存在的设计内瞬态，R1/R13D 同款）；随后产品 `inspect_project_schema` 实证 R14D 新项目成员全 current/current_shape（launch_registry marker=mm-r7-w01r26-launch-registry-v5）。终态硬断言见下表（project/open 必须 current）。
+- 主侧AI路由沿 R12D/R13D 先例复核：R13D 换绑的直连配置在本轮重启后仍生效，产品 `/api/ai-gateway/probe` 四档案真实往返全 passed:true（两主侧 cms-router/glm-5.3-flash 3063/3211ms；两 verifier ollama-cloud/deepseek-v4.1-flash 681/608ms），**本轮无需换绑**。
+- 环境侧：8911 /api/health ok、/api/runtime-readiness ready:true（build api-2ac4a3a5e6a1db40）；5178 /monitoring=200 且 runtime-build.json expectedBackendBuildId=api-2ac4a3a5e6a1db40 配对一致；8910/5177 无监听（连接拒绝）——非本轮所致（仅只读 lsof/curl 复核），按铁律未触碰，如实记录。
+
+## 项目
+
+| 项 | 值 |
+|---|---|
+| project_id | **proj_user_588084370b49** |
+| project_name | MX循R14D-CSU |
+| indication / product_name | 慢性自发性荨麻疹 / MG-K10 |
+| modules | ["medical_monitoring"] |
+| 幂等键 | r14d-seed-20261003T130929Z-174dc92d（唯一） |
+| data admission | stg-77d9531264f249608bb0c013e208e930（合成listing 591行/10表） |
+| 文档权威批次 | mmbatch_501bf7540ce877aff57e0a70（方案V1.3 docx + eCRF指南V1.0 docx 双VLM） |
+
+## 全链状态（自验实测，2026-10-03 14:39-14:52Z 独立复验）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| 建项 | ✅ 201 | POST /api/projects（幂等键唯一）；state r14d_seed_state.json（13:09:29Z） |
+| 数据接入 | ✅ | data-admissions/upload → attempt，591行/10表（13:09:29Z） |
+| 身份门 | ✅ 未触发 | 本轮 documents_resolve 自动归属确认（analyzing→cross_checking→ready），无 project_identity_incomplete 状态，无角色人工门 |
+| 文档权威 | ✅ ready=true | 13:09:30Z 提交→13:19:01Z ready（约9.5分钟）；protocol/ecrf 自动识别 current |
+| 映射双队列 | ✅ candidates_ready | 10主+10盲核，60字段候选（13:19:05Z→13:33:45Z 约14.5分钟） |
+| 复核收敛 | ✅ complete | 分歧 46→（系统裁决16）→30 remaining→0；48/48 作业全 completed（首轮1个分片短暂 failed 后重试完成，无终态 failed） |
+| 裁决卡 | ✅ 已答 | 共30张：29张按 R5/R8/R9/R11/R12/R13 既有数据实测决策表作答；**1张R14新卡 EX.EXDAT**（两轮分歧：主分析 treatment_administration_date vs 独立复核 administration_date，历轮首次浮现）首次浮现 fail-closed 诚实退出留痕（14:2xZ），按 openpyxl 直读实测作答：采纳卡面推荐 `treatment_administration_date`（来源列标题'给药日期'，128行全为合法ISO日期2026-03-02~2026-07-08、16名受试者各8条Q4W给药记录，与'给药药物'/'给药状态'同行配对；受试者级治疗身份以DM.试验分组为准，不据此声明实际IP暴露）（14:39:03Z） |
+| **字段映射确认** | ✅ **confirmed** | GET mapping-candidates：confirmation_status=confirmed，draft monmapdraft_df096d4513fe2f965946b6bc1530 status=confirmed（**v77**），user_questions=0（14:39:19Z，独立复验 14:4xZ 同值） |
+| **facts 物化** | ✅ **ready** | GET facts：state=ready，10表/591行/**3422值全核验**（source_values_verified=3422）（14:39:19Z） |
+| 界面可开始运行监查 | ✅ | `GET /r7/project/open` → state=current/openMode=edit/dataCoverage=complete/canView/canEdit=true；`run-setup/options` **200** |
+| 停在 facts（未启动监查） | ✅ | GET runs → {"runs":[]} |
+
+起止：13:09:29Z→14:39:23Z（21:09→22:39 CST，约1小时30分，含 EXDAT 新卡 fail-closed 退出后的补答重入一次）。AI 台账（medical_monitoring_ai.sqlite3 按 project_id 过滤）：48 作业全 completed；63 次调用，tokens 合计 1,577,719（prompt 1,055,579 + completion 522,140）。全程 AI 质量门自然通过，未跳门、未伪造状态。
+
+## 本轮观察（如实记录，非阻断）
+
+- **R14 新卡 EX.EXDAT 为 EX 域给药执行语义族的历轮首次分歧卡**：主分析与独立复核对给药日期给出 treatment_administration_date/administration_date 两个 token；已按数据实测采纳卡面推荐角色并固化进 `r14d_seed_csu.py` 的 R14_ROUND1_CARDS 表供后续轮次复用。
+- 本轮 documents 链未触发身份门与角色人工门（自动归属确认），与 R13D（一次 identity_confirmation）不同——属设计内条件门差异，非缺陷。
+- 主侧AI直连绑定在重启后保持生效（R12D/R13D 换绑结果跨重启持久），本轮未再换绑；host 代理单点风险沿 R12D/R13D 记录，提请循环所有者后续 runtime 重建时复核。
+- 8910/5177 无监听（沿 R11 起记录），本轮仅只读复核未触碰。
+
+## 留痕文件（同目录）
+
+- 驱动：`r14d_seed_csu.py`（由 r13d_seed_csu.py 机械适配：R14D 命名/幂等键/留痕文件 + R14_ROUND1_CARDS 一卡表；R5/R8/R9/R11/R12/R13 既有裁决卡决策表原样保留；幂等，含 fail-closed 未知卡防护）
+- 证据：`r14d_seed_evidence.jsonl`（每步请求/响应摘要，含 EXDAT unknown_questions_fail_closed 留痕）、`r14d_seed_state.json`（幂等状态）、`r14d_seed_console.log`/`r14d_seed_console2.log`（两段运行控制台输出）
+- 环境日志：`ISO_ENV_LOG.md`（R14D 探障+预置条目）
