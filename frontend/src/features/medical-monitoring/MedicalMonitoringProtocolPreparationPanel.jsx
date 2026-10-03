@@ -67,14 +67,29 @@ function normalizeStatusOrThrow(payload) {
   return normalized.value;
 }
 
+// R13轮（R11-02）：JavaScript异常原文（Cannot read properties of…等）
+// 不得渲染进用户界面——一律替换为友好文案并保留技术细节到控制台。
+const RAW_EXCEPTION_RE = /Cannot read propert|TypeError:|ReferenceError:|is not a function|undefined is not an object|SyntaxError:/i;
+
+function sanitizeErrorText(value) {
+  const text = String(value || "");
+  if (!text) return text;
+  if (RAW_EXCEPTION_RE.test(text)) {
+    // 技术细节进控制台供排障，界面只留可行动的表述。
+    console.warn("[monitoring] sanitized raw exception from UI:", text);
+    return "系统处理该面板数据时出现未预期错误，已停止展示原始细节；请重试或刷新，若持续出现请联系支持并提供时间点。";
+  }
+  return text;
+}
+
 function errorText(error, fallback) {
   if (error instanceof MedicalMonitoringApiError) {
     const detail = error.detail?.detail;
     if (detail && typeof detail === "object" && detail.message) {
-      return detail.message;
+      return sanitizeErrorText(detail.message);
     }
   }
-  return error?.message || fallback;
+  return sanitizeErrorText(error?.message) || fallback;
 }
 
 function versionOptionLabel(version) {

@@ -62,6 +62,23 @@ const RECOVERY_GUIDES = Object.freeze({
     canRetry: true,
     retryTarget: "create",
   }),
+  // R13轮（R13-01）：R5轮后端细分的新码同步前台引导。
+  admission_no_data_files: Object.freeze({
+    guidance: Object.freeze([
+      "该目录存在，但其中没有可导入的数据文件（.csv / .xls / .xlsx / .xlsm）。",
+      "研究方案等文档不参与数据导入，请在向导后续步骤单独上传。",
+    ]),
+    canRetry: true,
+    retryTarget: "create",
+  }),
+  admission_file_type_unsupported: Object.freeze({
+    guidance: Object.freeze([
+      "该文件不是受支持的数据文件格式。",
+      "研究方案、eCRF 等文档请在向导后续步骤上传。",
+    ]),
+    canRetry: true,
+    retryTarget: "create",
+  }),
   admission_project_identity_conflict: Object.freeze({
     guidance: Object.freeze([
       "演示数据会继续保持原样，不会被本机数据替换。",
@@ -148,6 +165,43 @@ export function admissionRecovery(errorLike) {
   const guide = RECOVERY_GUIDES[code] || null;
   let serverText = cleanText(errorLike?.message);
   if (guide?.serverText) serverText = guide.serverText;
+  // R13轮（R13-01）：浏览器级异常先于网络兜底分类——文件不可得
+  // （NotFoundError：路径不存在/被移除/不可读）与权限（NotAllowedError）
+  // 曾被统一掩盖为「网络连接异常」，误导排障方向。
+  const browserErrorName = cleanText(errorLike?.name);
+  let browserFailure = null;
+  if (browserErrorName === "NotFoundError" || /could not be found|no such file|not found/i.test(serverText)) {
+    browserFailure = Object.freeze({
+      serverText: "无法读取所选数据文件（文件不存在或已被移除/不可读），本次导入未完成。",
+      guidance: Object.freeze([
+        "请确认文件仍在本机且当前账号可读取后重新选择。",
+        "如文件在共享目录，请先确认网络磁盘已挂载。",
+      ]),
+      canRetry: true,
+      retryTarget: "create",
+      code: "file_unreadable",
+    });
+  } else if (browserErrorName === "NotAllowedError" || /permission|not allowed/i.test(serverText)) {
+    browserFailure = Object.freeze({
+      serverText: "浏览器未获准读取所选数据文件（权限被拒绝），本次导入未完成。",
+      guidance: Object.freeze([
+        "请重新选择文件并在浏览器提示时允许读取。",
+      ]),
+      canRetry: true,
+      retryTarget: "create",
+      code: "file_permission_denied",
+    });
+  }
+  if (browserFailure) {
+    return Object.freeze({
+      code: browserFailure.code,
+      status,
+      serverText: browserFailure.serverText,
+      guidance: browserFailure.guidance,
+      canRetry: browserFailure.canRetry,
+      retryTarget: browserFailure.retryTarget,
+    });
+  }
   if (!code && status === 0) {
     // Transport-level failure (browser message is not user-facing Chinese).
     serverText = NETWORK_RECOVERY.serverText;
