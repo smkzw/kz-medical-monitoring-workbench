@@ -6,6 +6,106 @@
 
 ---
 
+## R13 第1次（20261003，run=r13p_preflight）——**chainOk = true，第四次全链端到端跑通（含一次首遍EX主分片失败→产品自恢复路径重放后通过）**
+
+- 驱动脚本：`scripts/tester_loop_0927/r13p_preflight_csu.py`（由 R12P 全绿驱动
+  r12p_preflight_csu.py 机械适配 R13P 命名/幂等键/留痕文件，R5D-R12D 全部既有
+  裁决卡决策表原样保留；幂等，状态 `r13p_preflight_state.json`，留痕
+  `r13p_preflight_evidence.jsonl`（292驱动事件+2条人工恢复补录），运行日志
+  logs/r13p_preflight_run1.log、run2.log）
+- 数据：同 `tester_staging_0927/synth_csu` 三件套（方案V1.3 docx + eCRF指南V1.0 docx + 合成listing V1.0 xlsx）
+- 项目：**MX循R13P-CSU**（proj_user_f26b043b3337，慢性自发性荨麻疹 / MG-K10 /
+  modules 含 medical_monitoring【projects+source-manifest API 双核对；发布后
+  medical_monitoring → real_source_slice】，幂等键 r13p-preflight-20261003T083512Z-c3990522
+  唯一，精确名一次建项成功无需后缀，status=active，**留在原地待复盘归档**）
+- 运行：run:32c4bd34ee2277473f30d2b4（run_start_idem=r13p-run-20261003T101637Z-5c4c9945，
+  prepare-and-start 一次 200（55ms）无孤儿预约，项目 runs 列表仅此1条）
+- 结果：result-context:93fba13007ce4d36947e6436ff7d75b0（overview 原始 778,126 字节）
+
+### 结论：chainOk = true（八阶段全ok；运行真完成10/10项100%、发布available、结果可读）
+
+已知状态碎片化家族（readiness 409）**未命中**——本轮 prepare-and-start 一次 200
+（55ms），workspace/bootstrap 200 后首发即成功；source-manifest medical_monitoring →
+**real_source_slice**。R13D 界内换绑的主侧AI直连路由（cms-router 身份串不变，
+base_url 智谱官方直连）本轮承载全链无 503 窗口。
+
+**本轮真实事件（如实，非缺陷修复——全程未改产品代码/数据库）**：run1 映射首遍
+EX 主分片 attempt 1/2 终态 invalid_ai_output（provider 输出缺 schema_version/
+task_id/task_type 等整个信封字段族，经一次受控修复仍无效）→ 主侧 9/10 →
+state=needs_attention → adopt 422 mapping_draft_invalid（EX 域主命名空间零候选，
+域完整性门拒绝，R10-2 同家族不同表现：彼时为「definitive approval language」）。
+预检工程师按产品自身恢复路径（R10-2 先例：`mapping_pipeline.py`
+_recover_failed_submission_jobs requeue-once）人工重放**重入候选生成**：EX 主分片
+attempt 2/2 completed → 10/10 → candidates_ready → run2 adopt 201 通过。
+与 R10-2 的差异：彼时恢复预算尽（att=2/3 + requeue 已用）链路拦截，本轮
+requeue-once 成功——同一模型输出质量波动家族，恢复路径本轮有效。两轮结论合并看：
+该家族是否拦截取决于失败发生在首遍（有重排预算则可自愈）还是恢复预算耗尽后。
+
+### 八阶段计时（秒数=首次真实完成；映射确认为 run1 702s（拦截）+恢复窗口+run2 4174.6s，活跃驱动合计 4876.6s，壁钟 08:40-10:16Z 含恢复间隙）
+
+| # | 阶段 | ok | 秒 | 备注 |
+|---|---|---|---|---|
+| 1 | 建项 | ✅ | 0.0 | proj_user_f26b043b3337，精确名一次成功（R13D 在册名为 MX循R13D-CSU，无同名冲突）；indication/product/modules 合同双核对无误；status=active |
+| 2 | 上传 | ✅ | 0.2 | attempt=stg-7fc7a549a1ec415fac8958cbbbfc85ef，1文件/10表/591行 |
+| 3 | 文档权威 | ✅ | 304.1 | analyze→（身份归属确认1次，自动）→ready=true「研究文件已准备好」；4个AI作业全completed（analysis/review × 主/盲核），无文件角色人工裁决 |
+| 4 | 映射确认 | ✅ | 4876.6（run1 702+run2 4174.6；壁钟约96min） | 首遍主侧EX attempt1 invalid_ai_output→adopt 422拦截（run1 exit 2）→重入候选生成（requeue-once）EX attempt2 completed→10/10主+10/10盲核→60候选→adopt 201（monmapdraft_d2cdd15e8b49be28ee4215ba269c）→裁决波46→28(sys 17)→1→0（既有决策表作答，本轮**零未知卡**，无fail-closed退出）→confirm 200（draft v76 confirmed，user_questions=0） |
+| 5 | facts | ✅ | 0.2 | state=ready：10表/591行/3422值 source_values_verified=3422（100%） |
+| 6 | 运行 | ✅ | 30.3 | workspace/bootstrap 200→run-setup/options 200（snapshot:edb…）→prepare-and-start 200（55ms一次成功，**碎片化家族未命中**）→run_state=completed，**10/10项100%「已完成」×10**（progress复核API独立确认percent=100.0） |
+| 7 | 发布 | ✅ | 0.3 | publication POST 200→publication_state=available「结果已整理完成」（progress侧publication_state=available双端点一致，result_available=true） |
+| 8 | 结果 | ✅ | 0.4 | result-entry 200；overview 原始778,126字节非空；**finding_count=15**（query_findings列表长度与query_findings_meta.total双一致）+current_risks=477；subject_count=16；identity.project_ref=proj_user_f26b043b3337 归属核对无误 |
+
+### AI 节点路由核验（台账：medical_monitoring_ai.sqlite3 直读；/api/ai/queue 本build仍404）
+
+本项目总量 46 作业（权威4+映射首遍20+裁决主11+裁决盲核11），终态 45 completed +
+1 terminal failed，**0 queued/running（无滞留）**；唯一 failed（裁决盲核分片）有显式
+failure_code=provider_runtime_error/failure_message=「AI provider returned only
+reasoning tokens with no final answer channel; reasoning is not accepted as medical
+content (failure_code=provider_reasoning_only)」、attempt=4/4（无静默失败），经
+bounded-gap 吸收后 adjudication complete。调用71次，prompt 960,998 +
+completion 504,586 tokens。
+
+| 节点 | provider/model（台账实测） | 作业数 | 终态 | ok |
+|---|---|---|---|---|
+| 文档权威主 | cms-router/glm-5.3-flash（analysis primary-v9、review primary-v7 各1） | 2 | 2 completed | ✅ |
+| 文档权威盲核 | ollama-cloud/deepseek-v4.1-flash（analysis verifier-v9、review verifier-v7 各1） | 2 | 2 completed | ✅ |
+| 映射主 | cms-router/glm-5.3-flash（listing-field-mapping-v19） | 10 | 10 completed（EX attempt1 invalid_ai_output→requeue-once→attempt2 completed；输出缺信封字段族，与R10-2同家族首遍失败，本轮恢复预算内自愈） | ✅ |
+| 映射盲核 | ollama-cloud/deepseek-v4.1-flash（mapping-verifier-v8-tools-v6） | 10 | 10 completed | ✅ |
+| 裁决（映射收敛） | 主 cms-router/glm-5.3-flash（adjudication-v19-tools-v7.2）11：11 completed；盲核 ollama-cloud/deepseek-v4.1-flash（adjudication-verifier-v17-tools-v7.2）11：10 completed+1 failed | 22 | 21 completed + 1 terminal failed（reasoning-only att=4/4，bounded-gap吸收，adjudication complete；同R12已知家族复发一次） | ✅（失败可见且按设计恢复为可见缺口） |
+| 监查分析 | 本build运行lane不经AI台账（实例全库 task_type 仅 document_authority_*/listing_field_mapping 双核对；FactsModeOutputProvider 事实回执确定性产出，同R10P3/R11P2/R12P） | 0 | —（无作业=无滞留/无静默失败；15发现+477风险已产出） | ✅（机制核实，如实报0作业） |
+
+### 过程事件（如实）
+- 开赛前健康断言：8911 runtime-readiness ready:true（build api-2ac4a3a5e6a1db40，
+  R13 重建隔离运行时后的新build）、AI网关 status configured+
+  route_validation_errors=[]、实例台账 0 queued/running（47 completed+1 failed
+  均为 R13D 种子轮遗产，唯一 failed 为其裁决盲核 EX reasoning-only 已知家族）；
+  8910/5177/5178 连接拒绝（000，未触碰）；
+- 20261003T08:35:12Z（本地16:35）run1 启动：精确名建项一次成功；上传/文档权威
+  304.1s全绿；映射双队列08:40启动，08:51 needs_attention（主5/10，UAS/VS仍在跑）
+  → adopt 422 mapping_draft_invalid，驱动 fail-closed（exit 2，702s）；
+- 08:52-09:05Z 队列独立排干（UAS/VS completed→主9/10）；台账取证：EX主分片
+  attempt 1/2 invalid_ai_output（输出缺 schema_version/task_id/task_type 等
+  信封字段族，att=1/2 未触顶）；工程师按产品恢复路径人工重放重入候选生成
+  （POST mapping-candidates，R10-2 同款 manual_recovery 先例）→ EX requeue-once
+  attempt 2/2 completed → 09:05Z candidates_ready（主10/10+盲核10/10，60候选）；
+  2条 manual_recovery_* 证据已补写 r13p_preflight_evidence.jsonl；
+- 09:07:00Z run2 幂等续跑：建项/上传/文档权威秒级复用，adopt 201→裁决波收敛
+  46→28(sys 17)→1→0（既有决策表作答，**本轮零未知卡**，与 R12P 的3张EX卡
+  fail-closed 不同——R12P_ROUND1_CARDS 已入表）→confirm 200（draft v76，
+  4.6s）→facts 201→bootstrap/prepare 200（55ms）→运行30.3s 10/10 completed
+  →发布available→结果可读，八阶段全绿（exit 0，10:17:08Z）；
+- 后续为复盘归档做了API独立复核（非驱动日志自证）：progress端点10/10项
+  percent=100.0+已完成×10、publication端点available、result-entry 200/
+  overview 778,126字节/15发现（列表与meta.total双一致）/16受试者/477风险/
+  identity归属、source-manifest real_source_slice、runs列表仅1条（无孤儿）
+  ——全部一致；
+- console /tmp/mm_api_8911.log 全程 0 字节（uvicorn --log-level warning，与前几轮
+  同现象；本轮链路无门禁拒绝，无需 console 取证）；
+- 全程未触碰 8910/5177（开始/结束只读复核连接拒绝状态）；未改任何产品代码/
+  数据库（驱动脚本、一次性预检项目自身数据、产品恢复路径API重放与证据补录除外）；
+  项目与全部留痕原地保留（归档交复盘官）。
+
+---
+
 ## R10 第1次（20261001，run=r10p_preflight）
 
 - 驱动脚本：`scripts/tester_loop_0927/r10p_preflight_csu.py`（幂等，状态
