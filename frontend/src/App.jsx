@@ -1284,7 +1284,7 @@ function AppShell({
                 className={`nav-item ${visibleActivePage === item.key ? "active" : ""}`}
                 onClick={() => setActivePage(item.key)}
                 title={item.label}
-                disabled={!hasActiveProject && item.key !== "overview"}
+                disabled={!hasActiveProject && item.key !== "overview" && item.key !== "sourceRegistry" && item.key !== "approvals"}
               >
                 <Icon size={18} />
                 <span>{item.label}</span>
@@ -12861,6 +12861,15 @@ function SourceRegistryPage({ projectId, onOpenModule }) {
   const refresh = async () => {
     setLoading(true);
     setMessage("");
+    if (!projectId) {
+      // R12轮（R12-07）：导航已放行台账——无项目时给出明确状态而非
+      // 发起注定失败的请求。
+      setRegistry({ entries: [], content_validations: [], content_validation_histories: {} });
+      setAdmissionEvents([]);
+      setLoading(false);
+      setMessage("当前未选择项目。请在顶部项目选择器选择项目后查看来源台账。");
+      return;
+    }
     fetch(`/api/projects/${projectId}/admission-events`)
       .then((response) => response.json().catch(() => ({})))
       .then((payload) => {

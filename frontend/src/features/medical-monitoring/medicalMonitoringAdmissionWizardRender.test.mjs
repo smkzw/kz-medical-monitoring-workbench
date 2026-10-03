@@ -142,7 +142,7 @@ check(
 check(renders.documentsMissing.includes("当前研究方案"), "protocol uses a medical-facing label");
 check(renders.documentsMissing.includes("当前 eCRF"), "eCRF uses a recognizable label");
 check(
-  renders.documentsMissing.split(">一次选择研究文件</").length - 1 === 1,
+  renders.documentsMissing.split(">选择研究文件（方案 / eCRF）</").length - 1 === 1,
   "one batch picker replaces per-role confirmation work",
 );
 check(

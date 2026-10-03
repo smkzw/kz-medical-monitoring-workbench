@@ -297,22 +297,30 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
         </p>
       ) : null}
       {!payload.ready && !userChoices.length ? (
-        <label className="monitoring-admission-document-picker">
-          <input
-            type="file"
-            multiple
-            accept=".docx,.pdf,.xlsx"
-            disabled={processing}
-            onChange={(event) => onFiles?.(event.target.files)}
-          />
-          {processing
-            ? "系统正在识别并交叉核对…"
-            : state.phase === "failed"
-              ? "重新上传研究文件并再次核对"
-              : state.phase === "needs_user_input"
-                ? "如仍有文件遗漏，可继续补充上传"
-                : "一次选择研究文件"}
-        </label>
+        <div className="monitoring-admission-document-upload" style={{ marginTop: 8 }}>
+          {/* R12轮（R12-06）：上传入口曾是小字号label且主按钮无引导——
+              现显式说明缺什么+醒目上传按钮（CSS提升视觉层级）。 */}
+          <p style={{ margin: "0 0 6px", fontSize: 13, color: "#b4480c", fontWeight: 600 }}>
+            还缺研究文件：请在下方选择研究方案与eCRF（支持 .docx / .pdf / .xlsx），
+            上传后系统会自动核对——这是进入下一步的唯一待办。
+          </p>
+          <label className="monitoring-admission-document-picker">
+            <input
+              type="file"
+              multiple
+              accept=".docx,.pdf,.xlsx"
+              disabled={processing}
+              onChange={(event) => onFiles?.(event.target.files)}
+            />
+            {processing
+              ? "系统正在识别并交叉核对…"
+              : state.phase === "failed"
+                ? "重新上传研究文件并再次核对"
+                : state.phase === "needs_user_input"
+                  ? "如仍有文件遗漏，可继续补充上传"
+                  : "选择研究文件（方案 / eCRF）"}
+          </label>
+        </div>
       ) : null}
       {state.error ? <p className="monitoring-admission-warning" role="alert">{state.error}</p> : null}
       {state.phase === "failed" && !userChoices.length ? (
@@ -752,34 +760,48 @@ export function MedicalMonitoringAdmissionWizardView({
                 研究方案、eCRF 等文档请在第3步单独上传，不参与数据导入。
               </p>
             ) : null}
+            {/* R12轮（R12-02）：表结构展开区曾把59个表全部纳入Tab焦点链
+                （键盘用户到主按钮需25+次Tab）。现外层details是唯一
+                Tab焦点；内层每表改为非聚焦的只读行（列清单保留在同屏，
+                鼠标/键盘共用），并附跳到主操作链接。 */}
+            <a
+              className="monitoring-admission-skip-link"
+              href="#monitoring-admission-primary"
+            >
+              跳过表结构，直达主操作
+            </a>
             <details className="monitoring-admission-table-details">
               <summary>
                 查看 {profile.tables.length} 张表的结构
                 <span>仅在需要时展开</span>
               </summary>
-              {profile.tables.map((table) => (
-                <details
-                  key={`${table.name}-${table.sourceFile}`}
-                  className="monitoring-admission-table"
-                >
-                  <summary className="monitoring-admission-table-head">
-                    <strong>{table.name}</strong>
-                    <span className="monitoring-admission-table-meta">
-                      {table.rowsText} · {table.columnCount} 列
-                    </span>
-                  </summary>
-                  <ul className="monitoring-admission-columns">
-                    {table.columns.map((column) => (
-                      <li key={column.name}>
-                        <span className="monitoring-admission-column-name">{column.name}</span>
-                        <span className="monitoring-admission-column-meta">
-                          {[column.typeText, column.missingText, column.dateRangeText].filter(Boolean).join(" · ")}
+              <ul
+                className="monitoring-admission-table-summary"
+                aria-label={`${profile.tables.length} 张数据表的结构清单`}
+              >
+                {profile.tables.map((table) => (
+                  <li key={`${table.name}-${table.sourceFile}`}>
+                    <details className="monitoring-admission-table">
+                      <summary className="monitoring-admission-table-head" tabIndex={-1}>
+                        <strong>{table.name}</strong>
+                        <span className="monitoring-admission-table-meta">
+                          {table.rowsText} · {table.columnCount} 列
                         </span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ))}
+                      </summary>
+                      <ul className="monitoring-admission-columns">
+                        {table.columns.map((column) => (
+                          <li key={column.name}>
+                            <span className="monitoring-admission-column-name">{column.name}</span>
+                            <span className="monitoring-admission-column-meta">
+                              {[column.typeText, column.missingText, column.dateRangeText].filter(Boolean).join(" · ")}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  </li>
+                ))}
+              </ul>
             </details>
           </div>
         ) : profile && stepIndex === 2 ? (
@@ -837,6 +859,7 @@ export function MedicalMonitoringAdmissionWizardView({
           </button>
         ))}
         <button
+          id="monitoring-admission-primary"
           type="button"
           className="monitoring-admission-primary"
           disabled={primary.disabled}
