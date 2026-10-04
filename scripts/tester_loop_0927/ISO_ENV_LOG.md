@@ -256,3 +256,12 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 修复：特殊关注多候选显式选择即确认（run_setup.append_revision语义修正，无选择仍fail-closed）；疑点卡展示系统判断内容+残句消毒；准入错误响应与台账事件双带event_ref（EVT-时间-随机-原因码）且前台可复制展示。
 - 自检：8911 ready:true（build api-2ac4a3a5e6a1db40）；5178=200；指纹配对一致。
 - ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
+
+## 2026-10-04 上午（R16D 开考位预置·守护员）
+
+- **探障（无障碍，R5D marker 缺陷未复发，未修任何产品代码、未重启 8911/5178）**：① 循环收尾已把旧项目全部软归档（`GET /api/projects` → `[]`），无存量项目可按原样探 → 按 R13D-R15D 先例建项后探：R16D 建项瞬间 `GET /r7/project/open` blocked（bootstrap 前 monitoring_runtime.sqlite3 不存在的设计内瞬态，R1 已知同款）；② 修复代码在位：main.py:4925-4927,4935-4936 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54 = mm-r7-w01r26-launch-registry-v5）；③ R16D 新建 workspace 的 launch_registry marker sqlite 直查 = v5（现行进程写入实证），存量 15 个 workspace 逐库直查全部 v5；④ 终态硬断言 Step10 通过（project/open 必须 current）。环境侧：8911 /api/runtime-readiness ready:true（build api-2ac4a3a5e6a1db40，R15 修复员凌晨双重启后的现行进程）；5178 /monitoring=200（[::1]）且 runtime-build.json expectedBackendBuildId=api-2ac4a3a5e6a1db40 配对一致；8910/5177 无监听（连接拒绝）——非本轮所致（仅只读 lsof/curl 复核），按铁律未触碰，如实记录。
+- **预置 MX循R16D-CSU**（proj_user_e82b9e8acc60，幂等键 r16d-seed-20261004T001015Z-c018a8b7）：三件套上传（stg-e62b469df0b54c9a94866be0b8cef25e，591行/10表，sha256 与 R15D 逐字节一致）→ 文档权威双VLM约4.4分钟 ready（mmbatch_76e97b66cde8d4a2c47a2954；身份门 project_identity_incomplete 触发一次＝界面一次点击同款手势；角色门未触发，protocol/ecrf 自动识别 current）→ 映射双队列（10主+10盲核，60候选，约15.3分钟）→ 复核收敛：remaining 46 →（系统裁决23）→23 →（23张已知裁决卡作答）→0 complete → **confirm 200（draft monmapdraft_09ce60ee5b30df2e05d3cbfd5ebb v72 confirmed，user_questions=0）→ facts（10表/591行/3550值全核验，state=ready）**，停住未启动监查（runs=[]）；project/open → current/complete/canView/canEdit=true；run-setup/options 200。
+- 裁决卡：25 次作答事件 / **23 张唯一卡全部由既有决策表覆盖**（R5/R8/R9/R11/R12/R13/R14/R15 表；EX.EXFRQ、EX.EXTRT 两卡跨轮次重复浮现各作答两次）——**本轮无新卡浮现，无 fail-closed 退出**。中途 1 个 mapping 分片 failed 后自动重试完成，终态 44/44 作业全 completed，无 bounded-gap 缺口。
+- AI 台账（本项目）：44 作业全 completed（document_authority_analysis×2 + document_authority_review×2 + listing_field_mapping×40）；62 次调用，1,344,591 tokens（prompt 876,253 + completion 468,338）。全程未跳任何质量门。轮次分节详见 `R5_SEEDED_PROJECT.md` R16D。
+- 驱动与留痕：`r16d_seed_csu.py`（由 r15d_seed_csu.py 机械适配，既有裁决卡决策表原样保留）、`r16d_seed_state.json`、`r16d_seed_evidence.jsonl`、`r16d_seed_console.log`。
+2026-10-04 06:28 R16材料事故修复：十二轮收官清理误删暂存夹具→R13重启只补CSU→R16B位MY008派发时暴露；任务所有者已补齐四套三件套（MY008/RUX/CSU/PSO）并ResolveWorkflowQuestion答复按原任务开测；教训=夹具与垃圾同删、循环重启必须全量补料
