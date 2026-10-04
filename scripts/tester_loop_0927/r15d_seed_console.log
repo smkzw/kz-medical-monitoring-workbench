@@ -1,0 +1,85 @@
+[      0s] jobs={'completed': 26} inflight=0
+    adjudicate -> {'adj_state': 'running', 'remaining': 46, 'system_adjudicated': 0, 'http': 200}
+[     79s] jobs={'completed': 26, 'running': 3, 'queued': 17} inflight=20
+[    124s] jobs={'completed': 26, 'running': 3, 'queued': 17} inflight=20
+[    169s] jobs={'completed': 27, 'running': 3, 'queued': 16} inflight=19
+[    214s] jobs={'completed': 27, 'running': 3, 'queued': 16} inflight=19
+[    259s] jobs={'completed': 27, 'running': 3, 'queued': 16} inflight=19
+[    304s] jobs={'completed': 27, 'running': 3, 'queued': 16} inflight=19
+[    349s] jobs={'completed': 27, 'running': 3, 'queued': 16} inflight=19
+[    394s] jobs={'completed': 27, 'running': 3, 'queued': 16} inflight=19
+[    440s] jobs={'completed': 28, 'running': 3, 'queued': 15} inflight=18
+[    486s] jobs={'completed': 28, 'running': 3, 'queued': 15} inflight=18
+[    532s] jobs={'completed': 29, 'running': 3, 'queued': 14} inflight=17
+[    577s] jobs={'completed': 29, 'running': 3, 'queued': 14} inflight=17
+[    622s] jobs={'completed': 29, 'running': 3, 'queued': 14} inflight=17
+[    667s] jobs={'completed': 29, 'running': 3, 'queued': 14} inflight=17
+[    712s] jobs={'completed': 29, 'running': 3, 'queued': 14} inflight=17
+[    757s] jobs={'completed': 30, 'running': 3, 'queued': 13} inflight=16
+[    802s] jobs={'completed': 30, 'running': 3, 'queued': 13} inflight=16
+[    847s] jobs={'completed': 30, 'running': 3, 'queued': 13} inflight=16
+[    892s] jobs={'completed': 30, 'running': 3, 'queued': 13} inflight=16
+[    937s] jobs={'completed': 30, 'running': 3, 'queued': 13} inflight=16
+[    982s] jobs={'completed': 30, 'running': 3, 'queued': 13} inflight=16
+[   1027s] jobs={'completed': 31, 'running': 3, 'queued': 12} inflight=15
+[   1072s] jobs={'completed': 31, 'running': 3, 'queued': 12} inflight=15
+[   1117s] jobs={'completed': 31, 'running': 3, 'queued': 12} inflight=15
+[   1162s] jobs={'completed': 31, 'running': 3, 'queued': 11, 'failed': 1} inflight=14
+[   1208s] jobs={'completed': 31, 'running': 3, 'queued': 11, 'failed': 1} inflight=14
+[   1253s] jobs={'completed': 32, 'running': 3, 'queued': 10, 'failed': 1} inflight=13
+[   1298s] jobs={'completed': 32, 'running': 3, 'queued': 10, 'failed': 1} inflight=13
+[   1343s] jobs={'completed': 32, 'running': 3, 'queued': 10, 'failed': 1} inflight=13
+[   1388s] jobs={'completed': 32, 'running': 3, 'queued': 10, 'failed': 1} inflight=13
+[   1434s] jobs={'completed': 32, 'running': 3, 'queued': 10, 'failed': 1} inflight=13
+[   1479s] jobs={'completed': 33, 'running': 3, 'queued': 9, 'failed': 1} inflight=12
+[   1524s] jobs={'completed': 33, 'running': 3, 'queued': 9, 'failed': 1} inflight=12
+[   1569s] jobs={'completed': 33, 'running': 3, 'queued': 8, 'failed': 2} inflight=11
+[   1614s] jobs={'completed': 34, 'running': 3, 'queued': 7, 'failed': 2} inflight=10
+[   1659s] jobs={'completed': 35, 'failed': 3, 'running': 3, 'queued': 5} inflight=8
+[   1704s] jobs={'completed': 35, 'failed': 3, 'running': 3, 'queued': 5} inflight=8
+[   1749s] jobs={'completed': 35, 'failed': 3, 'running': 3, 'queued': 5} inflight=8
+[   1794s] jobs={'completed': 35, 'failed': 3, 'running': 3, 'queued': 5} inflight=8
+[   1839s] jobs={'completed': 35, 'failed': 3, 'running': 3, 'queued': 5} inflight=8
+[   1885s] jobs={'completed': 35, 'failed': 3, 'running': 3, 'queued': 5} inflight=8
+[   1930s] jobs={'completed': 36, 'failed': 4, 'running': 3, 'queued': 3} inflight=6
+[   1975s] jobs={'completed': 36, 'failed': 4, 'running': 3, 'queued': 3} inflight=6
+[   2020s] jobs={'completed': 38, 'failed': 4, 'running': 2, 'queued': 2} inflight=4
+[   2065s] jobs={'completed': 38, 'failed': 4, 'running': 2, 'queued': 2} inflight=4
+[   2110s] jobs={'completed': 39, 'failed': 4, 'running': 1, 'queued': 2} inflight=3
+[   2155s] jobs={'completed': 39, 'failed': 4, 'running': 1, 'queued': 2} inflight=3
+[   2201s] jobs={'completed': 39, 'failed': 4, 'running': 1, 'queued': 2} inflight=3
+[   2246s] jobs={'completed': 40, 'failed': 4, 'running': 1, 'queued': 1} inflight=2
+[   2291s] jobs={'completed': 40, 'failed': 4, 'running': 1, 'queued': 1} inflight=2
+[   2336s] jobs={'completed': 40, 'failed': 4, 'running': 1, 'queued': 1} inflight=2
+[   2381s] jobs={'completed': 40, 'failed': 4, 'running': 1, 'queued': 1} inflight=2
+[   2426s] jobs={'completed': 40, 'failed': 4, 'running': 1, 'queued': 1} inflight=2
+[   2471s] jobs={'completed': 40, 'failed': 4, 'running': 1, 'queued': 1} inflight=2
+[   2516s] jobs={'completed': 40, 'failed': 5, 'running': 1} inflight=1
+[   2561s] jobs={'completed': 40, 'failed': 5, 'running': 1} inflight=1
+[   2606s] jobs={'completed': 40, 'failed': 5, 'running': 1} inflight=1
+[   2651s] jobs={'completed': 41, 'failed': 5} inflight=0
+    adjudicate -> {'adj_state': 'running', 'remaining': 46, 'system_adjudicated': 0, 'http': 200}
+[   2849s] jobs={'completed': 41, 'running': 2, 'queued': 3} inflight=5
+[   2894s] jobs={'completed': 41, 'running': 2, 'queued': 3} inflight=5
+[   2940s] jobs={'completed': 42, 'running': 2, 'queued': 2} inflight=4
+[   2985s] jobs={'completed': 42, 'running': 2, 'queued': 2} inflight=4
+[   3030s] jobs={'completed': 42, 'running': 2, 'queued': 2} inflight=4
+[   3075s] jobs={'completed': 42, 'running': 2, 'queued': 2} inflight=4
+[   3120s] jobs={'completed': 42, 'running': 2, 'queued': 2} inflight=4
+[   3165s] jobs={'completed': 42, 'running': 2, 'queued': 2} inflight=4
+[   3210s] jobs={'completed': 42, 'running': 2, 'queued': 2} inflight=4
+[   3255s] jobs={'completed': 42, 'running': 2, 'queued': 2} inflight=4
+[   3300s] jobs={'completed': 42, 'running': 2, 'queued': 2} inflight=4
+[   3345s] jobs={'completed': 42, 'running': 2, 'failed': 1, 'queued': 1} inflight=3
+[   3390s] jobs={'completed': 42, 'running': 2, 'failed': 1, 'queued': 1} inflight=3
+[   3435s] jobs={'completed': 43, 'running': 2, 'failed': 1} inflight=2
+[   3481s] jobs={'completed': 43, 'running': 2, 'failed': 1} inflight=2
+[   3526s] jobs={'completed': 43, 'running': 2, 'failed': 1} inflight=2
+[   3571s] jobs={'completed': 43, 'running': 2, 'failed': 1} inflight=2
+[   3616s] jobs={'completed': 44, 'running': 1, 'failed': 1} inflight=1
+[   3661s] jobs={'completed': 44, 'running': 1, 'failed': 1} inflight=1
+[   3706s] jobs={'completed': 44, 'running': 1, 'failed': 1} inflight=1
+[   3751s] jobs={'completed': 44, 'running': 1, 'failed': 1} inflight=1
+[   3796s] jobs={'completed': 44, 'failed': 2} inflight=0
+    adjudicate -> {'adj_state': 'blocked', 'remaining': 26, 'system_adjudicated': 20, 'http': 200}
+{"ok": false, "step": "converge_cards", "unknown": [{"prior_user_action": "", "recommended_role": "diastolic_blood_pressure", "attention_reason": "需医学确认", "field_kind": "source_collected", "question_text": "系统两轮独立复核对本字段结论仍不一致，请裁决「VS·DBP」的实际语义：主分析判断为「diastolic_blood_pressure」，独立复核判断为「diastolic_blood_pressure」。可采纳任一方或给出其他结论", "source_field": "DBP", "confidence": 0.95, "evidence_summary": [], "domain": "VS"}, {"prior_user_action": "", "recommended_role": "heart_rate", "attention_reason": "需医学确认", "field_kind": "source_collected", "question_text": "系统两轮独立复核对本字段结论仍不一致，请裁决「VS·HRRATE」的实际语义：主分析判断为「heart_rate」，独立复核判断为「heart_rate」。可采纳任一方或给出其他结论", "source_field": "HRRATE", "confidence": 0.94, "evidence_summary": [], "domain": "VS"}, {"prior_user_action": "", "recommended_role": "respiratory_rate", "attention_reason": "需医学确认", "field_kind": "source_collected", "question_text": "系统两轮独立复核对本字段结论仍不一致，请裁决「VS·RESP」的实际语义：主分析判断为「respiratory_rate」，独立复核判断为「respiratory_rate」。可采纳任一方或给出其他结论", "source_field": "RESP", "confidence": 0.93, "evidence_summary": [], "domain": "VS"}, {"prior_user_action": "", "recommended_role": "systolic_blood_pressure", "attention_reason": "需医学确认", "field_kind": "source_collected", "question_text": "系统两轮独立复核对本字段结论仍不一致，请裁决「VS·SBP」的实际语义：主分析判断为「systolic_blood_pressure」，独立复核判断为「systolic_blood_pressure」。可采纳任一方或给出其他结论", "source_field": "SBP", "confidence": 0.95, "evidence_summary": [], "domain": "VS"}]}
