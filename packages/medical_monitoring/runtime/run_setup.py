@@ -741,12 +741,28 @@ class RiskRuleRegistry:
         preview = self._draft(project, draft)
         if preview.project_id != project:
             raise RunSetupError("risk_rule_project_mismatch")
-        if not preview.confirmable:
-            raise RunSetupError("ambiguous_risk_rule" if preview.state == "ambiguous" else "risk_rule_not_confirmed")
-        candidate = preview.candidates[0]
-        chosen = candidate_id or candidate.candidate_id
-        if chosen != candidate.candidate_id:
-            raise RunSetupError("risk_rule_not_confirmed")
+        # R15轮（R15-01）：多候选（AI诚实给出两个解释）曾被这里硬拒——
+        # confirmable要求state=ready且候选=1，用户在界面选了候选仍报
+        # 「无法可靠拆解」死循环。语义修正：显式candidate_id命中预览
+        # 候选之一即确认该候选（人的裁决就是拆解）；无显式选择时仅在
+        # 单候选（ready）下取首个，多候选仍fail-closed。
+        if candidate_id:
+            chosen_id = _required_text(candidate_id, "risk_rule_not_confirmed")
+            match = next(
+                (item for item in preview.candidates if item.candidate_id == chosen_id),
+                None,
+            )
+            if match is None:
+                raise RunSetupError("risk_rule_not_confirmed")
+            candidate = match
+        elif preview.confirmable:
+            candidate = preview.candidates[0]
+        else:
+            raise RunSetupError(
+                "ambiguous_risk_rule"
+                if preview.state == "ambiguous"
+                else "risk_rule_not_confirmed"
+            )
         start = starting_run or candidate.starting_run
         if idempotency_key is not None:
             idem = _required_text(idempotency_key, "invalid_rule_revision")

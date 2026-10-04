@@ -2134,15 +2134,42 @@ def test_slice07c1_risk_rule_preview_confirmation_revision_and_history(
     assert ambiguous_body["state"] == "ambiguous"
     assert ambiguous_body["confirmable"] is False
     assert 2 <= len(ambiguous_body["candidates"]) <= 5
+    # R15轮（R15-01）：无选择的ambiguous确认仍fail-closed。
     rejected = client.post(
         f"{_base(PROJECT_A)}/risk-rules",
         json={
             "preview_token": ambiguous_body["preview_token"],
-            "candidate_id": ambiguous_body["candidates"][0]["candidate_id"],
         },
     )
     assert rejected.status_code == 422
     assert rejected.json()["code"] == "ambiguous_risk_rule"
+
+    # R15轮（R15-01）：显式候选选择即确认（人的裁决就是拆解）——曾为
+    # 422死循环（用户选了候选仍报「无法可靠拆解」）。
+    ambiguous_confirmed = client.post(
+        f"{_base(PROJECT_A)}/risk-rules",
+        json={
+            "preview_token": ambiguous_body["preview_token"],
+            "candidate_id": ambiguous_body["candidates"][0]["candidate_id"],
+            "idempotency_key": "ambiguous-choice-001",
+        },
+    )
+    assert ambiguous_confirmed.status_code == 200, ambiguous_confirmed.text
+    ambiguous_revision = ambiguous_confirmed.json()
+    _assert_public_clean(ambiguous_revision)
+    # 公开投影不携带candidate_id（内部身份）；以摘要含所选候选主题核实。
+    assert ambiguous_body["candidates"][0]["subject"] in ambiguous_revision["summary"]
+
+    # 未知候选仍拒绝。
+    unknown = client.post(
+        f"{_base(PROJECT_A)}/risk-rules",
+        json={
+            "preview_token": ambiguous_body["preview_token"],
+            "candidate_id": "no-such-candidate",
+        },
+    )
+    assert unknown.status_code == 422
+    assert unknown.json()["code"] == "risk_rule_not_confirmed"
 
     preview = client.post(
         f"{_base(PROJECT_A)}/risk-rules/preview",
@@ -2170,7 +2197,7 @@ def test_slice07c1_risk_rule_preview_confirmation_revision_and_history(
     revision = confirmed.json()
     _assert_public_clean(revision)
     assert revision["project_id"] == PROJECT_A
-    assert revision["revision"] == 1
+    assert revision["revision"] == 2  # ambiguous-choice-001 已占 revision 1
     assert revision["selectable"] is True
     assert revision["applicable_scope"] == "所有受试者"
     assert revision["starting_run"] == "下一次日常监查"
@@ -2193,11 +2220,13 @@ def test_slice07c1_risk_rule_preview_confirmation_revision_and_history(
     listed_body = listed.json()
     _assert_public_clean(listed_body)
     assert listed_body["project_id"] == PROJECT_A
-    assert listed_body["rule_revisions"] == [revision]
+    # R15轮：ambiguous显式确认也产生一条修订——列表含两条（1=ambiguous
+    # 选择，2=ready确认）。
+    assert listed_body["rule_revisions"] == [ambiguous_revision, revision]
 
     options = client.get(f"{_base(PROJECT_A)}/run-setup/options")
     assert options.status_code == 200, options.text
-    assert options.json()["rule_revisions"] == [revision]
+    assert options.json()["rule_revisions"] == [ambiguous_revision, revision]
 
     assert client.post(f"{_base(PROJECT_B)}/workspace/bootstrap").status_code == 200
     assert client.get(f"{_base(PROJECT_B)}/risk-rules").json()["rule_revisions"] == []
