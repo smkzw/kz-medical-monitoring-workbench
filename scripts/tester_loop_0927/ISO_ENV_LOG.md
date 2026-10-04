@@ -266,3 +266,10 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 驱动与留痕：`r16d_seed_csu.py`（由 r15d_seed_csu.py 机械适配，既有裁决卡决策表原样保留）、`r16d_seed_state.json`、`r16d_seed_evidence.jsonl`、`r16d_seed_console.log`。
 2026-10-04 06:28 R16材料事故修复：十二轮收官清理误删暂存夹具→R13重启只补CSU→R16B位MY008派发时暴露；任务所有者已补齐四套三件套（MY008/RUX/CSU/PSO）并ResolveWorkflowQuestion答复按原任务开测；教训=夹具与垃圾同删、循环重启必须全量补料
 2026-10-04 10:23 第三次无损暂停（用户确认卡死后指示直接结束）：R16B位测试者卡服务方限流（token冻结979,499,000、6h12m零进展超5h纪律上限）→TaskStop；R16A/C/D已交卷在档；恢复=ResumeWorkflowRun dwfrun-513b9893（B位将重派）
+
+## 2026-10-04（R16轮次·修复员：R16-01修复后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R16轮次：R16-01）
+- 修复：resolve路由补GET变体（batch_id查询参数，与POST同语义；缺参给可读422非404）；前端轮询catch显式route_not_found/404分支→failed态+如实提示，不再无限静默。
+- 自检：8911 ready:true（build api-2ac4a3a5e6a1db40——packages/改动不入build指纹但进程已重启加载新代码）；5178=200；指纹配对一致。
+- ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。

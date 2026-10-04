@@ -1261,6 +1261,19 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
             setDocumentState((current) => ({ ...current, error: null }));
             return;
           }
+          // R16轮（R16-01）：路由级404（动词错配/路径变更）不得无限
+          // 静默重试——立即转failed并如实提示。
+          if (
+            error?.detail?.code === "route_not_found"
+            || Number(error?.status) === 404
+          ) {
+            setDocumentState((current) => ({
+              ...current,
+              phase: "failed",
+              error: "研究文件核对的查询路径当前不可用（404）。请刷新页面后重试；若持续出现请联系支持并提供该提示。",
+            }));
+            return;
+          }
           // R2循环：失败分支必须保留payload——user_choices/analysis_token
           // 都取自payload，清空会让「可裁决」提示与裁决控件同时消失，
           // 把用户锁死在第3步（报告C的document_authority_candidate_
