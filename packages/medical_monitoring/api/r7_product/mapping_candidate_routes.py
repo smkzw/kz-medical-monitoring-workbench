@@ -737,6 +737,37 @@ def register_mapping_candidate_routes(
         payload: DocumentAuthorityPromotionRequest,
         request: Request,
     ) -> Any:
+        return _resolve_mapping_documents_impl(
+            project_id, attempt_id, payload, request
+        )
+
+    @router.get(
+        "/data-admissions/{attempt_id}/study-documents/resolve",
+        status_code=200,
+    )
+    async def resolve_mapping_documents_get(
+        project_id: str,
+        attempt_id: str,
+        request: Request,
+        batch_id: str = Query(default=""),
+    ) -> Any:
+        # R16轮（R16-01）：实测有前端/工具以GET轮询resolve（POST-only
+        # 路由返回404 route_not_found且未被捕获→界面无限挂起）。补GET
+        # 语义：batch_id经查询参数传入（无请求体），行为与POST一致
+        # （只读推进核对状态机）。缺batch_id时给出明确可读错误而非404。
+        if not batch_id.strip():
+            return _mapping_error("mapping_attempt_id_invalid")
+        payload = DocumentAuthorityPromotionRequest(batch_id=batch_id.strip())
+        return _resolve_mapping_documents_impl(
+            project_id, attempt_id, payload, request
+        )
+
+    def _resolve_mapping_documents_impl(
+        project_id: str,
+        attempt_id: str,
+        payload: DocumentAuthorityPromotionRequest,
+        request: Request,
+    ) -> Any:
         canonical = context.resolve_project(project_id)
         if isinstance(canonical, JSONResponse):
             return canonical
