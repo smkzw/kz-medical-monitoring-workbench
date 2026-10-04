@@ -240,3 +240,19 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 修复：表结构区Tab焦点链收敛（外层details唯一焦点+内层summary tabindex=-1+跳到主操作跳过链接）；研究文件上传入口显式引导+视觉层级提升（dashed大按钮+缺什么说明）；导航禁用豁免（无项目时台账/审批中心仍可进入，台账页无项目态给出明确提示）。
 - 自检：8911 ready:true（build api-2ac4a3a5e6a1db40）；5178=200；指纹配对一致。
 - ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
+
+## 2026-10-03 深夜（R15轮次·开考预置守护员：探障无障碍 + 预置 MX循R15D-CSU）
+
+- 操作者：开考预置守护员-R15D。起止：2026-10-03 17:58Z → 19:28Z（2026-10-04 01:58→03:28 CST 北京；本机时区现 CEST）。全程未修任何产品代码、未重启 8911/5178（R14轮次修复员已于 17:43Z 重启隔离对，build api-2ac4a3a5e6a1db40 指纹配对在位）。
+- **探障（无障碍，R5D marker 缺陷未复发）**：① `GET /r7/project/open`（R14D 项目 proj_user_588084370b49）→ current/complete/canView/canEdit=true，无 blocked/CORRUPT；② 修复代码在位：main.py:4925-4927,4935-4936 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54 = mm-r7-w01r26-launch-registry-v5）；③ 隔离 runtime 存量 10 个 workspace 的 launch_registry marker 逐库 sqlite 直查全部 v5；④ R15D 建项后产品 `inspect_project_schema` 实证 6 成员全 current/current_shape（建项瞬间 project/open blocked 为 bootstrap 前 monitoring_runtime 不存在的设计内瞬态，R1 已知同款），终态硬断言 Step10 通过。主侧AI路由复核：直连绑定跨重启生效，/api/ai-gateway/probe 三档案真实往返全 passed:true（两主侧 5358/3319ms；verifier 535ms），本轮无需换绑。8910/5177 无监听（连接拒绝）——非本轮所致（仅只读复核），按铁律未触碰，如实记录。
+- **预置 MX循R15D-CSU**（proj_user_b556e56f50ba，幂等键 r15d-seed-20261003T175809Z-f69ce3fd）：三件套上传（stg-c2e8050af8ba4db1b4e144c49c5c7b9b，591行/10表，sha256 与 R13D 重建版逐字节一致）→ 文档权威双VLM约4.8分钟 ready（mmbatch_3cc1450700092fc19a46a9e3，自动归属确认，无身份门/角色门）→ 映射双队列（10主+10盲核，60候选，约13.9分钟）→ 复核收敛：remaining 46 →（系统裁决20）→26 →（27张裁决卡作答）→0 complete → **confirm 200（draft monmapdraft_23b664f6059daaaf1a96cf905a54 v74 confirmed，user_questions=0）→ facts 201（10表/591行/3038值全核验，state=ready）**，停住未启动监查（runs=[]）；project/open → current/complete/canView/canEdit=true；run-setup/options 200。
+- 裁决卡 27 张 = 1 首轮 EX.EXFRQ + 22 既有表 + **4张R15新卡 VS.DBP/HRRATE/RESP/SBP**（历轮首次浮现）首次浮现 fail-closed 诚实退出留痕（r15d_seed_evidence.jsonl unknown_questions_fail_closed 19:21:45Z）后，按 openpyxl 直读 VS 表实测（64行=16受试者×4访视，心率58-94/收缩压98-140/舒张压60-88/呼吸16-22 全整数）补答，采纳双队列同判角色 token。
+- AI 台账（本项目）：46作业（44完成/2终态failed=provider_runtime_error×1+invalid_ai_output×1，均 mapping 分片，经自动恢复与 bounded-gap 收敛 remaining=0）；73次调用，1,427,947 tokens。全程未跳任何质量门。轮次分节详见 `R5_SEEDED_PROJECT.md` R15D。
+- 驱动与留痕：`r15d_seed_csu.py`（由 r14d_seed_csu.py 机械适配 + R15_ROUND1_CARDS 四卡表）、`r15d_seed_state.json`、`r15d_seed_evidence.jsonl`、`r15d_seed_console.log`/`r15d_seed_console2.log`。
+
+## 2026-10-04 凌晨（R15轮次·修复员：三项修复后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R15轮次：R15-01、R13-02、R13-03）
+- 修复：特殊关注多候选显式选择即确认（run_setup.append_revision语义修正，无选择仍fail-closed）；疑点卡展示系统判断内容+残句消毒；准入错误响应与台账事件双带event_ref（EVT-时间-随机-原因码）且前台可复制展示。
+- 自检：8911 ready:true（build api-2ac4a3a5e6a1db40）；5178=200；指纹配对一致。
+- ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。

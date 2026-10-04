@@ -167,8 +167,20 @@ class AdmissionRouteContext:
 
 
 def _admission_error(code: str) -> JSONResponse:
-    return _error_response(
-        _ADMISSION_STATUS_CODES[code], code, _ADMISSION_MESSAGES[code]
+    # R15轮（R13-03）：错误响应附带事件参考（原因码+时间戳+短随机——
+    # 与来源台账admission_events.jsonl的ts/reason可互查），前台可
+    # 展示供报障与稽查对账。
+    import uuid as _uuid
+    from datetime import datetime, timezone as _tz
+
+    event_ref = f"EVT-{datetime.now(_tz.utc).strftime('%Y%m%dT%H%M%S')}-{_uuid.uuid4().hex[:6]}-{code}"
+    return JSONResponse(
+        status_code=_ADMISSION_STATUS_CODES[code],
+        content={
+            "code": code,
+            "message": _ADMISSION_MESSAGES[code],
+            "event_ref": event_ref,
+        },
     )
 
 
@@ -249,6 +261,7 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
         admissions/admission_events.jsonl；写入失败不阻断主链路。
         """
         import json as _json
+        import uuid as _uuid
         from datetime import datetime, timezone as _tz
 
         try:
@@ -264,6 +277,7 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
                 "stage": str(stage),
                 "outcome": str(outcome),
                 "files": [str(item)[:200] for item in files][:50],
+                "event_ref": f"EVT-{datetime.now(_tz.utc).strftime('%Y%m%dT%H%M%S')}-{_uuid.uuid4().hex[:6]}-{str(reason or stage)[:60]}",
             }
             if reason:
                 event["reason"] = str(reason)[:200]

@@ -212,6 +212,10 @@ export function admissionRecovery(errorLike) {
   const canRetry = guide ? guide.canRetry : true;
   const retryTarget = guide ? guide.retryTarget || null : null;
   const guidance = guide ? guide.guidance : NETWORK_RECOVERY.guidance;
+  // R15轮（R13-03）：透传服务端事件参考——报障时提供可与来源台账
+  // admission_events流水互查的依据（原因码已含在ref尾部）。
+  const eventRef = cleanText(errorLike?.detail?.event_ref)
+    || cleanText(errorLike?.event_ref) || "";
   return Object.freeze({
     code: code || (status ? `http_${status}` : "network"),
     status,
@@ -219,6 +223,7 @@ export function admissionRecovery(errorLike) {
     guidance: Object.freeze([...guidance]),
     canRetry,
     retryTarget,
+    eventRef,
   });
 }
 

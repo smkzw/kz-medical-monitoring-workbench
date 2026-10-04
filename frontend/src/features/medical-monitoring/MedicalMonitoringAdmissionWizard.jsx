@@ -425,6 +425,14 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
                 <div className="monitoring-admission-question-head">
                   <strong>请做一个医学选择</strong>
                 </div>
+                {/* R15轮（R13-02）：先展示系统判断内容与依据（字段/归类/
+                    置信度/证据覆盖），再展示问题——确认动作可独立核实，
+                    不依赖问题文案完整性。 */}
+                {card.systemJudgment ? (
+                  <p className="monitoring-admission-question-judgment" style={{ margin: "4px 0", fontSize: 12, color: "var(--monitoring-muted, #6b7785)" }}>
+                    系统判断：{card.systemJudgment}
+                  </p>
+                ) : null}
                 <p className="monitoring-admission-question-text">{card.question}</p>
                 {card.priorUserAction ? (
                   <details className="monitoring-admission-question-evidence">
@@ -837,6 +845,12 @@ export function MedicalMonitoringAdmissionWizardView({
       {error ? (
         <div className="monitoring-admission-alert" role="alert">
           <p className="monitoring-admission-alert-text">{error.serverText}</p>
+          {/* R15轮（R13-03）：事件参考可复制——与来源台账流水互查。 */}
+          {error.eventRef ? (
+            <p className="monitoring-admission-event-ref" style={{ margin: "2px 0 4px", fontSize: 11, color: "var(--monitoring-muted, #6b7785)", fontFamily: "monospace" }}>
+              事件参考：{error.eventRef}（报障时请提供；可在「来源台账 → 数据准入事件流水」按时间互查）
+            </p>
+          ) : null}
           {error.guidance?.length ? (
             <ul className="monitoring-admission-alert-guide">
               {error.guidance.map((line) => (

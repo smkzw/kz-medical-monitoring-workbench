@@ -71,6 +71,37 @@ export function mappingEvidenceText(evidenceSummary) {
 // Card question copy: the backend triage writes the authoritative Chinese
 // question (question_text); the harness question and a plain-language
 // template are the fallbacks for older payloads.
+// R15轮（R13-02）：AI生成的question偶有残句（如「请确认：而…——」
+// 开头即断）。无法修复模型原文本身，但可以：①剥掉悬空的引导词让残句
+// 以事实部分呈现；②在卡上展示系统判断详情（见buildSystemJudgment），
+// 使确认动作不依赖问题文案的完整性。
+function sanitizeQuestionText(text) {
+  let value = String(text || "").trim();
+  // 引导词后紧跟转折/引用（说明句子主体被截断）时剥掉引导词。
+  value = value.replace(/^请确认[：:]?\s*(?=[而但是]|“|")/, "");
+  // 结尾悬空的破折号/冒号
+  value = value.replace(/[——：:]\s*$/, "");
+  return value.trim();
+}
+
+function buildSystemJudgment(item) {
+  const parts = [];
+  if (item.sourceField) parts.push(`字段：${item.domain}·${item.sourceField}`);
+  if (item.recommendedRole) parts.push(`系统归类：${item.recommendedRole}`);
+  if (item.fieldKind) parts.push(`字段性质：${item.fieldKind}`);
+  const doseLabel = item.suggestedAnswer
+    || DOSE_SEMANTICS_TEXTS[String(item.doseSemantics || item.dose_semantics || "")] || "";
+  if (doseLabel) parts.push(`剂量语义：${doseLabel}`);
+  if (Number.isFinite(Number(item.confidence))) {
+    parts.push(`置信度：${Math.round(Number(item.confidence) * 100)}%`);
+  }
+  const evidence = Array.isArray(item.evidenceSummary) ? item.evidenceSummary[0] : null;
+  if (evidence) {
+    parts.push(`证据覆盖：${Number(evidence.non_empty_count) || 0}/${Number(evidence.total_rows) || 0} 条非空`);
+  }
+  return parts.join(" · ");
+}
+
 function questionText(item) {
   const serverQuestion = String(item?.questionText || item?.question_text || "").trim();
   if (serverQuestion) return serverQuestion;
@@ -144,10 +175,13 @@ export function projectMappingCandidates(payload) {
       domain: item.domain,
       sourceField: item.sourceField,
       attentionReason: item.attentionReason || "需要确认",
-      question: questionText(item),
+      question: sanitizeQuestionText(questionText(item)),
       evidenceText: mappingEvidenceText(item.evidenceSummary),
       confidence: item.confidence,
       suggestedAnswer: DOSE_SEMANTICS_TEXTS[item.doseSemantics] || "",
+      // R13-02：系统判断的具体内容与依据——字段、推荐角色、类型、
+      // 置信度、剂量语义、证据覆盖率，全部同屏可核实。
+      systemJudgment: buildSystemJudgment(item),
     }));
   const byDomain = new Map();
   for (const item of projected) {
@@ -188,7 +222,16 @@ function draftQuestionCards(draft) {
     domain: String(item?.domain || ""),
     sourceField: String(item?.source_field || ""),
     attentionReason: String(item?.attention_reason || "需要确认"),
-    question: questionText(item),
+    question: sanitizeQuestionText(questionText(item)),
+    systemJudgment: buildSystemJudgment({
+      domain: String(item?.domain || ""),
+      sourceField: String(item?.source_field || ""),
+      recommendedRole: String(item?.recommended_role || ""),
+      fieldKind: String(item?.field_kind || ""),
+      suggestedAnswer: DOSE_SEMANTICS_TEXTS[String(item?.dose_semantics || "")] || "",
+      confidence: item?.confidence,
+      evidenceSummary: Array.isArray(item?.evidence_summary) ? item.evidence_summary : [],
+    }),
     priorUserAction: String(item?.prior_user_action || ""),
     reusablePriorAnswer: (() => {
       const answer = String(item?.prior_user_action || "").replace(/^用户已(?:确认|核对)：/, "").trim();
