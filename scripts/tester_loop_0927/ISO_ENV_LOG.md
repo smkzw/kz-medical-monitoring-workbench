@@ -265,3 +265,4 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - AI 台账（本项目）：44 作业全 completed（document_authority_analysis×2 + document_authority_review×2 + listing_field_mapping×40）；62 次调用，1,344,591 tokens（prompt 876,253 + completion 468,338）。全程未跳任何质量门。轮次分节详见 `R5_SEEDED_PROJECT.md` R16D。
 - 驱动与留痕：`r16d_seed_csu.py`（由 r15d_seed_csu.py 机械适配，既有裁决卡决策表原样保留）、`r16d_seed_state.json`、`r16d_seed_evidence.jsonl`、`r16d_seed_console.log`。
 2026-10-04 06:28 R16材料事故修复：十二轮收官清理误删暂存夹具→R13重启只补CSU→R16B位MY008派发时暴露；任务所有者已补齐四套三件套（MY008/RUX/CSU/PSO）并ResolveWorkflowQuestion答复按原任务开测；教训=夹具与垃圾同删、循环重启必须全量补料
+2026-10-04 10:23 第三次无损暂停（用户确认卡死后指示直接结束）：R16B位测试者卡服务方限流（token冻结979,499,000、6h12m零进展超5h纪律上限）→TaskStop；R16A/C/D已交卷在档；恢复=ResumeWorkflowRun dwfrun-513b9893（B位将重派）
