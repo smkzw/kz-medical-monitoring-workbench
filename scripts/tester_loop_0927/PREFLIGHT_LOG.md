@@ -6,6 +6,114 @@
 
 ---
 
+## R15 第1次（20261003，run=r15p_preflight）——**chainOk = true，第六次全链端到端跑通（单run零fail-closed；R15D卡表全覆盖；5个盲核终态失败经bounded-gap吸收——如实记录facts覆盖率下降3038→2204）**
+
+- 驱动脚本：`scripts/tester_loop_0927/r15p_preflight_csu.py`（由 R14P 全绿驱动
+  r14p_preflight_csu.py 的8阶段流程面 + R15D 轮已在本build同数据完整验证至
+  facts 的裁决卡表 R5D-R15D（含 R13/R14 dict 卡与 R15_ROUND1_CARDS VS 四列）
+  机械组装适配 R15P 命名/幂等键/留痕文件；幂等，状态
+  `r15p_preflight_state.json`，留痕 `r15p_preflight_evidence.jsonl`（385驱动
+  事件），运行日志 logs/r15p_preflight_run1.log）
+- 数据：同 `tester_staging_0927/synth_csu` 三件套（方案V1.3 docx + eCRF指南V1.0 docx + 合成listing V1.0 xlsx）
+- 项目：**MX循R15P-CSU**（proj_user_655f6a5bbac5，慢性自发性荨麻疹 / MG-K10 /
+  modules 含 medical_monitoring【projects+source-manifest API 双核对；发布后
+  medical_monitoring → real_source_slice】，幂等键 r15p-preflight-20261003T193608Z-533bdb6e
+  唯一，精确名一次建项成功无需后缀，status=active，**留在原地待复盘归档**）
+- 运行：run:348d287368d0c54caf511f9a（run_start_idem=r15p-run-20261003T224407Z-29a1bfca，
+  prepare-and-start 一次 200，项目 runs 列表仅此1条无孤儿）
+- 结果：result-context:1ebd50f120fa418390f6b6c20b6380af（overview 驱动侧序列化
+  597,305 字节；独立HTTP读取原始载荷 778,126 字节）
+
+### 结论：chainOk = true（八阶段全ok；运行真完成10/10项100%、发布available、结果可读）
+
+已知状态碎片化家族（readiness 409）**未命中**——本轮 run-setup/options 200、
+workspace/bootstrap 200 后 prepare-and-start 一次 200，无 409 窗口；
+source-manifest medical_monitoring → **real_source_slice**。
+
+**本轮真实事件（如实，全程未改产品代码/数据库）**：
+1. **单 run 全绿，零 fail-closed**：R15D 卡表（27卡决策面）本轮全部覆盖收敛期
+   实际浮现的 13 张用户裁决卡（EX.EXFRQ/EX.EXTRT + ICF/LB_HEM/MH/UAS 既有卡），
+   无新未知卡（VS 四列卡 R15D 已收编，本轮未再浮现需作答的 VS 卡）；
+2. **收敛期失败家族多次复发并被产品恢复路径消化**：盲核裁决分片
+   provider_runtime_error（reasoning-only）反复出现（failed 计数 6→3→5→6→5
+   波动，多次被后续裁决波自动重排恢复），最终 **5 个分片 att=4/4 终态失败**
+   （AE/EX/CM/DM/SV 各1，均为显式 failure_code/failure_message，无静默失败），
+   经 bounded-gap 吸收后 adjudication complete（remaining=0，system_adjudicated=35，
+   confirm 200，monmapdraft_35139cb0f69090b7292715d5bc61 v60 confirmed）；
+3. **facts 覆盖率下降（如实记录，交复盘官）**：本轮 facts 物化 10表/591行/
+   **2204值**（source_values_verified=2204=100%），显著低于 R14P/R15D 同数据的
+   **3038值**——与盲核终态失败数 5（R14P/R15D 各2）相关，bounded-gap 吸收使
+   更多字段不进入事实物化。发布结果层结构仍与 R14P 完全一致（15发现/16受试者/
+   477风险，overview 序列化字节数相同 597,305），链路门本身按产品规则全绿
+   （facts state=ready、物化值100%核验），但**数据覆盖度差异是本轮值得复盘的
+   真实事件**；
+4. **文档权威本轮走了更长内部复核链**（产品内波次变化）：analysis 双VLM外，
+   review 阶段含 adjudication-v8 + critique-v2 + review-v7 双车道各3作业
+   （R14P 为 1+1），4+4 全 completed，452s（与R15D约4.8分钟一致）。
+
+### 八阶段计时（秒数=首次真实完成；总活跃驱动 11309.6s，壁钟 19:36:08Z→22:44:07Z 约3h8min，其中映射收敛 3h 占绝对主导）
+
+| # | 阶段 | ok | 秒 | 备注 |
+|---|---|---|---|---|
+| 1 | 建项 | ✅ | 0.0 | proj_user_655f6a5bbac5，精确名一次成功（在册 MX循R15D-CSU 无同名冲突）；indication/product/modules 合同双核对无误；status=active |
+| 2 | 上传 | ✅ | 0.2 | attempt=stg-4f6889391e0a4a37953b7456fc1654bc，1文件/10表/591行 |
+| 3 | 文档权威 | ✅ | 451.9 | analyze→（身份归属确认1次，自动）→ready=true「研究文件已准备好」；8个AI作业全completed（analysis/review × 主/盲核，review含3波内部复核链） |
+| 4 | 映射确认 | ✅ | 10826.4 | 双队列10+10→candidates_ready（60候选）→裁决收敛波（remaining 46→34→28→21→11→0；system_adjudicated 0→12→18→25→35）→13张用户卡全按数据实测决策表作答→adjudicate complete（remaining=0）→confirm 200；收敛3h远慢于R14（92min，盲核串行+失败/恢复循环多轮），仍在4h预算内 |
+| 5 | facts | ✅ | 0.1 | state=ready：10表/591行/**2204值** source_values_verified=2204（100%物化值核验；对比R14P/R15D 3038值，见上第3条） |
+| 6 | 运行 | ✅ | 30.3 | workspace/bootstrap 200→run-setup/options 200→prepare-and-start 一次200（**碎片化家族未命中**）→run_state=completed，**10/10项100%「已完成」**（progress复核API独立确认percent=100.0+status_overview[{已完成,count:10}]） |
+| 7 | 发布 | ✅ | 0.3 | publication POST 200→publication_state=available（progress侧publication_state=available+result_available=true双端点一致） |
+| 8 | 结果 | ✅ | 0.4 | result-entry 200；overview 非空（序列化597,305字节/原始载荷778,126字节）；**finding_count=15**（query_findings列表长度与query_findings_meta.total双一致）+current_risks=477；subject_count=16；identity.project_ref=proj_user_655f6a5bbac5 归属核对无误 |
+
+### AI 节点路由核验（台账：隔离实例 runs/tester_loop_iso_20260928/runtime/medical_monitoring_ai.sqlite3 直读；/api/ai/queue 本build仍404）
+
+本项目总量 88 作业（权威8+映射pipeline 20+裁决60），终态 83 completed +
+5 terminal failed，**0 queued/running（无滞留）**；5 个 failed（均为盲核裁决
+分片）均有显式 failure_code=provider_runtime_error（reasoning-only，R12-R15D
+同款已知家族）+ failure_message，无静默失败。调用139次（observed_model 与
+requested 全一致，0 mismatch），prompt 1,369,628 + completion 782,501 =
+2,152,129 tokens。
+
+| 节点 | provider/model（台账实测） | 作业数 | 终态 | ok |
+|---|---|---|---|---|
+| 文档权威主 | cms-router/glm-5.3-flash（analysis primary-v9 ×1；review：adjudication-primary-v8 + critique-primary-v2 + review-primary-v7 ×3） | 4 | 4 completed | ✅ |
+| 文档权威盲核 | ollama-cloud/deepseek-v4.1-flash（analysis verifier-v9 ×1；review：adjudication-verifier-v8 + critique-verifier-v2 + review-verifier-v7 ×3） | 4 | 4 completed | ✅ |
+| 映射主 | cms-router/glm-5.3-flash（pipeline listing-field-mapping-v19 ×10 + adjudication-v19-tools-v7.2 ×30） | 40 | 40 completed | ✅ |
+| 映射盲核 | ollama-cloud/deepseek-v4.1-flash（pipeline mapping-verifier-v8-tools-v6 ×10 + adjudication-verifier-v17-tools-v7.2 ×30） | 40 | 35 completed + 5 failed（AE/EX/CM/DM/SV 各1，att=4/4，reasoning-only 已知家族，bounded-gap吸收） | ✅（失败可见且按设计恢复为可见缺口） |
+| 裁决（映射收敛） | 同上两车道（主 cms-router/glm-5.3-flash 30 + 盲核 ollama-cloud/deepseek-v4.1-flash 25c+5f，tools-v7.2） | 60 | 55 completed + 5 failed（终态失败为可见缺口；收敛期另有多轮失败被产品后续裁决波重排恢复） | ✅（adj_state=complete，remaining=0，system_adjudicated=35，confirm 200） |
+| 监查分析 | 本build运行lane不经AI台账（本项目 task_type 仅 document_authority_*/listing_field_mapping；FactsModeOutputProvider 事实回执确定性产出，同R10P3-R14P） | 0 | —（无作业=无滞留/无静默失败；15发现+477风险已产出） | ✅（机制核实，如实报0作业） |
+
+### 过程事件（如实）
+- 开赛前健康断言：8911 /api/health ok（runtime_store integrity ok，schema v16）、
+  /api/runtime-readiness ready:true（build api-2ac4a3a5e6a1db40，与 R13/R14 轮
+  同build）、AI网关 /api/ai-gateway/status configured=true（zhipu-coding-plan/
+  glm-5.3-flash，route_validation_errors=[]）、实例台账 0 queued/running
+  （285c+7f 均为 R15D 及更早轮遗产）；8910/5177/5178 连接拒绝（000，未触碰）；
+  synth_csu 三件套在位；在册项目仅 MX循R15D-CSU（R14D/R14P 已被归档），
+  精确名 MX循R15P-CSU 无冲突；
+- 21:36:08 本地（19:36:08Z）run1（唯一run）启动：精确名建项一次成功；上传
+  0.2s；文档权威 451.9s 全绿（自动身份归属确认1次，无文件角色人工裁决）；
+  映射双队列 21:43:40 启动，约16分钟 candidates_ready（10主+10盲核全completed，
+  60候选）；收敛波 20:00Z→22:44Z 约3h：remaining 46→34→28→21→11→0，
+  system_adjudicated 0→12→18→25→35，盲核reasoning-only失败家族反复
+  （6→3→5→6→5 多轮恢复/复发循环），13张用户裁决卡（EX.EXFRQ/EX.EXTRT+
+  ICF/LB_HEM/MH/UAS 11张既有卡）全按 R5D-R15D 数据实测决策表作答，
+  无未知卡、无fail-closed；confirm 200 后 facts/运行/发布/结果 全部秒级~30s级
+  完成（22:44:07Z run_start → 22:44:37Z 结果可读）；
+- 后续为复盘归档做了API独立复核（非驱动日志自证）：progress端点 run_state=
+  completed/percent=100.0/status_overview=[{已完成,count:10}]/publication_state=
+  available/result_available=true、publication端点available、result-entry 200/
+  overview 独立读取15发现（列表与meta.total双一致）/16受试者/477风险/
+  identity归属、source-manifest real_source_slice、runs列表仅1条（无孤儿）
+  ——全部一致；
+- console /tmp/mm_api_8911.log 全程与赛前基线一致（0字节，uvicorn --log-level
+  warning；本轮链路无门禁拒绝、无碎片化拦截，无需 console 取证）；
+- 全程未触碰 8910/5177（开始/结束只读复核连接拒绝状态）；未改任何产品代码/
+  数据库（驱动脚本、一次性预检项目自身数据、产品恢复路径内的裁决波重排除外）；
+  项目 MX循R15P-CSU 与全部留痕原地保留（归档交复盘官；在册另有 R15D 预置项目
+  MX循R15D-CSU 仍active）。
+
+---
+
 ## R14 第1次（20261003，run=r14p_preflight）——**chainOk = true，第五次全链端到端跑通（run1 新裁决卡 VS·DBP fail-closed→数据实测补答→run2 全绿）**
 
 - 驱动脚本：`scripts/tester_loop_0927/r14p_preflight_csu.py`（由 R13P 全绿驱动

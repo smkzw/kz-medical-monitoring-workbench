@@ -425,3 +425,57 @@ AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）�
 - 驱动：`r14d_seed_csu.py`（由 r13d_seed_csu.py 机械适配：R14D 命名/幂等键/留痕文件 + R14_ROUND1_CARDS 一卡表；R5/R8/R9/R11/R12/R13 既有裁决卡决策表原样保留；幂等，含 fail-closed 未知卡防护）
 - 证据：`r14d_seed_evidence.jsonl`（每步请求/响应摘要，含 EXDAT unknown_questions_fail_closed 留痕）、`r14d_seed_state.json`（幂等状态）、`r14d_seed_console.log`/`r14d_seed_console2.log`（两段运行控制台输出）
 - 环境日志：`ISO_ENV_LOG.md`（R14D 探障+预置条目）
+
+# R15D 开考位预置结果 — MX循R15D-CSU（2026-10-03）
+
+## 探障（本轮前置，R5D marker 缺陷未复发，未修任何产品代码、未重启 8911/5178）
+
+- `GET /r7/project/open`（R14D 项目 proj_user_588084370b49）→ **state=current/openMode=edit/dataCoverage=complete/canView/canEdit=true，无 blocked/CORRUPT** → 按本轮指令判定无需修复。修复代码在位复核：main.py:4925-4927,4935-4936 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54 = mm-r7-w01r26-launch-registry-v5）。
+- 隔离 runtime 存量 10 个 workspace 的 launch_registry marker 逐库 sqlite 直查**全部 v5**（R13 重建 runtime 后的存量），无 v4/shape_mismatch。
+- R15D 建项瞬间 project/open blocked（bootstrap 前 monitoring_runtime.sqlite3 不存在的设计内瞬态，R1/R13D/R14D 同款）；随后产品 `inspect_project_schema` 实证 R15D 新项目 6 成员全 current/current_shape（launch_registry marker=mm-r7-w01r26-launch-registry-v5）；数据接入后 project/open 即转 current/complete。终态硬断言见下表（project/open 必须 current）。
+- 主侧AI路由沿 R12D/R13D 先例复核：直连配置跨重启仍生效（base_url=open.bigmodel.cn 直连），产品 `/api/ai-gateway/probe` 三档案真实往返全 passed:true（两主侧 cms-router/glm-5.3-flash 5358/3319ms；verifier ollama-cloud/deepseek-v4.1-flash 535ms），**本轮无需换绑**。
+- 环境侧：8911 /api/runtime-readiness ready:true（build api-2ac4a3a5e6a1db40，与 R14 轮一致，本轮无代码变更）；5178 /monitoring=200 且 runtime-build.json expectedBackendBuildId=api-2ac4a3a5e6a1db40 配对一致；8910/5177 无监听（连接拒绝）——非本轮所致（仅只读 lsof/curl 复核），按铁律未触碰，如实记录。
+
+## 项目
+
+| 项 | 值 |
+|---|---|
+| project_id | **proj_user_b556e56f50ba** |
+| project_name | MX循R15D-CSU |
+| indication / product_name | 慢性自发性荨麻疹 / MG-K10 |
+| modules | ["medical_monitoring"] |
+| 幂等键 | r15d-seed-20261003T175809Z-f69ce3fd（唯一） |
+| data admission | stg-c2e8050af8ba4db1b4e144c49c5c7b9b（合成listing 591行/10表） |
+| 文档权威批次 | mmbatch_3cc1450700092fc19a46a9e3（方案V1.3 docx + eCRF指南V1.0 docx 双VLM） |
+| 三件套 sha256 | listing 4be08e9e…b27968 / 方案 73024713…9a504199 / eCRF 8109d25a…ede15289（与 R13D 重建版逐字节一致） |
+
+## 全链状态（自验实测，2026-10-03 19:28-19:32Z 独立复验）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| 建项 | ✅ 201 | POST /api/projects（幂等键唯一）；state r15d_seed_state.json（17:58:09Z） |
+| 数据接入 | ✅ | data-admissions/upload → attempt，591行/10表（17:58:09Z） |
+| 身份门/角色门 | ✅ 未触发 | documents_resolve 自动归属确认（analyzing→reviewing→adjudicating→ready），无人工门 |
+| 文档权威 | ✅ ready=true | 17:58:10Z 提交→18:02:58Z ready（约4.8分钟）；protocol/ecrf 自动识别 |
+| 映射双队列 | ✅ candidates_ready | 10主+10盲核，60字段候选（18:03:03Z→18:16:56Z 约13.9分钟） |
+| 复核收敛 | ✅ complete | adjudicate 轨迹：running(remaining=46) → 第二轮双队列46作业 → blocked(remaining=26, 系统裁决20) → 裁决卡作答 → complete(remaining=0)；2个终态失败分片（provider_runtime_error×1 reasoning-only、invalid_ai_output×1）经自动恢复后按 bounded-gap 设计收敛，未跳门 |
+| 裁决卡 | ✅ 已答 | 共27张：1张首轮卡 EX.EXFRQ（R13 决策表）+ 22张既有表（R5/R8/R9/R11/R12 决策表）+ **4张R15新卡 VS.DBP/VS.HRRATE/VS.RESP/VS.SBP**（两轮分歧卡，历轮首次浮现，卡片显示主分析与独立复核同判同角色 token）首次浮现 fail-closed 诚实退出留痕（19:21:45Z），按 openpyxl 直读实测补答：VS 表 64 行测量数据（16受试者×4访视 R/W2/W4/W8），心率次分58-94/收缩压mmHg 98-140/舒张压mmHg 60-88/呼吸次分16-22 全为整数测量值，采纳卡面推荐 diastolic_blood_pressure/heart_rate/respiratory_rate/systolic_blood_pressure（19:27:45Z） |
+| **字段映射确认** | ✅ **confirmed** | GET mapping-candidates：confirmation_status=confirmed，draft monmapdraft_23b664f6059daaaf1a96cf905a54 status=confirmed（**v74**），user_questions=0（19:28:00Z） |
+| **facts 物化** | ✅ **ready** | GET facts：state=ready，10表/591行/**3038值全核验**（source_values_verified=3038），message「可用于监查的数据已生成，可以开始监查。」（19:28:01Z） |
+| 界面可开始运行监查 | ✅ | `GET /r7/project/open` → state=current/openMode=edit/dataCoverage=complete/canView/canEdit=true；`run-setup/options` **200** |
+| 停在 facts（未启动监查） | ✅ | GET runs → {"runs":[]} |
+
+起止：17:58:09Z→19:28:04Z（2026-10-04 01:58→03:28 CST 北京，约1小时30分，含 VS 新卡 fail-closed 退出后的补答重入一次）。AI 台账（medical_monitoring_ai.sqlite3 按 project_id 过滤）：46 作业（44完成/2终态failed均为 mapping 分片，经 bounded-gap 收敛 remaining=0）；73 次调用，tokens 合计 1,427,947（prompt 917,171 + completion 510,776）。全程 AI 质量门自然通过，未跳门、未伪造状态。
+
+## 本轮观察（如实记录，非阻断）
+
+- **R15 新卡 VS 域四列为生命体征域的历轮首次分歧卡**：DBP/HRRATE/RESP/SBP 主分析与独立复核同判同角色 token 仍入裁决（分歧由两侧论证路径而非结论产生），已按数据实测采纳并固化进 `r15d_seed_csu.py` 的 R15_ROUND1_CARDS 表供后续轮次复用。
+- 本轮 documents 链未触发身份门与角色人工门（自动归属确认），与 R14D 一致。
+- 主侧AI直连绑定跨重启保持生效（R12D/R13D 换绑结果），本轮未再换绑；host 代理单点风险沿 R12D/R13D 记录。
+- 8910/5177 无监听（沿 R11 起记录），本轮仅只读复核未触碰。
+
+## 留痕文件（同目录）
+
+- 驱动：`r15d_seed_csu.py`（由 r14d_seed_csu.py 机械适配：R15D 命名/幂等键/留痕文件 + R15_ROUND1_CARDS 四卡表；R5/R8/R9/R11/R12/R13/R14 既有裁决卡决策表原样保留；幂等，含 fail-closed 未知卡防护）
+- 证据：`r15d_seed_evidence.jsonl`（每步请求/响应摘要，含 VS 四卡 unknown_questions_fail_closed 留痕）、`r15d_seed_state.json`（幂等状态）、`r15d_seed_console.log`/`r15d_seed_console2.log`（两段运行控制台输出）
+- 环境日志：`ISO_ENV_LOG.md`（R15D 探障+预置条目）
