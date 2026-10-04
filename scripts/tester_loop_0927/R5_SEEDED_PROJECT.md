@@ -479,3 +479,55 @@ AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）�
 - 驱动：`r15d_seed_csu.py`（由 r14d_seed_csu.py 机械适配：R15D 命名/幂等键/留痕文件 + R15_ROUND1_CARDS 四卡表；R5/R8/R9/R11/R12/R13/R14 既有裁决卡决策表原样保留；幂等，含 fail-closed 未知卡防护）
 - 证据：`r15d_seed_evidence.jsonl`（每步请求/响应摘要，含 VS 四卡 unknown_questions_fail_closed 留痕）、`r15d_seed_state.json`（幂等状态）、`r15d_seed_console.log`/`r15d_seed_console2.log`（两段运行控制台输出）
 - 环境日志：`ISO_ENV_LOG.md`（R15D 探障+预置条目）
+
+# R16D 开考位预置结果 — MX循R16D-CSU（2026-10-04）
+
+## 探障（本轮前置，R5D marker 缺陷未复发，未修任何产品代码、未重启 8911/5178）
+
+- 循环收尾已把旧项目全部软归档（`GET /api/projects` → `[]`），无存量项目可按原样探 → 按 R13D-R15D 先例建项后探：R16D 建项瞬间 `GET /r7/project/open` blocked（bootstrap 前 monitoring_runtime.sqlite3 不存在的设计内瞬态，R1/R13D/R14D/R15D 同款）；数据接入与 facts 物化后终态 project/open → current/complete（终态硬断言见下表）。
+- 修复代码在位复核：main.py:4925-4927,4935-4936 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54 = mm-r7-w01r26-launch-registry-v5）；R16D 新建 workspace 的 launch_registry marker sqlite 直查 = **v5**（现行进程写入实证），存量 15 个 workspace 逐库直查全部 v5，无 v4/shape_mismatch。
+- 环境侧（R15 修复员 2026-10-04 凌晨双重启 8911+5178 后的现行进程）：8911 /api/runtime-readiness ready:true（build api-2ac4a3a5e6a1db40）；5178 /monitoring=200（[::1]）且 runtime-build.json expectedBackendBuildId=api-2ac4a3a5e6a1db40 配对一致；8910/5177 无监听（连接拒绝）——非本轮所致（仅只读 lsof/curl 复核），按铁律未触碰，如实记录。
+
+## 项目
+
+| 项 | 值 |
+|---|---|
+| project_id | **proj_user_e82b9e8acc60** |
+| project_name | MX循R16D-CSU |
+| indication / product_name | 慢性自发性荨麻疹 / MG-K10 |
+| modules | ["medical_monitoring"] |
+| 幂等键 | r16d-seed-20261004T001015Z-c018a8b7（唯一） |
+| data admission | stg-e62b469df0b54c9a94866be0b8cef25e（合成listing 591行/10表） |
+| 文档权威批次 | mmbatch_76e97b66cde8d4a2c47a2954（方案V1.3 docx + eCRF指南V1.0 docx 双VLM） |
+| 三件套 sha256 | listing 4be08e9e…b27968 / 方案 73024713…9a504199 / eCRF 8109d25a…ede15289（与 R15D 逐字节一致） |
+
+## 全链状态（自验实测，2026-10-04 02:07-02:20Z 独立复验）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| 建项 | ✅ 201 | POST /api/projects（幂等键唯一）；state r16d_seed_state.json（00:10:16Z） |
+| 数据接入 | ✅ | data-admissions/upload → attempt，591行/10表（00:10:16Z） |
+| 身份门 | ✅ 触发一次 | documents_resolve → project_identity_incomplete → identity_confirmation 提交（00:12:42Z，等价界面一次点击，R5D同款手势）；角色门未触发（protocol/ecrf 自动识别 current） |
+| 文档权威 | ✅ ready=true | 00:10:17Z 提交→00:14:43Z ready（约4.4分钟） |
+| 映射双队列 | ✅ candidates_ready | 10主+10盲核，60字段候选（00:14:47Z→00:30:08Z 约15.3分钟） |
+| 复核收敛 | ✅ complete | adjudicate 轨迹：running(remaining=46) → 第二轮队列44作业（中途1个 mapping 分片 failed 自动重试完成，终态44/44全completed，无 bounded-gap 缺口）→ blocked(remaining=23, 系统裁决23) → 已知裁决卡作答 → complete(remaining=0)，未跳门 |
+| 裁决卡 | ✅ 已答 | 25次作答事件/23张唯一卡**全部由既有决策表覆盖**（R5/R8/R9/R11/R12/R13/R14/R15 表；EX.EXFRQ、EX.EXTRT 跨轮重复浮现各作答两次）——**本轮无新卡、无 fail-closed 退出** |
+| **字段映射确认** | ✅ **confirmed** | GET mapping-candidates：confirmation_status=confirmed，draft monmapdraft_09ce60ee5b30df2e05d3cbfd5ebb status=confirmed（**v72**），user_questions=0（02:07:46Z） |
+| **facts 物化** | ✅ **ready** | GET facts：state=ready，10表/591行/**3550值全核验**（source_values_verified=3550），message「可用于监查的数据已生成，可以开始监查。」（02:07:46Z） |
+| 界面可开始运行监查 | ✅ | `GET /r7/project/open` → state=current/openMode=edit/dataCoverage=complete/canView/canEdit=true「项目格式正常，可以继续使用。」；`run-setup/options` **200** |
+| 停在 facts（未启动监查） | ✅ | GET runs → {"runs":[]} |
+
+起止：00:10:16Z→02:07:50Z（2026-10-04 08:10→10:07 CST 北京，约1小时58分，单段运行无中断）。AI 台账（medical_monitoring_ai.sqlite3 按 project_id 过滤）：44 作业全 completed（document_authority_analysis×2 + document_authority_review×2 + listing_field_mapping×40）；62 次调用，tokens 合计 1,344,591（prompt 876,253 + completion 468,338）。全程 AI 质量门自然通过，未跳门、未伪造状态。
+
+## 本轮观察（如实记录，非阻断）
+
+- 本轮无新裁决卡浮现：R15 及以前的决策表首次完整覆盖全部浮出卡（R8 的 AE.AENUM 本轮由系统自动裁决未浮卡）；VS 四卡也未再浮现。
+- 身份门本轮触发一次（R14D/R15D 为自动归属确认），同三份文件跨轮行为有差异，按设计内人工门如实提交 identity_confirmation，未绕过。
+- 主侧AI直连绑定沿 R12D/R13D 起保持生效，本轮未换绑、未复核 probe（无故障征兆）。
+- 8910/5177 无监听（沿 R11 起记录），本轮仅只读复核未触碰。
+
+## 留痕文件（同目录）
+
+- 驱动：`r16d_seed_csu.py`（由 r15d_seed_csu.py 机械适配：R16D 命名/幂等键/留痕文件；R5/R8/R9/R11/R12/R13/R14/R15 既有裁决卡决策表原样保留；幂等，含 fail-closed 未知卡防护）
+- 证据：`r16d_seed_evidence.jsonl`（324 条事件，每步请求/响应摘要）、`r16d_seed_state.json`（幂等状态）、`r16d_seed_console.log`（运行控制台输出）
+- 环境日志：`ISO_ENV_LOG.md`（R16D 探障+预置条目）
