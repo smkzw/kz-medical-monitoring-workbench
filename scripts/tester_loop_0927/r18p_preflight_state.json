@@ -1,0 +1,20 @@
+{
+ "project_id": "proj_user_429cae9629e8",
+ "create_key": "r18p-preflight-20261005T082942Z-8efd4505",
+ "project_name": "MX循R18P-CSU",
+ "updated_at": "2026-10-05T08:29:43.724934+00:00",
+ "stages": {
+  "建项": {
+   "ok": true,
+   "seconds": 0.0,
+   "note": "project_id=proj_user_429cae9629e8 name=MX循R18P-CSU"
+  },
+  "上传": {
+   "ok": true,
+   "seconds": 0.2,
+   "note": "attempt=stg-460555f9071d42a299bd9b9edd465ce3 summary={'files': 1, 'rows': 591, 'tables': 10}"
+  }
+ },
+ "attempt_id": "stg-460555f9071d42a299bd9b9edd465ce3",
+ "docs_batch_id": "mmbatch_838d5ad92d6c8c32568e47b5"
+}

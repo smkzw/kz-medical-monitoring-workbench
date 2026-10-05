@@ -585,3 +585,39 @@ AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）�
 - 驱动：`r17d_seed_csu.py`（由 r16d_seed_csu.py 机械适配：R17D 命名/幂等键/留痕文件；R5/R8/R9/R11/R12/R13/R14/R15 既有裁决卡决策表原样保留；幂等，含 fail-closed 未知卡防护）
 - 证据：`r17d_seed_evidence.jsonl`（664 条事件，每步请求/响应摘要）、`r17d_seed_state.json`（幂等状态）、`r17d_seed_console.log`（运行控制台输出）
 - 环境日志：`ISO_ENV_LOG.md`（R17D 探障+预置条目）
+
+# R18D 开考位预置结果 — MX循R18D-CSU（2026-10-05）【受阻进行中：主侧AI服务方计划级限流】
+
+## 探障（本轮前置，R5D marker 缺陷未复发，未修任何产品代码、未重启 8911/5178）
+
+- 存量直探：R17D proj_user_6d794c3dfd2f 与 R17P proj_user_20c4a3880375 的 `GET /r7/project/open` → state=current/openMode=edit/dataCoverage=complete/canView/canEdit=true「项目格式正常」（归档仅影响列表展示，直接 API 探障可用）。
+- 修复代码在位：main.py:4925-4927,4935-4936 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54 = mm-r7-w01r26-launch-registry-v5）；隔离 runtime 全部 25 个存量 workspace 逐库 sqlite 直查 marker 全部 v5；R18D 新建 workspace marker 亦为 v5（现行进程写入实证）。`proj_mgk10_sar_real` 的 blocked 为该参考项目 workspace 不在本隔离 runtime，非缺陷。
+- 主侧AI路由：角色绑定与 R17D 一致（medical_monitoring_ai→cms-router/glm-5.3-flash 直连 open.bigmodel.cn；verifier→ollama-cloud/deepseek-v4.1-flash），本轮**未换绑**；probe 实测 verifier passed:true、主侧 429（详见下）。
+
+## 项目
+
+| 项 | 值 |
+|---|---|
+| project_id | **proj_user_74e02b4af07c** |
+| project_name | MX循R18D-CSU |
+| indication / product_name | 慢性自发性荨麻疹 / MG-K10 |
+| modules | ["medical_monitoring"] |
+| 幂等键 | r18d-seed-20260905T031600Z-dddcb662（唯一） |
+| data admission | stg-87131078840646e1984b76b8fa1fb0fb（合成listing 591行/10表） |
+| 文档权威批次 | mmbatch_1f38738598938b07f25dc852（verifier 侧已 completed；主侧 429 卡住） |
+| 三件套 sha256 | listing 4be08e9e…b27968 / 方案 73024713…9a504199 / eCRF 8109d25a…ede15289（与 R15D/R16D/R17D 逐字节一致） |
+
+## 全链状态（截至 2026-10-05 08:20Z，如实记录）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| 建项 | ✅ 201 | POST /api/projects 03:16:00Z；state r18d_seed_state.json |
+| 数据接入 | ✅ | data-admissions/upload → attempt，591行/10表（03:16:00Z） |
+| 文档权威 | ⛔ 卡住 | verifier 侧 03:21:17Z completed（25,568 tokens）；主侧 cms-router/glm-5.3-flash 连续 HTTP 429：01:16:12Z（台账最后一次主侧成功）→08:20Z 零成功，本批次 1,602 次尝试全 429，产品 infra 自动恢复反复 requeue 无法穿透 |
+| 映射/确认/facts | ⏸ 未达 | 文档权威门 fail-closed 在前，未启动 |
+
+## 卡点与恢复路径（未跳门、未改绑、未伪造状态）
+
+- **卡点**：主侧AI服务方（open.bigmodel.cn 计划密钥）计划级配额冻结——同计划两个档案 probe 均 429、verifier（ollama-cloud）正常；主侧消耗 10-03=8.45M / 10-04=42.27M / 10-05（冻结前）=5.88M tokens；连续零成功 >7h（超 R16B 事件 5h 纪律线）。属外部服务方配额，非产品缺陷，守护员无权限处理（换绑主侧档案属循环所有者决策）。
+- **恢复**：`r18d_supervise.sh`（nohup 独立存活）每 50 分钟重拉幂等驱动 `r18d_seed_csu.py`，resolve 轮询自动 requeue；配额恢复后自动推进至 confirmed+facts 停住（Step10 硬断言与 R17D 同口径）。验收：`r18d_seed_state.json` 出现 confirmed/facts_materialized、R5_SEEDED_PROJECT 本节更新终态表。
+- 驱动与留痕：`r18d_seed_csu.py`（由 r17d_seed_csu.py 机械适配，diff 验证仅轮次命名差异；既有裁决卡决策表原样保留）、`r18d_seed_state.json`、`r18d_seed_evidence.jsonl`（1633 条）、`r18d_seed_console.log`、`r18d_supervise.sh`。
