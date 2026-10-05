@@ -199,14 +199,24 @@ def _monitoring_facts_materialized(project_id: str) -> bool:
     After data admission → mapping → facts materialization completes, the
     R7 workspace contains a facts manifest; the binding then transitions to
     ``real_source_slice`` so the R5 rule-authoring lane unlocks naturally.
+
+    R18轮（R18-03门禁判据统一）：本函数（运行执行门禁的binding来源）
+    曾以facts-manifest.json文件存在性判定，而checklist横幅门禁
+    （setup_routes的run_data_not_ready）以latest_fact_materialization_
+    ready（最新attempt的域对象state=ready+事实集可用）判定——两套
+    判据可分叉：横幅消失允许创建运行，而binding仍intake_pending被
+    prepare-and-start的来源就绪门409永久拦截（R8-01悖论的结构性
+    根因）。现统一为同一信号源：与横幅/运行设置完全一致的
+    latest_fact_materialization_ready。
     """
-    ws = (
-        _monitoring_runtime_root()
-        / project_id
-        / "runtime"
-        / "artifacts"
+    from packages.medical_monitoring.admission.fact_materialization import (
+        latest_fact_materialization_ready,
     )
-    return (ws / "facts-manifest.json").is_file()
+
+    workspace = _monitoring_runtime_root() / project_id
+    if not workspace.is_dir():
+        return False
+    return bool(latest_fact_materialization_ready(project_id, workspace))
 
 
 class ProjectSourceManifestService:

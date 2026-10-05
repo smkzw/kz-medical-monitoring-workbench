@@ -301,3 +301,11 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - **429 真相**：R12D/R13D 因当时本机 Clash 代理(7897)死亡，预置员把两个主侧档案从 OmniRouter 换绑成智谱官方直连(open.bigmodel.cn)+凭据仓直连钥匙——**档案名保留 cms_router 但实际路由早已不是 OmniRouter**。10-03/04/05 三天循环烧掉 8.45M+42.27M+5.88M tokens 把该直连钥匙配额打满（台账 01:16Z 后 1,921 次尝试全 429）。R18 守护员报告措辞"cms-router/glm-5.3-flash 直连 open.bigmodel.cn 429"易误读为 cms-router 配额问题，特此更正。
 - **处置**：从 r12d_provider_config_backup 逐档案对比恢复——仅恢复 base_url 从 20128→bigmodel 变更过的两个档案（medical_monitoring_ai__cms_router_glm53flash、document_authority_primary_ai__...）回 http://127.0.0.1:20128/v1 + 原 router 钥匙；改前快照 *.pre_omni_restore_*；产品探针即时验证 passed:true（provider=cms-router，5.4s）。
 - **后续**：R18 守护员留下的 r18d_supervise.sh 监督循环（pid 73910，~50min/轮）下一轮将走通修好的路由自动完成预置；R18 预检同理。教训：换绑档案必须同步改档案名或加路由注记，防"名实不符"误导后续取证。
+
+## 2026-10-05 下午（R18轮次·修复员：门禁判据统一后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R18轮次：R18-03；R18-01完成环境侧调查）
+- 修复：binding门禁（prepare-and-start的来源就绪门输入）由facts-manifest.json文件存在性改为与checklist横幅/运行设置完全同一信号源latest_fact_materialization_ready——「横幅消失允许创建但运行被409永久拦截」的判据分叉在两个方向都不可能再发生。
+- R18-01环境调查结论（本轮实测）：端口5186=另一workbench实例（protocol-v3-workbench-mw_protocol_v3_phase0的vite，pid 62193，ego浏览器进程7643与之有活跃连接）——非本产品路由重定向；测试会话漂移疑与ego共享TaskSpace的多实例使用有关，建议循环侧固定每个TaskSpace只挂5178或明确端口清单。本产品侧无可修代码路径。
+- 自检：8911 ready:true（build api-a9bb87fb5ee7ab77）；5178=200；指纹配对一致。
+- ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
