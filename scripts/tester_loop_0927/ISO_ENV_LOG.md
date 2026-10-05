@@ -286,3 +286,18 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 修复：疑点作答陈旧会话守卫改提示+自动重拉（不再静默丢弃）；映射错误在向导第3步面板内醒目渲染（含event_ref）；第2步补「返回上一步，重新选择数据」（回第1步重选数据源，服务端staging支持重走）；未配置模块页新增各模块前置链激活指引；字段关卡术语统一为「字段映射确认/研究文件与字段映射确认」。
 - 自检：8911 ready:true；5178=200；指纹配对一致。
 - ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
+
+## 2026-10-05 上午（R18D 开考位预置·守护员：受阻于主侧AI服务方计划级限流，未修码未重启）
+
+- **探障（R5D marker 缺陷未复发，未修任何产品代码、未重启 8911/5178）**：① 存量隔离项目直探：R17D（proj_user_6d794c3dfd2f）/R17P（proj_user_20c4a3880375）`GET /r7/project/open` 均 state=current/openMode=edit/dataCoverage=complete（两项目虽被循环收尾软归档，直接 API 访问仍可探）；② 隔离 runtime 全部 25 个 workspace 的 launch_registry marker 逐库 sqlite 直查全部 = mm-r7-w01r26-launch-registry-v5；③ 修复代码在位复核：main.py:4925-4927,4935-4936 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54 = v5）；④ R18D 新建 workspace marker sqlite 直查 = v5（现行进程写入实证）；⑤ `proj_mgk10_sar_real` open=blocked 系该参考项目 workspace 不在本隔离 runtime（且已归档），非 marker 缺陷。⑥ 8911 /api/runtime-readiness 正常应答、5178 node 存活（[::1]）；8910/5177 无监听（连接拒绝）——非本轮所致（仅只读 lsof/curl 复核），按铁律未触碰，如实记录。
+- **预置 MX循R18D-CSU（进行中，卡在文档权威门）**：建项 proj_user_74e02b4af07c（201，幂等键 r18d-seed-20260905T031600Z-dddcb662）→ 三件套上传 stg-87131078840646e1984b76b8fa1fb0fb（591行/10表，sha256 与 R15D/R16D/R17D 逐字节一致）→ 文档权威批次 mmbatch_1f38738598938b07f25dc852：verifier 侧（ollama-cloud/deepseek-v4.1-flash）03:21:17Z completed（1 次成功，25,568 tokens）；主侧（cms-router/glm-5.3-flash 直连 open.bigmodel.cn）持续 HTTP 429——截至 08:20Z 已 1,602 次尝试全部 429、产品 infra 失败自动恢复（R11-01 设计）反复 requeue 仍无法穿透。
+- **卡点定性（服务方计划级配额冻结，非产品缺陷）**：/api/ai-gateway/probe 对两个 zhipu 计划档案（medical_monitoring_ai__cms_router_glm53flash 与 independent_ai__zhipu_coding_plan_glm_flash）均 429，verifier 档案 passed:true；台账显示主侧最后一次成功 = 01:16:12Z，此后连续 >7h 零成功（超循环 R16B 事件 5h 零进展纪律线）；本隔离环境主侧消耗 10-03=8.45M、10-04=42.27M、10-05（冻结前）=5.88M tokens。本轮不改绑主侧档案（R12D/R13D 起的直连绑定属循环所有者决策，换绑属越权+改变测试条件），不跳门不造假。
+- **恢复路径（已就绪，无需人工干预）**：监督循环 r18d_supervise.sh（nohup 存活，独立于守护员会话）每 50 分钟重拉幂等驱动 r18d_seed_csu.py；产品 resolve 轮询自动 requeue failed 作业。配额窗口恢复后全链自动推进至 confirmed+facts 停住；验收口径与 R17D 相同（Step10 硬断言：confirmation_status=confirmed + facts state=ready + project/open 非 blocked）。
+- 留痕：`r18d_seed_csu.py`（由 r17d_seed_csu.py 机械适配，diff 验证仅轮次命名差异）、`r18d_seed_state.json`、`r18d_seed_evidence.jsonl`（1633 条）、`r18d_seed_console.log`、`r18d_supervise.sh`。轮次分节详见 `R5_SEEDED_PROJECT.md` R18D。
+
+## 2026-10-05 主侧路由纠错与换绑回 OmniRouter（任务所有者依据用户指正执行）
+
+- **用户指正成立**：cms-router 走 OmniRouter（127.0.0.1:20128，独立配额），与 ZCode 绑定的 glm-5.3-flash 无关。实测 OmniRoute 此刻 HTTP 200/2.8s 正常服务 glm-5.3-flash。
+- **429 真相**：R12D/R13D 因当时本机 Clash 代理(7897)死亡，预置员把两个主侧档案从 OmniRouter 换绑成智谱官方直连(open.bigmodel.cn)+凭据仓直连钥匙——**档案名保留 cms_router 但实际路由早已不是 OmniRouter**。10-03/04/05 三天循环烧掉 8.45M+42.27M+5.88M tokens 把该直连钥匙配额打满（台账 01:16Z 后 1,921 次尝试全 429）。R18 守护员报告措辞"cms-router/glm-5.3-flash 直连 open.bigmodel.cn 429"易误读为 cms-router 配额问题，特此更正。
+- **处置**：从 r12d_provider_config_backup 逐档案对比恢复——仅恢复 base_url 从 20128→bigmodel 变更过的两个档案（medical_monitoring_ai__cms_router_glm53flash、document_authority_primary_ai__...）回 http://127.0.0.1:20128/v1 + 原 router 钥匙；改前快照 *.pre_omni_restore_*；产品探针即时验证 passed:true（provider=cms-router，5.4s）。
+- **后续**：R18 守护员留下的 r18d_supervise.sh 监督循环（pid 73910，~50min/轮）下一轮将走通修好的路由自动完成预置；R18 预检同理。教训：换绑档案必须同步改档案名或加路由注记，防"名实不符"误导后续取证。
