@@ -2,7 +2,21 @@
  "project_id": "proj_user_74e02b4af07c",
  "create_key": "r18d-seed-20261005T031600Z-dddcb662",
  "project_name": "MX循R18D-CSU",
- "updated_at": "2026-10-05T03:16:02.000390+00:00",
+ "updated_at": "2026-10-05T15:40:13.081211+00:00",
  "attempt_id": "stg-87131078840646e1984b76b8fa1fb0fb",
- "docs_batch_id": "mmbatch_1f38738598938b07f25dc852"
+ "docs_batch_id": "mmbatch_1f38738598938b07f25dc852",
+ "role_selections": [
+  {
+   "role": "ecrf",
+   "candidate_id": "mmcandidate_203abafc8771b5d46541745a"
+  }
+ ],
+ "documents_ready": true,
+ "mapping_state": "candidates_ready",
+ "draft_id": "monmapdraft_a640fd6af6ffec0350e5bd70f77c",
+ "draft_version": 1,
+ "adjudication_state": "complete",
+ "confirmed": true,
+ "confirm_idempotency_key": "r18d-confirm-ef353c099ea742bfbc6029493de0bb82",
+ "facts_materialized": true
 }
