@@ -350,7 +350,7 @@ function buildPromptIso(round: number, slot: string, ds: Dataset, reportPath: st
 
 // ===== R5 开考位专属提示词（用户拍板：开赛门槛——接手已备好的项目，从运行监查起步考主考题） =====
 function buildPromptSeeded(round: number, slot: string, ds: Dataset, reportPath: string): string {
-  const projName = "MX循R" + round + slot + "-" + ds.key;
+  const projName = round >= 19 ? "MX循开考-CSU" : "MX循R" + round + slot + "-" + ds.key;
   return (
     "【第" + round + "轮·" + slot + "号测试任务·开考位】（提示词编号 R" + round + "-" + slot + "-开考，与以往任何一轮都不同）\n\n" +
     "你是一线医学监查专员。在中心做过多年 onsite 监查，习惯从受试者旅程逐访视核对，最在意证据链能不能从结论一路点回原始记录。\n" +
@@ -733,9 +733,15 @@ for (let round = 1; round <= MAXROUNDS; round++) {
       system:
         "你负责为本轮开考位（D位）在隔离测试环境上预置「字段映射已确认+facts就绪、界面可开始运行监查」的项目。你是运维/工程师身份，允许且只允许用 API 与脚本操作隔离环境 http://127.0.0.1:8911（严禁碰 8910/5177）。允许为完成预置而修复已定位的产品缺陷（最小修复+重启只动隔离对+留痕 ISO_ENV_LOG.md）。AI 质量门必须自然通过，严禁人为跳过或伪造状态。受阻就如实报，不绕过不造假。",
     }).ask<SeedResult>(
-      "为第" + round + "轮D位开考做准备，目标项目名必须是「MX循R" + round + "D-CSU」（每轮独立命名，本轮测试者提示词指定此名）：\n" +
-      "1. 先探障：GET /r7/project/open 若返回 blocked/CORRUPT（症状：界面『暂时无法安全打开此项目』），按既有定位先修复——services/api/app/main.py:4850 附近建项时 _init_monitoring_runtime_dbs 以现行v5 DDL创建 launch_registry.sqlite3 却写入过期v4 marker，schema检验按marker匹配v4形状即 shape_mismatch；修复方向：种子marker改取 launch_registry_contracts 现行 SCHEMA_VERSION，存量隔离库可原地v4→v5升级；修完重启隔离API（只动8911/5178）并自检\n" +
-      "2. 创建项目（project_name=MX循R" + round + "D-CSU、indication=慢性自发性荨麻疹、product_name=MG-K10、modules 含 medical_monitoring、idempotency_key 唯一）并上传 implementation/workbench/tester_staging_0927/synth_csu/ 三件套\n" +
+      (round <= 18
+        ? "为第" + round + "轮D位开考做准备，目标项目名必须是「MX循R" + round + "D-CSU」（每轮独立命名，本轮测试者提示词指定此名）：\n" +
+          "1. 先探障：GET /r7/project/open 若返回 blocked/CORRUPT（症状：界面『暂时无法安全打开此项目』），按既有定位先修复——services/api/app/main.py:4850 附近建项时 _init_monitoring_runtime_dbs 以现行v5 DDL创建 launch_registry.sqlite3 却写入过期v4 marker，schema检验按marker匹配v4形状即 shape_mismatch；修复方向：种子marker改取 launch_registry_contracts 现行 SCHEMA_VERSION，存量隔离库可原地v4→v5升级；修完重启隔离API（只动8911/5178）并自检\n" +
+          "2. 创建项目（project_name=MX循R" + round + "D-CSU、indication=慢性自发性荨麻疹、product_name=MG-K10、modules 含 medical_monitoring、idempotency_key 唯一）并上传 implementation/workbench/tester_staging_0927/synth_csu/ 三件套\n"
+        : "为D位开考做准备，目标是**常驻开考项目「MX循开考-CSU」**（跨轮持久存在，复盘按轮次前缀归档不会删它——杜绝每轮重种同数据的浪费）：\n" +
+          "0. 先查存量：若该项目已存在且 mapping confirmed + facts ready + project/open current，直接返回就绪（stateNote 注明『复用常驻项目』，本轮零重复预置）；仅补齐缺失环节\n" +
+          "1. 若需修复项目打不开缺陷沿用既有定位（main.py:4925-4936 种子marker=launch_registry_contracts.SCHEMA_VERSION）；若需新建：project_name=MX循开考-CSU、indication=慢性自发性荨麻疹、product_name=MG-K10、modules 含 medical_monitoring、幂等键唯一，材料=implementation/workbench/tester_staging_0927/synth_csu/ 三件套\n" +
+          "2. API序列沿用（scripts/fullchain_sar_rerun_20260926/HANDOFF_SAR_RERUN_20260926.md + 既有裁决卡决策表幂等驱动），AI质量门自然通过，不跳门不造假\n" +
+          "3. 推进至字段映射 confirmed + facts 物化、界面可开始运行监查即停（**不启动监查**——运行启动交给随后的攻坚验证做）\n") +
       "3. API 序列参考 scripts/fullchain_sar_rerun_20260926/HANDOFF_SAR_RERUN_20260926.md 与同目录幂等脚本；推进至字段映射 confirmed + facts 物化，停住\n" +
       "4. 完成后自验并把项目ID与各步状态证据追加到 scripts/tester_loop_0927/R5_SEEDED_PROJECT.md（按轮次分节），返回 {projectId, stateNote, blockedNote}（受阻时 blockedNote 写清卡点）",
     );
@@ -745,6 +751,21 @@ for (let round = 1; round <= MAXROUNDS; round++) {
     phase("全链预检：链路不绿不外派（用户0930指令）");
     let preflightOk = false;
     let preflightBlock = "";
+    let tierSkip = false;
+    if (round >= 19) {
+      const tierCheck = await world.run("bash", [
+        "-c",
+        "M=implementation/workbench/scripts/tester_loop_0927/PREFLIGHT_LAST_GREEN.json; " +
+        "if [ -f \"$M\" ]; then LB=$(python3 -c \"import json;print(json.load(open('$M')).get('build_id',''))\" 2>/dev/null); " +
+        "CB=$(curl -s --max-time 8 http://127.0.0.1:8911/api/runtime-readiness | python3 -c \"import json,sys;print(json.load(sys.stdin).get('backend_build_id',''))\" 2>/dev/null); " +
+        "if [ -n \"$LB\" ] && [ \"$LB\" = \"$CB\" ] && curl -s -o /dev/null --max-time 8 http://127.0.0.1:8911/api/health; then echo QUICK; exit 0; fi; fi; echo FULL",
+      ]);
+      if (tierCheck.exitCode === 0 && tierCheck.stdout.includes("QUICK")) {
+        preflightOk = true;
+        tierSkip = true;
+        log("预检分级（组织反思落地）：后端代码未变且上次全绿仍有效——本轮快检通过，跳过全链预检（省约1-3小时与百万级tokens）");
+      }
+    }
     for (let pfAttempt = 1; pfAttempt <= 3 && !preflightOk; pfAttempt++) {
       const pf = await agent("全链预检工程师-R" + round + "-第" + pfAttempt + "次", {
         system:
@@ -774,6 +795,46 @@ for (let round = 1; round <= MAXROUNDS; round++) {
     if (!preflightOk) {
       stagnationEscalation = "升级：第" + round + "轮全链预检三次未通过（" + preflightBlock + "）——链路端到端跑通前不派发测试者（用户0930指令），需要任务所有者决策。";
       break;
+    }
+    if (preflightOk && round >= 19 && !tierSkip) {
+      await world.run("bash", [
+        "-c",
+        "B=$(curl -s --max-time 8 http://127.0.0.1:8911/api/runtime-readiness | python3 -c \"import json,sys;print(json.load(sys.stdin).get('backend_build_id',''))\" 2>/dev/null); " +
+        "printf '{\"build_id\":\"%s\",\"round\":" + round + ",\"at\":\"%s\"}\\n' \"$B\" \"$(date -u +%FT%TZ)\" > implementation/workbench/scripts/tester_loop_0927/PREFLIGHT_LAST_GREEN.json && cat implementation/workbench/scripts/tester_loop_0927/PREFLIGHT_LAST_GREEN.json",
+      ]);
+    }
+  }
+  let siegeOk = true;
+  let siegeBlock = "";
+  if (round >= 19) {
+    phase("攻坚验证：让常驻项目真正跑通一次监查（组织反思落地）");
+    for (let sgAttempt = 1; sgAttempt <= 3 && !siegeOk; sgAttempt++) {
+      const sg = await agent("攻坚工程师-R" + round + "-第" + sgAttempt + "次", {
+        system:
+          "你是运行启动死锁攻坚工程师（工程验证身份，允许API驱动与代码修复——这不是替代测试：测试者在墙破后回归全量轮）。任务：让常驻开考项目「MX循开考-CSU」从『开始运行监查』真正走到运行完成→发布available→结果可读。背景：此墙自R8起10轮未破（8次创建运行全部卡『等待开始』，状态碎片化8证：预置台confirmed vs 界面unconfirmed），而预检在一次性新项目上8连绿——差异就在常驻/预置项目的状态读取路径。工程纪律：最小根因修复+相关pytest+git提交（『测试循环R" + round + "攻坚:』）+重启只动8911/5178；严禁跳门/伪造状态/绕过界面层缺陷不修。证据写入 scripts/tester_loop_0927/SIEGE_LOG.md（按轮分节）。",
+      }).ask<PreflightResult>(
+        "第" + sgAttempt + "次攻坚：①复现——在「MX循开考-CSU」上发起运行，完整记录从 run-setup/options→workspace/bootstrap→prepare-and-start→progress 每一步的请求/响应/状态与耗时；若被拒或卡『等待开始』，对照同一时刻后端 mapping/facts/project/open 的真实状态，把『两侧口径差』钉到具体代码行；②修复——修复该根因（若属上游门禁矛盾，沿链验证下一道门）；③重验——同项目再走一次到结果可读。返回 PreflightResult（chainOk 仅当运行真完成+发布available+结果可读；blockedAt 写具体卡点与代码行）。若你判断需要更大改动超出最小修复，如实返回并说明。",
+      );
+      siegeOk = sg.chainOk;
+      siegeBlock = sg.blockedAt;
+      if (siegeOk) {
+        await world.run("bash", [
+          "-c",
+          "B=$(curl -s --max-time 8 http://127.0.0.1:8911/api/runtime-readiness | python3 -c \"import json,sys;print(json.load(sys.stdin).get('backend_build_id',''))\" 2>/dev/null); " +
+          "printf '{\"build_id\":\"%s\",\"round\":" + round + ",\"siege\":true,\"at\":\"%s\"}\\n' \"$B\" \"$(date -u +%FT%TZ)\" > implementation/workbench/scripts/tester_loop_0927/PREFLIGHT_LAST_GREEN.json",
+        ]);
+        log("攻坚成功（第" + sgAttempt + "次）：常驻项目运行真完成——墙破，恢复全量测试者轮（下一批测试者应能走通运行→发布→结果）");
+      } else if (sgAttempt < 3) {
+        log("攻坚第" + sgAttempt + "次未破：" + siegeBlock + " ——转修复员攻坚后重验");
+        await fixer.ask<FixResult>(
+          "攻坚工程师复现并定位的运行启动死锁（第" + round + "轮第" + sgAttempt + "次）请修复：\n" +
+          JSON.stringify({ blockedAt: sg.blockedAt, stages: sg.stages, aiNodes: sg.aiNodes }) + "\n" +
+          "这是十轮未破的主墙（8次创建0执行+状态碎片化8证）；修复纪律见你的角色设定与任务书⑥；修完相关pytest+提交。返回FixResult。",
+        );
+      }
+    }
+    if (!siegeOk) {
+      log("攻坚第" + round + "轮三次未破（" + siegeBlock + "）——本轮转工程轮：不派发测试者（避免再花20+小时重复撞已知墙），分诊/修复/复盘照常推进存量");
     }
   }
   if (round === 5) {
@@ -867,14 +928,33 @@ for (let round = 1; round <= MAXROUNDS; round++) {
       await agent("隔离环境守护员-R5冲刺后", { system: ISO_GUARD_RULE }).ask("冲刺与预置后隔离API(8911)未就绪，请恢复：" + ISO_RESTART_API + " ；随后自检 ready:true；严禁动 8910/5177");
     }
   }
-  const outcomesP = CHANNELS.map((ch, s) => {
-    const seeded = round >= 5 && ch.slot === "D";
-    const csuDs = DATASETS.find((x) => x.key === "CSU");
-    const ds = seeded && csuDs ? csuDs : DATASETS[(round + s) % DATASETS.length];
-    const externalUsable = ch.kind !== "external" || (channelOk.get(ch.model) ?? false);
-    return runSlot(round, s, ds, (round + s) % PERSONAS.length, (round * 2 + s) % FOCUSES.length, (round * 3 + s) % SPECIALS.length, externalUsable, strategyNote, seeded);
-  });
-  const outcomes = await Promise.all(outcomesP);
+  let outcomes: TesterOutcome[];
+  if (round >= 19 && !siegeOk) {
+    const engDir = LOOP + "/round_" + (round < 10 ? "0" + round : round);
+    outcomes = CHANNELS.map((ch) => ({
+      tester: ch.label,
+      channel: "engineering-round",
+      reportFile: engDir + "/no-tester-dispatch.md",
+      projectName: "-",
+      stagesReached: [],
+      blockedAt: "攻坚门未过（" + siegeBlock + "），本轮为工程攻坚轮，不派发测试者",
+      stallMinutes: 0,
+      pass: false,
+      findings: [],
+      coverageNotes: "",
+      channelNote: "工程攻坚轮（组织反思R1005落地：墙未破不外派）",
+    }));
+    log("第" + round + "轮以工程轮收卷（0/4 派发，攻坚证据见 SIEGE_LOG.md）");
+  } else {
+    const outcomesP = CHANNELS.map((ch, s) => {
+      const seeded = round >= 5 && ch.slot === "D";
+      const csuDs = DATASETS.find((x) => x.key === "CSU");
+      const ds = seeded && csuDs ? csuDs : DATASETS[(round + s) % DATASETS.length];
+      const externalUsable = ch.kind !== "external" || (channelOk.get(ch.model) ?? false);
+      return runSlot(round, s, ds, (round + s) % PERSONAS.length, (round * 2 + s) % FOCUSES.length, (round * 3 + s) % SPECIALS.length, externalUsable, strategyNote, seeded);
+    });
+    outcomes = await Promise.all(outcomesP);
+  }
   const totalFindingsRaw = outcomes.reduce((n, o) => n + (o.findings ?? []).length, 0);
   log(
     "第" + round + "轮收卷：通过 " + outcomes.filter((o) => o.pass).length + "/4；原始发现 " + totalFindingsRaw + " 条；" +
