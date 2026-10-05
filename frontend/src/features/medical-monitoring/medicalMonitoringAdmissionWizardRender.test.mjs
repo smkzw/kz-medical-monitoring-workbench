@@ -58,7 +58,7 @@ check(renders.input.includes("数据接入"), "wizard heading rendered");
 check(renders.input.includes('aria-label="数据接入向导"'), "wizard aria label");
 check(renders.input.includes("第 一 步") && renders.input.includes("选择数据"), "step one rendered");
 check(renders.input.includes("第 二 步") && renders.input.includes("查看导入概况"), "step two rendered");
-check(renders.input.includes("第 三 步") && renders.input.includes("处理少量疑点"), "step three rendered");
+check(renders.input.includes("第 三 步") && renders.input.includes("研究文件与字段映射确认"), "step three rendered");
 check(renders.input.includes('aria-current="step"'), "current step exposed to assistive tech");
 check(
   renders.input.split('aria-current="step"').length - 1 === 1,

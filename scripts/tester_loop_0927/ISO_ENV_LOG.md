@@ -273,3 +273,16 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 修复：resolve路由补GET变体（batch_id查询参数，与POST同语义；缺参给可读422非404）；前端轮询catch显式route_not_found/404分支→failed态+如实提示，不再无限静默。
 - 自检：8911 ready:true（build api-2ac4a3a5e6a1db40——packages/改动不入build指纹但进程已重启加载新代码）；5178=200；指纹配对一致。
 - ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
+
+## 2026-10-04 晚（R17D 开考位预置·守护员）
+
+- **探障（无障碍，R5D marker 缺陷未复发，未修任何产品代码、未重启 8911/5178）**：① 循环收尾已把旧项目全部软归档（`GET /api/projects` → `[]`），无存量项目可按原样探 → 按 R13D-R16D 先例建项后探：R17D 建项瞬间 `GET /r7/project/open` blocked（bootstrap 前 monitoring_runtime.sqlite3 不存在的设计内瞬态，R1 已知同款）；② 修复代码在位：main.py:4925-4927,4935-4936 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54 = mm-r7-w01r26-launch-registry-v5）；③ 建项前存量 20 个 workspace 的 launch_registry marker 逐库 sqlite 直查全部 v5；④ R17D 建项后产品 `inspect_project_schema` 实证 6 成员全 current/current_shape（launch_registry marker=v5），终态硬断言 Step10 通过（project/open 必须 current）。主侧AI路由复核：直连绑定跨重启生效，/api/ai-gateway/probe 双档案真实往返 passed:true（主侧 cms-router/glm-5.3-flash 3577ms；verifier ollama-cloud/deepseek-v4.1-flash 1018ms），本轮无需换绑。环境侧：8911 ready:true（build api-2ac4a3a5e6a1db40）；5178 存活（node 67415，[::1]:5178）；8910/5177 无监听（连接拒绝）——非本轮所致（仅只读 lsof/curl 复核），按铁律未触碰，如实记录。
+- **预置 MX循R17D-CSU**（proj_user_6d794c3dfd2f，幂等键 r17d-seed-20261004T132225Z-4d453cfc）：三件套上传（stg-ed22e6108aa04ace9423b87c542da86f，591行/10表，sha256 与 R15D/R16D 逐字节一致）→ 文档权威双VLM约10.5分钟 ready（mmbatch_7e9b2f05ba8cfcbcbb237f18，自动归属确认，无身份门/角色门）→ 映射双队列（10主+10盲核，60候选，约20分钟）→ 复核收敛：16次 adjudicate_drive 多轮双队列（终轮 blocked remaining=9/系统裁决37 → 9张裁决卡作答 → complete remaining=0；5个 mapping 分片终态 failed=provider_runtime_error retryable，经自动恢复与系统裁决收敛）→ **confirm 200（draft monmapdraft_053c44ea0607a6086bb7d1b27dda v58 confirmed，user_questions=0）→ facts 201（10表/591行/1896值全核验，state=ready）**，停住未启动监查（runs=[]）；project/open → current/complete/canView/canEdit=true；run-setup/options 200。起止 13:22:25Z→19:25:01Z（约6小时03分，其中复核收敛约5.5小时为本循环历轮最慢，提请循环所有者留意 provider 侧时延；facts values 计数1896较近轮偏低已如实记录差异）。AI 台账：102作业（97完成/5终态failed经收敛 remaining=0）；193次调用，2,947,513 tokens。全程未跳任何质量门。轮次分节详见 `R5_SEEDED_PROJECT.md` R17D。
+- 驱动与留痕：`r17d_seed_csu.py`（由 r16d_seed_csu.py 机械适配，既有裁决卡决策表原样保留）、`r17d_seed_state.json`、`r17d_seed_evidence.jsonl`、`r17d_seed_console.log`。
+
+## 2026-10-05（R17轮次·修复员：五项修复后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R17轮次：R17-01/02/03、R15-02/04）
+- 修复：疑点作答陈旧会话守卫改提示+自动重拉（不再静默丢弃）；映射错误在向导第3步面板内醒目渲染（含event_ref）；第2步补「返回上一步，重新选择数据」（回第1步重选数据源，服务端staging支持重走）；未配置模块页新增各模块前置链激活指引；字段关卡术语统一为「字段映射确认/研究文件与字段映射确认」。
+- 自检：8911 ready:true；5178=200；指纹配对一致。
+- ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。

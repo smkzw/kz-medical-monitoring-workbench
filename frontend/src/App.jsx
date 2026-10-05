@@ -13079,6 +13079,16 @@ function ModuleUnavailablePage({ moduleKey, message = "当前项目尚未配置�
     eligibility_review: "eligibility_review",
   };
   const targetModule = moduleKeyToModule[moduleKey];
+  // R17轮（R15-02）：各未配置模块的前置链说明——用户需要知道先完成
+  // 什么才能激活，而非断崖式「功能未配置」。
+  const PRECONDITION_GUIDES = {
+    safety: "安全信号与PV协同的受试者级数据来自医学监查的数据接入：请先在「医学监查 → 数据接入」完成数据导入、研究文件核对与字段确认，并至少运行一次监查后，本模块即可基于同一数据查看安全信号。",
+    tfl: "数据分析与TFL基于医学监查已确认的数据表：请先完成「医学监查 → 数据接入」的数据导入与字段确认。",
+    evidenceDesign: "证据调研与方案设计不依赖其他模块的数据，可直接使用；若需引用本项目监查数据，请先完成医学监查的数据接入。",
+    eligibility: "入排审核需要研究方案与受试者清单：请先在「来源台账」登记方案文档，再启用本模块。",
+    medical_monitoring: "医学监查需先完成数据接入（Data Listing导入、研究文件核对、字段确认）后激活。",
+  };
+  const guideText = PRECONDITION_GUIDES[moduleKey] || "";
   const enableModule = async () => {
     if (!projectId || enableBusy) return;
     setEnableBusy(true);
@@ -13106,6 +13116,11 @@ function ModuleUnavailablePage({ moduleKey, message = "当前项目尚未配置�
       <SectionTitle eyebrow={moduleLabels[moduleKey] || "当前模块"} title="功能未配置" />
       <section className="panel empty-state">
         {message}
+        {guideText ? (
+          <p style={{ marginTop: 10, fontSize: 13, lineHeight: 1.6, color: "#43505c" }}>
+            <strong>如何激活：</strong>{guideText}
+          </p>
+        ) : null}
         {targetModule && projectId && !enabled ? (
           <p style={{ marginTop: 12 }}>
             <button type="button" className="primary-button" onClick={enableModule} disabled={enableBusy} title="为当前项目补开该模块（记录为项目模块清单变更）">

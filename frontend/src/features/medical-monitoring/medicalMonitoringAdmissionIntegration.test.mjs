@@ -131,7 +131,7 @@ const stubApi = {
 const wizardMountHtml = render(element(wizardBundle, "MedicalMonitoringAdmissionWizard", { projectId: "proj-c2", api: stubApi }));
 check(wizardMountHtml.includes('aria-label="数据接入向导"'), "mounted wizard renders its accessible region");
 check(wizardMountHtml.includes('id="monitoring-admission-files"'), "mounted wizard starts with the browser-native folder picker");
-check(wizardMountHtml.includes("选择数据") && wizardMountHtml.includes("查看导入概况") && wizardMountHtml.includes("处理少量疑点"), "mounted wizard renders the three native Chinese steps");
+check(wizardMountHtml.includes("选择数据") && wizardMountHtml.includes("查看导入概况") && wizardMountHtml.includes("研究文件与字段映射确认"), "mounted wizard renders the three native Chinese steps");
 check(wizardMountHtml.includes("disabled"), "wizard entry primary action waits for selected files or a fallback location");
 
 const mappingFlowCalls = [];
@@ -190,7 +190,7 @@ const needle = (text) => compact(text);
     "admission open state is declared beside the wizard state",
   );
   check(
-    src.includes(needle(`{!loadingBody && !resultLoaded && !publicRunToken ? (\n        <>\n          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError?.text : startSurfaceCopy}</span></section>\n          <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />\n          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={(payload) => {
+    src.includes(needle(`{!loadingBody && !resultLoaded && !publicRunToken ? (\n        <>\n          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先完成字段映射确认" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError?.text : startSurfaceCopy}</span></section>\n          <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />\n          {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={(payload) => {
             retryPage();
             // R5冲刺（R3-12）：接入完成后同步刷新全局顶栏的数据批次/
             // 方案版本元数据，消除「向导内已识别、顶栏仍显示未登记

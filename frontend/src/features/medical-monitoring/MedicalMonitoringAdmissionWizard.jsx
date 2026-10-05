@@ -399,6 +399,25 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
       <p className="monitoring-admission-minor">
         确认前不会生成可用于监查的数据；确认后也只保存字段对应关系。
       </p>
+      {/* R17轮（R17-02）：映射阶段的服务端错误在本面板醒目渲染——
+          此前仅在退回第2步后才可见，第3步用户只看到按钮跳变。 */}
+      {mappingState.error ? (
+        <div className="monitoring-admission-alert" role="alert" style={{ margin: "8px 0" }}>
+          <p className="monitoring-admission-alert-text">{mappingState.error.serverText}</p>
+          {mappingState.error.eventRef ? (
+            <p style={{ margin: "2px 0 4px", fontSize: 11, color: "var(--monitoring-muted, #6b7785)", fontFamily: "monospace" }}>
+              事件参考：{mappingState.error.eventRef}
+            </p>
+          ) : null}
+          {mappingState.error.guidance?.length ? (
+            <ul className="monitoring-admission-alert-guide">
+              {mappingState.error.guidance.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
       {mappingState.message ? (
         <p className="monitoring-admission-mapping-message" role="status">{mappingState.message}</p>
       ) : null}
@@ -1603,7 +1622,20 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   }, []);
 
   const onAnswerCard = useCallback(async (card, note) => {
-    if (!mappingState.draft || mappingState.phase !== "drafting") return;
+    if (!mappingState.draft || mappingState.phase !== "drafting") {
+      // R17轮（R17-01）：陈旧会话下作答曾被静默丢弃（零请求零反馈，
+      // 整页刷新才恢复）。现在：给出明确提示并触发重新拉取让会话
+      // 自愈，作答不再无声丢失。
+      mappingDispatch({
+        type: "error",
+        error: {
+          serverText: "当前页面的识别状态已过期，本次点击未提交作答。系统正在重新读取最新进度，请稍候后再次点击；若提示持续出现请刷新页面。",
+          guidance: ["正在自动重新读取识别结果。"],
+        },
+      });
+      loadMappingCandidates();
+      return;
+    }
     const generation = mappingRequestGeneration.current + 1;
     mappingRequestGeneration.current = generation;
     try {
@@ -1637,7 +1669,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         },
       });
     }
-  }, [api, mappingState.draft, mappingState.phase, state.attemptId, state.projectId]);
+  }, [api, loadMappingCandidates, mappingState.draft, mappingState.phase, state.attemptId, state.projectId]);
 
   return (
     <>
