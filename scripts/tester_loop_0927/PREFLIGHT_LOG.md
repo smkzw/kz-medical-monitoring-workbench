@@ -6,6 +6,121 @@
 
 ---
 
+## R17 第1次（20261004，run=r17p_preflight）——**chainOk = true，第八次全链端到端跑通（单run零fail-closed零未知卡；碎片化家族未命中；facts 满覆盖3038值；1个裁决主分片终态失败经bounded-gap吸收）**
+
+- 驱动脚本：`scripts/tester_loop_0927/r17p_preflight_csu.py`（由 R16P 全绿驱动
+  r16p_preflight_csu.py 机械适配 R17 命名/幂等键/留痕文件——diff 实测 38 行，
+  全部为轮次标识替换，R5D-R15D 裁决卡决策表原样保留；幂等，状态
+  `r17p_preflight_state.json`，留痕 `r17p_preflight_evidence.jsonl`
+  （474驱动事件，0条ok=false），运行日志 logs/r17p_preflight_run1.log，退出码 0）
+- 数据：同 `tester_staging_0927/synth_csu` 三件套（方案V1.3 docx + eCRF指南V1.0 docx + 合成listing V1.0 xlsx）
+- 项目：**MX循R17P-CSU**（proj_user_20c4a3880375，慢性自发性荨麻疹 / MG-K10 /
+  modules 含 medical_monitoring【projects+source-manifest API 双核对：发布后
+  medical_monitoring → real_source_slice】，幂等键 r17p-preflight-20261004T193426Z-3b0bf5c7
+  唯一，精确名一次建项成功无需后缀，status=active，**留在原地待复盘归档**）
+- 运行：run:91d42cd0b0b9de85ca2ba9d4（run_start_idem=r17p-run-20261004T231504Z-7d01c90d，
+  prepare-and-start 一次 200，项目 runs 列表仅此1条无孤儿）
+- 结果：result-context:f02aaa35e2324ec494c86fce1ba91ad8（overview 驱动侧序列化
+  597,305 字节；独立HTTP读取原始载荷 778,126 字节——与R14P/R15P/R16P字节数完全一致）
+
+### 结论：chainOk = true（八阶段全ok；运行真完成10/10项100%、发布available、结果可读）
+
+已知状态碎片化家族（后端confirmed vs 监查侧unconfirmed，readiness 409）**未命中**
+——本轮 run-setup/options 200、workspace/bootstrap 200 后 prepare-and-start 一次 200，
+无 409 窗口，无需碎片化取证（evidence 中 fragmentation_evidence 事件 0 条）。
+
+**本轮真实事件（如实，全程未改产品代码/数据库）**：
+1. **单 run 全绿，零 fail-closed、零未知卡**：收敛期浮现 **29 张用户裁决卡**
+  （AE 8 + CM 6 + DM 5 + EX 2 + LB_HEM 1 + MH 3 + UAS 4，evidence
+  question_card_answer 事件逐卡留痕），全部命中 R5D-R15D 既有决策表按数据实测
+  作答（unknown_questions_fail_closed 事件 0 条）；draft v1→76，confirm 200，
+  mapping state=candidates_ready / draft.status=confirmed / user_questions=0；
+2. **裁决收敛三波，盲核道串行主导壁钟**：remaining 46→42→27→0、
+  system_adjudicated 0→4→19→19（46分歧 = 系统19 + 用户27后收敛，29卡含波间重复浮出面），
+  收敛 12612.1s（约3h30m，慢于R16P的6942s——盲核裁决道本轮19分片逐个串行，
+  中途 DM 分片一次 controlled repair 重试后通过）；裁决AI作业 38 个（主19+盲核19）；
+3. **1个裁决主分片终态失败，可见且被吸收**：主侧 EX/裁决分片
+  invalid_ai_output（"provider output remained invalid after one controlled repair"，
+  att=2/3，automatic_recovery_count=1，显式failure_code+failure_message），经
+  bounded-gap 吸收后 adjudication complete（remaining=0）——**facts 满覆盖：
+  10表/591行/3038值，source_values_verified=3038（100%），与R14P/R15D/R16P持平**；
+4. **文档权威本轮8作业（长内部复核链，同R15P形态）**：analysis+critique+review+
+  adjudication 四环节 × 主/盲核各1，全completed；docs resolve 状态链
+  analyzing→reviewing→adjudicating→cross_checking→needs_user_input（身份归属确认
+  1次，自动）→ready，625.3s。
+
+### 八阶段计时（秒数=首次真实完成；总活跃驱动 13269.0s，壁钟 19:34:26Z→23:15:35Z 约3h41m，映射收敛3h30m占绝对主导）
+
+| # | 阶段 | ok | 秒 | 备注 |
+|---|---|---|---|---|
+| 1 | 建项 | ✅ | 0.0 | proj_user_20c4a3880375，精确名一次成功（在册仅 MX循R17D-CSU 开考位，无同名冲突）；indication/product/modules 合同双核对无误；status=active |
+| 2 | 上传 | ✅ | 0.2 | attempt=stg-975a0e04a8a5416cb0e0fd9f498804fb，1文件/10表/591行 |
+| 3 | 文档权威 | ✅ | 625.3 | analyze→长内部复核链（analysis/critique/review/adjudication × 主/盲核）→（身份归属确认1次，自动）→ready=true「研究文件已准备好」；8个AI作业全completed |
+| 4 | 映射确认 | ✅ | 12612.1 | 双队列10+10→candidates_ready（60候选）→裁决三波收敛（remaining 46→42→27→0；system_adjudicated 0→4→19）→29张用户卡全按数据实测决策表作答→adjudicate complete（remaining=0）→confirm 200（draft v76 confirmed，user_questions=0） |
+| 5 | facts | ✅ | 0.2 | state=ready：10表/591行/**3038值** source_values_verified=3038（100%物化值核验） |
+| 6 | 运行 | ✅ | 30.3 | workspace/bootstrap 200→run-setup/options 200→prepare-and-start 一次200（**碎片化家族未命中**）→run_state=completed，**10/10项100%「已完成」**（progress复核API独立确认percent=100.0+status_overview=[{已完成,count:10}]+result_available=true） |
+| 7 | 发布 | ✅ | 0.4 | publication POST 200→publication_state=available（progress侧publication_state=available+result_available=true双端点一致） |
+| 8 | 结果 | ✅ | 0.5 | result-entry 200；overview 非空（序列化597,305字节/原始载荷778,126字节）；**finding_count=15**（query_findings列表长度与query_findings_meta.total双一致）+current_risks=477；subject_count=16；identity.project_ref=proj_user_20c4a3880375 归属核对无误 |
+
+### AI 节点路由核验（台账：隔离实例 runs/tester_loop_iso_20260928/runtime/medical_monitoring_ai.sqlite3 直读；/api/ai/queue 本build仍404，模块级 ai/jobs 200）
+
+本项目总量 **66 作业**（权威8 + 映射pipeline 20 + 裁决38），终态 **65 completed +
+1 terminal failed**，**0 queued/running（项目级无滞留）**；唯一 failed 为裁决主侧
+EX分片 invalid_ai_output，有显式 failure_code/failure_message（provider输出缺
+schema_version/task_id/candidates等必填字段，一次受控修复后仍无效）、att=2/3、
+automatic_recovery_count=1，无静默失败；经 bounded-gap 吸收后 adjudication
+complete/remaining=0，facts 满覆盖3038值。调用95次（observed 与 requested
+response_model 全一致，0 mismatch），prompt 1,293,434 + completion 690,857 =
+**1,984,291 tokens**。
+
+| 节点 | provider/model（台账实测） | 作业数 | 终态 | ok |
+|---|---|---|---|---|
+| 文档权威主 | cms-router/glm-5.3-flash（analysis/critique/review/adjudication primary 各1） | 4 | 4 completed | ✅ |
+| 文档权威盲核 | ollama-cloud/deepseek-v4.1-flash（analysis/critique/review/adjudication verifier 各1） | 4 | 4 completed | ✅ |
+| 映射主 | cms-router/glm-5.3-flash（pipeline listing-field-mapping-v19 ×10 + adjudication primary ×19） | 29 | 28 completed + 1 failed（EX裁决分片 invalid_ai_output att=2/3，bounded-gap吸收） | ✅（失败可见且按设计恢复为可见缺口） |
+| 映射盲核 | ollama-cloud/deepseek-v4.1-flash（pipeline mapping-verifier/verifier 分片 ×10 + adjudication verifier ×19） | 29 | 29 completed | ✅ |
+| 裁决（映射收敛） | 主 cms-router/glm-5.3-flash 19（18 completed+1 failed）+ 盲核 ollama-cloud/deepseek-v4.1-flash 19（19 completed），tools车道 | 38 | 37 completed + 1 failed（终态失败为可见缺口；46分歧=系统19+用户卡全消化，adj_state=complete/remaining=0） | ✅ |
+| 监查分析 | 本build运行lane不经AI台账（本项目 business_key 仅 document-authority-* 与 listing-field-mapping* 两族；FactsModeOutputProvider 事实回执确定性产出，同R10P3-R16P） | 0 | —（无作业=无滞留/无静默失败；15发现+477风险已产出） | ✅（机制核实，如实报0作业） |
+
+注：映射主/映射盲核行含首遍pipeline双队列（10+10）与裁决车道（19+19）；
+裁决行单列的是其中裁决车道38作业。四行合计 4+4+29+29=66 与总量一致。
+
+### 过程事件（如实）
+- 开赛前健康断言：8911 /api/health ok（runtime_store integrity ok，schema v16）、
+  /api/runtime-readiness ready:true（build api-2ac4a3a5e6a1db40，与 R13-R16 轮
+  同build）、AI网关 /api/ai-gateway/status configured=true（zhipu-coding-plan/
+  glm-5.3-flash，route_validation_errors=[]）；在册项目仅 MX循R17D-CSU（开考位，
+  已推至 facts ready），精确名 MX循R17P-CSU 无冲突；synth_csu 三件套在位；
+  8910/5177 连接拒绝（000，未触碰）；
+- **赛前基线观察（如实记录，非本轮所致、未处理）**：实例台账存在 1 个僵尸
+  running 作业 monai_a7a4be4f864671b0d180ce4a3088（listing_field_mapping PE2
+  分片，属 proj_user_912dfa63e8cd——该项目不在当前实例项目注册表中，为历轮
+  遗留），created 2026-10-04T04:40:02Z、attempt 2、lease 已于 13:41:36Z 过期、
+  全程 updated_at 停在 13:11:36Z 未再变化；本轮全链（含映射双队列与裁决三波）
+  在其存在期间完整跑通，证明其不阻塞新作业；R17D（13:22Z→19:24Z 完整推至
+  facts ready）亦在其之后完成——按预检职责只记录不修复；
+- 19:34:26Z run1（唯一run）启动：精确名建项一次成功；上传 0.2s；文档权威
+  625.3s 全绿（长内部复核链+自动身份归属确认1次，无文件角色人工裁决）；
+  映射双队列 19:44:52Z 启动，首遍10主+10盲核全completed→60候选→adopt 201
+  （monmapdraft_330742f5cd6b3cd659f366857fa7）→裁决三波约3h30m收敛
+  （盲核道串行19分片逐个跑，DM分片一次controlled repair后通过）→29张用户
+  裁决卡全按 R5D-R15D 数据实测决策表作答→confirm 200（draft v76）；
+  23:15:04Z facts → 运行30.3s → 发布available → 结果可读（23:15:35Z）；
+- 后续为复盘归档做了API独立复核（非驱动日志自证）：progress端点 run_state=
+  completed/percent=100.0/status_overview=[{已完成,count:10}]/publication_state=
+  available/result_available=true、publication端点available、result-entry 200/
+  overview 独立读取778,126字节·15发现（列表与meta.total双一致）/16受试者/
+  477风险/identity归属、mapping-candidates终读 draft v76 confirmed/
+  user_questions=0/candidates=60、source-manifest real_source_slice、runs列表
+  仅1条（无孤儿，run_state=completed）——全部一致；
+- console /tmp/mm_api_8911.log 全程与赛前基线一致（0字节，uvicorn --log-level
+  warning；本轮链路无门禁拒绝、无碎片化拦截，无需 console 取证）；
+- 全程未触碰 8910/5177（开始/结束只读复核连接拒绝状态）；未改任何产品代码/
+  数据库（驱动脚本与一次性预检项目自身数据除外）；项目 MX循R17P-CSU 与全部
+  留痕原地保留（归档交复盘官；在册另有 R17D 开考位项目 MX循R17D-CSU 仍active）。
+
+---
+
 ## R16 第1次（20261004，run=r16p_preflight）——**chainOk = true，第七次全链端到端跑通（单run零fail-closed零未知卡；碎片化家族未命中；facts 恢复满覆盖3038值；2个EX裁决分片终态失败经bounded-gap吸收）**
 
 - 驱动脚本：`scripts/tester_loop_0927/r16p_preflight_csu.py`（由 R15P 全绿驱动

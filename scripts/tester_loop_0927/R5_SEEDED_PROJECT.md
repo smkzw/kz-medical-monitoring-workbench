@@ -531,3 +531,57 @@ AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）�
 - 驱动：`r16d_seed_csu.py`（由 r15d_seed_csu.py 机械适配：R16D 命名/幂等键/留痕文件；R5/R8/R9/R11/R12/R13/R14/R15 既有裁决卡决策表原样保留；幂等，含 fail-closed 未知卡防护）
 - 证据：`r16d_seed_evidence.jsonl`（324 条事件，每步请求/响应摘要）、`r16d_seed_state.json`（幂等状态）、`r16d_seed_console.log`（运行控制台输出）
 - 环境日志：`ISO_ENV_LOG.md`（R16D 探障+预置条目）
+
+# R17D 开考位预置结果 — MX循R17D-CSU（2026-10-04）
+
+## 探障（本轮前置，R5D marker 缺陷未复发，未修任何产品代码、未重启 8911/5178）
+
+- 循环收尾已把旧项目全部软归档（`GET /api/projects` → `[]`），无存量项目可按原样探 → 按 R13D-R16D 先例建项后探：R17D 建项瞬间 `GET /r7/project/open` blocked（bootstrap 前 monitoring_runtime.sqlite3 不存在的设计内瞬态，R1 已知同款）；随后产品 `inspect_project_schema` 实证 R17D 新项目 6 成员全 current/current_shape（launch_registry marker=mm-r7-w01r26-launch-registry-v5，sqlite 直查同值）；数据接入后终态 project/open → current/complete（终态硬断言见下表）。
+- 修复代码在位复核：main.py:4925-4927,4935-4936 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54 = mm-r7-w01r26-launch-registry-v5）；隔离 runtime 存量 20 个 workspace（本轮建项前逐库 sqlite 直查）全部 v5，无 v4/shape_mismatch。
+- 主侧AI路由沿 R12D/R13D 先例复核：直连配置跨重启仍生效（两主侧档案 base_url=open.bigmodel.cn 直连），产品 `/api/ai-gateway/probe` 双档案真实往返 passed:true（主侧 cms-router/glm-5.3-flash 3577ms；verifier ollama-cloud/deepseek-v4.1-flash 1018ms），**本轮无需换绑**。
+- 环境侧：8911 /api/runtime-readiness ready:true（build api-2ac4a3a5e6a1db40，R16 修复员重启后的现行进程）；5178 存活（node 67415 监听 [::1]:5178）；8910/5177 无监听（连接拒绝）——非本轮所致（仅只读 lsof/curl 复核），按铁律未触碰，如实记录。
+
+## 项目
+
+| 项 | 值 |
+|---|---|
+| project_id | **proj_user_6d794c3dfd2f** |
+| project_name | MX循R17D-CSU |
+| indication / product_name | 慢性自发性荨麻疹 / MG-K10 |
+| modules | ["medical_monitoring"] |
+| 幂等键 | r17d-seed-20261004T132225Z-4d453cfc（唯一） |
+| data admission | stg-ed22e6108aa04ace9423b87c542da86f（合成listing 591行/10表） |
+| 文档权威批次 | mmbatch_7e9b2f05ba8cfcbcbb237f18（方案V1.3 docx + eCRF指南V1.0 docx 双VLM） |
+| 三件套 sha256 | listing 4be08e9e…b27968 / 方案 73024713…9a504199 / eCRF 8109d25a…ede15289（与 R15D/R16D 逐字节一致） |
+
+## 全链状态（自验实测，2026-10-04 19:25-19:4xZ 独立复验）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| 建项 | ✅ 201 | POST /api/projects（幂等键唯一）；state r17d_seed_state.json（13:22:25Z） |
+| 数据接入 | ✅ | data-admissions/upload → attempt，591行/10表（13:22:26Z） |
+| 身份门/角色门 | ✅ 未触发 | documents_resolve 自动归属确认（analyzing→…→adjudicating→ready），无人工门 |
+| 文档权威 | ✅ ready=true | 13:22:26Z 提交→13:33:00Z ready（约10.5分钟）；protocol/ecrf 自动识别 |
+| 映射双队列 | ✅ candidates_ready | 10主+10盲核，60字段候选（13:33:13Z→13:53:27Z 约20分钟） |
+| 复核收敛 | ✅ complete | 16 次 adjudicate_drive 多轮双队列复核，终轮 blocked(remaining=9, 系统裁决37) → 9张裁决卡作答 → complete(remaining=0)；5个 listing_field_mapping 分片终态 failed=provider_runtime_error（retryable）经自动恢复预算与系统裁决收敛，未跳门 |
+| 裁决卡 | ✅ 已答 | 共11次作答：首轮2张（EX.EXFRQ、EX.EXTRT，既有决策表）+ 终轮9张（AE.AENUM、AE.AEOUT、CM.CMENDAT/CMINDC/CMONGO/CMSTDAT/CMTRT、ICF_TRACK.ICFSTATE/ICFVER）**全部由既有决策表覆盖（R5/R8/R9/R11/R12/R13/R14/R15 表）——本轮无新卡、无 fail-closed 退出** |
+| **字段映射确认** | ✅ **confirmed** | GET mapping-candidates：confirmation_status=confirmed，draft monmapdraft_053c44ea0607a6086bb7d1b27dda status=confirmed（**v58**），user_questions=0，60字段（19:24:57Z confirm 200；独立复验同值） |
+| **facts 物化** | ✅ **ready** | GET facts：state=ready，facts_generated=true，10表/591行/**1896值全核验**（values=source_values_verified=1896），message「可用于监查的数据已生成，可以开始监查。」（19:24:57Z facts 201） |
+| 界面可开始运行监查 | ✅ | `GET /r7/project/open` → state=current/openMode=edit/dataCoverage=complete/canView/canEdit=true「项目格式正常，可以继续使用。」；`run-setup/options` **200**（含 10表/591行 已核验事实快照） |
+| 停在 facts（未启动监查） | ✅ | GET runs → {"runs":[]} |
+
+起止：13:22:25Z→19:25:01Z（约6小时03分；其中复核收敛 13:56→19:24 约5.5小时，为本循环历轮最慢——多轮双队列+16次adjudicate）。AI 台账（medical_monitoring_ai.sqlite3 按 project_id 过滤）：102 作业（97完成：document_authority_analysis×2 + document_authority_review×4 + listing_field_mapping×91；5终态failed=provider_runtime_error，均经自动恢复与系统裁决收敛 remaining=0）；193 次调用，tokens 合计 2,947,513（prompt 1,788,654 + completion 1,158,859）。全程 AI 质量门自然通过，未跳门、未伪造状态。
+
+## 本轮观察（如实记录，非阻断）
+
+- **收敛耗时异常拉长**：R16D 全程约2小时，本轮约6小时（复核收敛5.5小时）。作业失败模式未变（listing_field_mapping provider_runtime_error×5 与历轮相同、retryable），多轮双队列复核轮次明显多于近轮（16次 adjudicate_drive vs R16D 数次）；v19 工具型裁决单作业耗时波动（R10D 曾7.2小时）属已知慢模式，但本轮耗时回升提请循环所有者留意 provider 侧时延。
+- **facts values 计数较近轮偏低**：本轮 1896（R16D 3550/R13D 3422/R12D 3038）。facts summary 的 values 计数随本轮确认版草稿的字段覆盖与列值非空分布变化，state=ready 且 values=source_values_verified 全核验、10表/591行与历轮一致；如实记录差异，不判为缺陷。
+- **无新裁决卡**：终轮9张卡全部由 R8-R15 既有决策表覆盖，fail-closed 防护在位未触发（unknown_questions=0 全程）。
+- 主侧AI直连绑定沿 R12D/R13D 起保持生效，本轮未换绑（probe 双档案 passed 预检在先）。
+- 8910/5177 无监听（沿 R11 起记录），本轮仅只读复核未触碰。
+
+## 留痕文件（同目录）
+
+- 驱动：`r17d_seed_csu.py`（由 r16d_seed_csu.py 机械适配：R17D 命名/幂等键/留痕文件；R5/R8/R9/R11/R12/R13/R14/R15 既有裁决卡决策表原样保留；幂等，含 fail-closed 未知卡防护）
+- 证据：`r17d_seed_evidence.jsonl`（664 条事件，每步请求/响应摘要）、`r17d_seed_state.json`（幂等状态）、`r17d_seed_console.log`（运行控制台输出）
+- 环境日志：`ISO_ENV_LOG.md`（R17D 探障+预置条目）
