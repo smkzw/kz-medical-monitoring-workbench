@@ -2,7 +2,7 @@
  "project_id": "proj_user_429cae9629e8",
  "create_key": "r18p-preflight-20261005T082942Z-8efd4505",
  "project_name": "MX循R18P-CSU",
- "updated_at": "2026-10-05T08:29:43.724934+00:00",
+ "updated_at": "2026-10-05T15:20:39.176990+00:00",
  "stages": {
   "建项": {
    "ok": true,
@@ -11,10 +11,145 @@
   },
   "上传": {
    "ok": true,
-   "seconds": 0.2,
+   "seconds": 0.0,
    "note": "attempt=stg-460555f9071d42a299bd9b9edd465ce3 summary={'files': 1, 'rows': 591, 'tables': 10}"
+  },
+  "文档权威": {
+   "ok": true,
+   "seconds": 4.9,
+   "note": "ready=True headline=研究文件已准备好"
+  },
+  "映射确认": {
+   "ok": true,
+   "seconds": 5711.5,
+   "note": "state=candidates_ready draft.status=confirmed adj=complete candidates=60"
+  },
+  "facts": {
+   "ok": true,
+   "seconds": 1.2,
+   "note": "state=ready summary={'tables': 10, 'rows': 591, 'values': 1752, 'source_values_verified': 1752}"
+  },
+  "运行": {
+   "ok": true,
+   "seconds": 5.8,
+   "note": "run_state=completed result_available=False run_token=run:bac6aaad1781e1b92a9402c4"
+  },
+  "发布": {
+   "ok": true,
+   "seconds": 1.5,
+   "note": "publication_state=available"
+  },
+  "结果": {
+   "ok": true,
+   "seconds": 1.2,
+   "note": "entry_http=200 overview_bytes=597305 finding_count=15 subject_count=16 current_risks=477 rct=result-context:6fada1d73eb64b8"
   }
  },
  "attempt_id": "stg-460555f9071d42a299bd9b9edd465ce3",
- "docs_batch_id": "mmbatch_838d5ad92d6c8c32568e47b5"
+ "docs_batch_id": "mmbatch_838d5ad92d6c8c32568e47b5",
+ "role_selections": [
+  {
+   "role": "ecrf",
+   "candidate_id": "mmcandidate_203abafc8771b5d46541745a"
+  }
+ ],
+ "documents_ready": true,
+ "mapping_state": "candidates_ready",
+ "draft_id": "monmapdraft_944a63003bb4bcef500c4061583f",
+ "draft_version": 1,
+ "confirmed": true,
+ "confirm_idempotency_key": "r18p-confirm-9f0ba9553dd54b2db627a071d84f389e",
+ "facts_materialized": true,
+ "workspace_bootstrapped": true,
+ "run_start_idem": "r18p-run-20261005T152031Z-e3392c01",
+ "run_token": "run:bac6aaad1781e1b92a9402c4",
+ "run_id": null,
+ "publication_state": "available",
+ "result_context_token": "",
+ "result_verdict": {
+  "overview_bytes": 597305,
+  "finding_count": 15,
+  "subject_count": 16
+ },
+ "ai_nodes": [
+  {
+   "task_type": "document_authority_analysis",
+   "role": "primary",
+   "routes": {
+    "cms-router/glm-5.3-flash": 1
+   },
+   "statuses": {
+    "completed": 1
+   },
+   "count": 1
+  },
+  {
+   "task_type": "document_authority_analysis",
+   "role": "verifier",
+   "routes": {
+    "ollama-cloud/deepseek-v4.1-flash": 1
+   },
+   "statuses": {
+    "completed": 1
+   },
+   "count": 1
+  },
+  {
+   "task_type": "document_authority_review",
+   "role": "primary",
+   "routes": {
+    "cms-router/glm-5.3-flash": 3
+   },
+   "statuses": {
+    "completed": 3
+   },
+   "count": 3
+  },
+  {
+   "task_type": "document_authority_review",
+   "role": "verifier",
+   "routes": {
+    "ollama-cloud/deepseek-v4.1-flash": 3
+   },
+   "statuses": {
+    "completed": 3
+   },
+   "count": 3
+  },
+  {
+   "task_type": "listing_field_mapping",
+   "role": "pipeline",
+   "routes": {
+    "cms-router/glm-5.3-flash": 10,
+    "ollama-cloud/deepseek-v4.1-flash": 10
+   },
+   "statuses": {
+    "completed": 20
+   },
+   "count": 20
+  },
+  {
+   "task_type": "listing_field_mapping",
+   "role": "primary",
+   "routes": {
+    "cms-router/glm-5.3-flash": 26
+   },
+   "statuses": {
+    "completed": 26
+   },
+   "count": 26
+  },
+  {
+   "task_type": "listing_field_mapping",
+   "role": "verifier",
+   "routes": {
+    "ollama-cloud/deepseek-v4.1-flash": 26
+   },
+   "statuses": {
+    "completed": 20,
+    "failed": 6
+   },
+   "count": 26
+  }
+ ]
 }
