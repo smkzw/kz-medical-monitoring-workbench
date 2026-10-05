@@ -1596,7 +1596,7 @@ export function MedicalMonitoringProductLoop({
           让用户随时可以上传Data Listing并启动首次监查。 */}
       {!loadingBody && !resultLoaded && !publicRunToken ? (
         <>
-          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先核对字段对应关系" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError?.text : startSurfaceCopy}</span></section>
+          <section className="monitoring-product-start-surface"><strong>{admissionOnly ? "先完成字段映射确认" : startSurfaceTitle}</strong><span>{admissionOnly ? setupHistoryError?.text : startSurfaceCopy}</span></section>
           <MonitoringAdmissionCard open={admissionOpen} onToggle={() => setAdmissionOpen((value) => !value)} />
           {admissionOpen ? <MedicalMonitoringAdmissionWizard key={normalizedProjectId} projectId={normalizedProjectId} api={api} onAdmitted={(payload) => {
             retryPage();

@@ -339,7 +339,7 @@ check(stepTodo[0].kind === "current" && stepTodo[1].kind === "todo" && stepTodo[
 const stepMid = admissionStepView({ phase: "ready", stepIndex: 1 });
 check(stepMid[0].kind === "done" && stepMid[1].kind === "current", "review step view");
 
-check(ADMISSION_WIZARD_STEPS.map((step) => step.title).join("/") === "选择数据/查看导入概况/处理少量疑点",
+check(ADMISSION_WIZARD_STEPS.map((step) => step.title).join("/") === "选择数据/查看导入概况/研究文件与字段映射确认",
   "three canonical steps");
 
 // ---------------------------------------------------------------------------

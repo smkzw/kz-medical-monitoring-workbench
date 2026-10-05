@@ -334,7 +334,7 @@ export function admissionMappingConfirmReducer(state, action) {
             ...loaded,
             phase: "confirmed",
             draft: action.payload?.draft || null,
-            message: "系统已保存全部字段对应关系，无需您逐项核对。",
+            message: "系统已保存全部字段映射确认结果，无需您逐项核对。",
           };
         }
         if (action.payload?.draft?.draft_id) {

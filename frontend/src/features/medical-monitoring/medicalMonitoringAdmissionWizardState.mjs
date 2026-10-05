@@ -5,7 +5,7 @@
 export const ADMISSION_WIZARD_STEPS = Object.freeze([
   { key: "select-source", title: "选择数据" },
   { key: "review-profile", title: "查看导入概况" },
-  { key: "confirm-fields", title: "处理少量疑点" },
+  { key: "confirm-fields", title: "研究文件与字段映射确认" },
 ]);
 
 export const ADMISSION_SUPPORTED_SUFFIX_TEXT = ".csv / .xls / .xlsx / .xlsm";
@@ -313,7 +313,23 @@ export function admissionWizardReducer(state, action) {
     case "advance":
       return state.stepIndex === 1 ? { ...state, stepIndex: 2 } : state;
     case "back":
-      return state.stepIndex === 2 ? { ...state, stepIndex: 1 } : state;
+      // R17轮（R17-03）：第2步可回第1步（重选数据源）；第3步回第2步。
+      if (state.stepIndex === 2) return { ...state, stepIndex: 1 };
+      if (state.stepIndex === 1) {
+        // 回第1步即放弃当前attempt的界面进度——服务端staging保留，
+        // 用户重新导入会产生新attempt（R13起实测支持重走）。
+        return {
+          ...state,
+          stepIndex: 0,
+          phase: "input",
+          selectedFiles: [],
+          selectedFolderName: "",
+          sourceDir: "",
+          error: null,
+          retryTarget: null,
+        };
+      }
+      return state;
     case "finish":
       return { ...state, phase: "done" };
     case "retry": {
@@ -376,6 +392,11 @@ export function admissionSecondaryActions(state) {
   }
   if (state.phase === "ready" && state.stepIndex === 2) {
     return [{ key: "back", label: "返回上一步" }];
+  }
+  // R17轮（R17-03）：第2步（导入概况）补「返回上一步」——第3步死锁
+  // 退回第2步后曾被困（无路回第1步重选/替换数据源）。
+  if (state.phase === "ready" && state.stepIndex === 1 && state.profile) {
+    return [{ key: "back", label: "返回上一步，重新选择数据" }];
   }
   return [];
 }
