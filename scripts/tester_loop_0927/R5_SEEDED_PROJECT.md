@@ -681,3 +681,38 @@ AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）�
 - 驱动：`r19d_seed_csu.py`（由 r18d_seed_csu.py 机械适配：常驻项目名 MX循开考-CSU/幂等键/留痕文件；R5/R8/R9/R11/R12/R13/R14/R15 既有裁决卡决策表原样保留；幂等，含 fail-closed 未知卡防护；roundtrip diff 验证仅命名差异）
 - 证据：`r19d_seed_evidence.jsonl`（每步请求/响应摘要）、`r19d_seed_state.json`（幂等状态）、`r19d_seed_console.log`（运行控制台输出）
 - 环境日志：`ISO_ENV_LOG.md`（R19D 探障+预置条目）
+
+# R20D 开考位预置结果 — 复用常驻项目 MX循开考-CSU（2026-10-06，零重复预置）
+
+> **本轮动作：查存量 → 三条件现场实测全过 → 直接复用，零新建、零 AI 作业、零代码修复、零重启。**
+
+隔离环境：API `http://127.0.0.1:8911`（build api-a9bb87fb5ee7ab77，R19轮次修复员 R19-01/02 修复后现行进程），全程未触碰 8910/5177。
+操作者：开考预置守护员-R20D。时点：2026-10-06（单次只读复验，无推进动作）。
+
+## 存量检查（ask 步骤0，全部现场 curl 实测）
+
+| 条件 | 实测结果 | 证据 |
+|---|---|---|
+| 项目存在且为常驻名 | ✅ | `GET /api/projects` → 全实例仅 1 项目 `[{proj_user_6ef58ac151e1, MX循开考-CSU}]`（R19 复盘归档刻意保留，见 round_19/REPORT.md:90） |
+| 字段映射 confirmed | ✅ | `GET …/r7/data-admissions/stg-cd69899943ba42618f589ba07a134a59/mapping-candidates?focus=all` → state=candidates_ready，draft monmapdraft_73abe5c6c9561a9e95eec2056991 **v80 status=confirmed**，user_questions=0，candidate_count=60 |
+| facts ready | ✅ | `GET …/facts` → state=ready，facts_generated（10表/591行/**3038值全核验** values=source_values_verified），message「可用于监查的数据已生成，可以开始监查。」 |
+| project/open current | ✅ | `GET …/r7/project/open` → state=**current**/dataCoverage=complete/openMode=edit/canView=true/canEdit=true「项目格式正常，可以继续使用。」 |
+| 研究文件 ready | ✅ | `GET …/study-documents` → ready=true「研究文件已准备好」 |
+| 界面可开始运行监查 | ✅ | `GET …/r7/run-setup/options` → HTTP 200；5178（[::1]）/monitoring=200 且 runtime-build.json expectedBackendBuildId=api-a9bb87fb5ee7ab77 与 8911 backend_build_id 配对一致 |
+| 未启动监查 | ✅ | `GET …/r7/runs` → 仅 1 条 `run:0bf83a78bae2a60856267103`，**run_state=waiting_start**、result_available=false（R19 轮测试者开考时经向导创建的运行设置，从未启动；R19 归档已留痕「向导四步＋运行创建 run:0bf83a78…」，round_19/REPORT.md:35）。本轮未启动任何运行——运行启动留给随后的攻坚验证 |
+
+## 探障（只读，未修码未重启）
+
+- R5D marker 缺陷未复发：修复代码在位 `implementation/workbench/services/api/app/main.py:4925-4936`（种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`）；contracts `packages/medical_monitoring/runtime/launch_registry_contracts.py:53-54` = mm-r7-w01r26-launch-registry-v5；本项目 workspace `runs/tester_loop_iso_20260928/runtime/medical_monitoring_r7/proj_user_6ef58ac151e1/launch_registry.sqlite3` sqlite 直查 marker = **v5**。
+- 8911 `/api/runtime-readiness` ready:true（build api-a9bb87fb5ee7ab77）；8910/5177 无监听（连接拒绝，沿 R11 起记录，仅只读复核未触碰）。
+- 5178 vite 监听 [::1]（127.0.0.1 连接失败属监听地址特性，R17D 起已记录），[::1]:5178 实测 200。
+
+## 本轮观察（如实记录）
+
+- **零重复预置达成**：R19D 建立的常驻项目语义（跨轮持久、先查存量、仅补缺失）首轮生效，本轮无建项/上传/AI 作业/确认/fats 物化动作，AI 消耗=0；已确认状态为 R19D 当轮全链自然通过（46作业、无跳门）的持久终态，本轮零新增 AI 质量门交互，无可跳之门可伪造之状态。
+- waiting_start 运行设置为 R19 开考测试遗留资产（非本轮产生、非启动态），保留不删（删除开考测试资产超出预置员权限且毁证据）；攻坚验证可直接启动该运行或另建新运行。
+- 幂等键沿用 r19d-seed-20260905T190452Z-5f59e580（本轮未新建项目故无新键）。
+
+## 留痕文件（同目录）
+
+- 本轮无新驱动脚本（复用即结论）；证据为本节表内各 curl 实测值 + `ISO_ENV_LOG.md`（R20D 复用条目）；项目状态源文件 `r19d_seed_state.json`（confirmed/facts_materialized 与现场实测一致）。
