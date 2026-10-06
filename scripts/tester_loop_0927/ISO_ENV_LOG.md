@@ -352,3 +352,10 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 只读探障：main.py:4925-4927,4935-4936 marker 修复在位（contracts v5）；本项目 workspace launch_registry marker sqlite 直查=v5；8911 ready（api-a9bb87fb5ee7ab77）与 5178 [::1] runtime-build.json 配对一致；8910/5177 无监听（沿 R11 起，未触碰）。观察：8911 偶发慢响应（readiness 一次 25.9s）与同日 R7-01 事件循环独占记录相符，属已知环境现象。
 - 留痕：`R5_SEEDED_PROJECT.md` R20D 节「第二次复验」小节。本轮无新驱动脚本/状态文件（复用即结论）。
 2026-10-06 18:46 写作Agent适配落地（5a009dc6：摘要导入modules透传）→API+vite双双重启配对api-1d25bf363b10c2a5；循环恢复续跑
+
+## 2026-10-07（R20轮次·修复员：四项修复后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R20轮次：R20-01核实/02/03、R18-02）
+- 修复：R20-02接入来源可追溯（sourceNamesText投影+第2步「数据来源：」行）；R20-03占位循环（变化原因待确认不再作为字段值二次渲染）；R18-02角色缺失声明跨attempt继承（用户治理决定随项目而非attempt生命周期）；R20-01三面验证（初治PNH在store/manifest/journey三层逐字一致——「改写」非本仓库行为，如实记录）。
+- 自检：8911 ready:true（build api-1d25bf363b10c2a5）；5178=200；指纹配对一致。
+- ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。

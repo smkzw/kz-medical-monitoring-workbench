@@ -773,6 +773,13 @@ export function MedicalMonitoringAdmissionWizardView({
             <p className="monitoring-admission-big monitoring-admission-summary">
               {profile.summaryText}
             </p>
+            {/* R20轮（R20-02）：数据来源可追溯——本步显示实际导入的
+                文件名，来源对用户可见可核对。 */}
+            {profile.sourceNamesText ? (
+              <p className="monitoring-admission-minor" role="status" style={{ margin: "0 0 6px" }}>
+                数据来源：{profile.sourceNamesText}
+              </p>
+            ) : null}
             {/* R4-03口径澄清：本步表数=文件内全部工作表（含辅助表），
                 识别阶段逐表处理，两步口径不同由此而来。 */}
             <p className="monitoring-admission-minor" style={{ margin: "2px 0 8px" }}>
