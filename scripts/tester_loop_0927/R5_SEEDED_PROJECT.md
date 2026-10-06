@@ -716,3 +716,21 @@ AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）�
 ## 留痕文件（同目录）
 
 - 本轮无新驱动脚本（复用即结论）；证据为本节表内各 curl 实测值 + `ISO_ENV_LOG.md`（R20D 复用条目）；项目状态源文件 `r19d_seed_state.json`（confirmed/facts_materialized 与现场实测一致）。
+
+## R20 第二次复验（攻坚/修复轮之后的现态，2026-10-06 15:16Z 现场实测）
+
+> 首验（上表）之后，同日 R19 攻坚工程师第1次与 R19 轮次修复员（R19-01/03）先后对隔离对 8911/5178 做过多次重启并加载新代码，且攻坚验证在常驻项目上启动并跑完了监查运行（见 ISO_ENV_LOG 同日条目）。本次复验确认：**常驻项目预置三条件在上述环境变更后依然全部成立**，本轮（开考预置守护员-R20）再次零新建、零 AI 作业、零代码修复、零重启、零启动运行。
+
+| 条件 | 实测结果（本轮 curl/sqlite 现场值） | 证据 |
+|---|---|---|
+| 项目存在且 active | ✅ | `GET /api/projects` → 5 项目含 `proj_user_6ef58ac151e1 / MX循开考-CSU`（另 4 个为本轮他位项目 R20A-RUX/R20B-MY008/R20C-CSU/R20P-CSU，非本预置员所建） |
+| 字段映射 confirmed | ✅ | `GET …/r7/data-admissions/stg-cd69899943ba42618f589ba07a134a59/mapping-candidates?focus=all` → confirmation_status=**confirmed**，draft monmapdraft_73abe5c6c9561a9e95eec2056991 **v80 status=confirmed**，user_questions=0，candidate_count=60（与 R19D/R20D 首验同版未漂移） |
+| facts ready | ✅ | `GET …/facts` → state=ready，facts_generated=true，10表/591行/**3038值全核验**（values=source_values_verified），message「可用于监查的数据已生成，可以开始监查。」 |
+| project/open current | ✅ | `GET …/r7/project/open` → state=**current**/dataCoverage=complete/openMode=edit/canView/canEdit=true「项目格式正常，可以继续使用。」 |
+| 界面可开始运行监查 | ✅ | `GET …/r7/run-setup/options` → **200**（data_batches/current_data/modes/rule_revisions 等就绪）；study-documents ready=true「研究文件已准备好」 |
+| 修复代码在位 | ✅ | `services/api/app/main.py:4925-4927,4935-4936` 种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`（contracts.py:53-54=mm-r7-w01r26-launch-registry-v5）；本项目 workspace launch_registry.sqlite3 marker sqlite 直查=**v5** |
+| 前后端配对 | ✅ | 8911 `/api/runtime-readiness` ready:true（backend_build_id=api-a9bb87fb5ee7ab77）；5178 `[::1]/monitoring`=200，runtime-build.json expectedBackendBuildId=api-a9bb87fb5ee7ab77 一致 |
+| 8910/5177 | 未触碰 | lsof 复核均无监听（沿 R11 起记录），本轮仅只读 curl/lsof |
+| 监查运行现态 | 3 条 completed（非本轮启动） | `GET …/r7/runs` → run:0bf83a78…（R19 遗留 waiting_start，已被攻坚验证启动并完成）+ run:c22165ecc…/run:3ee655a0…，全部 run_state=completed/result_available=true；本轮零启动动作 |
+
+本轮环境观察：8911 现行进程响应偶发慢（runtime-readiness 一次 25.9s，后续请求 1.7s 内）——与 ISO_ENV_LOG 同日「R7-01 事件循环独占画像」记录相符，属已知环境现象，未影响任何复验判据。
