@@ -786,6 +786,12 @@ export function MedicalMonitoringAdmissionWizardView({
               表数按文件内的全部工作表统计，可能包含代码对照表、名册页等
               辅助表；下一步字段识别会逐表进行，不在此处预先剔除任何表。
             </p>
+            {state.profile?.technical?.duplicate_of ? (
+              <p className="monitoring-admission-warning" role="status" style={{ borderColor: "#2f6b52", color: "#2f6b52" }}>
+                本次导入与此前导入（{String(state.profile.technical.duplicate_of).slice(0, 18)}…）的数据内容完全一致，
+                属重复导入——数据未翻倍，已按同一数据集处理。无需重复导入即可继续后续步骤。
+              </p>
+            ) : null}
             {(state.profile?.technical?.skipped_non_data_files || []).length ? (
               <p className="monitoring-admission-warning" role="status">
                 已忽略 {state.profile.technical.skipped_non_data_files.length}

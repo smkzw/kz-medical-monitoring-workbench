@@ -523,11 +523,20 @@ class DataAdmissionPipeline:
                 store.put_domain_object(
                     LOCATOR_INDEX_KIND, snapshot.snapshot_id, locator_index
                 )
+            duplicate_of = self._find_duplicate_import(
+                store=store,
+                project_id=project_id,
+                manifest_hash=attempt.manifest_hash,
+                current_attempt_id=attempt.attempt_id,
+                admission_dir=self._admission_workspace(workspace_dir),
+            )
             summary = {
                 "files": len(attempt.files),
                 "tables": len(public_tables),
                 "rows": sum(int(table["row_count"]) for table in public_tables),
             }
+            if duplicate_of:
+                summary["duplicate_of"] = duplicate_of
             record = {
                 "attempt_id": attempt.attempt_id,
                 "project_id": project_id,
@@ -537,6 +546,7 @@ class DataAdmissionPipeline:
                 "technical_details": {
                     "manifest_hash": attempt.manifest_hash,
                     "files": staged_file_payloads,
+                    "duplicate_of": duplicate_of or "",
                     "skipped_non_data_files": list(skipped_files),
                     "revision_ids": revision_ids,
                     "snapshot_ids": snapshot_ids,
@@ -563,6 +573,39 @@ class DataAdmissionPipeline:
             raise AdmissionPipelineError("admission_pipeline_failed") from exc
         finally:
             store.close()
+
+
+    def _find_duplicate_import(
+        self,
+        *,
+        store: Any,
+        project_id: str,
+        manifest_hash: str,
+        current_attempt_id: str,
+        admission_dir: Path,
+    ) -> str:
+        """R19轮（R19-10）：返回staging manifest与本批完全一致的更早
+        attempt id（内容重复判定，供界面提示复用）；无则空串。
+
+        manifest hash由staging对同一文件集合+内容哈希确定性生成，一致
+        即等价，无需行级比对；不阻断导入（幂等，数据不翻倍）。"""
+
+        try:
+            for attempt_id in list_attempt_ids(admission_dir):
+                if attempt_id == current_attempt_id:
+                    continue
+                persisted = store.get_domain_object(ADMISSION_RECORD_KIND, attempt_id)
+                if persisted is None or not isinstance(persisted[1], dict):
+                    continue
+                record = persisted[1]
+                if record.get("project_id") != project_id:
+                    continue
+                technical = record.get("technical_details") or {}
+                if technical.get("manifest_hash") == manifest_hash:
+                    return str(attempt_id)
+        except Exception:
+            return ""
+        return ""
 
     def revalidate_project_identity(
         self,

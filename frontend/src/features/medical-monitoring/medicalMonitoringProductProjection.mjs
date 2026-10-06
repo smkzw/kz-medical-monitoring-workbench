@@ -424,6 +424,9 @@ function normalizeHistoryRow(value, index) {
     statusText: requiredText(value.status_text, `runs[${index}].status_text`, "invalid_history"),
     // R8轮（R8-02）：waiting_start运行被来源就绪门阻断时的原因注入。
     blockedReason: typeof value.blocked_reason === "string" ? value.blocked_reason : "",
+    // R19轮（R19-08）：运行token尾号——同截止日期的多次运行据此区分，
+    // 卡片不再完全同形无法辨认新旧。
+    runTokenTail: String(publicRunToken).slice(-8),
   });
 }
 

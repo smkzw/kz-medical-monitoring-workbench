@@ -812,6 +812,9 @@ class FactsModeOutputProvider:
                 {
                     "finding_id": f"facts-finding-{event.event_ref}",
                     "risk_id": risk.risk_ref,
+                    # R21轮（R21-01）：同时携带实例引用（riski-格式）——
+                    # 前端「来源定位」按钮曾误用risk-引用致证据页死链。
+                    "risk_instance_id": risk.risk_instance_ref,
                     "issue_id": f"facts-issue-{event.domain}",
                     "subject_id": event.subject_ref,
                     "site_id": event.site_ref,

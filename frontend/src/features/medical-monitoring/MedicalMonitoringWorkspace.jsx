@@ -2202,6 +2202,10 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
                           {sourceRefs.map((ref, refIndex) => (
                             <li key={ref.evidenceId || refIndex} data-source-evidence-id={ref.evidenceId}>
                               {ref.path ? `${ref.path} · ${ref.recordId || ""} · ${ref.field || ""}` : ref.evidenceId}
+                              {/* R21轮（R21-01）：risk_instance_ref必须用riski-
+                                  实例引用（item.riskId来自risk_instance_id，
+                                  已是riski-格式）；此前误用risk-引用格式致
+                                  来源定位永久死链。 */}
                               <button type="button" className="monitoring-subject-link" onClick={() => onSource?.({ risk_instance_ref: item.riskId, source_locator_ref: ref.evidenceId })}>来源定位</button>
                             </li>
                           ))}
