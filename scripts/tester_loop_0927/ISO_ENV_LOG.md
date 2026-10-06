@@ -351,3 +351,4 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 存量检查现场实测（ask 步骤0）三条件全过：mapping-candidates → draft v80 status=confirmed/user_questions=0/60候选（与首验同版未漂移）；facts → state=ready（10表/591行/3038值全核验）；project/open → current/complete/canView/canEdit；run-setup/options 200；study-documents ready。**再次零新建、零 AI 作业、零代码修复、零重启、零启动运行**（runs 的 3 条 completed 均为攻坚验证所启动，非本轮动作）。
 - 只读探障：main.py:4925-4927,4935-4936 marker 修复在位（contracts v5）；本项目 workspace launch_registry marker sqlite 直查=v5；8911 ready（api-a9bb87fb5ee7ab77）与 5178 [::1] runtime-build.json 配对一致；8910/5177 无监听（沿 R11 起，未触碰）。观察：8911 偶发慢响应（readiness 一次 25.9s）与同日 R7-01 事件循环独占记录相符，属已知环境现象。
 - 留痕：`R5_SEEDED_PROJECT.md` R20D 节「第二次复验」小节。本轮无新驱动脚本/状态文件（复用即结论）。
+2026-10-06 18:46 写作Agent适配落地（5a009dc6：摘要导入modules透传）→API+vite双双重启配对api-1d25bf363b10c2a5；循环恢复续跑
