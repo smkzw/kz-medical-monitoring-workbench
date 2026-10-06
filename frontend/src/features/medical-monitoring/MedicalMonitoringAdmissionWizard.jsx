@@ -1293,6 +1293,28 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
             }));
             return;
           }
+          // R19轮（R19-02）：attempt失效（返回重入/记录过期）曾被静默
+          // 吞没——轮询无限循环422且界面死锁「正在核对研究文档…」。
+          // 现在立即转failed+自动重新获取最新导入记录自愈。
+          if (
+            error?.detail?.code === "mapping_attempt_id_invalid"
+            || error?.detail?.code === "admission_attempt_not_found"
+            || error?.detail?.code === "mapping_resolve_batch_id_required"
+          ) {
+            setDocumentState((current) => ({
+              ...current,
+              phase: "failed",
+              error: "本次数据导入记录已失效（可能因返回重入产生新记录）。系统正在重新读取最新导入进度，请稍候；若界面长时间未恢复请刷新页面。",
+            }));
+            api.getLatestDataAdmission(state.projectId)
+              .then((latest) => {
+                if (latest?.attempt_id && latest.attempt_id !== state.attemptId) {
+                  dispatch({ type: "resume-created", payload: latest });
+                }
+              })
+              .catch(() => {});
+            return;
+          }
           // R2循环：失败分支必须保留payload——user_choices/analysis_token
           // 都取自payload，清空会让「可裁决」提示与裁决控件同时消失，
           // 把用户锁死在第3步（报告C的document_authority_candidate_

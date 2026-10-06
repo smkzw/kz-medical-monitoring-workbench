@@ -1982,14 +1982,21 @@ class AdmissionMappingPipeline:
                         "confirmation_status": "pending_confirmation",
                     })
         states = [item["status"] for item in job_rows]
+        # R19轮（R19-01契约统一）：needs_attention仅在「全部作业终态且
+        # 存在失败」时报告——曾有作业仍在跑（queued/running）时仅因
+        # 一门失败即报needs_attention，前端点亮「采用已识别的X个字段
+        # 并继续」诱导提交，后端强校验跑70+秒后422拒收，重试100%死锁。
+        # 现约定：任何作业未终态→一律generating（前端按钮态与后端
+        # 校验同源）。
+        _TERMINAL = {"completed", "failed", "blocked", "stale_input", "cancelled"}
+        _FAILED = {"failed", "blocked", "stale_input", "cancelled"}
         state = (
             "candidates_ready"
             if states and all(value == "completed" for value in states)
             else "needs_attention"
-            if any(
-                value in {"failed", "blocked", "stale_input", "cancelled"}
-                for value in states
-            )
+            if states
+            and all(value in _TERMINAL for value in states)
+            and any(value in _FAILED for value in states)
             else "generating"
         )
         return {

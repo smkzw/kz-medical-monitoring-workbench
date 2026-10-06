@@ -499,6 +499,16 @@ class AdmissionMappingConfirmationService:
         if not jobs:
             raise AdmissionMappingPipelineError("mapping_candidates_not_found")
         jobs = _latest_job_cohort(jobs, repository=self.ai_repository)
+        # R19轮（R19-01双保险）：list_candidates的state约定已统一为
+        # 「任何作业未终态→generating」，防御性再校验——cohort中仍有
+        # queued/running作业时部分采纳立即失败（快失败，不再让用户等
+        # 70秒强校验后422）。
+        if partial_adoption and any(
+            str(_value(getattr(job, "status", "")))
+            not in {"completed", "failed", "blocked", "stale_input", "cancelled"}
+            for job in jobs
+        ):
+            raise AdmissionMappingPipelineError("mapping_run_incomplete")
         # Migration gate: the durable draft may only be assembled from the
         # new dual-cohort execution shapes. A verifier identity inside the
         # primary namespace is a legacy single-verifier cohort and must never
