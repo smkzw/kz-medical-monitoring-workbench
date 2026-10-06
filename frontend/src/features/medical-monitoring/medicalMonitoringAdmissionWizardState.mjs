@@ -508,12 +508,25 @@ export function projectAdmissionProfile(payload) {
   );
   const files = toCount(summary.files) || new Set(tableViews.map((table) => table.sourceFile).filter(Boolean)).size;
   const rows = toCount(summary.rows) || tableViews.reduce((total, table) => total + table.rowCount, 0);
+  // R20轮（R20-02）：数据来源可追溯——接入概况必须展示实际导入的
+  // 文件名（预置/上传一律如实列出），不选文件即接入的不可见来源
+  // 曾使用户无从核对数据从何而来。
+  const technical = isRecord(payload?.technical_details) ? payload.technical_details : null;
+  const sourceFileNames = Array.isArray(technical?.files)
+    ? technical.files
+      .map((item) => cleanText(item?.path || item?.name))
+      .filter(Boolean)
+    : Array.from(new Set(tableViews.map((table) => table.sourceFile).filter(Boolean)));
+  const sourceNamesText = sourceFileNames.length
+    ? sourceFileNames.slice(0, 5).join("、") + (sourceFileNames.length > 5 ? ` 等${sourceFileNames.length}个` : "")
+    : "";
   return {
     summaryText: `${files} 个文件 · ${tableViews.length} 张数据表 · ${rows} 行数据`,
+    sourceNamesText,
     files,
     tables: tableViews,
     pendingColumns,
-    technical: isRecord(payload?.technical_details) ? payload.technical_details : null,
+    technical,
   };
 }
 

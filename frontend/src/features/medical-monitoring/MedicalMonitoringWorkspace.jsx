@@ -1124,7 +1124,12 @@ export const RiskRow = memo(function RiskRow({ risk, onSelect, marker = null, om
         <strong>{risk.riskType}</strong>
         <small>
           {metaParts.join(" · ")}
-          {!omitChangeClaims && risk.changeCauseLabel ? ` · 变化原因：${risk.changeCauseLabel}` : ""}
+          {/* R20轮（R20-03）：占位文案不作为字段值二次渲染——
+              「变化原因：变化原因待确认」是占位循环，无信息量。 */}
+          {!omitChangeClaims
+            && risk.changeCauseLabel
+            && risk.changeCauseLabel !== "变化原因待确认"
+            ? ` · 变化原因：${risk.changeCauseLabel}` : ""}
         </small>
       </span>
       {marker ? (
