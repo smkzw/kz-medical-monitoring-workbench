@@ -359,3 +359,18 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 修复：R20-02接入来源可追溯（sourceNamesText投影+第2步「数据来源：」行）；R20-03占位循环（变化原因待确认不再作为字段值二次渲染）；R18-02角色缺失声明跨attempt继承（用户治理决定随项目而非attempt生命周期）；R20-01三面验证（初治PNH在store/manifest/journey三层逐字一致——「改写」非本仓库行为，如实记录）。
 - 自检：8911 ready:true（build api-1d25bf363b10c2a5）；5178=200；指纹配对一致。
 - ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
+
+## 2026-10-06T18:33-18:47Z（R21D 开考位预置·守护员第3次复验：R20修复后新build下三条件仍全过，零重复预置）
+
+- 操作者：开考预置守护员-R21（D位）。背景：R20D 第2次复验后，环境经 10-06 18:46 写作Agent适配落地与 10-07 R20 修复员双重启，build 变为 api-1d25bf363b10c2a5；runtime 根实测已移至 implementation/workbench/runs/tester_loop_iso_20260928/runtime（lsof 8911 pid 12958 实证，仓库根旧 runs/ 路径不存在）。
+- 存量检查现场实测（ask 步骤0）三条件全过：mapping-candidates → confirmation_status=confirmed / draft monmapdraft_73abe5c6c9561a9e95eec2056991 v80 status=confirmed / user_questions=0 / 60候选；facts → state=ready（10表/591行/3038值全核验，manifest 在盘 attempt stg-cd69899943ba42618f589ba07a134a59）；project/open → current/complete/canView/canEdit；run-setup/options 200；study-documents ready。**零新建、零 AI 作业、零代码修复、零重启、零启动运行**（runs 6 条 completed 均为 R19/R20 他位角色所启动，非本轮）。
+- 只读探障：main.py:4925-4936 marker 修复在位（contracts v5）；本项目 workspace launch_registry sqlite 直查=mm-r7-w01r26-launch-registry-v5；8911 readiness ready:true（0.46s）与 5178 [::1] runtime-build.json expectedBackendBuildId=api-1d25bf363b10c2a5 配对一致；8910/5177 lsof 均 0 监听（沿 R11 起，未触碰）。AI gateway status 只读探看 configured，未做付费 probe。
+- 观察如实记录：mapping-candidates 投影顶层 facts_generated=False 与 summary pending_confirmation_count=60/user_question_count=1 同权威终态（facts ready / draft confirmed / user_questions=0项）不一致，属投影怪癖非阻断，提请修复员核投影字段语义（详见 R5_SEEDED_PROJECT.md R21D 节）。
+- 留痕：`R5_SEEDED_PROJECT.md` R21D 节。本轮无新驱动脚本/状态文件（复用即结论）。
+
+## 2026-10-07 下午（R21轮次·修复员：四项修复后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R21轮次：R21-01、R21-02、R19-08、R19-10）
+- 修复：发现卡riskId改用risk_instance_id（riski-实例引用，来源定位不再死链）；工作条保留最近一次非loading状态（视图切换不再塌陷为空态文案）；历史卡片加运行token尾号；数据侧重复导入检测（duplicate_of）+第2步重复提示。
+- 自检：8911 ready:true（build api-1d25bf363b10c2a5）；5178=200；指纹配对一致。
+- ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。

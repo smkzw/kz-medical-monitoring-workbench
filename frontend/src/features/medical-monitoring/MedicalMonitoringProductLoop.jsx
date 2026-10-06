@@ -304,7 +304,9 @@ function normalizeFindingCard(value = {}) {
     : null;
   return {
     findingId: clean(value.finding_id),
-    riskId: clean(value.risk_id),
+    // R21轮（R21-01）：实例引用优先（riski-格式可被证据路由解析）——
+    // risk_id是risk-引用格式，「来源定位」曾用它导致永久死链。
+    riskId: clean(value.risk_instance_id) || clean(value.risk_id),
     issueId: clean(value.issue_id),
     subjectRef: clean(value.subject_id || value.subject_ref),
     siteRef: clean(value.site_id || value.site_ref),
@@ -609,7 +611,7 @@ export function MonitoringHistoryDrawer({ history, selectedPublicRunToken = "", 
               <div className="monitoring-history-row-head"><strong>{row.modeText}</strong><span>{row.resultAvailable ? "结果可用" : "结果尚未整理"}</span></div>
               <p>{row.dataCutoffText}</p>
               <p>{row.comparisonRangeText}</p>
-              <p className="monitoring-history-status">{row.statusText}</p>
+              <p className="monitoring-history-status">{row.statusText}{row.runTokenTail ? ` · 运行 ${row.runTokenTail}` : ""}</p>
               {/* R8轮（R8-02）：停滞运行的阻断原因在历史行直接可见，
                   不再藏在需20秒加载的抽屉里。 */}
               {row.blockedReason ? (
@@ -1535,7 +1537,18 @@ export function MedicalMonitoringProductLoop({
       workbar.otherAction = "";
     }
   }
-  const displayState = { ...productState, workbar };
+  // R21轮（R21-02）：视图切换/刷新期间productState短暂回到loading
+  // （setup/history被清空重拉），workbar曾塌陷为「当前项目尚无已选择
+  // 的监查记录」空态文案。保留最近一次非loading的完整状态用于渲染
+  // 工作条，切换期显示骨架而非空态。
+  const lastGoodProductStateRef = useRef(null);
+  if (productState.kind !== "loading" && productState.workbar) {
+    lastGoodProductStateRef.current = productState;
+  }
+  const renderState = productState.kind === "loading" && lastGoodProductStateRef.current
+    ? lastGoodProductStateRef.current
+    : productState;
+  const displayState = { ...renderState, workbar };
   const admissionOnly = setupHistoryError?.code === "run_data_not_ready";
   const productStatus = resultError || (setupHistoryError && !admissionOnly) ? "unavailable" : admissionOnly ? "admission_ready" : loadingBody ? "loading" : productState.kind;
   const startSurfaceTitle = routeView === "site_overview"
