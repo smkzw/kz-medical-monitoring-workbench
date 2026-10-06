@@ -309,3 +309,17 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - R18-01环境调查结论（本轮实测）：端口5186=另一workbench实例（protocol-v3-workbench-mw_protocol_v3_phase0的vite，pid 62193，ego浏览器进程7643与之有活跃连接）——非本产品路由重定向；测试会话漂移疑与ego共享TaskSpace的多实例使用有关，建议循环侧固定每个TaskSpace只挂5178或明确端口清单。本产品侧无可修代码路径。
 - 自检：8911 ready:true（build api-a9bb87fb5ee7ab77）；5178=200；指纹配对一致。
 - ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
+
+## 2026-10-05 晚（R19D 开考位预置·常驻项目 MX循开考-CSU 就位，未修码未重启）
+
+- **探障全过（R5D marker 缺陷未复发）**：① 常驻名存量 sqlite 直查 count=0（首轮新建）；② main.py:4925-4936 种子 marker 修复在位（contracts.py:53-54=v5）；③ 隔离 runtime 30 个存量 workspace launch_registry marker 逐库直查全部 v5，R19D 新建 workspace marker=v5；④ 主侧AI沿任务所有者 10-05 11:13 换回的 OmniRouter LB（127.0.0.1:20128）现行配置，probe 三档案 passed:true（主侧 5853/753ms、verifier 661ms）——R18D 上午 429 冻结已随路由纠错解除，本轮未换绑；⑤ 8911 ready（api-a9bb87fb5ee7ab77）与 5178 runtime-build.json 配对一致；8910/5177 无监听（仅只读复核，未触碰）。
+- **预置常驻项目 MX循开考-CSU（单段完成，全程 1h40m）**：proj_user_6ef58ac151e1（201，幂等键 r19d-seed-20260905T190452Z-5f59e580）→ stg-cd69899943ba42618f589ba07a134a59（591行/10表，三件套 sha256 与历轮一致）→ 文档权威 mmbatch_06432a73d31b1d87094f90fd 约8.6分钟 ready（无人工门）→ 映射双队列 10主+10盲核 约18.5分钟 candidates_ready → 收敛 46→32→0（系统裁决14）→ 33张裁决卡全部既有决策表覆盖（零新卡、零 fail-closed）→ confirmed（v80）→ facts ready（10表/591行/3038值全核验）→ project/open current/complete/canEdit，run-setup/options 200，GET runs 空（停在 facts 未启监查）。六项独立 curl 复验全过。AI 台账：46作业（44完成/2终态failed经bounded-gap收敛）、76调用、1,628,699 tokens，质量门全部自然通过。
+- **常驻约定**：本项目跨轮持久，后续轮次预置先查存量（confirmed+facts ready+project/open current 即复用零重种）；复盘归档不得删除/重建；「MX循开考-」前缀不属任何轮次。轮次分节详见 `R5_SEEDED_PROJECT.md` R19D。
+- 留痕：`r19d_seed_csu.py`、`r19d_seed_state.json`、`r19d_seed_evidence.jsonl`、`r19d_seed_console.log`。
+
+## 2026-10-06（R19轮次·修复员：契约统一+attempt失效自愈后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R19轮次：R19-01、R19-02）
+- 修复：①needs_attention仅在全部作业终态时报告（任何queued/running→generating）+adopt防御性快失败（跑动作业在cohort→立即mapping_run_incomplete，不再70秒强校验422）；②GET resolve缺batch_id改报诚实新码mapping_resolve_batch_id_required（原误报mapping_attempt_id_invalid）+前端对attempt失效族错误立即转failed并自动getLatestDataAdmission自愈重入。
+- 自检：8911 ready:true（build api-a9bb87fb5ee7ab77——packages/改动不入指纹但进程已重启加载新代码）；5178=200；指纹配对一致。
+- ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。

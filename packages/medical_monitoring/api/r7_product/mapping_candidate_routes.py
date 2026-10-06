@@ -76,6 +76,7 @@ _MAPPING_STATUS_CODES = {
     "mapping_document_selection_pending": 409,
     "mapping_document_refresh_pending": 409,
     "mapping_attempt_id_invalid": 422,
+    "mapping_resolve_batch_id_required": 422,
     "mapping_focus_invalid": 422,
     "mapping_run_incomplete": 409,
     "mapping_candidate_not_adoptable": 409,
@@ -161,6 +162,10 @@ _MAPPING_MESSAGES = {    "mapping_admission_not_found": "未找到对应的数�
         "文件已保存，系统暂未完成状态更新。请点击“重新核对研究文件”，无需再次上传。"
     ),
     "mapping_attempt_id_invalid": "数据导入记录标识无效。请返回上一步重新进入。",
+    "mapping_resolve_batch_id_required": (
+        "研究文件核对查询缺少批次参数（batch_id）。请返回向导重新进入第3步；"
+        "若持续出现请刷新页面。"
+    ),
     "mapping_focus_invalid": "筛选条件无效。请使用“重点优先”或“全部建议”。",
     "mapping_run_incomplete": "字段对应建议尚未完整完成，暂时不能进入确认。请等待生成完成或只重试失败部分。",
     "mapping_candidate_not_adoptable": "部分字段建议已不可采用。请重新生成建议后再确认。",
@@ -756,7 +761,10 @@ def register_mapping_candidate_routes(
         # 语义：batch_id经查询参数传入（无请求体），行为与POST一致
         # （只读推进核对状态机）。缺batch_id时给出明确可读错误而非404。
         if not batch_id.strip():
-            return _mapping_error("mapping_attempt_id_invalid")
+            # R19轮（R19-02）：缺batch_id曾被误报为mapping_attempt_id_
+            # invalid（与「attempt失效」混淆，误导排障）——如实报告
+            # 缺少查询参数。
+            return _mapping_error("mapping_resolve_batch_id_required")
         payload = DocumentAuthorityPromotionRequest(batch_id=batch_id.strip())
         return _resolve_mapping_documents_impl(
             project_id, attempt_id, payload, request
