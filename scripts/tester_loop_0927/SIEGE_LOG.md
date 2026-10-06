@@ -4,7 +4,112 @@
 
 ---
 
+## R20 攻坚·第 1 次（2026-10-06，攻坚工程师-R20-第1次）
+
+### 0. 结论先行
+
+**墙已破且未复发：本轮全链两遍实测全绿，无需新修复。** R19 落地的根因修复
+（cbb5f52e）在役：代码在位、回归测试 2/2 绿、全量路由套件 95/95 绿、
+常驻项目「MX循开考-CSU」以全新幂等键两遍走完 run-setup/options →
+prepare-and-start → progress completed → publication available →
+result-entry/overview 可读。R20-D 触发本轮攻坚的「等待开始」报告发生在
+R19 修复**之前**（时间线见 §2），非新墙。
+
+### 1. 环境前置（复现前）
+
+- 8911（pid 57073）/5178（pid 57134）在监听，`/api/health` 200
+  （runtime_store integrity ok，schema v16）。未重启任何服务（无需要）。
+- 复现前磁盘基线：launch_registry 3 条全部 completed+result_available=1
+  （sequence 1= R19-D 僵尸补完、2= R19 攻坚路径B、3= R19-D 修复后界面重测），
+  **waiting_start 计数 0**；execution_profiles 有 `global_default|*|1`。
+
+### 2. 复现（任务①）——驱动与双侧口径
+
+驱动：`r20s_siege_repro.py`；证据：`r20s_siege_evidence.jsonl`（每请求
+ts/http_status/elapsed_ms/响应体）。忠实界面路径（不先 workspace/bootstrap
+——前端 `medicalMonitoringProductApi.mjs:390` 定义 bootstrapWorkspace 但零
+组件调用；任务书列名该步骤，故按列名实测留证其行为）。全新幂等键=用户
+下一次日常监查的常规路径。
+
+**第一遍（15:31Z，key=r20s-fresh-c50dfe352ffa）**：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线双侧 | mapping-candidates 200（candidates_ready）、facts 200（ready）、project/open 200（current）、runs 200 |
+| run-setup/options | 200，1037ms，snapshot:ef8692ac…（与 registry 指纹一致） |
+| workspace/bootstrap（留证） | 200，992ms，replayed=true revision=1（已有内置档，幂等零改动） |
+| prepare-and-start | **200，1195ms**，run:b8f424d9c3a84a2f92467044（registry sequence 4 落库即 running） |
+| progress | 首轮询即 completed（percent=100.0；registry created→updated 2.7s） |
+| publication | POST 200→**available**（1376ms） |
+| result-entry | 200，rct=result-context:7dd7780b… |
+| results/{rct}/overview | 200，原始 778,126 字节（序列化 1,136,740），**15 发现/477 现行风险/16 受试者**（投影含 query_findings 15 条、current_risks 477 条、identity.project_ref 归属正确）——与 r19p/r20p 绿路径口径逐项一致 |
+
+第一遍证据行 b7 的 findings=0 系驱动初版提取键错误（读了不存在的顶层
+`findings/subjects` 键；正确路径 `projection.query_findings/current_risks`），
+随后独立复核与第二遍（修正后）均为 15/477/16——证据文件如实保留初版记录。
+
+**第二遍=重验（15:35Z，key=r20s-fresh-01f0b714b089，任务③）**：
+同链全绿：options 200（12.5s）→ bootstrap 200 replayed → prepare 200
+（20.3s，run:273d3736cda3d1a383d7f2d）→ progress completed → publication
+**available** → entry 200（rct=result-context:7052e30e…）→ overview 200
+（15 发现/477 现行风险，chain_ok=True，总壁钟 97s）。本遍各步耗时升高
+（1s→12-20s）系隔离实例上外源项目（proj_user_b4e6e62616c9）在途负载
+所致（r20p 预检补记已载），非本项目链路劣化——运行本体 registry
+created→updated 仍约 2.7s。
+
+终态磁盘：sequence 1-5 全部 completed+result_available=1，
+**waiting_start=0**。
+
+**R20-D「等待开始」报告的时间线归因（口径差钉行）**：R20-D 测试窗口为
+2026-10-06 01:56–02:23Z（报告载 09:56–10:23 本机时间），早于 R19 攻坚
+修复（复现 12:47Z、验证 12:54–13:05Z，r19s_siege_evidence.jsonl 时间戳）。
+其所见「等待开始+无发起控件」是修复前僵尸在途的界面投影：workbar 在
+选中运行 in-flight 时不渲染新监查入口
+（`frontend/src/features/medical-monitoring/medicalMonitoringProductState.mjs:249-275`：
+仅 published 或 completed-未整理才给出 secondaryTarget="wizard"）；
+僵尸补完后（12:54Z 起）该控件即回归——R19-D 修复后界面重测
+（round_19/report_D.md 旅程表）即从向导四步走到结果视图（registry
+sequence 3，13:05:41Z 界面键 monitoring_3948aab1…）。R20-D 报告的
+「数据接入向导第 3 步未点亮」为会话级步骤进度（挂载即重置 stepIndex，
+`medicalMonitoringAdmissionWizardState.mjs:240-253`），不是对持久确认态
+的读数——修复前后该显示一致，非缺陷、不拦链路。
+
+### 3. 修复（任务②）
+
+**无需新修复。** R19 根因修复核验（本轮全部亲测）：
+
+- 代码在位：`packages/medical_monitoring/runtime/run_entry.py:377-396`
+  `ensure_builtin_global_default()`（仅缺失时幂等种入）；
+  `packages/medical_monitoring/api/r7_product/run_routes.py:161-181`
+  prepare-and-start 在 `registry.reserve()` 之前调用（补种失败 fail-closed
+  且无预约落库）。
+- 回归测试：`pytest tests/test_medical_monitoring_r7_product_router.py -k
+  r19_siege` → **2 passed**（缺档自愈真启动 / 补种失败无僵尸）。
+- 全量：`pytest tests/test_medical_monitoring_r7_product_router.py` →
+  **95 passed**（R19 记录的存量失败
+  test_late_project_dispatchers_keep_two_actual_api_results_isolated 本轮
+  亦绿）。
+- 实链：本日志 §2 两遍（含 422→200 的对照历史证据 r19s_siege_evidence.jsonl）。
+
+### 4. 遗留与边界
+
+- progress 首轮询时 `result_available=false` 与 registry 终态 1 的瞬差：
+  completed 即刻发布尚未完成时的正常投影时序，发布 available 后一致，
+  不拦链路（两遍均复现同型时序，非缺陷证据）。
+- R19-D 修复后报告的「准备门禁语义未定义」（向导警告前置未完成但不拦
+  运行、「方案事实与规则发布」抽屉文案与运行结果并存）属产品语义层发现，
+  在测试循环台账流转，不属运行启动死锁墙（该墙以「运行能否真正完成+
+  发布+可读」为判据，本轮两遍皆绿）。
+- 浏览器像素级全链回归未在本攻坚内执行（工程验证身份以 API 驱动+状态机
+  代码核验为口径；界面全量回归归墙破后的测试轮，R19-D 修复后重测已覆盖
+  向导→结果视图一段）。
+
+留痕文件：`r20s_siege_repro.py`、`r20s_siege_evidence.jsonl`、本日志节。
+
+---
+
 ## R19 攻坚·第 1 次（2026-10-06，攻坚工程师-R19-第1次）
+
 
 ### 0. 环境前置（复现前）
 
