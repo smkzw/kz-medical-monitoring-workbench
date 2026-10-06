@@ -344,3 +344,10 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 修复：source_locator_ref多locator时取首个（原仅恰好1条才下发→29条发现全部断链）；卡片severity_source=unknown时如实「严重度未知」+分级依据字段（severityBasis）入卡片与旅程详情两处、drawer新增「分级依据」节。
 - 自检：8911 ready:true（build api-a9bb87fb5ee7ab77——packages/改动不入指纹但进程已重启）；5178=200；指纹配对一致。
 - ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
+
+## 2026-10-06 傍晚（R20D 开考位预置·守护员第2次复验：攻坚/修复轮后三条件仍全过，零重复预置）
+
+- 操作者：开考预置守护员-R20（第2次，D位）。背景：R20D 首验后同日 R19 攻坚工程师第1次与 R19 修复员（R19-01/03）多次重启 8911/5178 并加载新代码、攻坚验证在常驻项目上启动跑完 3 条监查运行——本次为现态复验。
+- 存量检查现场实测（ask 步骤0）三条件全过：mapping-candidates → draft v80 status=confirmed/user_questions=0/60候选（与首验同版未漂移）；facts → state=ready（10表/591行/3038值全核验）；project/open → current/complete/canView/canEdit；run-setup/options 200；study-documents ready。**再次零新建、零 AI 作业、零代码修复、零重启、零启动运行**（runs 的 3 条 completed 均为攻坚验证所启动，非本轮动作）。
+- 只读探障：main.py:4925-4927,4935-4936 marker 修复在位（contracts v5）；本项目 workspace launch_registry marker sqlite 直查=v5；8911 ready（api-a9bb87fb5ee7ab77）与 5178 [::1] runtime-build.json 配对一致；8910/5177 无监听（沿 R11 起，未触碰）。观察：8911 偶发慢响应（readiness 一次 25.9s）与同日 R7-01 事件循环独占记录相符，属已知环境现象。
+- 留痕：`R5_SEEDED_PROJECT.md` R20D 节「第二次复验」小节。本轮无新驱动脚本/状态文件（复用即结论）。

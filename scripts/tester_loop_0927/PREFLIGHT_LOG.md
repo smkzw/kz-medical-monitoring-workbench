@@ -126,6 +126,41 @@ g01裁决52作业已计入映射主/盲核行；加法合计 4+4+36+36=**80** �
   MX循R20P-CSU 与全部留痕原地保留（归档交复盘官；在册另有 R19D 常驻
   开考位 MX循开考-CSU 仍active）。
 
+### 补记：压缩后独立复核（20261006 09:5xZ，预检工程师本人重锚）
+
+运行结束约2小时后（会话上下文压缩后）对全部关键断言做了一次独立复核
+（只读HTTP+sqlite直读，非驱动日志自证），全部一致：
+
+- /api/health ok（schema v16、runtime_store integrity ok）；项目在册5个，
+  MX循R20P-CSU=proj_user_ce177c32b799（慢性自发性荨麻疹/MG-K10/active/
+  medical_monitoring→real_source_slice 双端点一致）；
+- runs 列表恰1条 run:3272e6b47bf84a11da8965b6（completed、result_available、
+  「结果已整理完成」）；progress run_state=completed/percent=100.0/
+  status_overview=[{已完成,count:10}]/publication_state=available；
+  publication GET 200 available replayed=false；result-entry 200（338B）；
+  **overview 原始载荷 778,126 字节**，findings=15（列表长度=query_findings_
+  meta.total）/subjects=16/current_risks=477/identity.project_ref 归属正确；
+  无 /r7 前缀路径404（负对照复现）；
+- **新观察（非本轮缺陷）**：先 GET overview 不先 GET result-entry 会得
+  409 result_context_unavailable「本次结果暂不可查看，请返回进度页」——
+  按产品访问序（entry→overview）立即 200。这是结果上下文的访问顺序契约，
+  复盘官评估易用性时可参考；链路本身不受影响；
+- AI台账（API /ai/jobs + sqlite双读）：本项目80作业（analysis 2+review 6+
+  mapping 72）0 queued/running；cms-router/glm-5.3-flash 40全completed；
+  ollama-cloud/deepseek-v4.1-flash 37 completed+3 failed（att=4/4、
+  automatic_recovery=1、provider_runtime_error reasoning-only，bounded-gap
+  吸收）；调用135次 tokens 1,599,962+880,534=2,480,496；AI台账sqlite无
+  monitoring_daily_runs 表（sqlite_master查证，运行lane不经AI台账结论成立）；
+- **实例级在途作业37个（33 queued+4 running）全部属于外源项目
+  proj_user_b4e6e62616c9**（created 08:21Z，本轮链路07:50Z完成后新启的外源
+  lane）——非本项目作业，无污染（台账按project_id隔离核对），但说明隔离
+  实例上外源工作负载在本轮结束后仍在持续投放；
+- console /tmp/mm_api_8911.log 现523字节（09:11Z后出现），内容仅FastAPI
+  启动期 Duplicate Operation ID UserWarning（project_routes.py
+  verify_project_audit）——与链路各阶段无关的良性告警，本轮运行期间0字节
+  的记载仍成立；
+- 8910/5177 复核仍连接拒绝（000）；项目与留痕仍原地未动。
+
 ---
 
 ## R19 第1次（20261005-06，run=r19p_preflight）——**chainOk = true，第十次全链端到端跑通（新build api-a9bb87fb5ee7ab77 首跑即单run全绿 exit 0：零未知卡、零用户裁决卡、零终态失败；碎片化家族未命中；3个盲核分片 transient reasoning-only 后经 attempt 自愈；facts 3422 值历史最高覆盖；总壁钟约1h38m 历史最快）**
