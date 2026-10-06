@@ -30,6 +30,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Circle,
   ClipboardCheck,
   Clock3,
   Database,
@@ -1032,6 +1033,59 @@ const EMPTY_NEW_PROJECT = {
   entry_mode: "from_zero",
 };
 
+// 子系统优先建项（用户 2026-10-06 指令）：首页只做子系统多选，
+// 项目信息配置全部移入对应子系统页（NewProjectConfigPanel）。
+const SUBSYSTEM_OPTIONS = [
+  {
+    module: "medical_writing",
+    page: "writing",
+    label: "医学写作",
+    tagline: "方案撰写 · 摘要导入 · 章节生成",
+    icon: BookOpenText,
+  },
+  {
+    module: "medical_monitoring",
+    page: "monitoring",
+    label: "医学监查",
+    tagline: "Data Listing 接入 · 跨表线索分析",
+    icon: ShieldAlert,
+  },
+  {
+    module: "eligibility_review",
+    page: "eligibility",
+    label: "入排审核",
+    tagline: "受试者入排筛选与审核",
+    icon: UserRoundCheck,
+  },
+];
+
+const NEW_PROJECT_HANDOFF_KEY = "workbench:new-project-handoff";
+
+function subsystemLabelOf(module) {
+  return SUBSYSTEM_OPTIONS.find((item) => item.module === module)?.label || module;
+}
+
+function pageOfModule(module) {
+  return SUBSYSTEM_OPTIONS.find((item) => item.module === module)?.page || moduleToPage[module] || "overview";
+}
+
+// 建项交接读取（一次性消费）：首页选择子系统后，携 modules 跳转到
+// 首个选中子系统；也可由 URL ?new_project=1 直达。
+function consumeNewProjectHandoff() {
+  try {
+    const raw = globalThis.sessionStorage?.getItem(NEW_PROJECT_HANDOFF_KEY);
+    if (!raw) return null;
+    globalThis.sessionStorage?.removeItem(NEW_PROJECT_HANDOFF_KEY);
+    const parsed = JSON.parse(raw);
+    const modules = Array.isArray(parsed?.modules)
+      ? parsed.modules.filter((item) => SUBSYSTEM_OPTIONS.some((option) => option.module === item))
+      : [];
+    return modules.length ? { modules } : null;
+  } catch {
+    return null;
+  }
+}
+
 const DIRECT_MEDICAL_DECISION_ITEM_TYPES = new Set([
   "risk",
   "approval",
@@ -1058,6 +1112,142 @@ function isUnreadMedicalDecisionItem(item) {
 
 function medicalDecisionItems(workbenchInbox) {
   return (workbenchInbox?.items || []).filter(isUnreadMedicalDecisionItem);
+}
+
+// 子系统页上的新项目配置面板：首页选完子系统后在此收集项目信息并创建。
+// 写作被选中时提供写作专属入口（从零开始 / 导入方案摘要）。
+function NewProjectConfigPanel({ handoff, onCompleted, onDismiss }) {
+  const modules = handoff?.modules || [];
+  const firstPageModule = SUBSYSTEM_OPTIONS.find((item) => modules.includes(item.module));
+  const [draft, setDraft] = useState({ ...EMPTY_NEW_PROJECT });
+  const [errors, setErrors] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const updateField = (field, value) => {
+    setDraft((current) => ({ ...current, [field]: value }));
+    setErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+    setMessage("");
+  };
+  const writingSelected = modules.includes("medical_writing");
+  const submit = async (event) => {
+    event.preventDefault();
+    if (writingSelected && draft.entry_mode === "synopsis_import") return;
+    const requiredFields = [
+      ["product_name", "试验药物"],
+      ["indication", "适应症"],
+      ["study_phase", "研究分期"],
+    ];
+    const nextErrors = Object.fromEntries(
+      requiredFields
+        .filter(([field]) => !String(draft[field] || "").trim())
+        .map(([field, label]) => [field, `请填写${label}`]),
+    );
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors);
+      setMessage("请先补全标记为必填的项目信息。");
+      globalThis.requestAnimationFrame?.(() => {
+        document.querySelector(".new-project-config-fields [aria-invalid='true']")?.focus();
+      });
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    const slowTimer = setTimeout(() => {
+      setMessage("创建请求仍在处理中（服务器初始化项目可能需要一些时间），请稍候。");
+    }, 10000);
+    try {
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...draft,
+          project_name: draft.project_name.trim(),
+          product_name: draft.product_name.trim(),
+          modules,
+          actor: "medical_manager",
+          idempotency_key: `create-project-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        }),
+      });
+      const payload = await readJsonOrThrow(response);
+      onCompleted?.(payload.project, payload.entry_mode);
+    } catch (error) {
+      setMessage(`创建失败：${error?.message || error}`);
+    } finally {
+      clearTimeout(slowTimer);
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget && !busy) onDismiss?.();
+    }}>
+      <form className="panel new-project-dialog new-project-config-panel" onSubmit={submit} noValidate role="dialog" aria-modal="true" aria-label={`在${firstPageModule?.label || "子系统"}配置新研究项目`} ref={(node) => {
+        if (node && !node.dataset.focusedOnce) {
+          node.dataset.focusedOnce = "true";
+          globalThis.requestAnimationFrame?.(() => {
+            node.querySelector(".new-project-config-fields input")?.focus();
+          });
+        }
+      }}>
+        <header>
+          <div>
+            <span>正在 {firstPageModule?.label || "子系统"} 配置研究项目</span>
+            <h2>配置新研究项目</h2>
+          </div>
+          <button type="button" className="icon-button" aria-label="关闭新项目配置" onClick={() => { if (!busy) onDismiss?.(); }} disabled={busy} title="关闭">
+            <XCircle size={18} />
+          </button>
+        </header>
+        <div className="new-project-config-modules" aria-label="已选子系统">
+          {modules.map((module) => (
+            <span key={module} className={`config-module-chip ${module === firstPageModule?.module ? "config-module-chip-current" : ""}`}>
+              {subsystemLabelOf(module)}{module === firstPageModule?.module ? " · 当前配置" : ""}
+            </span>
+          ))}
+        </div>
+        {modules.length > 1 && (
+          <p className="new-project-config-note">本项目同时启用多个子系统：完成当前子系统的项目信息与配置后，可回到项目总看板进入其余子系统继续配置。</p>
+        )}
+        {writingSelected ? (
+          <div className="new-project-entry-mode" role="radiogroup" aria-label="建项方式（医学写作）">
+            <button type="button" className={draft.entry_mode === "from_zero" ? "active" : ""} onClick={() => setDraft((current) => ({ ...current, entry_mode: "from_zero" }))}>
+              <PencilLine size={17} /><strong>从零开始</strong><span>两阶段反问确定研究框架与 PICOS</span>
+            </button>
+            <button type="button" className={draft.entry_mode === "synopsis_import" ? "active" : ""} onClick={() => setDraft((current) => ({ ...current, entry_mode: "synopsis_import" }))}>
+              <Upload size={17} /><strong>导入方案摘要</strong><span>先解析文件，确认提取结果后创建项目</span>
+            </button>
+          </div>
+        ) : null}
+        {writingSelected && draft.entry_mode === "synopsis_import" ? (
+          <MedicalWritingSynopsisProjectIntake
+            disabled={busy}
+            onCreated={(payload) => {
+              onCompleted?.(payload.project, payload.entry_mode);
+            }}
+          />
+        ) : (
+          <>
+            <div className="new-project-fields new-project-config-fields">
+              <label>项目名称<input maxLength={200} value={draft.project_name} onChange={(event) => updateField("project_name", event.target.value)} placeholder="项目代号或管理名称" /><small className="new-project-field-hint">用于项目列表与研究文件归属核对；不填则按试验药物与适应症自动生成。管理代号请填在这里，不要填入试验药物。</small></label>
+              <label><span className="new-project-required">试验药物<i aria-hidden="true">*</i></span><input required aria-required="true" aria-invalid={Boolean(errors.product_name)} maxLength={160} value={draft.product_name} onChange={(event) => updateField("product_name", event.target.value)} placeholder="药物代号或通用名" />{errors.product_name ? <small className="new-project-field-error">{errors.product_name}</small> : <small className="new-project-field-hint">填写研究药物本身；管理代号请填“项目名称”。</small>}</label>
+              <label><span className="new-project-required">适应症<i aria-hidden="true">*</i></span><input required aria-required="true" aria-invalid={Boolean(errors.indication)} maxLength={120} value={draft.indication} onChange={(event) => updateField("indication", event.target.value)} placeholder="例如 类风湿关节炎" />{errors.indication && <small className="new-project-field-error">{errors.indication}</small>}</label>
+              <label><span className="new-project-required">研究分期<i aria-hidden="true">*</i></span><select required aria-required="true" aria-invalid={Boolean(errors.study_phase)} value={draft.study_phase} onChange={(event) => updateField("study_phase", event.target.value)}><option value="">请选择</option><option value="I期">I期</option><option value="I/II期">I/II期</option><option value="II期">II期</option><option value="II/III期">II/III期</option><option value="III期">III期</option><option value="待核实">分期未知（待核实，不作为已核实事实）</option></select>{errors.study_phase && <small className="new-project-field-error">{errors.study_phase}</small>}</label>
+            </div>
+            {message && <p className="new-project-message">{message}</p>}
+            <footer>
+              <button type="button" onClick={() => { if (!busy) onDismiss?.(); }} disabled={busy} title={busy ? "项目正在创建，请稍候" : "取消创建"}>取消</button>
+              <button type="submit" className="primary-button" disabled={busy} title={busy ? "项目正在创建，请稍候" : "创建项目"}>{busy ? "创建中" : "创建项目"}</button>
+            </footer>
+          </>
+        )}
+      </form>
+    </div>
+  );
 }
 
 function EmptyProjectOverview({
@@ -1105,6 +1295,26 @@ function EmptyProjectOverview({
         )}
       />
       <section className="panel empty-project-panel" aria-live="polite">
+        {!loading && !unavailable ? (
+          <div className="landing-hero">
+            <div className="landing-hero-copy">
+              <h3>在一个工作台里完成研究的写作、监查与入排</h3>
+              <p>从「新建项目」开始：选择要启用的子系统，项目信息将在所选子系统中完成配置。已有项目可从顶部项目列表进入。</p>
+            </div>
+            <div className="landing-subsystems" aria-label="可用子系统">
+              {SUBSYSTEM_OPTIONS.map((option) => {
+                const Icon = option.icon;
+                return (
+                  <div key={option.module} className="landing-subsystem-card">
+                    <Icon size={20} />
+                    <strong>{option.label}</strong>
+                    <span>{option.tagline}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
         <div className="empty-project-metrics">
           {[
             ["项目数", emptyProjectMetricValue],
@@ -1146,6 +1356,9 @@ function AppShell({
   requestProjectChange,
   onRetryProjects,
   onClearProjectRoute,
+  onStartSubsystemSetup,
+  projectCreatedNotice,
+  onDismissProjectCreatedNotice,
   sourceManifests,
   workbenchInbox,
   workbenchInboxError,
@@ -1156,18 +1369,9 @@ function AppShell({
   children,
 }) {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
-  const [newProjectDraft, setNewProjectDraft] = useState(EMPTY_NEW_PROJECT);
-  const [newProjectBusy, setNewProjectBusy] = useState(false);
-  const [newProjectMonitoring, setNewProjectMonitoring] = useState(false);
   const [newProjectMessage, setNewProjectMessage] = useState("");
-  const [newProjectErrors, setNewProjectErrors] = useState({});
-  // R3循环：创建成功横幅（含已启用模块清单），8秒或点击后消失。
-  const [projectCreatedNotice, setProjectCreatedNotice] = useState("");
-  useEffect(() => {
-    if (!projectCreatedNotice) return undefined;
-    const timer = setTimeout(() => setProjectCreatedNotice(""), 8000);
-    return () => clearTimeout(timer);
-  }, [projectCreatedNotice]);
+  // 子系统优先建项：首页多选结果（如 ["medical_monitoring"]），配置面板据此渲染。
+  const [newProjectSubsystems, setNewProjectSubsystems] = useState([]);
   const hasActiveProject = Boolean(
     activeProjectId && projects.some((item) => item.project_id === activeProjectId),
   );
@@ -1197,78 +1401,6 @@ function AppShell({
   const pendingApprovalCount = unavailableCount || decisionItems.filter((item) => item.item_type === "approval").length;
   const highRiskCount = unavailableCount || decisionItems.filter((item) => item.item_type === "risk" && ["critical", "high"].includes(item.priority)).length;
   const handoffDecisionCount = unavailableCount || decisionItems.filter((item) => item.item_type === "handoff").length;
-  const updateNewProjectField = (field, value) => {
-    setNewProjectDraft((current) => ({ ...current, [field]: value }));
-    setNewProjectErrors((current) => {
-      if (!current[field]) return current;
-      const next = { ...current };
-      delete next[field];
-      return next;
-    });
-    setNewProjectMessage("");
-  };
-  const createNewProject = async (event) => {
-    event.preventDefault();
-    if (newProjectDraft.entry_mode === "synopsis_import") return;
-    const requiredFields = [
-      ["product_name", "试验药物"],
-      ["indication", "适应症"],
-      ["study_phase", "研究分期"],
-    ];
-    const errors = Object.fromEntries(
-      requiredFields
-        .filter(([field]) => !String(newProjectDraft[field] || "").trim())
-        .map(([field, label]) => [field, `请填写${label}`]),
-    );
-    if (Object.keys(errors).length) {
-      setNewProjectErrors(errors);
-      setNewProjectMessage("请先补全标记为必填的项目信息。后续研究设计细节可在两阶段反问中继续确认。");
-      globalThis.requestAnimationFrame?.(() => {
-        document.querySelector(".new-project-field-error + input, .new-project-fields [aria-invalid='true']")?.focus();
-      });
-      return;
-    }
-    setNewProjectBusy(true);
-    setNewProjectMessage("");
-    setNewProjectErrors({});
-    // R5冲刺（R3-10）：创建请求曾停滞「创建中」45-60秒以上无反馈（后端
-    // 实际已创建）。10秒仍未返回时给出可操作提示，不无限静默等待。
-    const createSlowTimer = setTimeout(() => {
-      setNewProjectMessage("创建请求仍在处理中（服务器初始化项目可能需要一些时间）。您可以继续等待，或关闭本对话框后刷新页面查看项目是否已创建。");
-    }, 10000);
-    try {
-      const response = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...newProjectDraft,
-          project_name: newProjectDraft.project_name.trim(),
-          product_name: newProjectDraft.product_name.trim(),
-          modules: newProjectMonitoring ? ["medical_writing", "medical_monitoring"] : ["medical_writing"],
-          actor: "medical_manager",
-          idempotency_key: `create-project-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        }),
-      });
-      const payload = await readJsonOrThrow(response);
-      // R3循环（报告B）：创建成功必须反馈已启用的模块清单，否则
-      // 「无模块项目误建」无法被用户当场发现。
-      const enabledModules = newProjectMonitoring
-        ? ["医学写作", "医学监查"]
-        : ["医学写作"];
-      setProjectCreatedNotice(
-        `已创建项目「${payload.project?.project_name || newProjectDraft.project_name.trim() || payload.project?.project_code || ""}」，已启用模块：${enabledModules.join("、")}`,
-      );
-      onProjectCreated?.(payload.project, payload.entry_mode);
-      setNewProjectDraft(EMPTY_NEW_PROJECT);
-      setNewProjectMonitoring(false);
-      setNewProjectOpen(false);
-    } catch (error) {
-      setNewProjectMessage(`创建失败：${apiErrorText(error)}`);
-    } finally {
-      clearTimeout(createSlowTimer);
-      setNewProjectBusy(false);
-    }
-  };
   return (
     <div className={`app ${activePage === "writing" ? "writing-active" : ""} ${activePage === "monitoringProduct" ? "monitoring-product-active" : ""}`}>
       <aside className="sidebar">
@@ -1350,12 +1482,11 @@ function AppShell({
               disabled={!projectsLoaded || Boolean(projectsLoadError)}
               onClick={() => {
                 setNewProjectMessage("");
-                // R3循环（报告B）：模块勾选不跨会话残留——上次勾选会让
-                // 「再开对话框→一次点击」实际是取消，误建无模块项目。
-                setNewProjectMonitoring(false);
+                // 子系统优先建项：每次打开重置选择，不跨会话残留。
+                setNewProjectSubsystems([]);
                 setNewProjectOpen(true);
               }}
-              title={!projectsLoaded || projectsLoadError ? "项目列表尚未就绪，暂不能新建项目" : "新建中国临床试验方案写作项目"}
+              title={!projectsLoaded || projectsLoadError ? "项目列表尚未就绪，暂不能新建项目" : "新建研究项目：选择子系统"}
             >
               <Plus size={16} /> 新建项目
             </button>
@@ -1418,7 +1549,7 @@ function AppShell({
           <div className="project-created-notice" role="status" style={{ display: "flex", alignItems: "center", gap: "10px", margin: "0 16px 8px", padding: "8px 12px", borderRadius: "6px", background: "#f0f9f1", border: "1px solid #cfe8d2", color: "#256b32" }}>
             <CheckCircle2 size={15} />
             <span style={{ flex: 1 }}>{projectCreatedNotice}</span>
-            <button type="button" className="icon-button" aria-label="关闭创建成功提示" title="关闭提示" onClick={() => setProjectCreatedNotice("")}>
+            <button type="button" className="icon-button" aria-label="关闭创建成功提示" title="关闭提示" onClick={() => onDismissProjectCreatedNotice?.()}>
               <XCircle size={14} />
             </button>
           </div>
@@ -1434,7 +1565,7 @@ function AppShell({
             onAiGatewayStatusChange={onAiGatewayStatusChange}
             onCreateProject={() => {
               setNewProjectMessage("");
-              setNewProjectMonitoring(false);
+              setNewProjectSubsystems([]);
               setNewProjectOpen(true);
             }}
           />
@@ -1442,64 +1573,68 @@ function AppShell({
       </section>
       {newProjectOpen && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget && !newProjectBusy) setNewProjectOpen(false);
+          if (event.target === event.currentTarget) setNewProjectOpen(false);
         }}>
-          <form className="panel new-project-dialog" onSubmit={createNewProject} noValidate role="dialog" aria-modal="true" aria-label="新建研究项目" ref={(node) => {
-            // R5冲刺（R4-04）：对话框打开时聚焦首个输入字段（项目名称），
-            // 键盘用户不再落在触发按钮上。
-            if (node && !node.dataset.focusedOnce) {
-              node.dataset.focusedOnce = "true";
-              globalThis.requestAnimationFrame?.(() => {
-                node.querySelector(".new-project-fields input")?.focus();
-              });
-            }
-          }}>
+          <section className="panel new-project-dialog new-project-subsystem-select" role="dialog" aria-modal="true" aria-label="新建研究项目：选择子系统">
             <header>
               <div>
-                <span>{newProjectMonitoring ? "研究项目 · 医学写作 · 医学监查" : "研究项目"}</span>
+                <span>研究项目 · 第 1 步，共 1 步</span>
                 <h2>新建研究项目</h2>
               </div>
-              <button type="button" className="icon-button" aria-label="关闭新建项目对话框" onClick={() => setNewProjectOpen(false)} disabled={newProjectBusy} title="关闭">
+              <button type="button" className="icon-button" aria-label="关闭新建项目对话框" onClick={() => setNewProjectOpen(false)} title="关闭">
                 <XCircle size={18} />
               </button>
             </header>
-            <div className="new-project-entry-mode" role="radiogroup" aria-label="建项方式">
-              <button type="button" className={newProjectDraft.entry_mode === "from_zero" ? "active" : ""} onClick={() => setNewProjectDraft((current) => ({ ...current, entry_mode: "from_zero" }))}>
-                <PencilLine size={17} /><strong>从零开始</strong><span>两阶段反问确定研究框架与 PICOS</span>
-              </button>
-              <button type="button" className={newProjectDraft.entry_mode === "synopsis_import" ? "active" : ""} onClick={() => setNewProjectDraft((current) => ({ ...current, entry_mode: "synopsis_import" }))}>
-                <Upload size={17} /><strong>导入方案摘要</strong><span>先解析文件，确认提取结果后创建项目</span>
-              </button>
+            <p className="subsystem-select-lead">选择要在本研究中启用的子系统（可多选）。项目信息将在所选子系统中配置：</p>
+            <div className="subsystem-select-grid" role="group" aria-label="选择子系统（多选）">
+              {SUBSYSTEM_OPTIONS.map((option) => {
+                const Icon = option.icon;
+                const checked = newProjectSubsystems.includes(option.module);
+                return (
+                  <button
+                    type="button"
+                    key={option.module}
+                    className={`subsystem-select-card ${checked ? "subsystem-select-card-checked" : ""}`}
+                    aria-pressed={checked}
+                    onClick={() => {
+                      setNewProjectSubsystems((current) => current.includes(option.module)
+                        ? current.filter((item) => item !== option.module)
+                        : [...current, option.module]);
+                    }}
+                  >
+                    <span className="subsystem-select-check" aria-hidden="true">{checked ? <CheckCircle2 size={18} /> : <Circle size={18} />}</span>
+                    <Icon size={20} className="subsystem-select-icon" />
+                    <strong>{option.label}</strong>
+                    <span className="subsystem-select-tagline">{option.tagline}</span>
+                  </button>
+                );
+              })}
             </div>
-            {newProjectDraft.entry_mode === "synopsis_import" ? (
-              <MedicalWritingSynopsisProjectIntake
-                disabled={newProjectBusy}
-                onCreated={(payload) => {
-                  onProjectCreated?.(payload.project, payload.entry_mode);
-                  setNewProjectDraft(EMPTY_NEW_PROJECT);
+            <footer>
+              <button type="button" onClick={() => setNewProjectOpen(false)} title="取消新建项目">取消</button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!newProjectSubsystems.length}
+                title={newProjectSubsystems.length ? `前往${subsystemLabelOf(newProjectSubsystems[0])}配置项目` : "请至少选择一个子系统"}
+                onClick={() => {
+                  const ordered = SUBSYSTEM_OPTIONS.filter((item) => newProjectSubsystems.includes(item.module));
+                  const handoff = { modules: ordered.map((item) => item.module) };
+                  try {
+                    globalThis.sessionStorage?.setItem(NEW_PROJECT_HANDOFF_KEY, JSON.stringify(handoff));
+                  } catch { /* sessionStorage 不可用时仅靠 URL 参数交接 */ }
                   setNewProjectOpen(false);
+                  onStartSubsystemSetup?.(handoff, ordered[0].page);
                 }}
-              />
-            ) : (
-              <>
-                <div className="new-project-fields">
-                  <label>项目名称<input aria-describedby="new-project-name-hint" maxLength={200} value={newProjectDraft.project_name} onChange={(event) => updateNewProjectField("project_name", event.target.value)} placeholder="项目代号或管理名称，如 MX循R1D-RUX" /><small id="new-project-name-hint" className="new-project-field-hint">用于项目列表与研究文件归属核对；不填则按试验药物与适应症自动生成。管理代号请填在这里，不要填入试验药物。</small></label>
-                  <label><span className="new-project-required">试验药物<i aria-hidden="true">*</i></span><input required aria-required="true" aria-invalid={Boolean(newProjectErrors.product_name)} aria-describedby={newProjectErrors.product_name ? "new-project-product-error" : "new-project-product-hint"} maxLength={160} value={newProjectDraft.product_name} onChange={(event) => updateNewProjectField("product_name", event.target.value)} placeholder="药物代号或通用名，如 磷酸芦可替尼乳膏" />{newProjectErrors.product_name ? <small id="new-project-product-error" className="new-project-field-error">{newProjectErrors.product_name}</small> : <small id="new-project-product-hint" className="new-project-field-hint">填写研究药物本身；管理代号请填“项目名称”。</small>}</label>
-                  <label><span className="new-project-required">适应症<i aria-hidden="true">*</i></span><input required aria-required="true" aria-invalid={Boolean(newProjectErrors.indication)} aria-describedby={newProjectErrors.indication ? "new-project-indication-error" : undefined} maxLength={120} value={newProjectDraft.indication} onChange={(event) => updateNewProjectField("indication", event.target.value)} placeholder="例如 类风湿关节炎" />{newProjectErrors.indication && <small id="new-project-indication-error" className="new-project-field-error">{newProjectErrors.indication}</small>}</label>
-                  <label><span className="new-project-required">研究分期<i aria-hidden="true">*</i></span><select required aria-required="true" aria-invalid={Boolean(newProjectErrors.study_phase)} aria-describedby={newProjectErrors.study_phase ? "new-project-phase-error" : undefined} value={newProjectDraft.study_phase} onChange={(event) => updateNewProjectField("study_phase", event.target.value)}><option value="">请选择</option><option value="I期">I期</option><option value="I/II期">I/II期</option><option value="II期">II期</option><option value="II/III期">II/III期</option><option value="III期">III期</option><option value="待核实">分期未知（待核实，不作为已核实事实）</option></select>{newProjectErrors.study_phase && <small id="new-project-phase-error" className="new-project-field-error">{newProjectErrors.study_phase}</small>}</label>
-                </div>
-                <label className="new-project-monitoring-toggle" style={{display:"flex",alignItems:"center",gap:"8px",margin:"8px 0"}}>
-                  <input type="checkbox" checked={newProjectMonitoring} onChange={(e) => setNewProjectMonitoring(e.target.checked)} />
-                  <span>启用医学监查模块（上传 Data Listing 并进行跨表线索分析）</span>
-                </label>
-                {newProjectMessage && <p className="new-project-message">{newProjectMessage}</p>}
-                <footer>
-                  <button type="button" onClick={() => setNewProjectOpen(false)} disabled={newProjectBusy} title={newProjectBusy ? "项目正在创建，请稍候" : "取消新建项目"}>取消</button>
-                  <button type="submit" className="primary-button" disabled={newProjectBusy} title={newProjectBusy ? "项目正在创建，请稍候" : "创建项目"}>{newProjectBusy ? "创建中" : "创建项目"}</button>
-                </footer>
-              </>
-            )}
-          </form>
+              >
+                {newProjectSubsystems.length === 1
+                  ? `前往${subsystemLabelOf(newProjectSubsystems[0])}配置`
+                  : newProjectSubsystems.length > 1
+                    ? `前往${subsystemLabelOf(newProjectSubsystems[0])}并配置全部`
+                    : "请选择子系统"}
+              </button>
+            </footer>
+          </section>
         </div>
       )}
     </div>
@@ -13205,6 +13340,14 @@ export function App() {
   const [projectsLoadError, setProjectsLoadError] = useState("");
   const [monitoringProjectRouteError, setMonitoringProjectRouteError] = useState("");
   const [projectsRequestNonce, setProjectsRequestNonce] = useState(0);
+  // 子系统优先建项（用户 2026-10-06）：子系统页上的配置面板交接与创建横幅。
+  const [pendingNewProject, setPendingNewProject] = useState(null);
+  const [projectCreatedNotice, setProjectCreatedNotice] = useState("");
+  useEffect(() => {
+    if (!projectCreatedNotice) return undefined;
+    const timer = setTimeout(() => setProjectCreatedNotice(""), 8000);
+    return () => clearTimeout(timer);
+  }, [projectCreatedNotice]);
   // R9轮（R7-02）：空列表自动重拉计数（防启动/预置写入期误显「暂无项目」）。
   const emptyListRetriesRef = useRef(0);
   const rememberedProjectIdRef = useRef(readRememberedProjectId());
@@ -13365,18 +13508,51 @@ export function App() {
     setProjectsRequestNonce((current) => current + 1);
   }, []);
 
-  const handleProjectCreated = (project) => {
+  const handleProjectCreated = (project, intentModules) => {
     if (!project?.project_id) return;
     setProjects((current) => [
       project,
       ...current.filter((item) => item.project_id !== project.project_id),
     ]);
-    // 监查意图项目直接落到医学监查工作区；写作项目维持原写作落点。
-    const monitoringIntent = (project.modules || []).some(
-      (item) => (typeof item === "string" ? item : item?.module) === "medical_monitoring",
-    );
-    requestProjectChange(project.project_id, monitoringIntent ? "monitoring" : "writing");
+    // 子系统优先建项：按用户选择的子系统（intentModules，而非后端
+    // 补齐的默认模块）路由到对应子系统工作区（监查 > 入排 > 写作）。
+    const enabled = (intentModules && intentModules.length
+      ? intentModules
+      : (project.modules || [])
+    ).map((item) => (typeof item === "string" ? item : item?.module));
+    const landing = enabled.includes("medical_monitoring")
+      ? "monitoring"
+      : enabled.includes("eligibility_review")
+        ? "eligibility"
+        : "writing";
+    setPendingNewProject(null);
+    requestProjectChange(project.project_id, landing);
   };
+
+  // 子系统建项交接（首页 → 子系统页）：sessionStorage 一次性消费 +
+  // URL ?new_project=1 直达（外部深链/其他子系统适配用同一契约）。
+  const startSubsystemSetup = useCallback((handoff, page) => {
+    setPendingNewProject(handoff);
+    requestActivePage(page);
+  }, [requestActivePage]);
+
+  useEffect(() => {
+    if (pendingNewProject) return;
+    const params = new URLSearchParams(globalThis.location?.search || "");
+    if (params.get("new_project") !== "1") return;
+    const handoff = consumeNewProjectHandoff();
+    if (handoff) {
+      setPendingNewProject(handoff);
+      const first = SUBSYSTEM_OPTIONS.find((item) => handoff.modules.includes(item.module));
+      if (first && first.page !== activePage) requestActivePage(first.page);
+    }
+    // 消费后清理 URL 参数，避免刷新重复触发。
+    try {
+      const url = new URL(globalThis.location?.href);
+      url.searchParams.delete("new_project");
+      globalThis.history?.replaceState?.({}, "", url);
+    } catch { /* URL 清理失败不影响交接 */ }
+  }, [activePage, pendingNewProject, requestActivePage]);
 
   useEffect(() => {
     if (isMedicalMonitoringProductRoute) {
@@ -13798,12 +13974,30 @@ export function App() {
           aiGatewayStatus={aiGatewayStatus}
           onAiGatewayStatusChange={setAiGatewayStatus}
           onProjectCreated={handleProjectCreated}
+          onStartSubsystemSetup={startSubsystemSetup}
+          projectCreatedNotice={projectCreatedNotice}
+          onDismissProjectCreatedNotice={() => setProjectCreatedNotice("")}
           forceRenderChildren={activePage === "monitoringProduct"}
         >
         <WorkbenchErrorBoundary resetKey={`${activeProjectId}:${activePage}`}>
           {page}
         </WorkbenchErrorBoundary>
       </AppShell>
+      {pendingNewProject && (
+        <NewProjectConfigPanel
+          handoff={pendingNewProject}
+          onCompleted={(project) => {
+            const selected = pendingNewProject.modules;
+            const label = selected.map(subsystemLabelOf).join("、") || "未知模块";
+            setProjectCreatedNotice(`已创建项目「${project?.project_name || project?.project_code || ""}」，已启用子系统：${label}${selected.length > 1 ? "。完成本子系统配置后，可回到项目总看板进入其余子系统。" : ""}`);
+            handleProjectCreated(project, selected);
+          }}
+          onDismiss={() => {
+            setPendingNewProject(null);
+            requestActivePage("overview");
+          }}
+        />
+      )}
       {pendingWritingNavigation && writingNavigationGuard?.dirty && (
         <div className="writing-unsaved-navigation-backdrop app-navigation-guard" role="presentation">
           <section className="writing-unsaved-navigation-dialog" role="dialog" aria-modal="true" aria-label="离开医学写作前处理未保存修订">
