@@ -374,6 +374,27 @@ class MonitoringRunEntry:
             _raise_mapped(exc)
             raise  # pragma: no cover
 
+    def ensure_builtin_global_default(self) -> None:
+        """R19攻坚：运行启动路径的内置档自愈（幂等）。
+
+        仅当 ``global_default/*`` 修订完全缺失时种入内置默认（与
+        ``bootstrap_workspace`` 同一实现）；已存在任何修订时不做任何
+        改动（后续配置覆盖层属正常状态，不在此断言 builtin）。
+
+        背景：``/workspace/bootstrap`` 需要 ADMINISTER_RUNTIME 权限，
+        用户侧启动链路无从调用；预置/常驻项目从未 bootstrap 时，
+        prepare-and-start 在 ``registry.reserve()`` 之后的 ``bind_run``
+        必然 ``global_default_missing``，留下永不可启动的 waiting_start
+        僵尸预约（R8起10轮8次运行卡「等待开始」的根因）。
+        """
+        if (
+            self.profile_store.latest_revision(
+                ps.LAYER_GLOBAL_DEFAULT, ps.GLOBAL_SCOPE_KEY
+            )
+            is None
+        ):
+            self.bootstrap_workspace()
+
     @staticmethod
     def _assert_builtin_default(record: ps.ProfileLayerRecord) -> None:
         fields = record.fields

@@ -323,3 +323,17 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 修复：①needs_attention仅在全部作业终态时报告（任何queued/running→generating）+adopt防御性快失败（跑动作业在cohort→立即mapping_run_incomplete，不再70秒强校验422）；②GET resolve缺batch_id改报诚实新码mapping_resolve_batch_id_required（原误报mapping_attempt_id_invalid）+前端对attempt失效族错误立即转failed并自动getLatestDataAdmission自愈重入。
 - 自检：8911 ready:true（build api-a9bb87fb5ee7ab77——packages/改动不入指纹但进程已重启加载新代码）；5178=200；指纹配对一致。
 - ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
+
+## 2026-10-06（R20D 开考位预置·守护员：复用常驻项目，零重复预置，未修码未重启）
+
+- 存量检查（ask 步骤0）现场实测三条件全过：`GET /api/projects` 仅 1 项目=常驻 MX循开考-CSU（proj_user_6ef58ac151e1，R19 归档刻意保留）；mapping-candidates → draft v80 status=confirmed/user_questions=0/60候选；facts → state=ready（10表/591行/3038值全核验）；project/open → current/complete/canView/canEdit；study-documents ready；run-setup/options 200。直接复用，**零新建、零 AI 作业、零代码修复、零重启**。
+- 未启动监查：GET runs 仅 1 条 run:0bf83a78… run_state=waiting_start/result_available=false（R19 开考测试者向导创建的运行设置遗留，从未启动，保留不删）。运行启动留给随后的攻坚验证。
+- 只读探障：main.py:4925-4936 marker 修复在位（contracts v5）；本项目 workspace launch_registry.sqlite3 marker sqlite 直查=v5；8911 ready（api-a9bb87fb5ee7ab77）与 5178 [::1] runtime-build.json 配对一致；8910/5177 无监听（沿 R11 起，未触碰）。
+- 留痕：`R5_SEEDED_PROJECT.md` R20D 节。本轮无新驱动脚本/状态文件（复用即结论）。
+
+## 2026-10-06 下午（R19攻坚·攻坚工程师第1次：两段重启，仅8911/5178）
+
+- 操作者：攻坚工程师-R19-第1次（运行启动死锁攻坚）。
+- 第1段（复现前）：攻坚开始时 8911（pid 35808，02:45 起）103.5% CPU 自旋、/api/health TCP通60s零响应（sample：主线程+工作线程深陷纯Python循环，PySequence_Tuple 热点；AI台账3 running 停在12:43Z、134 queued——R7-01 事件循环独占画像，环境级缺陷未修仅重启）。按标准命令重启 8911+5178；自检 8911 ready:true（api-a9bb87fb5ee7ab77）、5178 /monitoring=200、runtime-build.json 指纹配对一致。
+- 第2段（修复后加载）：global_default 自愈修复（run_routes.py prepare-and-start reserve 前 ensure + run_entry.py ensure_builtin_global_default）落地并过回归后重启 8911 加载新代码（packages 改动不入 build 指纹，进程重启实证）；5178 未动仍为该指纹配对态。
+- 未触碰 8910/5177（医学写作舰队）。攻坚决战与证据详见 scripts/tester_loop_0927/SIEGE_LOG.md R19 第1次节。

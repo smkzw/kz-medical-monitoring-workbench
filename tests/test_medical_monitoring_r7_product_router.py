@@ -34,8 +34,10 @@ from services.api.app.monitoring_runtime_principal import (
     MonitoringAuthenticatedPrincipal,
 )
 from packages.medical_monitoring.runtime.run_entry import (
+    PROFILE_DB_NAME,
     RUN_BINDING_DB_NAME,
     MonitoringRunEntry,
+    RunEntryError,
 )
 from packages.medical_monitoring.runtime.background_recovery import (
     BackgroundRecoveryAdapter,
@@ -7126,3 +7128,112 @@ def test_slice08c1_continuity_endpoint_truncation_over_200_rows(
 
     # All 200 returned rows are non-empty and well-formed
     assert all(r["row_ref"] for r in comparison["rows"])
+
+
+def _r19_siege_unbootstrapped_workspace(tmp_path: Path, project_id: str) -> Path:
+    """构造「预置/常驻项目」终态：工作区库文件已建（接入管线产物），
+    但从未 workspace/bootstrap——global_default 修订缺失。"""
+    ws = _r7_workspace(tmp_path, project_id)
+    ws.mkdir(parents=True, exist_ok=True)
+    MonitoringRunEntry(ws).close()
+    return ws
+
+
+def test_r19_siege_prepare_and_start_seeds_missing_global_default(
+    tmp_path: Path,
+) -> None:
+    """R19攻坚回归：未 bootstrap 的工作区上，用户侧 prepare-and-start 必须
+    自愈补种内置 global_default 并真正启动运行。修复前该请求 422
+    global_default_missing，且 registry.reserve() 已先行落库，留下永不可
+    启动的 waiting_start 僵尸预约（常驻开考项目 R8 起 10 轮 8 次卡
+    「等待开始」的根因；/workspace/bootstrap 需 ADMINISTER_RUNTIME 权限，
+    用户链路无从调用）。
+    """
+    from packages.medical_monitoring.runtime import profile_store as ps
+
+    client = _client(tmp_path)
+    ws = _r19_siege_unbootstrapped_workspace(tmp_path, PROJECT_A)
+    assert _sqlite_files(ws), "workspace DB files must pre-exist (zombie path)"
+    rows = sqlite3.connect(ws / PROFILE_DB_NAME).execute(
+        "SELECT COUNT(*) FROM profile_layer_versions"
+    ).fetchone()
+    assert rows[0] == 0, "no global_default revision before start"
+
+    options = client.get(f"{_base(PROJECT_A)}/run-setup/options")
+    assert options.status_code == 200, options.text
+    payload = {
+        "current_snapshot_token": options.json()["current_data"]["snapshot_token"],
+        "mode": "daily",
+        "execution_basis": "full",
+        "risk_rule_tokens": [],
+        "idempotency_key": "r19-siege-no-bootstrap-001",
+    }
+
+    started = client.post(f"{_base(PROJECT_A)}/runs/prepare-and-start", json=payload)
+    assert started.status_code == 200, started.text
+    body = started.json()
+    assert body["replayed"] is False
+    assert body["public_run_token"].startswith("run:")
+    assert body["run_state"] in ("running", "completed")
+
+    # 内置档已补种（revision 1，幂等语义与 bootstrap_workspace 相同）
+    entry = MonitoringRunEntry(ws)
+    try:
+        latest = entry.profile_store.latest_revision(
+            ps.LAYER_GLOBAL_DEFAULT, ps.GLOBAL_SCOPE_KEY
+        )
+    finally:
+        entry.close()
+    assert latest is not None and latest.revision == 1
+
+    # 运行真正完成（不是停在 waiting_start）
+    history = client.get(f"{_base(PROJECT_A)}/runs")
+    for _ in range(500):
+        assert history.status_code == 200, history.text
+        if history.json()["runs"][0]["run_state"] == "completed":
+            break
+        time.sleep(0.01)
+        history = client.get(f"{_base(PROJECT_A)}/runs")
+    runs = history.json()["runs"]
+    assert len(runs) == 1
+    assert runs[0]["run_state"] == "completed", runs[0]
+    assert runs[0]["public_run_token"] == body["public_run_token"]
+
+    # 同键重放仍收敛到同一运行（幂等语义不回归）
+    replay = client.post(f"{_base(PROJECT_A)}/runs/prepare-and-start", json=payload)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["replayed"] is True
+    assert replay.json()["public_run_token"] == body["public_run_token"]
+
+
+def test_r19_siege_seed_failure_fails_closed_without_reservation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """补种失败必须 fail-closed 且不留预约：reserve 之前完成 ensure，
+    种不进去时 422 如实返回，launch_registry 无任何行（无僵尸）。"""
+
+    def _fail_ensure(self: MonitoringRunEntry) -> None:
+        raise RunEntryError("global_default_missing")
+
+    monkeypatch.setattr(
+        MonitoringRunEntry, "ensure_builtin_global_default", _fail_ensure
+    )
+    client = _client(tmp_path)
+    ws = _r19_siege_unbootstrapped_workspace(tmp_path, PROJECT_A)
+
+    options = client.get(f"{_base(PROJECT_A)}/run-setup/options")
+    assert options.status_code == 200, options.text
+    payload = {
+        "current_snapshot_token": options.json()["current_data"]["snapshot_token"],
+        "mode": "daily",
+        "execution_basis": "full",
+        "risk_rule_tokens": [],
+        "idempotency_key": "r19-siege-seed-fail-001",
+    }
+    failed = client.post(f"{_base(PROJECT_A)}/runs/prepare-and-start", json=payload)
+    assert failed.status_code == 422, failed.text
+    assert failed.json()["code"] == "global_default_missing"
+
+    # 僵尸预约不可能存在：ensure 在 open_launch_registry/reserve 之前失败
+    assert not (ws / lr.LAUNCH_REGISTRY_DB_NAME).exists()

@@ -148,6 +148,38 @@ def register_run_launch_routes(router: APIRouter, context: RunRouteContext) -> N
             return resolved
         current, baseline, revisions, manifest = resolved
 
+        # R19攻坚（运行启动死锁根因修复）：内置 global_default 执行档是
+        # 基础设施默认（bootstrap_workspace 幂等种入的内置配置，非用户
+        # 决策），而 /workspace/bootstrap 需 ADMINISTER_RUNTIME 权限，用户
+        # 侧启动链路无从调用（前端从未调用 bootstrapWorkspace）；预置/
+        # 常驻项目从未 bootstrap 时，下方 reserve() 成功后 bind_run() 必然
+        # global_default_missing，留下永不可启动的 waiting_start 僵尸预约
+        # ——in_flight 判定含 waiting_start，会拦住该项目后续所有新幂等键
+        # （R8起10轮8次运行卡「等待开始」即此）。故在 reserve 之前幂等
+        # 补种内置 global_default：仅缺失时种（已有修订零改动），补种
+        # 失败仍 fail-closed，且此时尚未创建任何预约（无僵尸）。
+        pre_entry = _open_entry(workspace, allow_create=False)
+        if isinstance(pre_entry, JSONResponse):
+            write_permit.release()
+            return pre_entry
+        try:
+            pre_entry.ensure_builtin_global_default()
+        except Exception as exc:
+            _run_rejection_event(
+                canonical,
+                stage="run_prepare_and_start",
+                reason=str(getattr(exc, "code", "") or type(exc).__name__),
+                mode=parsed.mode,
+            )
+            error = _run_entry_error_response(exc)
+        else:
+            error = None
+        finally:
+            pre_entry.close()
+        if error is not None:
+            write_permit.release()
+            return error
+
         registry = open_launch_registry(canonical)
         if isinstance(registry, JSONResponse):
             write_permit.release()
