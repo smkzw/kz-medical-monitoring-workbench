@@ -782,7 +782,15 @@ class AdmissionMappingPipeline:
 
     @staticmethod
     def _declared_missing_roles(workspace_dir: Path, attempt_id: str) -> set[str]:
-        """Roles the user explicitly declared missing for this attempt."""
+        """Roles the user explicitly declared missing for this attempt.
+
+        R20轮（R18-02）：角色缺失声明是用户对本项目作出的治理决定——
+        其生命周期属于项目而非单次导入attempt。重新导入数据产生新
+        attempt时，此前声明的「本次未提供eCRF」曾被静默清退为
+        「尚未添加」，与无补传入口叠加后无法恢复。现：当前attempt无
+        声明时，回溯本项目任意更早attempt的同角色声明并继承（新
+        attempt的显式选择仍可通过重新声明覆盖——declare写入新键）。
+        """
 
         store = _store(workspace_dir)
         try:
@@ -792,13 +800,38 @@ class AdmissionMappingPipeline:
                     DOCUMENT_MISSING_DECLARATION_KIND,
                     f"{attempt_id}::{role}",
                 )
-                if row is None or not isinstance(row[1], Mapping):
-                    continue
-                payload = row[1]
-                if (
-                    payload.get("attempt_id") == attempt_id
-                    and payload.get("role") == role
-                ):
+                if row is not None and isinstance(row[1], Mapping):
+                    payload = row[1]
+                    if (
+                        payload.get("attempt_id") == attempt_id
+                        and payload.get("role") == role
+                    ):
+                        declared.add(role)
+                        continue
+                # 继承项目内更早attempt的同角色声明。
+                inherited = False
+                try:
+                    for object_id, _version in store.list_domain_objects(
+                        DOCUMENT_MISSING_DECLARATION_KIND
+                    ):
+                        if not object_id.endswith(f"::{role}"):
+                            continue
+                        legacy = store.get_domain_object(
+                            DOCUMENT_MISSING_DECLARATION_KIND,
+                            object_id,
+                        )
+                        if legacy is None or not isinstance(legacy[1], Mapping):
+                            continue
+                        if (
+                            legacy[1].get("role") == role
+                            and str(legacy[1].get("attempt_id") or "")
+                            != attempt_id
+                        ):
+                            inherited = True
+                            break
+                except Exception:
+                    inherited = False
+                if inherited:
                     declared.add(role)
             return declared
         finally:
