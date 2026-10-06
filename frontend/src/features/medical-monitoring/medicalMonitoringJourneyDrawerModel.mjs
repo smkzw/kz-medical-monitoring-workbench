@@ -140,6 +140,9 @@ export function monitoringJourneyDrawerSections({
     title: clean(event?.eventLabel) || clean(risk?.riskType) || clean(row?.title) || "本轮变化详情",
     eventCategory: category || fallback.eventCategory,
     riskLevel: monitoringJourneySeverityLabel(row) || clean(risk?.severityLabel) || fallback.riskLevel,
+    // R19轮（R19-03）：分级依据同屏展示——「高」从哪来（源记录载明/
+    // 系统推定/严重度未知）可查，两级矛盾时用户可据此判断。
+    severityBasis: clean(risk?.severityBasis) || "分级依据待确认",
     change: clean(row?.change_text) || fallback.change,
     date: date || fallback.date,
     beforeAfter: beforeAfter.text || fallback.beforeAfter,

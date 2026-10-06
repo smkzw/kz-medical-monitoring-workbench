@@ -192,7 +192,14 @@ function normalizeRisk(value = {}, domains) {
     domainEncoding: encoding,
     domainStatus: "confirmed",
     severity,
-    severityLabel: SEVERITY_LABELS[severity] || "风险等级待确认",
+    // R19轮（R19-03）：severity_source=unknown时severity是占位（R24V2-B02
+    // 「不得当中风险呈现」）——卡片此前渲染「AE·高风险」而详情显示
+    // 「风险等级待确认」，两级矛盾。卡片与详情同源：unknown时卡片也
+    // 如实显示「严重度未知」，不得渲染为高/中风险。
+    severityLabel: source.severity_source === "unknown"
+      ? "严重度未知"
+      : SEVERITY_LABELS[severity] || "风险等级待确认",
+    severityBasis: clean(source.severity_source_zh) || "分级依据待确认",
     riskType: clean(source.risk_type_zh || source.risk_type || source.title, "风险提示"),
     subjectLabel: clean(source.subject_label || source.subject_name),
     siteLabel: clean(source.site_label || source.site_name, publicCenterLabel(source.site_ref || source.site_id)),
