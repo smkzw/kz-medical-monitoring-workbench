@@ -23332,3 +23332,174 @@ textarea {
 .monitoring-subject-link:hover {
   color: #1e40af;
 }
+
+/* ===== 子系统优先建项（用户 2026-10-06 指令）—— kangzhe Liquid Glass 语言：功能优先 ===== */
+
+/* 子系统多选卡片（首页新建对话框） */
+.new-project-subsystem-select {
+  max-width: 640px;
+}
+
+.subsystem-select-lead {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.subsystem-select-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0 18px;
+}
+
+.subsystem-select-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto auto auto;
+  justify-items: start;
+  gap: 6px;
+  min-height: 148px;
+  padding: 14px;
+  text-align: left;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.66);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: 0 1px 2px rgba(32, 36, 42, 0.04), 0 8px 22px rgba(32, 36, 42, 0.06);
+  transition: box-shadow 120ms ease, background 120ms ease, transform 120ms ease;
+}
+
+.subsystem-select-card:hover {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 1px 2px rgba(32, 36, 42, 0.05), 0 10px 26px rgba(32, 36, 42, 0.09);
+}
+
+.subsystem-select-card-checked {
+  background: linear-gradient(180deg, rgba(255, 248, 243, 0.92), rgba(255, 255, 255, 0.8));
+  box-shadow: 0 1px 2px rgba(217, 87, 16, 0.08), 0 10px 26px rgba(217, 87, 16, 0.12);
+}
+
+.subsystem-select-check {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: var(--muted);
+}
+
+.subsystem-select-card-checked .subsystem-select-check {
+  color: var(--orange-dark);
+}
+
+.subsystem-select-icon {
+  color: var(--orange-dark);
+}
+
+.subsystem-select-card strong {
+  font-size: 15px;
+}
+
+.subsystem-select-tagline {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 子系统页上的新项目配置面板 */
+.new-project-config-panel {
+  max-width: 680px;
+}
+
+.new-project-config-modules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 0;
+}
+
+.config-module-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #46515b;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--line);
+}
+
+.config-module-chip-current {
+  color: var(--orange-dark);
+  background: #fff8f3;
+  border-color: #f3c9ab;
+}
+
+.new-project-config-note {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--info-bg);
+  color: #2f5a9e;
+  font-size: 12px;
+}
+
+/* 首页无项目落地页（Liquid Glass，功能优先） */
+.landing-hero {
+  display: grid;
+  gap: 16px;
+  padding: 18px 0 6px;
+}
+
+.landing-hero-copy h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.landing-hero-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.landing-subsystems {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.landing-subsystem-card {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.66);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: 0 1px 2px rgba(32, 36, 42, 0.04), 0 8px 22px rgba(32, 36, 42, 0.06);
+}
+
+.landing-subsystem-card svg {
+  color: var(--orange-dark);
+  margin-bottom: 4px;
+}
+
+.landing-subsystem-card strong {
+  font-size: 14px;
+}
+
+.landing-subsystem-card span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 1080px) {
+  .subsystem-select-grid,
+  .landing-subsystems {
+    grid-template-columns: 1fr;
+  }
+}
