@@ -621,3 +621,63 @@ AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）�
 - **卡点**：主侧AI服务方（open.bigmodel.cn 计划密钥）计划级配额冻结——同计划两个档案 probe 均 429、verifier（ollama-cloud）正常；主侧消耗 10-03=8.45M / 10-04=42.27M / 10-05（冻结前）=5.88M tokens；连续零成功 >7h（超 R16B 事件 5h 纪律线）。属外部服务方配额，非产品缺陷，守护员无权限处理（换绑主侧档案属循环所有者决策）。
 - **恢复**：`r18d_supervise.sh`（nohup 独立存活）每 50 分钟重拉幂等驱动 `r18d_seed_csu.py`，resolve 轮询自动 requeue；配额恢复后自动推进至 confirmed+facts 停住（Step10 硬断言与 R17D 同口径）。验收：`r18d_seed_state.json` 出现 confirmed/facts_materialized、R5_SEEDED_PROJECT 本节更新终态表。
 - 驱动与留痕：`r18d_seed_csu.py`（由 r17d_seed_csu.py 机械适配，diff 验证仅轮次命名差异；既有裁决卡决策表原样保留）、`r18d_seed_state.json`、`r18d_seed_evidence.jsonl`（1633 条）、`r18d_seed_console.log`、`r18d_supervise.sh`。
+
+# R19D 开考位预置结果 — 常驻项目 MX循开考-CSU（2026-10-05）
+
+> **常驻语义（本轮起生效）**：本项目为跨轮持久存在的开考项目，项目名固定「MX循开考-CSU」（无轮次后缀）。后续轮次开考预置**先查存量**：若 mapping confirmed + facts ready + project/open current 三者俱在，直接复用（零重复预置）；复盘按轮次归档时**不得删除/重建**本项目。本轮为该常驻名**首轮新建**（存量实测 user_projects 中 project_name='MX循开考-CSU' count=0）。
+
+隔离环境：API `http://127.0.0.1:8911`（build api-a9bb87fb5ee7ab77，R18轮次修复员双重启后的现行进程），全程未触碰 8910/5177。
+操作者：开考预置守护员-R19D。起止：2026-10-05 19:04:52Z → 20:44:23Z（约 1 小时 40 分，单段运行无中断）。
+
+## 探障（本轮前置，R5D marker 缺陷未复发，未修任何产品代码、未重启 8911/5178）
+
+- 存量检查（常驻名首轮）：sqlite 直查 `user_projects` 中 project_name='MX循开考-CSU' **count=0** → 按 ask 新建；`GET /api/projects` → `[]`（历轮项目均已软归档，沿 R13D 起常态）。
+- 修复代码在位：`services/api/app/main.py:4925-4936`（实测 4926 行导入 `SCHEMA_VERSION as _LAUNCH_REGISTRY_SCHEMA_VERSION`、4935-4936 行 launch_registry.sqlite3 种子 marker 取该常量；contracts.py:53-54 = mm-r7-w01r26-launch-registry-v5）。
+- 存量库直查：隔离 runtime **30 个** workspace 的 launch_registry.sqlite3 marker 逐库 sqlite 直查**全部 v5**（0 个非 v5）；R19D 新建 workspace marker sqlite 直查 = **v5**（现行 build 写入实证）。
+- 主侧AI路由：R18轮次任务所有者已于 10-05 11:13 把两主侧档案从直连换回 OmniRouter LB（127.0.0.1:20128，*.pre_omni_restore_1005_1113 快照留痕，见 ISO_ENV_LOG 同日条目）。本轮沿用现行配置，产品 `/api/ai-gateway/probe` 三档案真实往返全 passed:true（两主侧 cms-router/glm-5.3-flash 5853/753ms；verifier ollama-cloud/deepseek-v4.1-flash 661ms）——R18D 上午的 429 冻结已随路由纠错解除，**本轮无需换绑**。
+- 环境侧：8911 /api/runtime-readiness ready:true（build api-a9bb87fb5ee7ab77）；5178 /monitoring=200 且 runtime-build.json expectedBackendBuildId=api-a9bb87fb5ee7ab77 与 8911 backend_build_id 配对一致；8910/5177 无监听（连接拒绝）——非本轮所致（仅只读 lsof/curl 复核），按铁律未触碰，如实记录。
+- 建项瞬间 project/open blocked（bootstrap 前 monitoring_runtime.sqlite3 不存在的设计内瞬态，R1/R13D-R18D 同款，留痕 probe_recorded）；终态硬断言见下表。
+
+## 项目
+
+| 项 | 值 |
+|---|---|
+| project_id | **proj_user_6ef58ac151e1**（常驻，后续轮次复用勿删） |
+| project_code | MW-PHASE-2210A806 |
+| project_name | **MX循开考-CSU** |
+| indication / product_name | 慢性自发性荨麻疹 / MG-K10 |
+| modules | ["medical_monitoring"] |
+| 幂等键 | r19d-seed-20260905T190452Z-5f59e580（唯一） |
+| data admission | stg-cd69899943ba42618f589ba07a134a59（合成listing 591行/10表） |
+| 文档权威批次 | mmbatch_06432a73d31b1d87094f90fd（方案V1.3 docx + eCRF指南V1.0 docx 双VLM） |
+| 三件套 sha256 | listing 4be08e9e…b27968 / 方案 73024713…9a504199 / eCRF 8109d25a…ede15289（与 R13D-R18D 逐字节一致） |
+
+## 全链状态（自验实测，2026-10-05 20:4x-20:5xZ 独立复验）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| 建项 | ✅ 201 | POST /api/projects（幂等键唯一）；state r19d_seed_state.json（19:04:52Z） |
+| 数据接入 | ✅ | data-admissions/upload → attempt，591行/10表（19:04:55Z） |
+| 身份门/角色门 | ✅ 未触发 | documents_resolve 自动归属确认（analyzing→reviewing→…→ready），无人工门（与 R14D/R15D/R17D 同款自动路径） |
+| 文档权威 | ✅ ready=true | 19:04:55Z 提交→19:13:29Z ready（约8.6分钟）；protocol/ecrf 自动识别 |
+| 映射双队列 | ✅ candidates_ready | 10主+10盲核，60字段候选（19:13:38Z→19:32:03Z 约18.5分钟） |
+| 复核收敛 | ✅ complete | adjudicate 轨迹：running(remaining=46) → 第二轮双队列46作业 → blocked(remaining=32, 系统裁决14) → 33张裁决卡作答 → complete(remaining=0)；2个 listing_field_mapping 分片终态 failed（invalid_ai_output×1 不可重试、provider_runtime_error×1 可重试）经 bounded-gap 设计与系统裁决收敛，未跳门 |
+| 裁决卡 | ✅ 已答 | 共33张**全部由既有决策表覆盖**（EX.EXTRT + R5/R8/R9/R11 各表：AE×8、CM×6、LB_HEM×7、MH×5、DM.ARM、ICF_TRACK.ICFSTATE、SV.VISDAT、UAS×4、MH.MHNUM）——**本轮无新卡、无 fail-closed 退出**（unknown_questions_fail_closed=0 全程，历轮首次单段零中断跑完全链） |
+| **字段映射确认** | ✅ **confirmed** | GET mapping-candidates：confirmation_status=confirmed，draft monmapdraft_73abe5c6c9561a9e95eec2056991 status=confirmed（**v80**），user_questions=0，60字段（20:44:16Z confirm 200；独立复验同值） |
+| **facts 物化** | ✅ **ready** | GET facts：state=ready，facts_generated=true，10表/591行/**3038值全核验**（values=source_values_verified=3038），message「可用于监查的数据已生成，可以开始监查。」（20:44:16Z） |
+| 界面可开始运行监查 | ✅ | `GET /r7/project/open` → state=current/openMode=edit/dataCoverage=complete/canView/canEdit=true「项目格式正常，可以继续使用。」；`run-setup/options` **200**；5178 /monitoring=200 且前后端 build 配对一致 |
+| 停在 facts（未启动监查） | ✅ | GET runs → {"runs":[]} |
+
+AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）：46 作业（44完成：document_authority_analysis×2 + document_authority_review×4 + listing_field_mapping×38；2终态failed 经自动恢复与系统裁决收敛 remaining=0）；76 次调用（68成功/8次 provider_error 重试路径），tokens 合计 1,628,699（prompt 1,073,162 + completion 555,537）。全程 AI 质量门自然通过，未跳门、未伪造状态。
+
+## 本轮观察（如实记录，非阻断）
+
+- **R19 新卡：零**。R15 及以前的决策表再次完整覆盖全部浮出卡；主侧路由回到 OmniRouter LB 后作业时延恢复常态（全程 1h40m，vs R17D 6h03m、R18D 卡阻 12h+）。R12D/R13D 直连换绑已由任务所有者纠错回 OmniRouter（ISO_ENV_LOG 2026-10-05「主侧路由纠错」条目），本轮沿用未动。
+- **常驻项目就位**：后续轮次预置员的存量检查三条件（mapping confirmed + facts ready + project/open current）以本项目为准；本项目被循环收尾软归档不影响直接 API/界面使用（R18D 已实证归档项目 project/open 仍 current）。若某轮复盘归档逻辑按项目名前缀匹配轮次，请注意「MX循开考-」前缀不属于任何轮次、不应被归档删除。
+- 8910/5177 无监听（沿 R11 起记录），本轮仅只读复核未触碰。
+
+## 留痕文件（同目录）
+
+- 驱动：`r19d_seed_csu.py`（由 r18d_seed_csu.py 机械适配：常驻项目名 MX循开考-CSU/幂等键/留痕文件；R5/R8/R9/R11/R12/R13/R14/R15 既有裁决卡决策表原样保留；幂等，含 fail-closed 未知卡防护；roundtrip diff 验证仅命名差异）
+- 证据：`r19d_seed_evidence.jsonl`（每步请求/响应摘要）、`r19d_seed_state.json`（幂等状态）、`r19d_seed_console.log`（运行控制台输出）
+- 环境日志：`ISO_ENV_LOG.md`（R19D 探障+预置条目）

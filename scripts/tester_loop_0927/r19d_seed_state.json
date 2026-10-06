@@ -1,0 +1,16 @@
+{
+ "project_id": "proj_user_6ef58ac151e1",
+ "create_key": "r19d-seed-20261005T190452Z-5f59e580",
+ "project_name": "MX循开考-CSU",
+ "updated_at": "2026-10-05T20:44:16.585172+00:00",
+ "attempt_id": "stg-cd69899943ba42618f589ba07a134a59",
+ "docs_batch_id": "mmbatch_06432a73d31b1d87094f90fd",
+ "documents_ready": true,
+ "mapping_state": "candidates_ready",
+ "draft_id": "monmapdraft_73abe5c6c9561a9e95eec2056991",
+ "draft_version": 1,
+ "adjudication_state": "complete",
+ "confirmed": true,
+ "confirm_idempotency_key": "r19d-confirm-aa77fcaf4c56463e9c14faf0e33d1b11",
+ "facts_materialized": true
+}
