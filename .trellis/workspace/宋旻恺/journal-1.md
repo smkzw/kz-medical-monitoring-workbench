@@ -1641,3 +1641,24 @@ W00证据位于`../../tasks/09-22-mm-delivery-replan/evidence/{route-lock,projec
 真实第二轮证明auto/high可由DeepSeek返回完整四字段结果，但仍有部分分片只返回reasoning或输出形状不合合同，系统全部fail closed，不采纳思考内容。用户随后要求完成手头工作后无损暂停：先调用产品queue pause，再等待8个在途请求自然归零，最后停止8920；8911全程停止。暂停时当前digest状态：GLM 47完/26败/14排队，DeepSeek 33完/22败/142排队，running均0；SQLite integrity_check=ok。本地Qwen/MTPLX未选择或加载。
 
 完整接管说明写入`../../tasks/09-22-mm-delivery-replan/HANDOFF_20260923.md`。恢复时只启动8920并resume现有队列，不POST新代际；两个digest终态后调用产品adjudication端点，让现有机制仅对失败分片做一次有界原位恢复，再把完成映射和可见coverage gap落草稿。不得由开发Agent替代盲核或按主模型/多数票接受分歧。W01/W02仍in_progress，facts、真实AE/MH、看板/旅程/来源/Query、W03-W07和最终验收均未完成。
+
+
+## Session 3: 首页子系统优先建项重构交付
+
+**Date**: 2026-10-06
+**Task**: 首页子系统优先建项重构交付
+**Branch**: `main`
+
+### Summary
+
+新建项目改三子系统多选卡→项目信息在首个选中子系统页配置面板填写创建（单选直跳/多选跳首个）；Liquid Glass；全流程浏览器验证通过；适配prompt×2已交用户转发
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a05a62ef` | (see git log) |
+
+### Status
+
+[OK] **Completed**
