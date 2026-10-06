@@ -752,7 +752,11 @@ for (let round = 1; round <= MAXROUNDS; round++) {
     let preflightOk = false;
     let preflightBlock = "";
     let tierSkip = false;
-    if (round >= 19) {
+    if (round >= 21) {
+      preflightOk = true;
+      tierSkip = true;
+      log("预检与攻坚合并（组织反思二轮）：全链门改由攻坚验证在常驻项目上执行（运行完成→发布→结果可读）；一次性预检项目停用——每轮省约 2-2.5M tokens 与 1.5-6.7 小时；从零路径由测试者旅程覆盖");
+    } else if (round >= 19) {
       const tierCheck = await world.run("bash", [
         "-c",
         "M=implementation/workbench/scripts/tester_loop_0927/PREFLIGHT_LAST_GREEN.json; " +
@@ -804,7 +808,7 @@ for (let round = 1; round <= MAXROUNDS; round++) {
       ]);
     }
   }
-  let siegeOk = true;
+  let siegeOk = false;
   let siegeBlock = "";
   if (round >= 19) {
     phase("攻坚验证：让常驻项目真正跑通一次监查（组织反思落地）");
