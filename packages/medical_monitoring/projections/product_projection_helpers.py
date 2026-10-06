@@ -133,7 +133,11 @@ def _risk_payload(
         "date_state": risk.date_state,
         "event_ref": risk.event_ref,
         "visit_ref": risk.visit_ref,
-        "source_locator_ref": risk.source_locator_refs[0] if len(risk.source_locator_refs) == 1 else None,
+        # R19轮（R19-01）：原实现仅在恰好1个locator时下发source_locator_ref
+        # ——多条时为None，前端「查看来源」按钮恒禁用，发现→原始记录
+        # 断链（全部29条发现不可反查）。现至少有1个即取首个（多条时
+        # 来源详情仍展示全部），证据链最后一环可达。
+        "source_locator_ref": risk.source_locator_refs[0] if risk.source_locator_refs else None,
         "source_locator_refs": list(risk.source_locator_refs),
         "change_kind": risk.change_kind,
         "change_cause": risk.change_cause,

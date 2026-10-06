@@ -96,6 +96,7 @@ const DRAWER_SECTION_LABELS = Object.freeze({
   before_after: "前后依据",
   related_records: "关联记录",
   query_draft: "Query 草稿",
+  severity_basis: "分级依据",
 });
 
 // Maps the frozen wire section keys to the camelCase fields the section
@@ -104,6 +105,7 @@ const DRAWER_SECTION_FIELDS = Object.freeze({
   title: "title",
   event_category: "eventCategory",
   risk_level: "riskLevel",
+  severity_basis: "severityBasis",
   change: "change",
   date: "date",
   before_after: "beforeAfter",

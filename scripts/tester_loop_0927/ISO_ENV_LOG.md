@@ -337,3 +337,10 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 第1段（复现前）：攻坚开始时 8911（pid 35808，02:45 起）103.5% CPU 自旋、/api/health TCP通60s零响应（sample：主线程+工作线程深陷纯Python循环，PySequence_Tuple 热点；AI台账3 running 停在12:43Z、134 queued——R7-01 事件循环独占画像，环境级缺陷未修仅重启）。按标准命令重启 8911+5178；自检 8911 ready:true（api-a9bb87fb5ee7ab77）、5178 /monitoring=200、runtime-build.json 指纹配对一致。
 - 第2段（修复后加载）：global_default 自愈修复（run_routes.py prepare-and-start reserve 前 ensure + run_entry.py ensure_builtin_global_default）落地并过回归后重启 8911 加载新代码（packages 改动不入 build 指纹，进程重启实证）；5178 未动仍为该指纹配对态。
 - 未触碰 8910/5177（医学写作舰队）。攻坚决战与证据详见 scripts/tester_loop_0927/SIEGE_LOG.md R19 第1次节。
+
+## 2026-10-06（R19轮次·修复员：证据链+风险分级修复后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R19轮次：R19-01、R19-03；R19-02前端分支经核实已在树上——攻坚工程师cbb5f52e/52fd9697已含attempt失效自愈+batch_id_required诚实化分支）
+- 修复：source_locator_ref多locator时取首个（原仅恰好1条才下发→29条发现全部断链）；卡片severity_source=unknown时如实「严重度未知」+分级依据字段（severityBasis）入卡片与旅程详情两处、drawer新增「分级依据」节。
+- 自检：8911 ready:true（build api-a9bb87fb5ee7ab77——packages/改动不入指纹但进程已重启）；5178=200；指纹配对一致。
+- ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
