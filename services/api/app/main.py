@@ -8499,6 +8499,7 @@ def confirm_file_first_synopsis_project_intake(
                 protocol_id=request.framing.protocol_id,
                 protocol_version=request.framing.version or "草案",
                 entry_mode="synopsis_import",
+                modules=request.modules,
                 actor=request.actor,
                 idempotency_key=f"file-first-project-{request.idempotency_key}"[:160],
             )

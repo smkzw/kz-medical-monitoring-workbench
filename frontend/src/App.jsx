@@ -1226,6 +1226,7 @@ function NewProjectConfigPanel({ handoff, onCompleted, onDismiss }) {
         {writingSelected && draft.entry_mode === "synopsis_import" ? (
           <MedicalWritingSynopsisProjectIntake
             disabled={busy}
+            modules={modules}
             onCreated={(payload) => {
               onCompleted?.(payload.project, payload.entry_mode);
             }}
