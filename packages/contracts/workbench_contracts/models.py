@@ -5870,6 +5870,14 @@ class MedicalWritingSynopsisProjectCreateRequest(WorkbenchModel):
     synopsis_text: str = Field(min_length=1, max_length=100_000)
     acknowledged_validation_warnings: List[str] = Field(default_factory=list)
     validation_override_reason: str = Field(default="", max_length=2_000)
+    # 首屏子系统多选交接（20261006适配）：摘要导入路径也必须携带完整
+    # modules（多选场景其他子系统依赖同一项目）；缺省维持仅写作（兼容
+    # 旧调用方）。与 UserProjectCreateRequest.modules 同一取值域。
+    modules: list[Literal["medical_writing", "medical_monitoring", "eligibility_review"]] = Field(
+        default=["medical_writing"],
+        min_length=1,
+        max_length=3,
+    )
     actor: str = Field(default="medical_manager", min_length=1, max_length=100)
     idempotency_key: str = Field(min_length=1, max_length=200)
 

@@ -187,7 +187,7 @@ function phaseLabel(job) {
   })[job?.phase || job?.status] || "准备导入";
 }
 
-export function MedicalWritingSynopsisProjectIntake({ disabled = false, onCreated }) {
+export function MedicalWritingSynopsisProjectIntake({ disabled = false, modules = [], onCreated }) {
   const mountedRef = useRef(true);
   const pollGenerationRef = useRef(0);
   const pollControllerRef = useRef(null);
@@ -402,6 +402,9 @@ export function MedicalWritingSynopsisProjectIntake({ disabled = false, onCreate
             intake_id: intake.intake_id,
             import_idempotency_key: intake.idempotency_key,
             source_id: imported.source.source_id,
+            // 首屏多选交接（20261006适配）：携带完整 modules，多选场景
+            // 其他子系统依赖同一项目；为空则走后端缺省（仅写作）。
+            ...(Array.isArray(modules) && modules.length ? { modules } : {}),
             framing,
             picos,
             synopsis_text: synopsisText,
