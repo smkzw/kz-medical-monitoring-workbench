@@ -390,3 +390,11 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 修复：复核分畨预过滤（规范化不敏感比对，同串/同义噪音自动合并agreed）；AE医学逻辑文字（severity/relationship/outcome/SAE组合理由+SAE漏报模式提示）入risk payload与旅程详情「医学依据」节；protocol-versions GET自愈（三项前置满足但列表空时自动注册已确认方案版本）。
 - 自检：8911 ready:true（build api-e041fb3ab9060114）；5178=200；指纹配对一致。
 - ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
+
+## 2026-10-07T08:3x-08:4xZ（R23D 开考位预置·守护员第5次复验：R22修复员新build下三条件仍全过，零重复预置）
+
+- 操作者：开考预置守护员-R23（D位）。背景：R22D 复验后，R22 轮次修复员对隔离对 8911/5178 双重启加载三项修复（复核分畨预过滤/AE医学逻辑文字/protocol-versions自愈），build 由 api-1d25bf363b10c2a5 变为 **api-e041fb3ab9060114**（本轮之前他位动作，本轮未重启）。
+- 存量检查现场实测（ask 步骤0）三条件全过：mapping-candidates → confirmation_status=confirmed / draft v80 status=confirmed / user_questions=0 / 60候选；facts → state=ready（10表/591行/3038值全核验）；project/open → current/complete/canView/canEdit；run-setup/options 200；study-documents ready。**零新建、零 AI 作业、零代码修复、零重启、零启动运行**（runs 12 条全部 completed，R22D 后新增 3 条为 R22 开考/攻坚角色所启动，非本轮）。
+- 只读探障：main.py:4920-4940 marker 修复在位（import SCHEMA_VERSION 常量直读实证）；本项目 workspace launch_registry Python sqlite3 只读直查=mm-r7-w01r26-launch-registry-v5；8911 readiness ready:true（runtime_schema_version=16）与 5178 [::1]（node pid 13827）runtime-build.json expectedBackendBuildId=api-e041fb3ab9060114 配对一致；8910/5177 lsof 均 0 监听（沿 R11 起，未触碰）。AI gateway status 只读探看 configured=true，未做付费 probe。
+- 观察如实记录：candidates 投影怪癖沿 R21D/R22D 持续（顶层 facts_generated=False / summary pending_confirmation_count=60、user_question_count=1，与权威 facts ready / draft confirmed 终态不一致），提请修复员核投影字段语义。另本员复验 R22D 同款台账简写路径笔误一次（漏 modules 段/study-documents 漏 attempt 段），核对 r19d_seed_csu.py:516,554 与 openapi 后自纠，非产品缺陷。
+- 留痕：`R5_SEEDED_PROJECT.md` R23D 节。本轮无新驱动脚本/状态文件（复用即结论）。
