@@ -4,6 +4,251 @@
 
 ---
 
+## R25 攻坚·第 1 次（2026-10-08，攻坚工程师-R25-第1次）
+
+### 0. 结论先行
+
+**墙以新形态复发一次：遗留「completed+未发布」诊断运行占用单运行窗口，
+全新幂等键 prepare-and-start 被 409 in_flight_conflict 拒（969ms）。**
+根因不在 R19 修复失效（其两处代码在新 build 仍在役、回归 2/2 绿），而是
+R24 轮次角色留下的 API 驱动诊断运行（registry seq 19
+`diag-r18-03-gate-check-002`）止步于发布收口之前，命中
+`launch_registry_core_mixin.py:326-340` 既有单运行窗口语义
+（`run_state='completed' AND result_available=0` 也算 in-flight，blame
+5f1a071a）。**最小根因处置=用与界面完全相同的设计端点把该遗留运行收口
+（POST publication → available、result_available=1、其结果自身可读），
+零代码改动、零重启、不跳门**；随后两遍全新幂等键全链皆绿
+（completed→available→可读，投影逐字节一致 1,241,039B/41 发现/16 受试者）。
+
+### 1. 环境前置（复现前，未重启任何服务）
+
+- 8911（pid 74159，127.0.0.1 IPv4 监听）`/api/health` 200
+  （runtime_store integrity ok, schema v16）；`/api/runtime-readiness`
+  status=ready、backend_build_id=**api-157c89f897d07331**（R24 攻坚时为
+  api-06744bbced9d86a2；期间经 R24 六项修复 commit 117657f6 重建），
+  与 5178（vite node pid 74210，仅监听 [::1]:5178，属 R24 记录的监听
+  布局）`runtime-build.json` expectedBackendBuildId **配对一致**
+  （frontendBuildId=web-61cf3eec89de9bcb）。本轮全程未重启。
+- R19 修复在新 build 在位（本轮亲读源码）：
+  `packages/medical_monitoring/runtime/run_entry.py:377`
+  `ensure_builtin_global_default()`；调用点因 117657f6 增补代码自 :166
+  移至 `api/r7_product/run_routes.py:183`，仍在 `registry.reserve()`
+  （run_routes.py:207）之前、补种失败 fail-closed 无预约落库。
+- 复现前磁盘基线：launch_registry 19 条（18 条 completed+result_available=1；
+  **sequence 19 `diag-r18-03-gate-check-002` completed+result_available=0**，
+  created 2026-10-07T21:52:13Z、updated 22:32:54Z，R24 轮次角色的 R18-03
+  门禁核查诊断运行）、waiting_start=0；execution_profiles
+  `global_default|*|1` 在位。
+
+### 2. 复现（任务①）——第一遍即 BLOCKED（驱动 `r25s_siege_repro.py`，
+证据 `r25s_siege_evidence.jsonl` 前段）
+
+忠实界面路径（不先 workspace/bootstrap；bootstrap 仅按任务书列名留证实测，
+200 replayed=true revision=1 幂等零改动）。第一遍 22:36:48Z
+（key=r25s-fresh-778f7877dc91）：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线双侧 | mapping-candidates 200（869ms，candidates_ready）、facts 200（779ms，**ready**）、project/open 200（796ms，**current**）、runs 200——预置台全绿 |
+| run-setup/options | 200，839ms，snapshot:ef8692acfbab4d2a9846916f（与历史 registry 指纹同源） |
+| workspace/bootstrap（留证） | 200，897ms，replayed=true revision=1 |
+| prepare-and-start | **409 `{"code":"in_flight_conflict","message":"当前已有监查正在进行，请先查看本次进度"}`，969ms** |
+| 被拒同刻后端真实状态 | mapping 200（1045ms，candidates_ready）/ facts 200（825ms，ready）/ project/open 200（828ms，current）——**预置台口径与运行门口径当场分叉** |
+| 磁盘 launch_registry | 19 条全部 completed（含 seq 19 result_available=0），无 waiting_start |
+
+### 3. 根因（两侧口径差钉到代码行）
+
+口径差本质：**接入管线侧 candidates_ready/ready/current 全部为真，运行
+启动门拒的是注册表里一条「已完成但从未发布」的遗留运行**：
+
+1. `packages/medical_monitoring/runtime/launch_registry_core_mixin.py:326-340`
+   `_find_in_flight_locked` 的 SQL 含
+   `OR (launch.run_state = 'completed' AND launch.result_available = 0)`
+   ——completed+未发布也算 in-flight（git blame 5f1a071a，2026-09-02
+   既有产品语义：单运行窗口**包含结果发布收口**，不是本轮新代码）。
+2. `launch_registry_core_mixin.py:601-604` `reserve()` 前的
+   `enforce_in_flight` 命中即抛 `in_flight_conflict` →
+   prepare-and-start 409（run_routes.py reserve 调用点）。
+3. 遗留成因：界面路径本会自动收口——
+   `frontend/src/features/medical-monitoring/MedicalMonitoringProductLoop.jsx:1060-1065`
+   轮询到 `runState=completed && publicationState=not_started` 即调
+   `api.publishResult`（幂等键 `result-publication:{token}`）；而 seq 19
+   是 R24 轮次角色的 **API 驱动**诊断运行（diag-r18-03-gate-check-002，
+   复核其 publication_state=not_started、"分析已结束，结果整理未完成"），
+   止步于发布前，无人再走收口 → 常驻项目单运行窗口被永久占用，拦住
+   后续**所有**新幂等键（与 R19 僵尸同型的「自我强化」，只是形态从
+   waiting_start 换成 completed+未发布）。
+4. R19 修复与本案正交且仍在役：本轮 global_default 在位、422 未复现。
+
+### 4. 处置（任务②，最小根因收口，非代码改动）
+
+单运行窗口语义（5f1a071a）是设计门禁而非缺陷，**不跳门、不改注册表
+状态位**；遗留运行的**设计收口路径**存在且对监查用户可达
+（`api/r7_product/publication_routes.py:122` POST
+`/runs/{public_run_token}/publication`，READ_AI_RUN 权限、按运行指纹
+幂等——与界面 publishResult 同端点同语义）。执行
+`r25s_close_leftover.py`（证据 c* 系列事件）：
+
+- 收口前双侧：GET publication 200 publication_state=**not_started**；
+  磁盘 seq 19 completed+result_available=0。
+- POST publication（幂等键 r25s-closure-diag-r18-03-002）→ 200，
+  **21,130ms → publication_state=available**。
+- 磁盘复核：seq 19 **result_available=1**（22:46:37Z）。
+- 该遗留运行自身结果可读留证：result-entry 200 →
+  rct=result-context:b04ed8f0a5af4e24855f7f1eaac26e91 →
+  overview 200，1,241,039 字节。
+
+### 5. 重验（任务③，同项目 MX循开考-CSU，两遍全新幂等键全链）
+
+**第一遍（22:47:31Z，key=r25s-fresh-641f06e0e9b9）**：options 200（822ms，
+snapshot 同源）→ bootstrap 200 replayed → prepare-and-start **200**
+（1,002ms，run:282cccabd8db2cb10ccb2bc2，registry seq 20）→ progress
+**completed**（percent=100.0，polls=1；result_available 首轮询 false，
+发布后终态 1，R20 §4 已记录的同型投影时序）→ publication **available**
+（1,205ms）→ result-entry 200（rct=result-context:979e834ff18a4589…
+）→ overview 200（16,386ms 首读，**1,241,039 字节、41 发现/16 受试者**，
+identity.project_ref=proj_user_6ef58ac151e1），链路壁钟 47s。
+
+**第二遍=重验（22:48:07Z 起，key=r25s-fresh-e55c16ceabe8）**：全绿壁钟
+16s：prepare-and-start 200（1,019ms，run:13b8e67b5487ecfefd927bd9，
+registry seq 21）→ progress completed → publication **available**
+（1,264ms）→ entry 200（rct=result-context:7fdef2e0b3374dfabf456…）→
+overview 200（1,016ms，1,241,039 字节、41 发现/16 受试者，
+chain_ok=True）。两遍与 seq 19 收口 overview 投影**逐字节一致**
+（1,241,039B，较 R24 的 1,148,653B 增加系 R24 六项修复 117657f6 改变
+投影输出，本轮三读一致佐证确定性）。
+
+终态磁盘：sequence 19/20/21 全部 completed+result_available=1、
+manifest_digest 统一 f58ccf16c4f3、**waiting_start=0**。
+
+### 6. 回归
+
+- `pytest tests/test_medical_monitoring_r7_product_router.py -k r19_siege
+  -q` → **2 passed**（1.10s）。
+- 全量：`pytest tests/test_medical_monitoring_r7_product_router.py -q` →
+  **95 passed**（45.78s）。
+- 本轮零代码改动，故无新增 pytest；上述两档证明在役代码未被本轮触碰。
+
+### 7. 遗留与边界（转台账，不属本轮墙判据）
+
+- 409 文案语义偏差：completed+未发布场景下报「当前已有监查正在进行，
+  请先查看本次进度」——实为「上一运行已完成待发布收口」，且响应不带
+  指向该运行 token 的字段，客户端无从引导用户收口（本轮靠 registry
+  磁盘行定位）。产品语义层发现，与 R20 §4 同类，转测试循环台账。
+- 观察到偶发 ~16-22s 慢调用（收口首发 publication POST 21.1s、两次
+  链路首读 overview 16.4s/冷 projects_list 22.0s；其后同端点 ~1s）——
+  疑与 R23-01 写锁/线程池家族相关的首次重计算或锁等待，未拦链路，
+  转台账观察。
+- 常驻项目现有 3 条 completed+已发布运行（seq 19 补收口的 R24 诊断、
+  seq 20/21 本轮两键）；后续轮次开考直接走「开始运行监查」即可。
+- 浏览器像素级全链回归未执行（工程验证身份以 API 驱动+状态机代码
+  核验为口径；界面路径的自动收口行为已有 Loop.jsx:1060-1065 代码
+  佐证）。
+
+留痕文件：`r25s_siege_repro.py`、`r25s_close_leftover.py`、
+`r25s_siege_evidence.jsonl`（含 409 复现、c* 收口、两遍全链）、本日志节。
+
+---
+
+## R24 攻坚·第 1 次（2026-10-07，攻坚工程师-R24-第1次）
+
+### 0. 结论先行
+
+**墙未复发：本轮独立复现两遍全链全绿，零阻断、零新修复、零重启。**
+R19 根因修复（cbb5f52e）在**当前新 build**（backend_build_id=
+api-06744bbced9d86a2；R23 攻坚时为 api-e041fb3ab9060114，期间经 R23-01
+写锁饥饿缓解 19d4359e（线程池 128 token+写锁等待 3s 快速失败）重建，且
+循环收尾停机后由 R24 隔离环境守护员 17:44-17:46 恢复 8911（pid 801）/
+5178（vite node pid 852））下亲测仍在役：代码两处都在位
+（`run_entry.py:377` ensure_builtin_global_default、`run_routes.py:166`
+reserve 前接入点，两文件最后修改 commit 即 cbb5f52e、工作树无未提交改动）、
+R19 回归 2/2 绿、全量路由套件 95/95 绿。常驻项目「MX循开考-CSU」
+（proj_user_6ef58ac151e1）以两个全新幂等键各走完 run-setup/options →
+prepare-and-start → progress completed → publication available →
+result-entry → results/{rct}/overview 可读。
+
+### 1. 环境前置（复现前，未重启任何服务）
+
+- 8911（pid 801，127.0.0.1 IPv4 监听）`/api/health` 200
+  （runtime_store integrity ok, schema v16）；`/api/runtime-readiness`
+  status=ready、backend_build_id=**api-06744bbced9d86a2**，与 5178
+  （vite node pid 852，**仅监听 [::1]:5178**——127.0.0.1 直连 exit 7
+  属该监听布局的预期，`http://[::1]:5178/` 与 `/monitoring` 均 200）
+  `runtime-build.json` expectedBackendBuildId **配对一致**
+  （frontendBuildId=web-61cf3eec89de9bcb）。本轮全程未重启。
+- 复现前磁盘基线：launch_registry 15 条全部 completed+
+  result_available=1、manifest_digest 统一 f58ccf16c4f3、
+  waiting_start=0；execution_profiles `global_default|*|1` 在位。
+
+### 2. 复现（任务①）——两遍全链（驱动 `r24s_siege_repro.py`，证据
+`r24s_siege_evidence.jsonl` 48 行、0 阻断）
+
+忠实界面路径（不先 workspace/bootstrap；bootstrap 仅按任务书列名留证实测
+——两遍均 replayed=true revision=1，幂等零改动）。
+
+**第一遍（15:51:24Z，key=r24s-fresh-3aee4195b12f）**：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线双侧 | mapping-candidates 200（736ms，candidates_ready，draft monmapdraft_73abe5c6c9561a9e95eec2056991 **v80 confirmed**，user_questions=0，60 候选）、facts 200（651ms，**ready**）、project/open 200（656ms，**current**/edit/canEdit）、runs 200——预置台与运行门无口径差 |
+| run-setup/options | 200，708ms，snapshot:ef8692acfbab4d2a9846916f（与历史 registry 指纹同源） |
+| workspace/bootstrap（留证） | 200，658ms，replayed=true revision=1 |
+| prepare-and-start | **200，794ms**，run:79277d8fbc4b53b6425f9acf（registry sequence 16 落库即 running，created→updated 1.86s） |
+| progress | 首轮询即 completed（percent=100.0，polls=1；result_available 首轮询 false→发布后终态 1，R20 §4 记录的同型投影时序，不拦链路） |
+| publication | POST 200→**available**（1003ms） |
+| result-entry | 200，rct=result-context:fc2dbb76b11c410ba69b6a1108c8cb19 |
+| results/{rct}/overview | 200，1001ms，序列化 1,148,653 字节，**15 发现/477 现行风险/去重受试者 11**，identity.project_ref=proj_user_6ef58ac151e1 |
+
+**第二遍=重验（任务③，15:51:50Z，key=r24s-fresh-ea3eaa54ff26）**：同链
+全绿 9s 壁钟：options 200（702ms）→ bootstrap 200 replayed → prepare 200
+（798ms，run:bef92bd76de41a6d66596213，registry sequence 17，
+created→updated 1.94s）→ progress completed → publication **available**
+（1013ms）→ entry 200（rct=result-context:d0d9112f268a444aaab1e24d81ddb357）
+→ overview 200（883ms，1,148,653 字节、15 发现/477 现行风险/11 受试者，
+chain_ok=True）。两遍序列化字节数逐字节一致，与 R23 新 build 绿路径口径
+（1,148,653）一致（较 R19-R22 的 1,136,740 增加系 R22 三项产品修复
+3042c74b 改变投影输出，R23 §2 已记录）。
+
+### 3. 修复（任务②）与口径差对照
+
+**无需新修复，本轮零代码改动、零重启。** 两侧口径在本轮无分叉：预置台
+（mapping confirmed v80 / facts ready / project current）与运行启动门
+（run-setup/options 200 + prepare-and-start 200）读数一致。本轮若复现
+422/卡「等待开始」，对照方案为驱动内 `backend_truth()`（mapping/facts/
+project/open 同刻快照）——已装备但未触发（0 阻断）。
+
+R19 修复在新 build 在役证明（本轮亲测）：
+
+- 代码在位：`packages/medical_monitoring/runtime/run_entry.py:377`
+  `ensure_builtin_global_default()`（仅缺失时幂等种入）；
+  `packages/medical_monitoring/api/r7_product/run_routes.py:166`
+  prepare-and-start 在 reserve 之前调用（补种失败 fail-closed 且无预约
+  落库）；两文件工作树无未提交改动、最后一次修改 commit cbb5f52e。
+- `pytest tests/test_medical_monitoring_r7_product_router.py -k r19_siege
+  -q` → **2 passed**（1.03s）。
+- 全量：`pytest tests/test_medical_monitoring_r7_product_router.py -q` →
+  **95 passed**（42.96s）。
+
+### 4. 终态与边界
+
+- 终态磁盘：sequence 1-17 全部 completed+result_available=1、
+  manifest_digest 统一 f58ccf16c4f3、**waiting_start=0**（本轮新增 16/17
+  两行，壁钟 created→updated 各约 1.9s）。基线 15 条与 R24-D 只读复验
+  读数一致；R23 攻坚（seq 13/14）后、本轮之前的 sequence 15
+  （monitoring_c83192f9…，2026-10-07T08:51Z 界面键）为 R23 轮次角色
+  所启动，非本轮。
+- 本轮结论仅覆盖「运行启动→完成→发布→可读」墙；测试循环台账升级区所列
+  fail-open 语义修正、R7-01 异步隔离、确认映射重跑公平评估，及 R21D-R24D
+  持续记录的 candidates 投影怪癖（顶层 facts_generated=False /
+  summary pending_confirmation_count=60 与权威终态不一致）均属测试循环
+  排期项，不属本攻坚墙判据。
+- 浏览器像素级全链回归未执行（工程验证身份以 API 驱动+状态机代码核验为
+  口径；R19-D/R20-D 已两轮覆盖界面路径到结果视图）。
+
+留痕文件：`r24s_siege_repro.py`、`r24s_siege_evidence.jsonl`、本日志节。
+
+---
+
 ## R23 攻坚·第 1 次（2026-10-07，攻坚工程师-R23-第1次）
 
 ### 0. 结论先行
