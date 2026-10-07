@@ -336,7 +336,7 @@ if (!state) {
   bootstrapNote = boot.note;
 }
 if ((state.baselineFailures ?? []).length === 0) {
-  const baselineRun = await world.run(PY, [
+  const baselineRun = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
     "-c",
     "import os,subprocess,sys\nos.chdir('implementation/workbench')\nr=subprocess.run([sys.executable,'-m','pytest','tests/medical_monitoring','-q','-p','no:cacheprovider'],capture_output=True,text=True)\nsys.stdout.write(r.stdout[-30000:])\nsys.stderr.write(r.stderr[-4000:])\nsys.exit(r.returncode)",
   ], { timeoutMs: 3600000 });
@@ -391,8 +391,8 @@ log("第" + round + "轮（单轮制）开run：存量未决 " + registry.filter
 
 // ===== 隔离环境门 =====
 phase("开局：隔离环境就绪门");
-const isoApiProbe = await world.run(PY, ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + ISOAPI + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
-const isoFeProbe = await world.run(PY, ["-c", "import urllib.request\nr=urllib.request.urlopen('" + ISOFE + "',timeout=10)\nprint(r.status)"]);
+const isoApiProbe = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + ISOAPI + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
+const isoFeProbe = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request\nr=urllib.request.urlopen('" + ISOFE + "',timeout=10)\nprint(r.status)"]);
 let isoOk = isoApiProbe.exitCode === 0 && isoApiProbe.stdout.includes("READY") && isoFeProbe.exitCode === 0;
 if (!isoOk) {
   await agent("隔离环境守护员-R" + round, { system: ISO_GUARD_RULE }).ask(
@@ -403,8 +403,8 @@ if (!isoOk) {
     "http://localhost:5178/runtime-build.json 的 expectedBackendBuildId 与 8911 的 backend_build_id 一致\n" +
     "4. 把时间戳与结果写入 " + LOOP + "/ISO_ENV_LOG.md",
   );
-  const reApi = await world.run(PY, ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + ISOAPI + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
-  const reFe = await world.run(PY, ["-c", "import urllib.request\nr=urllib.request.urlopen('" + ISOFE + "',timeout=10)\nprint(r.status)"]);
+  const reApi = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + ISOAPI + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
+  const reFe = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request\nr=urllib.request.urlopen('" + ISOFE + "',timeout=10)\nprint(r.status)"]);
   isoOk = reApi.exitCode === 0 && reApi.stdout.includes("READY") && reFe.exitCode === 0;
   if (!isoOk) {
     return {
@@ -607,7 +607,7 @@ if (fixTargets.length > 0) {
     const f = registry.find((x) => x.id === sk.id);
     if (f && f.status === "待修复") f.status = "搁置";
   }
-  const gate = await world.run(PY, [
+  const gate = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
     "-c",
     "import os,subprocess,sys\nos.chdir('implementation/workbench')\nr=subprocess.run([sys.executable,'-m','pytest','tests/medical_monitoring','-q','-p','no:cacheprovider'],capture_output=True,text=True)\nsys.stdout.write(r.stdout[-30000:])\nsys.stderr.write(r.stderr[-4000:])\nsys.exit(r.returncode)",
   ], { timeoutMs: 3600000 });
@@ -617,7 +617,7 @@ if (fixTargets.length > 0) {
     await fixer.ask(
       "修复引入了新的测试失败（相对基线），必须处理（修好或回滚）：\n" + newlyFailed.join("\n") + "\n失败输出尾部：\n" + gate.stdout.slice(-4000),
     );
-    const gate2 = await world.run(PY, [
+    const gate2 = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", [
       "-c",
       "import os,subprocess,sys\nos.chdir('implementation/workbench')\nr=subprocess.run([sys.executable,'-m','pytest','tests/medical_monitoring','-q','-p','no:cacheprovider'],capture_output=True,text=True)\nsys.stdout.write(r.stdout[-30000:])\nsys.stderr.write(r.stderr[-4000:])\nsys.exit(r.returncode)",
     ], { timeoutMs: 3600000 });
@@ -629,7 +629,7 @@ if (fixTargets.length > 0) {
       log("回归门二次拦截：本批修复判无效，发现退回待修复，留待复盘升级");
     }
   }
-  const postApi = await world.run(PY, ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + ISOAPI + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
+  const postApi = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + ISOAPI + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
   if (!(postApi.exitCode === 0 && postApi.stdout.includes("READY"))) {
     await agent("环境守护员-R" + round).ask(
       "修复后隔离API(8911)未就绪，请恢复：" + ISO_RESTART_API + " ；随后自检 ready:true；严禁动 8910/5177",
