@@ -4,6 +4,107 @@
 
 ---
 
+## R23 攻坚·第 1 次（2026-10-07，攻坚工程师-R23-第1次）
+
+### 0. 结论先行
+
+**墙未复发：本轮独立复现两遍全链全绿，零阻断、零新修复、零重启。**
+R19 根因修复（cbb5f52e）在**当前新 build**（expectedBackendBuildId=
+api-e041fb3ab9060114 / frontend web-1e1b51b10b4de15c；R22 时为
+api-1d25bf363b10c2a5，R22 归档后后端经重建+重启，当前 pid 13760）下
+亲测仍在役：代码两处都在位（`run_entry.py:377`
+ensure_builtin_global_default、`run_routes.py:166` reserve 前接入点）、
+R19 回归对 2/2 绿、全量路由套件 95/95 绿（R19 时的存量失败
+test_late_project_dispatchers_keep_two_actual_api_results_isolated 亦绿）。
+常驻项目「MX循开考-CSU」（proj_user_6ef58ac151e1）以两个全新幂等键各走完
+run-setup/options → prepare-and-start → progress completed → publication
+available → result-entry → results/{rct}/overview 可读。任务书背景
+「此墙自 R8 起 10 轮未破」仍系 R19/R20 攻坚前的历史口径，本轮实测不成立。
+
+### 1. 环境前置（复现前，未重启任何服务）
+
+- 8911（pid 13760，2026-10-07 10:29:52 启动）`/api/health` 200
+  （runtime_store integrity ok, schema v16）；`/api/runtime-readiness`
+  status=ready、backend_build_id=**api-e041fb3ab9060114**，与 5178
+  （pid 13827，仅监听 [::1]）`frontend/public/runtime-build.json` 的
+  expectedBackendBuildId **配对一致**。build 指纹自 R22 后变化系 R22 归档
+  后三笔 commit（3042c74b 三项产品修复、dfccdf49/ed4cbeb9 轮次归档）重建
+  所致；packages/medical_monitoring 与 services/api 全部源码 mtime 最晚
+  10:26:12，早于进程启动 10:29:52——运行进程加载的即含 R19 修复的当前
+  源码。本轮全程未重启（无修复即无重启需要）。
+- 复现前磁盘基线：launch_registry 12 条全部 completed+
+  result_available=1、manifest_digest 统一 f58ccf16c4f3、
+  waiting_start=0（sequence 12=monitoring_30ab326a，2026-10-07T05:42Z
+  界面键，亦 completed）；execution_profiles `global_default|*|1` 在位。
+
+### 2. 复现（任务①）——两遍全链（驱动 `r23s_siege_repro.py`，证据
+`r23s_siege_evidence.jsonl` 48 行、0 阻断）
+
+忠实界面路径（不先 workspace/bootstrap；bootstrap 仅按任务书列名留证实测
+——两遍均 replayed=true revision=1，幂等零改动）。
+
+**第一遍（08:43Z，key=r23s-fresh-f7b10a93062d）**：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线双侧 | mapping-candidates 200（candidates_ready，draft **confirmed**，user_questions=0）、facts 200（**ready**）、project/open 200（**current**）、runs 200——预置台与运行门无口径差 |
+| run-setup/options | 200，636ms，snapshot:ef8692ac…（与历史 registry 指纹同源） |
+| workspace/bootstrap（留证） | 200，655ms，replayed=true revision=1 |
+| prepare-and-start | **200，721ms**，run:f1230e28aa5ebd65891f468d（registry sequence 13 落库即 running，created→updated 约 1.7s） |
+| progress | 首轮询即 completed（percent=100.0，polls=1；result_available 首轮询 false→发布后终态 1，R20 §4 记录的同型投影时序，不拦链路） |
+| publication | POST 200→**available**（947ms） |
+| result-entry | 200，rct=result-context:3c5fcb8fa5514dfaaabc05d8f419a32e |
+| results/{rct}/overview | 200，805ms，序列化 1,148,653 字节，**15 发现/477 现行风险/去重受试者 11**，identity.project_ref=proj_user_6ef58ac151e1 |
+
+**第二遍=重验（任务③，08:44Z，key=r23s-fresh-ac35b9caf8b9）**：同链
+全绿 8s 壁钟：options 200 → bootstrap 200 replayed → prepare 200
+（727ms，run:9b07ae19f3983d2501c0ca38，registry sequence 14）→ progress
+completed → publication **available**（915ms）→ entry 200
+（rct=result-context:873634ced7c74b95913a8b22f8346a24）→ overview 200
+（850ms，1,148,653 字节、15 发现/477 现行风险，chain_ok=True）。
+
+**序列化字节数口径更新**：两遍均 1,148,653 字节且逐字节互相一致；较
+R19-R22 绿路径口径（1,136,740）增加，系 R22 三项产品修复（3042c74b：
+AE 医学逻辑入发现等）改变投影输出所致——发现数 15/现行风险 477/去重
+受试者 11 与 R21/R22 读数一致，本轮两遍互证为新 build 下的稳定绿路径
+口径。
+
+### 3. 修复（任务②）与口径差对照
+
+**无需新修复，本轮零代码改动、零重启。** 两侧口径在本轮无分叉：预置台
+（mapping confirmed / facts ready / project current）与运行启动门
+（run-setup/options 200 + prepare-and-start 200）读数一致。本轮若复现
+422/卡「等待开始」，对照方案为驱动内 `backend_truth()`（mapping/facts/
+project/open 同刻快照）——已装备但未触发（0 阻断）。
+
+R19 修复在新 build 在役证明（本轮亲测）：
+
+- 代码在位：`packages/medical_monitoring/runtime/run_entry.py:377`
+  `ensure_builtin_global_default()`（仅缺失时幂等种入）；
+  `packages/medical_monitoring/api/r7_product/run_routes.py:166`
+  prepare-and-start 在 reserve 之前调用（补种失败 fail-closed 且无预约
+  落库，接入点注释块在位）；两文件工作树无未提交改动、最后一次修改
+  commit cbb5f52e。
+- `pytest tests/test_medical_monitoring_r7_product_router.py -k r19_siege
+  -q` → **2 passed**（1.07s）。
+- 全量：`pytest tests/test_medical_monitoring_r7_product_router.py -q` →
+  **95 passed**（42.39s，无存量失败残留）。
+
+### 4. 终态与边界
+
+- 终态磁盘：sequence 1-14 全部 completed+result_available=1、
+  manifest_digest 统一 f58ccf16c4f3、**waiting_start=0**（本轮新增 13/14
+  两行，壁钟 created→updated 各约 1.7s）。
+- 本轮结论仅覆盖「运行启动→完成→发布→可读」墙；测试循环台账升级区所列
+  fail-open 语义修正、R7-01 异步隔离、确认映射重跑公平评估等属测试循环
+  排期项，不属本攻坚墙判据。
+- 浏览器像素级全链回归未执行（工程验证身份以 API 驱动+状态机代码核验为
+  口径；R19-D/R20-D 已两轮覆盖界面路径到结果视图）。
+
+留痕文件：`r23s_siege_repro.py`、`r23s_siege_evidence.jsonl`、本日志节。
+
+---
+
 ## R22 攻坚·第 1 次（2026-10-07，攻坚工程师-R22-第1次）
 
 ### 0. 结论先行
