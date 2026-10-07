@@ -1044,12 +1044,57 @@ def create_medical_monitoring_router(
             request_id=f"monitoring-protocol-versions-read:{project_id}",
         )
         rule_service = _require_protocol_rule_service(protocol_rule_service)
+        items = list(rule_service.repository.list_protocol_versions(project_id))
+        # R22轮（R22-01 critical）：三项前置满足（方案源已登记且内容校验
+        # 通过）但方案版本列表为空时，自动把已登记的方案docx注册为
+        # 「已确认且可解析的方案版本」——发布动作此前缺失，抽屉恒空、
+        # 事实/规则层被整体永久阻断。注册是幂等的（重复protocol_version_id
+        # 返回200 reused），仅在有可用的protocol_docx来源时触发。
+        if not items and protocol_rule_authoring_service is not None:
+            try:
+                entries = [
+                    item
+                    for item in (
+                        protocol_rule_authoring_service.source_registry
+                        .list_entries(project_id)
+                    )
+                    if item.module == "medical_monitoring"
+                    and item.source_kind == "protocol_docx"
+                    and item.parser_status == "parsed"
+                ]
+                if entries:
+                    latest = max(entries, key=lambda item: item.entry_id)
+                    validation = (
+                        protocol_rule_authoring_service.source_registry
+                        .current_content_validation(project_id, latest.entry_id)
+                    )
+                    if (
+                        validation is not None
+                        and validation.technical_status == "ready"
+                        and validation.use_status in {"allowed", "confirmed_after_warning"}
+                    ):
+                        authoring = protocol_rule_authoring_service
+                        version, _reused = authoring.register_protocol_version(
+                            project_id=project_id,
+                            source_entry_id=latest.entry_id,
+                            protocol_code=str(latest.entry_id)[:80],
+                            version_label=str(latest.public_title or latest.entry_id)[:200],
+                            version_date=str(getattr(latest, "registered_at", "") or "")[:10]
+                            or "1970-01-01",
+                            applicability_status="active",
+                            operational_effective_from=str(
+                                getattr(latest, "registered_at", "") or ""
+                            )[:10] or "1970-01-01",
+                        )
+                        items = list(
+                            rule_service.repository.list_protocol_versions(project_id)
+                        )
+            except Exception:
+                # 自愈失败不阻断读取——抽屉保持原空列表与前置链说明。
+                pass
         return {
             "project_id": project_id,
-            "items": [
-                item.public_dict()
-                for item in rule_service.repository.list_protocol_versions(project_id)
-            ],
+            "items": [item.public_dict() for item in items],
         }
 
     @router.get("/protocol-versions/{protocol_version_id}/facts")

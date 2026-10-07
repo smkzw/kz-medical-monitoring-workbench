@@ -143,6 +143,8 @@ export function monitoringJourneyDrawerSections({
     // R19轮（R19-03）：分级依据同屏展示——「高」从哪来（源记录载明/
     // 系统推定/严重度未知）可查，两级矛盾时用户可据此判断。
     severityBasis: clean(risk?.severityBasis) || "分级依据待确认",
+    // R22轮（R22-03）：AE源记录医学逻辑文字（严重度/关系/转归/SAE）。
+    medicalNote: clean(risk?.medicalNote) || clean(risk?.medical_note) || clean(row?.medical_note) || "",
     change: clean(row?.change_text) || fallback.change,
     date: date || fallback.date,
     beforeAfter: beforeAfter.text || fallback.beforeAfter,

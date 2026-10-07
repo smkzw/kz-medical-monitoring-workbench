@@ -144,6 +144,11 @@ def _risk_payload(
         "authority_receipt_ref": receipt_ref,
         "evidence_summary": evidence_summary,
     }
+    # R22轮（R22-03）：AE源记录医学逻辑文字入卡——高风险依据可核实，
+    # SAE漏报质疑模式（3级+肯定有关+持续未愈+未报SAE）显式呈现。
+    medical_note = str(getattr(risk, "medical_note", "") or "").strip()
+    if medical_note:
+        result["medical_note"] = medical_note
     if risk.risk_key == "s7-risk-key-ae-06021":
         result["analysis_disagreement"] = {
             "status_zh": "分析意见有分歧，暂不作为最终分析结论",

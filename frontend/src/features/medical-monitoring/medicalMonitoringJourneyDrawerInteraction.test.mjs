@@ -129,13 +129,13 @@ passed += 4;
   );
   check(fallbackSections.sourceEnabled === false, "fallback source entry is disabled");
   const sectionKeys = Object.keys(fallbackSections).filter((key) => key !== "sourceEnabled");
-  const expectedOrder = ["title", "eventCategory", "riskLevel", "severityBasis", "change", "date", "beforeAfter", "relatedRecords", "queryDraft", "sourceText"];
+  const expectedOrder = ["title", "eventCategory", "riskLevel", "severityBasis", "medicalNote", "change", "date", "beforeAfter", "relatedRecords", "queryDraft", "sourceText"];
   check(
     JSON.stringify(sectionKeys) === JSON.stringify(expectedOrder),
     "model fields follow the frozen section order",
   );
   check(
-    JSON.stringify(MONITORING_JOURNEY_DRAWER_SECTION_ORDER) === JSON.stringify(["title", "event_category", "risk_level", "severity_basis", "change", "date", "before_after", "related_records", "query_draft", "source"]),
+    JSON.stringify(MONITORING_JOURNEY_DRAWER_SECTION_ORDER) === JSON.stringify(["title", "event_category", "risk_level", "severity_basis", "medical_note", "change", "date", "before_after", "related_records", "query_draft", "source"]),
     "frozen section order is the contract order",
   );
 }

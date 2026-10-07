@@ -51,6 +51,7 @@ export const MONITORING_JOURNEY_DRAWER_SECTION_ORDER = Object.freeze([
   "event_category",
   "risk_level",
   "severity_basis",
+  "medical_note",
   "change",
   "date",
   "before_after",
