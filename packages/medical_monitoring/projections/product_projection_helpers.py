@@ -206,6 +206,40 @@ def _count_indicator(
     })
 
 
+def _value_indicator(
+    indicator_ref: str,
+    label: str,
+    records: Sequence[Any],
+    receipt_ref: str,
+) -> dict[str, Any]:
+    """R24轮（R24-06）：量表/检验数值序列指标（非计数）。
+
+    点值直接取事件携带的 measure_value（事实层从源行数值列解析），
+    不做任何推断；日期缺失的点保留 date=None 并以记录序（周次升序
+    展开）为次序，前端按序绘制。
+    """
+
+    points = []
+    for index, item in enumerate(records, start=1):
+        points.append({
+            "point_ref": f"{indicator_ref}:point:{index:03d}",
+            "date": _iso(item.start_date),
+            "date_state": item.date_state,
+            "value": item.measure_value,
+            "record_refs": [item.event_ref],
+            "source_locator_refs": sorted(item.source_locator_refs),
+            "authority_receipt_ref": receipt_ref,
+        })
+    return _with_content_hash({
+        "indicator_ref": indicator_ref,
+        "label": label,
+        "unit": "分",
+        "value_kind": "scale_measure_value",
+        "points": points,
+        "authority_receipt_ref": receipt_ref,
+    })
+
+
 def _indicator_payloads(
     packet: R5AuthorityPacket,
     *,
@@ -242,6 +276,22 @@ def _indicator_payloads(
             date_state_getter=lambda item: event_by_ref.get(item.event_ref).date_state if item.event_ref and event_by_ref.get(item.event_ref) else item.date_state,
             ref_getter=lambda item: item.risk_instance_ref,
             source_refs_getter=lambda item: item.source_locator_refs,
+            receipt_ref=receipt_ref,
+        ))
+    # R24轮（R24-06）：量表数值序列（UAS7等）——按 measure_label 分组，
+    # 每组一条指标。此前指标页只有计数柱图，项目申明的UAS7趋势零产出。
+    measure_groups: dict[str, list[Any]] = {}
+    for item in events:
+        if item.measure_value is None or not str(item.measure_label or "").strip():
+            continue
+        measure_groups.setdefault(str(item.measure_label).strip(), []).append(item)
+    for position, (measure_label, items) in enumerate(
+        sorted(measure_groups.items()), start=1
+    ):
+        indicators.append(_value_indicator(
+            f"r5-indicator-scale-value-{position:02d}",
+            measure_label,
+            items,
             receipt_ref=receipt_ref,
         ))
     return indicators
@@ -589,6 +639,10 @@ def _event_payload(event: R5EventRecord) -> dict[str, Any]:
         "label_zh": event.label_zh,
         "encoding": dict(DOMAIN_ENCODING[event.domain]),
         "risk_overlay_shape": "double_chevron_badge",
+        # R24轮（R24-06）：量表数值事件的测量值随事件透传（时间轴/详情
+        # 可直接读数，不必解析label）。
+        "measure_value": event.measure_value,
+        "measure_label": event.measure_label,
     }
 
 

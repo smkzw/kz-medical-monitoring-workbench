@@ -426,8 +426,12 @@ def create_medical_monitoring_r7_product_router(
     admission_fact_materializer: Any = None,
     real_setup_inputs: Optional[Callable[[str], Any]] = None,
     audit_ledger_factory: Optional[Callable[..., Any]] = None,
-    ensure_source_ready: Optional[Callable[..., None]] = None,
+    ensure_source_ready: Optional[Callable[[str], None]] = None,
     source_block_message: Optional[Callable[[str], str]] = None,
+    # R24轮（R24-05）：发布成功后的聚合风险快照桥（总看板/收件箱数据源）。
+    risk_snapshot_recorder: Any = None,
+    # R24轮（R18-03收尾）：fail-open语义修正——未确认映射的启动阻断门。
+    mapping_confirmation_gate: Any = None,
 ) -> APIRouter:
     """Create the project-scoped R7 product router; no workspace I/O here."""
     # Publication never synthesizes authority.  A caller must inject one
@@ -910,6 +914,7 @@ def create_medical_monitoring_r7_product_router(
         monitoring_action=MonitoringAction,
         ensure_source_ready=ensure_source_ready,
         source_block_message=source_block_message,
+        mapping_confirmation_gate=mapping_confirmation_gate,
     )
     register_run_launch_routes(router, run_route_context)
 
@@ -946,6 +951,7 @@ def create_medical_monitoring_r7_product_router(
             lambda *args, **kwargs: _read_publication_gate(*args, **kwargs)
         ),
         monitoring_action=MonitoringAction,
+        risk_snapshot_recorder=risk_snapshot_recorder,
     )
     register_publication_routes(router, publication_route_context)
     register_execution_routes(router, run_route_context)

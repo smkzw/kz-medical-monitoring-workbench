@@ -1407,6 +1407,35 @@ class MonitoringMappingDraftRepository:
             )
         return self._draft_from_row(row, field_sources=field_sources)
 
+    def latest_draft_for_project(
+        self,
+        project_id: str,
+    ) -> Optional[MonitoringMappingDraft]:
+        """R24轮（R18-03收尾）：项目最新一条映射草稿（跨attempt）。
+
+        fail-open语义修正的判据源——运行启动前核对最近一次字段映射
+        是否已确认：重新导入数据产生的新attempt草稿未确认时，旧的
+        确认不再覆盖新数据，启动必须阻断。
+        """
+
+        project_id = _require_safe_identifier(project_id, "project_id")
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM monitoring_mapping_drafts
+                WHERE project_id = ?
+                ORDER BY updated_at DESC, draft_id DESC
+                LIMIT 1
+                """,
+                (project_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            field_sources = self._effective_field_sources(
+                connection, project_id, row["draft_id"]
+            )
+        return self._draft_from_row(row, field_sources=field_sources)
+
     def edit_field(
         self,
         project_id: str,

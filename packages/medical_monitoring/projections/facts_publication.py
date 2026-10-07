@@ -123,6 +123,10 @@ _AE_SEV_ZH = {
 _AE_GRADE_RE = re.compile(r"(?:^[Gg]?(\d+)\s*级?$)")
 _AE_SEVERITY_BY_GRADE = {1: "low", 2: "medium", 3: "high", 4: "critical", 5: "critical"}
 
+# R24轮（R22-06）：SV失约状态词表——失约访视是方案执行风险（特殊关注），
+# 且必须与当日给药记录交叉核对（失约却给药=执行矛盾）。
+_MISSED_VISIT_STATES = {"失约", "未访视", "missed", "no_show", "not_done"}
+
 
 def _is_roster_form_table(rows: Sequence[dict[str, Any]]) -> bool:
     """Generic roster/form-page exclusion.
@@ -154,7 +158,10 @@ def _is_roster_form_table(rows: Sequence[dict[str, Any]]) -> bool:
         for c in columns
     )
     has_scale = any(
-        _SCALE_ITEM_RE.match(c) or _SCALE_MEAN_RE.match(c) for c in columns
+        _SCALE_ITEM_RE.match(c)
+        or _SCALE_MEAN_RE.match(c)
+        or _SCALE_WEEK_RE.match(c)
+        for c in columns
     )
     return not (clinical_date or has_term or has_scale)
 
@@ -191,6 +198,7 @@ _TABLE_LABEL_ZH = {
     "PK": "药代采样",
     "RT": "RPR检测",
     "USV": "尿酸检测",
+    "UAS": "UAS7量表",
     "UNS": "其他检查",
     "MO": "胸片影像",
     "PE": "体格检查",
@@ -283,6 +291,10 @@ _DOMAIN_COLUMN_SIGNATURES: tuple[tuple[tuple[str, ...], tuple[str, str]], ...] =
 # 量表列模式：NNNNQ1/DLQIQ1类条目列、NNNNMEAN/NRSMEAN类均值列、*TSCOR/*SCOR总分列
 _SCALE_ITEM_RE = re.compile(r"^[A-Z]{2,6}(?:Q|SC)[0-9]{1,3}$")
 _SCALE_MEAN_RE = re.compile(r"^[A-Z]{2,6}MEAN$|^[A-Z]{2,6}TSCOR$|^[A-Z]{2,6}SCORE$|^[A-Z]{2,6}TS$")
+# R24轮（R24-06）：访视周分值列（UASW2/UASW4/UASW8/UASW12）——量表按
+# 访视周分列记录总分。此前不匹配任何量表模式，UAS7整表被误判为名册
+# 表排除，指标趋势页永远只有「事件记录数」计数柱图。
+_SCALE_WEEK_RE = re.compile(r"^([A-Z]{2,8})W([0-9]{1,2})$")
 
 
 def _infer_domain_by_columns(
@@ -305,7 +317,8 @@ def _infer_domain_by_columns(
     # 量表/疗效评分：多个条目列或总分/均值列（SCORAD/DLQI/NRS/PROMIS等形态）
     scale_items = [c for c in columns if _SCALE_ITEM_RE.match(c)]
     scale_scores = [c for c in columns if _SCALE_MEAN_RE.match(c)]
-    if len(scale_items) >= 2 or scale_scores:
+    scale_weeks = [c for c in columns if _SCALE_WEEK_RE.match(c)]
+    if len(scale_items) >= 2 or scale_scores or len(scale_weeks) >= 2:
         return ("symptom_efficacy", "scale")
     return ("uncategorized", "unclassified")
 
@@ -637,7 +650,14 @@ class FactsPublicationAuthorityProvider:
                 )
                 entry["subjects"].add(f"subject-{subj}")
 
+        _locator_cache: dict[tuple[str, int], R5SourceRecord] = {}
+
         def _locator(table: str, index: int) -> R5SourceRecord:
+            # R24轮（R24-06）：同一行可能派生多个量表事件（按访视周分值
+            # 列展开），按(table,index)幂等——重复引用共享同一行定位符。
+            cached = _locator_cache.get((table, index))
+            if cached is not None:
+                return cached
             entry = table_entries[table]
             row = domains[table][index]
             ref = f"loc-{table}-{index:06d}"
@@ -671,6 +691,7 @@ class FactsPublicationAuthorityProvider:
                 excerpt=excerpt,
             )
             sources.append(record)
+            _locator_cache[(table, index)] = record
             return record
 
         def _add_event(
@@ -685,6 +706,11 @@ class FactsPublicationAuthorityProvider:
             severity_hint: str = "low",
             end_raw: Any = None,
             record_id: str = "",
+            event_suffix: str = "",
+            measure_value: float | None = None,
+            measure_label: str = "",
+            with_risk: bool = True,
+            note_override: str = "",
         ) -> R5EventRecord | None:
             subj_ref = f"subject-{subj}"
             site_ref = subject_site.get(subj, "site-unknown")
@@ -701,7 +727,7 @@ class FactsPublicationAuthorityProvider:
                 else None
             )
             record = R5EventRecord(
-                event_ref=f"event-{table}-{index:06d}",
+                event_ref=f"event-{table}-{index:06d}{event_suffix}",
                 subject_ref=subj_ref,
                 site_ref=site_ref,
                 spine_ref=spine,
@@ -711,10 +737,19 @@ class FactsPublicationAuthorityProvider:
                 start_date=_parse_date(start_raw) if state == "exact" else None,
                 end_date=end_date,
                 visit_ref=None,
-                risk_anchor_refs=(),
+                # R24轮（R24-04）：本方法对每条事件同步落一条风险记录且
+                # risk_anchor_ref=event_ref（见下方risks.append）。此前事件侧
+                # risk_anchor_refs恒为空，前端从事件详情找不到关联风险——
+                # drawer的risk_instance_ref/source_locator_ref失去来源，
+                # 证据链『查看来源证据』永远disabled（『原始记录位置待确认』），
+                # 分级依据/医学依据也随风险上下文一并丢失。事件锚定自身
+                # 对应的风险锚后，事件详情即可回溯风险与原始记录行。
+                risk_anchor_refs=(f"event-{table}-{index:06d}{event_suffix}",),
                 source_locator_refs=(_locator(table, index).locator_ref,),
                 label_zh=label[:60] or _SUBTYPE_LABEL_ZH.get(subtype, subtype),
                 source_record_id=record_id,
+                measure_value=measure_value,
+                measure_label=measure_label,
             )
             events.append(record)
             # R24V2-B02（收尾）：每条事件仍保留风险锚点行（产品合同要求
@@ -766,27 +801,35 @@ class FactsPublicationAuthorityProvider:
             else:
                 severity = severity_hint
                 severity_source = "inferred"
-            risks.append(
-                R5RiskRecord(
-                    medical_note=ae_medical_note if domain == "ae" else "",
-                    risk_ref=f"risk-{table}-{index:06d}",
-                    risk_instance_ref=f"riski-{table}-{index:06d}",
-                    risk_key=f"{domain}:{table}:{index}",
-                    site_ref=site_ref,
-                    subject_ref=subj_ref,
-                    spine_ref=spine,
-                    domain=domain,
-                    severity=severity,
-                    risk_type_zh=_risk_type_zh(domain, subtype),
-                    date_state=state,
-                    event_ref=record.event_ref,
-                    visit_ref=None,
-                    risk_anchor_ref=record.event_ref,
-                    source_locator_refs=record.source_locator_refs,
-                    change_kind="initial_current",
-                    severity_source=severity_source,
+            # R24轮（R24-06）：量表周分值事件（with_risk=False）不落风险行
+            # ——评分是测量事实而非监查发现，逐周分数自动成风险会制造
+            # 大量低风险噪声并稀释真实风险信号。事件仍进时间轴与指标。
+            if with_risk:
+                risks.append(
+                    R5RiskRecord(
+                        medical_note=(
+                            ae_medical_note
+                            if domain == "ae"
+                            else note_override
+                        ),
+                        risk_ref=f"risk-{table}-{index:06d}",
+                        risk_instance_ref=f"riski-{table}-{index:06d}",
+                        risk_key=f"{domain}:{table}:{index}",
+                        site_ref=site_ref,
+                        subject_ref=subj_ref,
+                        spine_ref=spine,
+                        domain=domain,
+                        severity=severity,
+                        risk_type_zh=_risk_type_zh(domain, subtype),
+                        date_state=state,
+                        event_ref=record.event_ref,
+                        visit_ref=None,
+                        risk_anchor_ref=record.event_ref,
+                        source_locator_refs=record.source_locator_refs,
+                        change_kind="initial_current",
+                        severity_source=severity_source,
+                    )
                 )
-            )
             return record
 
         # 访视（SV 为权威访视记录表；VS/HW/EG 补充覆盖）
@@ -820,6 +863,17 @@ class FactsPublicationAuthorityProvider:
                 )
 
         # 八轨事件
+        # R24轮（R22-06）：试验药给药日索引（受试者×日期）——失约访视
+        # 与当日给药的矛盾交叉核对数据源。
+        ex_dosing_days: set[tuple[str, str]] = set()
+        for ex_table, ex_rows in domains.items():
+            if not ex_table.upper().startswith("EX"):
+                continue
+            for ex_row in ex_rows:
+                ex_subj = _clean(ex_row.get("SUBJID"))
+                ex_day = _clean(ex_row.get("EXDAT"))
+                if ex_subj and ex_day:
+                    ex_dosing_days.add((ex_subj, ex_day))
         for table, rows in domains.items():
             if table in _EXCLUDED_TABLES or _is_roster_form_table(rows):
                 continue
@@ -829,9 +883,80 @@ class FactsPublicationAuthorityProvider:
             date_keys = sorted(raw_date_keys, key=lambda k: (1 if "END" in k.upper() else 0, raw_date_keys.index(k)))
             end_keys = [k for k in raw_date_keys if "END" in k.upper()]
             term_keys = _term_keys_for(table, list(rows[0].keys())) if rows else []
+            # R24轮（R24-06）：量表周分值列（UASW2/UASW4/…）——每列是一次
+            # 访视周的总分评估，展开为独立数值事件（measure_value），供
+            # 指标趋势页构建量表数值序列（此前UAS表整表被名册误判排除，
+            # UAS7趋势零产出）。周次升序展开。
+            week_columns: list[tuple[int, str]] = []
+            if subtype == "scale" and rows:
+                for column in rows[0].keys():
+                    matched = _SCALE_WEEK_RE.match(column)
+                    if matched:
+                        week_columns.append((int(matched.group(2)), column))
+                week_columns.sort()
             for index, row in enumerate(rows):
                 subj = _clean(row.get("SUBJID"))
                 if not subj or subj in _UK_TOKENS:
+                    continue
+                if week_columns:
+                    scale_name = _TABLE_LABEL_ZH.get(table) or "量表评估"
+                    emitted = False
+                    for week, column in week_columns:
+                        raw_value = _clean(row.get(column))
+                        if not raw_value:
+                            continue
+                        try:
+                            value = float(raw_value)
+                        except ValueError:
+                            continue
+                        _add_event(
+                            table=table,
+                            index=index,
+                            subj=subj,
+                            subtype=subtype,
+                            domain=domain,
+                            start_raw=None,
+                            label=f"{scale_name}·第{week}周={value:g}",
+                            event_suffix=f"-{column}",
+                            measure_value=value,
+                            measure_label=f"{scale_name}（第{week}周）",
+                            record_id=_clean(row.get("Block顺序号")),
+                            with_risk=False,
+                        )
+                        emitted = True
+                    if emitted:
+                        continue
+                # R24轮（R22-06）：失约访视（SVSTATE）——此前状态被吞掉
+                # （label恒「访视记录·访视名」，severity恒低），特殊关注
+                # 零产出。失约=方案执行风险（中等级），当日存在给药记录
+                # 时升级为执行矛盾提示。
+                if table == "SV" and _clean(row.get("SVSTATE")) in _MISSED_VISIT_STATES:
+                    visit_name = _clean(row.get("VISIT"))
+                    visit_day = _clean(row.get("VISDAT"))
+                    note = (
+                        "访视记录载明失约（SVSTATE=失约），方案执行风险待医学复核。"
+                    )
+                    if visit_day and (subj, visit_day) in ex_dosing_days:
+                        note = (
+                            f"访视记录载明失约（SVSTATE=失约），但当日"
+                            f"（{visit_day}）存在试验药给药记录——失约访视与"
+                            "给药执行矛盾，请核查给药依据与访视状态。"
+                        )
+                    missed_label = (
+                        f"访视失约·{visit_name}" if visit_name else "访视失约"
+                    )
+                    _add_event(
+                        table=table,
+                        index=index,
+                        subj=subj,
+                        subtype=subtype,
+                        domain=domain,
+                        start_raw=row.get("VISDAT"),
+                        label=missed_label,
+                        severity_hint="medium",
+                        note_override=note,
+                        record_id=_clean(row.get("Block顺序号")),
+                    )
                     continue
                 start_raw = next((row[k] for k in date_keys if _clean(row.get(k))), None)
                 end_raw = next((row[k] for k in end_keys if _clean(row.get(k))), None) if end_keys else None

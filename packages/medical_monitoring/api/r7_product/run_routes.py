@@ -67,6 +67,11 @@ class RunRouteContext:
     # R8轮（R8-02）：非抛错的就绪查询——历史中存量waiting_start僵尸
     # 运行据此在行内暴露阻断原因（R5-03前置链文案）。
     source_block_message: Any = None
+    # R24轮（R18-03收尾）：fail-open语义修正——运行启动前核对最近一次
+    # 字段映射是否已确认（R19实测：facts旁路存在时未确认映射照常执行，
+    # 以未确认映射产出医学结论比停滞责任更大）。未确认→409阻断。
+    # 返回None=放行；返回dict=阻断（code/message透传给前端向导）。
+    mapping_confirmation_gate: Any = None
 
 
 def register_run_launch_routes(router: APIRouter, context: RunRouteContext) -> None:
@@ -114,6 +119,18 @@ def register_run_launch_routes(router: APIRouter, context: RunRouteContext) -> N
         # →来源激活），向导把阻断原因如实呈现给用户。
         if ensure_source_ready is not None:
             ensure_source_ready(canonical, operation="prepare-and-start")
+        # R24轮（R18-03收尾）：fail-open语义修正——最近一次字段映射
+        # 未确认（含从未进入第3步、或重新导入后新attempt草稿待确认）
+        # 时阻断启动。判据与横幅/运行设置同源（latest draft status），
+        # 不再有「横幅消失即可运行」与「未确认仍执行」的分裂。
+        if context.mapping_confirmation_gate is not None:
+            blocked = context.mapping_confirmation_gate(canonical)
+            if blocked is not None:
+                return _error_response(
+                    409,
+                    str(blocked.get("code") or "mapping_confirmation_required"),
+                    str(blocked.get("message") or ""),
+                )
 
         body = await _read_json_object(request)
         if isinstance(body, JSONResponse):

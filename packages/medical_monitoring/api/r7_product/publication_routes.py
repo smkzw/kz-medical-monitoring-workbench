@@ -86,6 +86,9 @@ class PublicationRouteContext:
     build_r5_publication_packet: Any
     read_publication_gate: Any
     monitoring_action: Any
+    # R24轮（R24-05）：发布成功后把packet风险桥接写入聚合风险快照
+    # （总看板/收件箱数据源）。可选注入；失败只留痕，不改变发布结果。
+    risk_snapshot_recorder: Any = None
 
 
 def register_publication_routes(router: APIRouter, context: PublicationRouteContext) -> None:
@@ -542,6 +545,24 @@ def register_publication_routes(router: APIRouter, context: PublicationRouteCont
                     in {"store_closed", "publication_cas_conflict"},
                 )
                 return _publication_failure_response(publication)
+            # R24轮（R24-05）：发布已确认成功——把packet风险桥接写入聚合
+            # 风险快照（medical_risk_repository），让总看板风险摘要/模块
+            # 开放风险数/统一工作收件箱与结果视图同源。桥接失败不改变
+            # 发布结果本身，只把诊断留在stderr供排障。
+            if context.risk_snapshot_recorder is not None:
+                try:
+                    context.risk_snapshot_recorder(
+                        project_id=canonical,
+                        run_id=launch.run_id,
+                        packet=packet,
+                        created_at=getattr(launch, "created_at", None),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    print(
+                        "[product-publication] risk snapshot bridge failed: "
+                        f"{type(exc).__name__}: {exc}",
+                        flush=True,
+                    )
             return _publication_projection(
                 launch.public_run_token,
                 publication.publication_state,

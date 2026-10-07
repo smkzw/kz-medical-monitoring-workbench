@@ -36,6 +36,41 @@ RUX_PROJECT_ID = "proj_rux_03_002"
 RUX_P0_SUBJECT_IDS = ("S01017", "S01003", "S03040")
 
 
+class _PublishedSnapshotAdapter:
+    """R24轮（R24-05）：r7产品发布链项目的收件箱适配器。
+
+    发布链把 packet 风险写入聚合风险快照后，收件箱需要等价的『当前版本』
+    三元组做一致性校验。产品链的当前版本就是最新已发布快照本身——三个
+    版本方法都从同一持久化快照读取，校验自洽且永不展示过期快照（新发布
+    覆盖 current_snapshot 后版本随之变化）。
+    """
+
+    def __init__(self, risk_repository: Any, project_id: str) -> None:
+        self._risk_repository = risk_repository
+        self._project_id = project_id
+
+    def _snapshot(self) -> Any:
+        return self._risk_repository.current_snapshot(self._project_id)
+
+    def source_revision(self) -> str:
+        try:
+            return str(self._snapshot().source_revision)
+        except KeyError:
+            return ""
+
+    def risk_profile_revision(self) -> str:
+        try:
+            return str(self._snapshot().rule_profile_revision)
+        except KeyError:
+            return ""
+
+    def risk_engine_version(self) -> str:
+        try:
+            return str(self._snapshot().engine_version)
+        except KeyError:
+            return ""
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -640,7 +675,25 @@ class WorkbenchInboxService:
             return adapter
         if project_id == RUX_PROJECT_ID and self.rux_monitoring_service is not None:
             return self.rux_monitoring_service
+        # R24轮（R24-05）：r7产品发布链项目（用户创建）没有静态注册的
+        # adapter，收件箱恒空——发布链写入的聚合风险快照从未进入统一
+        # 工作收件箱。有快照即返回发布快照适配器（版本三元组与快照同源）。
+        if self.medical_risk_repository is not None and self._is_product_publication_project(project_id):
+            try:
+                self.medical_risk_repository.current_snapshot(project_id)
+            except KeyError:
+                return None
+            return _PublishedSnapshotAdapter(self.medical_risk_repository, project_id)
         return None
+
+    def _is_product_publication_project(self, project_id: str) -> bool:
+        manifest_service = getattr(self, "project_source_manifest_service", None)
+        if manifest_service is None:
+            return False
+        try:
+            return bool(manifest_service.is_user_created_project(project_id))
+        except Exception:  # noqa: BLE001
+            return False
 
     def _monitoring_risk_items(self, project_id: str) -> List[WorkbenchItem]:
         adapter = self._monitoring_adapter(project_id)

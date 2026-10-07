@@ -227,6 +227,11 @@ class R5EventRecord:
     # 原始记录号（如listing的Block顺序号）：与源位置分离的逻辑记录身份，
     # 重排/增量下跨表引用（CM的CMAENO/CMMHNO）不漂移。空串=源无此列。
     source_record_id: str = ""
+    # R24轮（R24-06）：量表/检验数值事件的测量值与测量名（如
+    # UAS7·W2=17）。None=非数值事件（现有事件全部如此，兼容不破坏）。
+    # 数值序列指标（指标趋势页的量表曲线）从该字段构建。
+    measure_value: Optional[float] = None
+    measure_label: str = ""
 
     def __post_init__(self) -> None:
         for name in ("event_ref", "subject_ref", "site_ref", "spine_ref", "label_zh"):

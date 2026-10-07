@@ -439,6 +439,11 @@ function normalizeRisk(value = {}, domainRegistry = new Map()) {
     sourceLocatorRef: clean(value.source_locator_ref || value.source_locator_refs?.[0]),
     evidenceSummary: value.evidence_summary || null,
     analysisDisagreement: value.analysis_disagreement || null,
+    // R24轮（R24-04）：后端R19-03/R22-03已下发severity_source_zh与
+    // medical_note，但此处未映射——事件详情面板的「分级依据」「医学依据」
+    // 恒显示待确认/为空，高风险结论在界面内无法核实。透传给drawer。
+    severityBasis: clean(value.severity_source_zh),
+    medicalNote: clean(value.medical_note),
     riskStatus: "confirmed",
   };
 }

@@ -405,3 +405,29 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 修复：①线程池扩容40→128 token（写锁等待者各占一个token至wait超时，叠加轮询曾耗尽默认池→整站假死8分50秒）；②写锁等待上限30s→3s（拿不到快速失败503，前端重试/提示兜底；长任务走异步队列不持锁）。
 - 自检：8911 ready:true（build api-06744bbced9d86a2）；5178=200；指纹配对一致。
 - ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
+2026-10-07 17:18 循环收尾：隔离测试环境已停止（运行时目录保留取证）
+
+## 2026-10-07 17:44-17:46（R24·隔离环境守护员：循环收尾后按ask恢复隔离对 8911+5178）
+
+- 操作者：隔离环境守护员-R24。背景：ask 报 API/前端探针双 exit=1；本员 17:44:41 实测 lsof 8911/5178 均无监听，与 17:18「循环收尾：隔离测试环境已停止（运行时目录保留取证）」条目吻合。恢复前核验 `runs/tester_loop_iso_20260928/runtime` 目录在盘（71 项，非整目录丢失），`~/.config/cms-medical-workbench/ai-runtime.env` 在位，具备恢复条件。
+- API 重启（严格按 ask 给定命令）：kill 仅限 `lsof -ti:8911`，uvicorn 以 WORKBENCH_RUNTIME_DIR=…/tester_loop_iso_20260928/runtime、WORKBENCH_LOCAL_SINGLE_USER=1、WORKBENCH_AI_RUNTIME=api、WORKBENCH_MONITORING_AI_PARALLELISM=2 启动 → pid 801，3 秒存活，/tmp/mm_api_8911.log 无告警输出。
+- vite 重启（严格按 ask 给定命令）：kill 仅限 `lsof -ti:5178`，VITE_API_PROXY_TARGET=http://127.0.0.1:8911 启动 → npx pid 821 / vite node pid 852（[::1]:5178），VITE v6.4.2 ready in 188ms，/tmp/mm_vite_5178.log 仅 App.jsx 超 500KB 的 BABEL 样式降级提示（非错误）。
+- 自检（重启后等满 15 秒，17:45:44 实测）三条件全过：① http://127.0.0.1:8911/api/runtime-readiness → http 200，ready:true，backend_build_id=api-06744bbced9d86a2，runtime_schema_version=16，runtime_store_ready:true，independent_ai ready/configured=true（zhipu-coding-plan / glm-5.3-flash）；② http://localhost:5178/monitoring → http 200；③ http://localhost:5178/runtime-build.json expectedBackendBuildId=api-06744bbced9d86a2 与 8911 backend_build_id 完全一致（frontendBuildId=web-61cf3eec89de9bcb），且与 R23 轮次留痕 build 一致。
+- 纪律：本轮零业务管道推进、零项目数据触碰；8910/5177 全程仅只读 lsof 查看（沿 R11 起本就无监听），未 kill 未重启未触碰。一次恢复即成，未用第二次尝试。
+
+## 2026-10-07（R24·开考预置守护员-D位：常驻项目 MX循开考-CSU 存量复验，零重复预置）
+
+- 操作者：开考预置守护员-R24（D位）。动作：查存量 → 三条件全过 → 直接复用。**零新建、零 AI 作业、零代码修复、零重启、零启动运行**。
+- 存量检查现场实测（ask 步骤0）：`GET /api/projects` → 仅 1 项目 proj_user_6ef58ac151e1 / MX循开考-CSU / active（modules 含 medical_monitoring）；mapping-candidates → confirmation_status=confirmed / draft monmapdraft_73abe5c6c9561a9e95eec2056991 v80 status=confirmed / user_questions=0 / 60候选；facts → state=ready（10表/591行/3038值全核验，message「可用于监查的数据已生成，可以开始监查。」）；project/open → current/complete/openMode=edit/canView/canEdit；study-documents ready=true；run-setup/options 200。
+- 只读探障：main.py:4936+4946 marker 修复在位（import SCHEMA_VERSION 常量，种子 marker 取该值；contracts.py:54=V5）；本项目 workspace launch_registry Python sqlite3 只读直查 r7_launch_registry_meta → ('schema_version','mm-r7-w01r26-launch-registry-v5')；8911 readiness ready:true（backend_build_id=api-06744bbced9d86a2，runtime_schema_version=16）与 5178 [::1] runtime-build.json expectedBackendBuildId 配对一致；runs 15 条全部 completed（R23D 后新增 3 条为 R23 开考/攻坚角色所启动，非本轮）；8910/5177 lsof 均 0 监听（沿 R11 起，未触碰）。
+- 环境背景（非本轮动作）：本轮前 build 已由 R23-01 修复员（线程池扩容+写锁上限修复）与 R24 隔离环境守护员（循环收尾停机后恢复 8911+5178）更替为 api-06744bbced9d86a2；常驻项目跨停机恢复周期存活，draft v80 / facts 3038 值零漂移。
+- 观察如实记录：candidates 投影怪癖沿 R21D-R23D 持续（顶层 facts_generated=False / summary pending_confirmation_count=60、user_question_count=1，与权威终态不一致），提请修复员核投影字段语义。
+- 留痕：`R5_SEEDED_PROJECT.md` R24D 节。本轮无新驱动脚本/状态文件（复用即结论）。
+
+## 2026-10-07 23:30–23:55（测试循环R24·修复员：隔离环境 API+vite 双重启）
+
+- 操作者：修复员（R24 待修清单 R24-03/04/05/06、R18-03、R22-06）。动作：API 8911 与 vite 5178 均重启（指纹配对要求）；8910/5177 未触碰（lsof 确认无监听）。
+- 重启命令：API `WORKBENCH_RUNTIME_DIR=runs/tester_loop_iso_20260928/runtime WORKBENCH_LOCAL_SINGLE_USER=1 WORKBENCH_AI_RUNTIME=api WORKBENCH_MONITORING_AI_PARALLELISM=2 .venv/bin/python -m uvicorn services.api.app.main:app --host 127.0.0.1 --port 8911`；vite `VITE_API_PROXY_TARGET=http://127.0.0.1:8911 npx vite --port 5178 --strictPort`。
+- 自检（重启后实测）：8911 `/api/runtime-readiness` ready:true（backend_build_id=api-157c89f897d07331，较此前 api-06744bbced9d86a2 更替，源为本轮代码修复）；5178 `/monitoring` HTTP 200；5178 `/runtime-build.json` expectedBackendBuildId=api-157c89f897d07331 与 8911 一致（配对通过）。
+- 诊断性验证（隔离环境内，被测动作本身）：①R24-03：proj_user_e08934f9a5a7 mapping-draft/confirm 修复前 500 mapping_bridge_failed（复现2次）→ 修复后 409 mapping_reconciliation_required（业务状态），adjudicate 200 且 AI 裁决队列推进（completed 33→35，46问收敛中，固有耗时非缺陷）；②R18-03：proj_user_6ef58ac151e1（历史 CONFIRMED draft v80）prepare-and-start 放行（run:4d16d078 创建，语义正确）；proj_user_e08934f9a5a7（未确认）被来源就绪门+映射确认门双阻断（readiness unconfirmed 详案）。
+- 副作用如实记录：验证 R18-03 放行分支时在常驻项目 proj_user_6ef58ac151e1 上创建了 1 条真实运行 run:4d16d078ea9ae0d29ae898ae（该项目的正常行为，18→19 条）；e08934f9a5a7 的裁决队列被诊断调用推进（继续收敛，非破坏）。
