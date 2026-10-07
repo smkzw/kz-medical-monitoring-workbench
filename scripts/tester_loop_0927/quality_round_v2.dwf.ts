@@ -700,7 +700,7 @@ if (round >= 3 && cleanStreak >= CLEANSTREAKNEED) {
     "-c",
     "rm -rf 'implementation/workbench/runs/tester_loop_iso_20260928' '/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/tester_staging_0927' 'implementation/workbench/tester_staging_0927' /tmp/tester_channel_probe /tmp/channel_probe_v2 2>/dev/null || true\n" +
     "rm -f /tmp/mm_api_8911.log /tmp/mm_vite_5178.log 2>/dev/null || true\n" +
-    "find implementation/workbench/scripts/tester_loop_0927/logs -maxdepth 1 -type d -name 'round_*' 2>/dev/null | sort | head -n -3 | xargs rm -rf 2>/dev/null || true\n" +
+    "find implementation/workbench/scripts/tester_loop_0927/logs -maxdepth 1 -type d -name 'round_*' 2>/dev/null | sort | awk '{a[NR]=\$0} END{for(i=1;i<=NR-3;i++) print a[i]}' | xargs rm -rf 2>/dev/null || true\n" +
     "echo '收敛全量清理完成（运行时/测试材料/临时件已清，报告与台账保留）'",
   ]);
   await world.run("bash", ["-c", "cat > " + STATE_FILE + " <<'ZCODEJSON'\n" + JSON.stringify({ round, cleanStreak, strategyNote: recap.strategyNote, registry: [], baselineFailures, channelOk: chanObj(channelOk), campaignDone: true }) + "\nZCODEJSON"]);
@@ -723,7 +723,7 @@ const trimRun = await world.run("bash", [
   "-c",
   "rm -rf /tmp/tester_channel_probe /tmp/channel_probe_v2 2>/dev/null || true; " +
   "rm -f /tmp/mm_api_8911.log /tmp/mm_vite_5178.log 2>/dev/null || true; " +
-  "find implementation/workbench/scripts/tester_loop_0927/logs -maxdepth 1 -type d -name 'round_*' 2>/dev/null | sort | head -n -3 | xargs rm -rf 2>/dev/null || true; " +
+  "find implementation/workbench/scripts/tester_loop_0927/logs -maxdepth 1 -type d -name 'round_*' 2>/dev/null | sort | awk '{a[NR]=\$0} END{for(i=1;i<=NR-3;i++) print a[i]}' | xargs rm -rf 2>/dev/null || true; " +
   "du -sh implementation/workbench/runs/tester_loop_iso_20260928 2>/dev/null | awk '{print \"隔离运行时体量：\" $1}'",
 ]);
 log("轮末退役完成：" + persistRun.stdout.trim().split("\n").pop() + "；本轮成员随run结束全部退役，下一轮由新run从 STATE_V2.json 无缝接续。" + trimRun.stdout.trim());
