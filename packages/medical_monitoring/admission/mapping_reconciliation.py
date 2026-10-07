@@ -31,6 +31,7 @@ Nothing here materializes canonical facts or mutates a draft.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any, Collection, Iterable, Mapping, Sequence
 

@@ -114,6 +114,151 @@ def test_start_column_prefers_stdat_over_page_dates(tmp_path: Path) -> None:
     assert str(event.start_date) == "2026-03-01"
 
 
+def test_event_carries_resolvable_risk_anchor(tmp_path: Path) -> None:
+    """R24轮（R24-04）：事件的risk_anchor_refs必须锚定到对应风险——此前恒为
+    空元组，前端从事件详情找不到风险上下文，risk_instance_ref与
+    source_locator_ref失去来源，证据链『查看来源证据』永远disabled
+    （『原始记录位置待确认』），分级依据/医学依据一并丢失。"""
+
+    workspace = _workspace(
+        tmp_path,
+        {
+            "AE": [
+                {
+                    "SUBJID": "01001",
+                    "AETERM": "头痛",
+                    "AESEV": "2级",
+                    "AESTDAT": "2026-01-05",
+                },
+            ],
+        },
+    )
+    provider = FactsPublicationAuthorityProvider(workspace)
+    packet = provider.get_packet("proj-test", snapshot_ref="facts-snapshot-001")
+    risk_anchors = {risk.risk_anchor_ref for risk in packet.risks}
+    assert risk_anchors, "risk records missing"
+    for event in packet.events:
+        assert event.risk_anchor_refs, (
+            f"event {event.event_ref} carries no risk anchor"
+        )
+        unresolved = set(event.risk_anchor_refs) - risk_anchors
+        assert not unresolved, (
+            f"event {event.event_ref} anchors unresolved: {unresolved}"
+        )
+
+
+def test_scale_week_table_produces_value_events_not_risks(tmp_path: Path) -> None:
+    """R24轮（R24-06）：UASW2/UASW4类访视周分值列是量表数据，不是名册
+    ——此前整表被_roster误判排除，UAS7趋势零产出。每个(受试者,周)应
+    展开为一条带measure_value的数值事件；评分不落风险行（测量事实
+    不是监查发现，避免低风险噪声稀释真实信号）；行定位符按行幂等。"""
+
+    workspace = _workspace(
+        tmp_path,
+        {
+            "UAS": [
+                {
+                    "SUBJID": "21001",
+                    "UASW2": "2",
+                    "UASW4": "20",
+                    "UASW8": "18",
+                    "UASW12": "7",
+                },
+            ],
+            "AE": [
+                {
+                    "SUBJID": "21001",
+                    "AETERM": "荨麻疹加重",
+                    "AESEV": "3级",
+                    "AESTDAT": "2026-02-01",
+                },
+            ],
+        },
+    )
+    provider = FactsPublicationAuthorityProvider(workspace)
+    packet = provider.get_packet("proj-test", snapshot_ref="facts-snapshot-001")
+    scale_events = [
+        event for event in packet.events if event.domain == "symptom_efficacy"
+    ]
+    assert len(scale_events) == 4
+    by_label = {event.measure_label: event for event in scale_events}
+    assert by_label["UAS7量表（第2周）"].measure_value == 2.0
+    assert by_label["UAS7量表（第12周）"].measure_value == 7.0
+    # 周次升序展开（W2→W4→W8→W12，数值事件顺序即周次顺序）
+    weeks = [
+        int(event.event_ref.rsplit("UASW", 1)[1]) for event in scale_events
+    ]
+    assert weeks == sorted(weeks)
+    # 量表评估不落风险行；AE风险行照常存在
+    assert all(risk.domain != "symptom_efficacy" for risk in packet.risks)
+    assert any(risk.domain == "ae" for risk in packet.risks)
+    # 同一UAS行的4个事件共享同一条行定位符（不重复占用sources）
+    locator_refs = {
+        locator for event in scale_events for locator in event.source_locator_refs
+    }
+    assert len(locator_refs) == 1
+    assert locator_refs <= {source.locator_ref for source in packet.sources}
+
+
+def test_missed_visit_marks_state_and_same_day_dosing_conflict(
+    tmp_path: Path,
+) -> None:
+    """R24轮（R22-06）：SVSTATE=失约的访视必须带失约标记（中等级方案执行
+    风险）；失约当日存在给药记录时提示执行矛盾——此前失约状态被吞掉
+    （label恒「访视记录·…」、severity恒低），特殊关注零产出。"""
+
+    workspace = _workspace(
+        tmp_path,
+        {
+            "SV": [
+                {
+                    "SUBJID": "21001",
+                    "SVSTATE": "失约",
+                    "VISDAT": "2026-04-03",
+                    "VISIT": "W2",
+                },
+                {
+                    "SUBJID": "21001",
+                    "SVSTATE": "已访视",
+                    "VISDAT": "2026-04-10",
+                    "VISIT": "W4",
+                },
+            ],
+            "EX": [
+                {
+                    "SUBJID": "21001",
+                    "EXDAT": "2026-04-03",
+                    "EXTRT": "MG-K10",
+                    "EXSTATE": "完成",
+                },
+            ],
+        },
+    )
+    provider = FactsPublicationAuthorityProvider(workspace)
+    packet = provider.get_packet("proj-test", snapshot_ref="facts-snapshot-001")
+    missed = [
+        event
+        for event in packet.events
+        if event.label_zh.startswith("访视失约")
+    ]
+    assert len(missed) == 1
+    assert missed[0].label_zh == "访视失约·W2"
+    risks_by_event = {risk.event_ref: risk for risk in packet.risks}
+    missed_risk = risks_by_event[missed[0].event_ref]
+    assert missed_risk.severity == "medium"
+    assert "失约" in missed_risk.medical_note
+    assert "给药执行矛盾" in missed_risk.medical_note
+    attended = [
+        event
+        for event in packet.events
+        if event.label_zh.startswith("访视记录")
+    ]
+    assert len(attended) == 1
+    attended_risk = risks_by_event[attended[0].event_ref]
+    assert attended_risk.severity == "low"
+    assert attended_risk.medical_note == ""
+
+
 def test_severity_source_honesty(tmp_path: Path) -> None:
     # WP2：源记录载明的严重度=recorded；缺失=unknown（不伪装中度）；
     # 非AE表的系统推定=inferred。

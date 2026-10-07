@@ -1122,6 +1122,43 @@ monitoring_document_evidence_resolver = MonitoringDocumentEvidenceResolver(
 monitoring_mapping_draft_repository = MonitoringMappingDraftRepository(
     RUNTIME_DIR / "medical_monitoring_ai.sqlite3"
 )
+
+
+def _r7_mapping_confirmation_gate(project_id: str):
+    """R24轮（R18-03收尾）：运行启动的映射确认阻断门（fail-closed）。
+
+    判据与横幅/运行设置同源：项目最近一次字段映射草稿的确认状态。
+    R19实测facts旁路存在时未确认映射照常执行（fail-open）——以未确认
+    映射产出医学结论比停滞责任更大，改为阻断并给出前置链指引。
+    返回None=放行；dict=409阻断详情。
+    """
+
+    draft = monitoring_mapping_draft_repository.latest_draft_for_project(
+        project_id
+    )
+    if draft is not None and str(
+        getattr(draft.status, "value", draft.status)
+    ) == "confirmed":
+        return None
+    if draft is None:
+        return {
+            "code": "mapping_confirmation_required",
+            "message": (
+                "先完成字段映射确认：本项目尚未进行字段对应关系确认，"
+                "确认完成前不会启动医学监查（未确认的映射不产出医学结论）。"
+                "请进入数据接入向导第3步完成确认。"
+            ),
+        }
+    return {
+        "code": "mapping_confirmation_required",
+        "message": (
+            "先完成字段映射确认：最近一次导入的字段对应关系尚未确认"
+            f"（草稿 {draft.draft_id}，状态 "
+            f"{str(getattr(draft.status, 'value', draft.status))}），"
+            "确认完成前不会启动医学监查（未确认的映射不产出医学结论）。"
+            "请进入数据接入向导第3步完成确认。"
+        ),
+    }
 monitoring_mapping_activation_service = MonitoringMappingActivationService(
     monitoring_mapping_draft_repository
 )
@@ -3459,6 +3496,48 @@ def _source_manifest_dashboard(project_id: str) -> DashboardSummary:
     )
 
 
+def _record_r7_publication_risk_snapshot(
+    *,
+    project_id: str,
+    run_id: str,
+    packet: Any,
+    created_at: Any = None,
+) -> None:
+    """R24轮（R24-05）：r7发布链→聚合风险快照桥（总看板/收件箱数据源）。
+
+    发布路由在发布确认成功后调用；此处不做发布成败判定。规则画像版本
+    绑定 packet 内容指纹——同一数据重复发布幂等，数据变化自然成为新快照。
+    """
+
+    from datetime import datetime as _datetime
+
+    from .monitoring_product_risk_bridge import (
+        record_publication_risk_snapshot,
+    )
+
+    if isinstance(created_at, _datetime):
+        created = created_at
+    else:
+        text = str(created_at or "").strip()
+        try:
+            created = (
+                _datetime.fromisoformat(text.replace("Z", "+00:00"))
+                if text
+                else _datetime.now(timezone.utc)
+            )
+        except ValueError:
+            created = _datetime.now(timezone.utc)
+    packet_digest = str(getattr(packet, "packet_digest", "") or "")
+    record_publication_risk_snapshot(
+        project_id=project_id,
+        run_id=run_id,
+        packet=packet,
+        risk_repository=medical_risk_repository,
+        rule_profile_revision=f"r5-packet:{packet_digest[:16]}",
+        created_at=created,
+    )
+
+
 def _monitoring_dashboard_from_snapshot(
     base: DashboardSummary,
     *,
@@ -4254,6 +4333,11 @@ app.include_router(
         ensure_source_ready=_ensure_legacy_monitoring_source_ready,
         # R8轮（R8-02）：存量waiting_start运行的历史行阻断原因注入。
         source_block_message=_monitoring_source_block_message,
+        # R24轮（R24-05）：发布成功后把packet风险桥接写入聚合风险快照，
+        # 总看板风险摘要/模块开放风险数/统一工作收件箱与结果视图同源。
+        risk_snapshot_recorder=_record_r7_publication_risk_snapshot,
+        # R24轮（R18-03收尾）：fail-open语义修正——未确认映射阻断启动。
+        mapping_confirmation_gate=_r7_mapping_confirmation_gate,
     )
 )
 app.include_router(
@@ -5023,7 +5107,13 @@ def get_dashboard(project_id: str, http_request: Request):
         return _my009_dashboard_summary().model_dump(mode="json")
     if canonical_id == "proj_mgk10_sar_demo":
         return repo.dashboard(canonical_id).model_dump(mode="json")
-    return _source_manifest_dashboard(canonical_id).model_dump(mode="json")
+    # R24轮（R24-05）：用户创建项目此前只返回来源清单骨架——开放风险数
+    # 与风险摘要恒空，与已发布监查结果矛盾。叠加与RUX/MY009同一份持久
+    # 化风险权威（无快照时行为不变：KeyError→空聚合）。
+    return _monitoring_dashboard_from_snapshot(
+        _source_manifest_dashboard(canonical_id),
+        latest_batch=None,
+    ).model_dump(mode="json")
 
 
 @app.get("/api/projects/{project_id}/module-catalog")

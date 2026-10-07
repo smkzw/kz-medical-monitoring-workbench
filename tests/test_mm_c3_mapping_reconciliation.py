@@ -167,6 +167,38 @@ def test_case_only_role_difference_still_agrees() -> None:
     assert report["auto_pass"] is True
 
 
+def test_list_valued_verdicts_reconcile_without_crash() -> None:
+    """R24轮（R24-03）：verdict携带列表值（related_fields等）时，规范化
+    不敏感比对会对列表做json排序——曾因模块缺import json抛NameError，
+    confirm端点500死循环（新项目全链阻断）。带列表的等价verdict必须
+    正常比对并一致通过。"""
+
+    primary = _primary_verdicts()
+    verifier = _verifier_verdicts()
+    primary[0]["related_fields"] = ["AE_END_DATE", "AESTDY"]
+    primary[0]["derivation_lineage"] = {
+        "source_fields": ["AESTDY"],
+        "coding_system": "MedDRA",
+    }
+    verifier[0]["related_fields"] = ["ae_end_date", "aestdy"]
+    verifier[0]["derivation_lineage"] = {
+        "source_fields": ["aestdy"],
+        "coding_system": "MedDRA",
+    }
+
+    report = _reconcile(
+        primary_mappings=primary,
+        verifier_mappings=verifier,
+    )
+
+    row = next(
+        item for item in report["fields"] if item["source_field"] == "AETERM"
+    )
+    assert row["result"] == "agreed"
+    assert report["state"] == "agreed"
+    assert report["auto_pass"] is True
+
+
 def test_non_role_semantic_difference_never_auto_passes() -> None:
     primary = _primary_verdicts()
     verifier = _verifier_verdicts()
