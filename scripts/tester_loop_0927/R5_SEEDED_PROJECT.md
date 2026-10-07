@@ -734,3 +734,44 @@ AI 台账（本项目，medical_monitoring_ai.sqlite3 按 project_id 过滤）�
 | 监查运行现态 | 3 条 completed（非本轮启动） | `GET …/r7/runs` → run:0bf83a78…（R19 遗留 waiting_start，已被攻坚验证启动并完成）+ run:c22165ecc…/run:3ee655a0…，全部 run_state=completed/result_available=true；本轮零启动动作 |
 
 本轮环境观察：8911 现行进程响应偶发慢（runtime-readiness 一次 25.9s，后续请求 1.7s 内）——与 ISO_ENV_LOG 同日「R7-01 事件循环独占画像」记录相符，属已知环境现象，未影响任何复验判据。
+
+---
+
+# R21D 开考位预置结果 — 复用常驻项目 MX循开考-CSU（2026-10-06T18:33-18:47Z，零重复预置）
+
+> **本轮动作：查存量 → 三条件现场实测全过 → 直接复用，零新建、零 AI 作业、零代码修复、零重启、零启动运行。**（常驻项目语义第 3 次复验：R19D 新建、R20D 两验、R21D 本验）
+
+隔离环境：API `http://127.0.0.1:8911`（build **api-1d25bf363b10c2a5**，R20 轮次修复员重启后现行进程，见 ISO_ENV_LOG 2026-10-06 18:46 写作Agent适配落地与 2026-10-07 R20 修复员条目），全程未触碰 8910/5177。
+操作者：开考预置守护员-R21（D位）。时点：2026-10-06T18:33→18:47Z（单次只读复验，无推进动作；宿主机时区 CEST，时间戳一律 UTC）。
+
+## 环境漂移观察（R20D 15:16Z 复验之后、本轮之前由他位角色发生，非本轮动作）
+
+- 后端 build 由 api-a9bb87fb5ee7ab77 变为 **api-1d25bf363b10c2a5**（ISO_ENV_LOG 同日两条重启记录；8911 /api/runtime-readiness ready:true 实测 0.46s 返回该值）。
+- 隔离 runtime 根现为 `implementation/workbench/runs/tester_loop_iso_20260928/runtime/`（lsof 8911 进程 pid 12958 打开文件实证；仓库根 `runs/tester_loop_iso_20260928` 已不存在——R21D 首查曾按旧路径落空，如实记录）。
+- 常驻项目监查运行 3→6 条（新增 run:7e110483518e034a843a612b / run:273d37362cda3d1a383d7f2d / run:b8f424d9c3a84a2f92467044，全部 completed、result_available=true，为 R20 攻坚/测试角色所启动，非本轮）。
+- `GET /api/projects` 现仅 1 条（R20D 复验时 5 条：R20A/B/C/P 等他位项目已按轮次收尾归档，符合 R13D 起常态）；常驻项目 `proj_user_6ef58ac151e1` 保留且 status=active。
+
+## 存量检查（ask 步骤0，全部现场 curl/sqlite 实测）
+
+| 条件 | 实测结果 | 证据 |
+|---|---|---|
+| 项目存在且 active（常驻名） | ✅ | `GET /api/projects` → 全实例仅 1 项目 `proj_user_6ef58ac151e1 / MX循开考-CSU / 慢性自发性荨麻疹 / MG-K10`，status=active，modules 含 medical_monitoring（另有 dashboard/medical_writing/approvals） |
+| 字段映射 confirmed | ✅ | `GET …/r7/data-admissions/stg-cd69899943ba42618f589ba07a134a59/mapping-candidates?focus=all` → state=candidates_ready，confirmation_status=**confirmed**，draft monmapdraft_73abe5c6c9561a9e95eec2056991 **v80 status=confirmed**，draft.user_questions 列表=0 项，summary candidate_count=60/field_count=60（与 R19D/R20D 同版未漂移） |
+| facts 物化 ready | ✅ | `GET …/facts` → state=**ready**，facts_generated=true，10表/591行/**3038值全核验**（values=source_values_verified=3038），message「可用于监查的数据已生成，可以开始监查。」；workspace facts-manifest.json 在盘（attempt=stg-cd69899943ba42618f589ba07a134a59，mapping_version=monmaprev_a8a8d780a593da9eaf100400fcbe，snapshot facts:f4bebca7701a87d2b6eec2ed，10表 AE/CM/DM/EX/ICF_TRACK/LB_HEM/MH/SV/UAS/VS，mtime Oct 5 22:44） |
+| project/open current | ✅ | `GET …/r7/project/open` → state=**current**/dataCoverage=complete/openMode=edit/canView=true/canEdit=true「项目格式正常，可以继续使用。」 |
+| 研究文件 ready | ✅ | `GET …/study-documents` → ready=true |
+| 界面可开始运行监查 | ✅ | `GET …/r7/run-setup/options` → **HTTP 200**（data_batches/current_data/modes/rule_revisions/recommended_mode 等就绪）；5178 `[::1]/monitoring`=200 且 runtime-build.json expectedBackendBuildId=api-1d25bf363b10c2a5 与 8911 backend_build_id 配对一致 |
+| 未启动监查（本轮零启动） | ✅ | `GET …/r7/runs` → 6 条全部 run_state=completed、result_available=true（3 条 R19/R20 攻坚遗留 + 3 条本轮窗口前他位新增）；本轮零启动动作——运行启动留给随后的攻坚验证 |
+| R5D marker 缺陷未复发 | ✅ | 修复代码在位 `services/api/app/main.py:4925-4936`（种子 marker 取 `launch_registry_contracts.SCHEMA_VERSION`，import 实证）；contracts `packages/medical_monitoring/runtime/launch_registry_contracts.py:53-54` = mm-r7-w01r26-launch-registry-v5；本项目 workspace launch_registry.sqlite3 sqlite 直查（只读）`schema_version=mm-r7-w01r26-launch-registry-v5` |
+| 8910/5177 未触碰 | ✅ | lsof 只读复核：8910/5177 均 0 监听（沿 R11 起记录）；本轮仅 curl/lsof/sqlite 只读 + 文档追加 |
+
+AI 台账：本轮 **0 作业 0 调用**（复用即结论，无任何新 AI 质量门交互）；`/api/ai-gateway/status` 只读探看 configured（zhipu-coding-plan/glm-5.3-flash，无 route_validation_errors、无 missing_env），未做付费 probe。
+
+## 本轮观察（如实记录，非阻断）
+
+- **candidates 投影两处计数与权威终态不一致（新 build 投影怪癖，仅记录不判读）**：mapping-candidates 响应顶层 `facts_generated=False`（facts 端点与在盘 manifest 均为已物化，以权威 facts 端点为准）；summary 内 `pending_confirmation_count=60/user_question_count=1`（draft.status=confirmed 与 draft.user_questions=0 项为权威确认终态，同 R19D/R20D 实测一致）。如后续轮次发现该投影误导界面，提请修复员核 mapping_candidate_routes 投影字段语义。
+- 常驻项目跨轮、跨 build（a9bb87fb→1d25bf36）、跨多轮重启后三条件依然成立——常驻复用语义经受住环境漂移考验。
+
+## 留痕文件（同目录）
+
+- 本轮无新驱动脚本/状态文件（复用即结论）；证据为本节表内各 curl/sqlite/lsof 实测值 + `ISO_ENV_LOG.md`（R21D 复用条目）；项目状态源文件 `r19d_seed_state.json`（confirmed/facts_materialized，与现场实测一致）。
