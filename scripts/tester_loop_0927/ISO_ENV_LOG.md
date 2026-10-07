@@ -374,3 +374,12 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 修复：发现卡riskId改用risk_instance_id（riski-实例引用，来源定位不再死链）；工作条保留最近一次非loading状态（视图切换不再塌陷为空态文案）；历史卡片加运行token尾号；数据侧重复导入检测（duplicate_of）+第2步重复提示。
 - 自检：8911 ready:true（build api-1d25bf363b10c2a5）；5178=200；指纹配对一致。
 - ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。
+
+## 2026-10-07T05:0x-05:27Z（R22D 开考位预置·守护员第4次复验：R21修复员重启后三条件仍全过，零重复预置）
+
+- 操作者：开考预置守护员-R22（D位）。背景：R21D 复验后，R21 轮次修复员对隔离对 8911/5178 双重启加载四项修复（riskId引用/工作条保留/运行token尾号/重复导入检测），8911 现行进程 pid 54721（原 12958），build 仍 api-1d25bf363b10c2a5。
+- 存量检查现场实测（ask 步骤0）三条件全过：mapping-candidates → confirmation_status=confirmed / draft monmapdraft_73abe5c6c9561a9e95eec2056991 v80 status=confirmed / user_questions=0 / 60候选；facts → state=ready（10表/591行/3038值全核验，manifest 在盘 mtime Oct 5 22:44 与 R21D 一致）；project/open → current/complete/canView/canEdit；run-setup/options 200；study-documents ready。**零新建、零 AI 作业、零代码修复、零重启、零启动运行**（runs 9 条全部 completed，R21D 后新增 3 条为 R21 开考/攻坚角色所启动，非本轮）。
+- 探查笔误自纠（如实记录）：本员首轮误用台账简写路径 `…/r7/…`（漏 `/modules/medical-monitoring/` 段）得三连 404，一度疑似「项目打不开」复发；核对 r19d_seed_csu.py:516 与 /openapi.json（43 条 r7 路由在册）后确认属本员笔误非产品缺陷，修正后全 200——未修码未重启。
+- 只读探障：main.py:4925-4936 marker 修复在位（本员直读实证 import SCHEMA_VERSION 常量）；本项目 workspace launch_registry sqlite 只读直查=mm-r7-w01r26-launch-registry-v5；8911 readiness ready:true 与 5178 [::1] runtime-build.json expectedBackendBuildId=api-1d25bf363b10c2a5 配对一致；8910/5177 lsof 均 0 监听（沿 R11 起，未触碰）。AI gateway status 只读探看 configured=true，未做付费 probe。
+- 观察如实记录：candidates 投影怪癖沿 R21D 持续（顶层 facts_generated=False / summary pending_confirmation_count=60、user_question_count=1，与权威 confirmed/facts ready 终态不一致），提请修复员核投影字段语义。
+- 留痕：`R5_SEEDED_PROJECT.md` R22D 节。本轮无新驱动脚本/状态文件（复用即结论）。
