@@ -815,3 +815,43 @@ AI 台账：本轮 **0 作业 0 调用**（复用即结论，无任何新 AI 质
 ## 留痕文件（同目录）
 
 - 本轮无新驱动脚本/状态文件（复用即结论）；证据为本节表内各 curl/sqlite/lsof/openapi 实测值 + `ISO_ENV_LOG.md`（R22D 复用条目）；项目状态源文件 `r19d_seed_state.json`（confirmed/facts_materialized，与现场实测一致）。
+
+---
+
+# R23D 开考位预置结果 — 复用常驻项目 MX循开考-CSU（2026-10-07T08:3x-08:4xZ，零重复预置）
+
+> **本轮动作：查存量 → 三条件现场实测全过 → 直接复用，零新建、零 AI 作业、零代码修复、零重启、零启动运行。**（常驻项目语义第 5 次复验：R19D 新建、R20D 两验、R21D、R22D、R23D 本验）
+
+隔离环境：API `http://127.0.0.1:8911`（build **api-e041fb3ab9060114**——R22D 复验时的 api-1d25bf363b10c2a5 之后，R22 轮次修复员重启加载三项修复所致，见 ISO_ENV_LOG「2026-10-08 R22轮次·修复员」条目，属本轮之前他位动作），全程未触碰 8910/5177。
+操作者：开考预置守护员-R23（D位）。时点：2026-10-07T08:3x→08:4xZ（单次只读复验，无推进动作；时间戳一律 UTC）。
+
+## 探查路径更正（如实记录，非产品缺陷）
+
+本员首轮按 R20D 台账简写路径 `…/r7/…`（漏 `/api/projects/{pid}/modules/medical-monitoring/` 前缀）与 `…/r7/study-documents`（漏 attempt 段）各得 404——前者 R22D 已记录同款笔误、后者核对 `r19d_seed_csu.py:554`（`{att}/study-documents`，att 为 attempt 基路径）与 `/openapi.json`（study-documents 路由挂 `…/r7/data-admissions/{attempt_id}/study-documents`）后确认均系本员探查路径笔误，修正后全 200。未修码、未重启（无缺陷可修）。
+
+## 存量检查（ask 步骤0，全部现场 curl/sqlite 实测）
+
+| 条件 | 实测结果 | 证据 |
+|---|---|---|
+| 项目存在且 active（常驻名） | ✅ | `GET /api/projects` → 全实例仅 1 项目 `proj_user_6ef58ac151e1 / MX循开考-CSU / 慢性自发性荨麻疹 / MG-K10`，status=active，modules 含 medical_monitoring（另有 dashboard/medical_writing/approvals） |
+| 字段映射 confirmed | ✅ | `GET …/modules/medical-monitoring/r7/data-admissions/stg-cd69899943ba42618f589ba07a134a59/mapping-candidates?focus=all` → state=candidates_ready，confirmation_status=**confirmed**，draft **v80 status=confirmed**，draft.user_questions=0 项，candidate_count=60/field_count=60（与 R19D-R22D 同版未漂移） |
+| facts 物化 ready | ✅ | `GET …/facts` → state=**ready**，facts_generated=true，10表/591行/**3038值全核验**（values=source_values_verified=3038），message「可用于监查的数据已生成，可以开始监查。」 |
+| project/open current | ✅ | `GET …/r7/project/open` → state=**current**/openMode=edit/dataCoverage=complete/canView=true/canEdit=true「项目格式正常，可以继续使用。」 |
+| 研究文件 ready | ✅ | `GET …/r7/data-admissions/{attempt}/study-documents` → HTTP 200，ready=true |
+| 界面可开始运行监查 | ✅ | `GET …/r7/run-setup/options` → **HTTP 200**（data_batches/current_data/modes/rule_revisions/recommended_mode/recommendation_reason 等就绪）；5178（node pid 13827 监听 [::1]:5178）/monitoring=200 且 runtime-build.json expectedBackendBuildId=api-e041fb3ab9060114 与 8911 backend_build_id 配对一致 |
+| 未启动监查（本轮零启动） | ✅ | `GET …/r7/runs` → 12 条全部 run_state=completed、result_available=true（R22D 时 9 条 → 现新增 run:11bf9d406a9034e58b8504bf / run:c1175d6ba3d980bd3ae0dccb / run:98389c6e1b554500f4496b8b，为 R22 开考/攻坚角色所启动，非本轮）；本轮零启动动作——运行启动留给随后的攻坚验证 |
+| R5D marker 缺陷未复发 | ✅ | 修复代码在位 `services/api/app/main.py:4920-4940`（本员直读实证：`from packages.medical_monitoring.runtime.launch_registry_contracts import SCHEMA_VERSION as _LAUNCH_REGISTRY_SCHEMA_VERSION`，launch_registry 作业 marker 取该常量）；contracts `launch_registry_contracts.py:53` `SCHEMA_VERSION = SCHEMA_VERSION_V5`；本项目 workspace `…/runtime/medical_monitoring_r7/proj_user_6ef58ac151e1/launch_registry.sqlite3` Python sqlite3 只读直查 `r7_launch_registry_meta.schema_version=mm-r7-w01r26-launch-registry-v5`（v5） |
+| 8910/5177 未触碰 | ✅ | lsof 只读复核：8910/5177 均 0 监听（沿 R11 起记录）；本轮仅 curl/lsof/sqlite 只读 + 文档追加 |
+| runtime 就绪 | ✅ | 8911 `/api/runtime-readiness` → ready=true，backend_build_id=api-e041fb3ab9060114，runtime_schema_version=16 |
+
+AI 台账：本轮 **0 作业 0 调用**（复用即结论，无任何新 AI 质量门交互）；`/api/ai-gateway/status` 只读探看 configured=true（route_validation_errors=[]、missing_env=[]、deployment_profile_approved=true），未做付费 probe。项目状态源文件 `r19d_seed_state.json`（confirmed=true / facts_materialized=true，updated_at 2026-10-05T20:44:16Z）与现场实测一致。
+
+## 本轮观察（如实记录，非阻断）
+
+- **candidates 投影怪癖沿 R21D/R22D 持续**：mapping-candidates 响应顶层 `facts_generated=False`、summary 内 `pending_confirmation_count=60/user_question_count=1`，与权威终态（facts 端点 state=ready/facts_generated=true、draft.status=confirmed、draft.user_questions=0 项）不一致。同前两轮记录，仅记录不判读，提请修复员核 mapping_candidate_routes 投影字段语义。
+- 常驻项目跨轮、跨进程重启、跨新 build（a9bb87fb→1d25bf36→**e041fb3a**）后三条件依然全部成立且数据版本零漂移（draft v80 / facts 3038 值，R19D 终态原样）——常驻复用语义第 5 次经受住环境变更考验。
+- `GET /api/projects/{pid}`（不带模块段）返回 405（沿 R22D 记录，该项目详情无此 GET 路由），非阻断，仅记录。
+
+## 留痕文件（同目录）
+
+- 本轮无新驱动脚本/状态文件（复用即结论）；证据为本节表内各 curl/sqlite/lsof/openapi 实测值 + `ISO_ENV_LOG.md`（R23D 复用条目）；项目状态源文件 `r19d_seed_state.json`（confirmed/facts_materialized，与现场实测一致）。
