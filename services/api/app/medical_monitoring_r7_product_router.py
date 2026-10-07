@@ -397,7 +397,10 @@ def create_medical_monitoring_r7_product_router(
     ] = None,
     require_server_principal: bool = True,
     synthetic_fixture_mode: bool = False,
-    maintenance_wait_seconds: float = DEFAULT_WAIT_SECONDS,
+    # R23-01：写锁等待上限收敛（默认30s曾让叠加的轮询等待者耗尽线程
+    # 池→整站假死8分50秒）。3s内拿不到即快速失败，前端既有重试/提示
+    # 兜底；长任务（识别/复核）走异步队列不持有本锁。
+    maintenance_wait_seconds: float = 3.0,
     harness_runtime_factory: Optional[Callable[..., Any]] = None,
     harness_adapter: Any = None,
     harness_catalog: Any = None,

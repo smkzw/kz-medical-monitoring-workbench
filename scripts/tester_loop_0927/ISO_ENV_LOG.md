@@ -398,3 +398,10 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 只读探障：main.py:4920-4940 marker 修复在位（import SCHEMA_VERSION 常量直读实证）；本项目 workspace launch_registry Python sqlite3 只读直查=mm-r7-w01r26-launch-registry-v5；8911 readiness ready:true（runtime_schema_version=16）与 5178 [::1]（node pid 13827）runtime-build.json expectedBackendBuildId=api-e041fb3ab9060114 配对一致；8910/5177 lsof 均 0 监听（沿 R11 起，未触碰）。AI gateway status 只读探看 configured=true，未做付费 probe。
 - 观察如实记录：candidates 投影怪癖沿 R21D/R22D 持续（顶层 facts_generated=False / summary pending_confirmation_count=60、user_question_count=1，与权威 facts ready / draft confirmed 终态不一致），提请修复员核投影字段语义。另本员复验 R22D 同款台账简写路径笔误一次（漏 modules 段/study-documents 漏 attempt 段），核对 r19d_seed_csu.py:516,554 与 openapi 后自纠，非产品缺陷。
 - 留痕：`R5_SEEDED_PROJECT.md` R23D 节。本轮无新驱动脚本/状态文件（复用即结论）。
+
+## 2026-10-08 下午（R23轮次·修复员：写锁饥饿缓解后隔离环境 8911+5178 双重启）
+
+- 操作者：修复员（R23轮次：R23-01）
+- 修复：①线程池扩容40→128 token（写锁等待者各占一个token至wait超时，叠加轮询曾耗尽默认池→整站假死8分50秒）；②写锁等待上限30s→3s（拿不到快速失败503，前端重试/提示兜底；长任务走异步队列不持锁）。
+- 自检：8911 ready:true（build api-06744bbced9d86a2）；5178=200；指纹配对一致。
+- ⚠️舰队状态沿R11起：8910/5177仍无HTTP应答（本轮kill仅针对8911/5178）；留痕提请舰队值班。

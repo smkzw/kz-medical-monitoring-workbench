@@ -15,6 +15,7 @@ import re
 from threading import Lock
 from typing import Any, Literal, Mapping, Optional
 
+import anyio
 from pydantic import BaseModel, Field
 from urllib.parse import quote
 
@@ -633,6 +634,15 @@ MGK10_SAR_PROTOCOL_PATH = Path(
 
 app = FastAPI(title="AI Medical Manager Workbench", version="0.1.0")
 app.include_router(eligibility_router)
+
+# R23-01：写锁等待者各自占用一个线程池token直至wait超时——叠加的
+# 轮询等待者曾耗尽默认40 token线程池，造成整站HTTP级联阻塞假死
+# （8分50秒）。线程池扩容 + 写锁等待上限收敛双管齐下。
+if hasattr(anyio, "to_thread"):
+    try:
+        anyio.to_thread.current_default_thread_limiter().total_tokens = 128
+    except Exception:  # pragma: no cover - limiter缺租时保持默认
+        pass
 
 
 @app.middleware("http")

@@ -591,6 +591,7 @@ export function MedicalMonitoringAdmissionWizardView({
   onDocumentIdentityConfirm,
   confirmingEntries = {},
   confirmedEntries = {},
+  resumedNotice = "",
 }) {
   const phase = state?.phase || "input";
   const stepIndex = state?.stepIndex || 0;
@@ -732,6 +733,9 @@ export function MedicalMonitoringAdmissionWizardView({
               />
               <span>选择单个数据文件</span>
             </label>
+            {resumedNotice ? (
+              <p className="monitoring-admission-selection" role="status">{resumedNotice}</p>
+            ) : null}
             {filePickNotice ? (
               <p className="monitoring-admission-warning" role="alert">{filePickNotice}</p>
             ) : null}
@@ -960,6 +964,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   // 立即可见（B实测确认已落台账但界面15分钟零反馈）。
   const [confirmingEntries, setConfirmingEntries] = useState({});
   const [confirmedEntries, setConfirmedEntries] = useState({});
+  // R20轮（R20-02）：自动继续既有接入记录的可见提示。
+  const [resumedNotice, setResumedNotice] = useState("");
 
   useEffect(() => {
     if (!state.projectId || state.attemptId || state.phase !== "input") return undefined;
@@ -967,7 +973,14 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     let cancelled = false;
     api.getLatestDataAdmission(state.projectId, { signal: controller.signal })
       .then((payload) => {
-        if (!cancelled) dispatch({ type: "resume-created", payload });
+        if (!cancelled) {
+          dispatch({ type: "resume-created", payload });
+          // R20轮（R20-02）：自动继续既有接入必须可见——零选择即推进
+          // 曾让用户无从知晓数据从何而来。
+          setResumedNotice(
+            `检测到本项目已有的数据接入记录（${String(payload?.attempt_id || "").slice(0, 18)}…），已自动继续该记录的接入进度。`,
+          );
+        }
       })
       .catch((error) => {
         const code = error?.detail?.code || error?.code || "";
@@ -1728,6 +1741,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onDocumentIdentityConfirm={submitIdentityConfirmation}
       confirmingEntries={confirmingEntries}
       confirmedEntries={confirmedEntries}
+      resumedNotice={resumedNotice}
     />
     </>
   );
