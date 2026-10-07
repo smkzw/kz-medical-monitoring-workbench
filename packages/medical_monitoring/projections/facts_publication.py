@@ -104,6 +104,16 @@ _EXCLUDED_TABLES = {"DM", "TOC"}
 
 # R24V2-B02：AE严重度识别表。中文描述与CTC分级（"1级"/"G3"/纯数字）
 # 都视为有源记录；映射不到识别值的severity不进风险行（事件保留）。
+
+def _grade_match(value: str) -> str:
+    """R22轮（R22-03）：返回CTC分级的规范化文本（如"3级"）；无匹配空串。"""
+    raw = _clean(value)
+    m = _AE_GRADE_RE.fullmatch(raw)
+    if m:
+        return f"{m.group(1)}级"
+    return raw if raw in {"重度", "严重", "中度", "轻度"} else ""
+
+
 _AE_SEV_ZH = {
     "重度": "critical",
     "严重": "critical",
@@ -713,8 +723,13 @@ class FactsPublicationAuthorityProvider:
             # 无severity源；inferred=非AE按域推定。unknown/inferred的
             # severity仅是schema占位（取low不取medium——审阅点名"未知不得
             # 当中风险"），呈现层按severity_source区分。
+            ae_medical_note = ""
             if domain == "ae":
-                sev_raw = _clean(domains.get("AE", [{}])[index].get("AESEV") if index < len(domains.get("AE", [])) else "")
+                ae_row = domains.get("AE", [{}])[index] if index < len(domains.get("AE", [])) else {}
+                sev_raw = _clean(ae_row.get("AESEV"))
+                rel_raw = _clean(ae_row.get("AEREL"))
+                out_raw = _clean(ae_row.get("AEOUT"))
+                ser_raw = _clean(ae_row.get("AESER"))
                 severity = _AE_SEV_ZH.get(sev_raw)
                 severity_source = "recorded"
                 if severity is None:
@@ -724,11 +739,36 @@ class FactsPublicationAuthorityProvider:
                     else:
                         severity = "low"
                         severity_source = "unknown"
+                # R22轮（R22-03）：高风险发现的医学逻辑文字——从源记录字段
+                # 组合理由（严重度/关系/转归/SAE报告），使「高风险」可核实，
+                # 并显式标记SAE漏报质疑模式（3级+肯定有关+持续未愈+未报SAE）。
+                facts = []
+                if sev_raw:
+                    facts.append(f"严重度：{sev_raw}")
+                if rel_raw:
+                    facts.append(f"与试验药关系：{rel_raw}")
+                if out_raw:
+                    facts.append(f"转归：{out_raw}")
+                if ser_raw:
+                    facts.append(f"严重不良事件报告：{ser_raw}")
+                if facts:
+                    ae_medical_note = "源记录依据——" + "；".join(facts) + "。"
+                if (
+                    _grade_match(sev_raw) in {"3级", "4级", "5级"}
+                    and "肯定" in rel_raw
+                    and ("持续" in out_raw or "未愈" in out_raw)
+                    and ser_raw in {"否", "N", "NO", "no"}
+                ):
+                    ae_medical_note += (
+                        "注意：该事件满足严重不良事件（SAE）漏报审查模式——"
+                        "3级及以上+肯定有关+持续未愈+未报告SAE，建议核查严重性判定与SAE上报。"
+                    )
             else:
                 severity = severity_hint
                 severity_source = "inferred"
             risks.append(
                 R5RiskRecord(
+                    medical_note=ae_medical_note if domain == "ae" else "",
                     risk_ref=f"risk-{table}-{index:06d}",
                     risk_instance_ref=f"riski-{table}-{index:06d}",
                     risk_key=f"{domain}:{table}:{index}",

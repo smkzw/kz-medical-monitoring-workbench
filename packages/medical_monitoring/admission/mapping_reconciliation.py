@@ -291,6 +291,30 @@ def _verdict_projection(item: Mapping[str, Any]) -> dict[str, Any]:
     return projection
 
 
+
+def _normalization_insensitive_verdict(verdict: Mapping[str, Any]) -> dict[str, Any]:
+    """R22轮（R22-02）：规范化不敏感的判定副本——字符串叶子casefold并
+    去除 -/_/空格 后比较。『adverse_event_end_date』vs『adverse_event_
+    end_date』或大小写差异属同一医学语义（复核噪音），不得进入人工
+    裁决队列；原始判定保留给展示，不受本副本影响。"""
+
+    def walk(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            return {key: walk(item) for key, item in value.items()}
+        if isinstance(value, list):
+            normalized = [walk(item) for item in value]
+            return sorted(
+                normalized,
+                key=lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True),
+            )
+        if isinstance(value, str):
+            folded = re.sub(r"[-_\s]+", "", value).casefold()
+            return folded or value.casefold()
+        return value
+
+    return {key: walk(item) for key, item in verdict.items()}
+
+
 def semantic_difference_paths(left: Mapping[str, Any], right: Mapping[str, Any]) -> list[str]:
     """Locate disagreements without interpreting, accepting or dropping either side."""
     paths: list[str] = []
@@ -572,7 +596,16 @@ def reconcile_mapping_cohorts(
             row["human_decision_required"] = False
             row["system_review_required"] = True
         elif primary is not None and verifier is not None:
-            agreed = primary["semantic_verdict"] == verifier["semantic_verdict"]
+            # R22轮（R22-02）：先做规范化不敏感比对——B实测28题人工裁决
+            # 中27题为同串/同义噪音（如adverse_event_end_date两轮完全
+            # 相同仍被要求裁决）。规范化后一致即自动合并（agreed），
+            # 仅真实语义分歧进入后续比较/裁决。
+            if _normalization_insensitive_verdict(
+                primary["semantic_verdict"]
+            ) == _normalization_insensitive_verdict(verifier["semantic_verdict"]):
+                agreed = True
+            else:
+                agreed = primary["semantic_verdict"] == verifier["semantic_verdict"]
             if comparison_policy_version in {DEPENDENCY_COMPARISON_VERSION, *ROLE_EQUIVALENCE_POLICIES}:
                 try:
                     compare = compare_role_equivalence if comparison_policy_version in ROLE_EQUIVALENCE_POLICIES else compare_mapping_dependencies

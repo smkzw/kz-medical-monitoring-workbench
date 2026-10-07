@@ -315,6 +315,9 @@ class R5RiskRecord:
     # unknown=源记录缺失（severity仅为兼容占位，不等于医学"中度"）。
     # WP2：默认medium不得掩盖未知。
     severity_source: str = "recorded"
+    # R22轮（R22-03）：AE源记录的医学逻辑文字（严重度/关系/转归/SAE
+    # 组合理由，含SAE漏报质疑模式提示）——高风险发现的依据可核实。
+    medical_note: str = ""
 
     def __post_init__(self) -> None:
         if self.severity_source not in ("recorded", "inferred", "unknown"):

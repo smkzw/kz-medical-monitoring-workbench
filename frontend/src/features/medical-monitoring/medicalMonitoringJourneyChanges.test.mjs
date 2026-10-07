@@ -147,7 +147,7 @@ function journeyRisk(overrides = {}) {
 {
   check(
     JSON.stringify(MONITORING_JOURNEY_DRAWER_SECTION_ORDER)
-      === JSON.stringify(["title", "event_category", "risk_level", "severity_basis", "change", "date", "before_after", "related_records", "query_draft", "source"]),
+      === JSON.stringify(["title", "event_category", "risk_level", "severity_basis", "medical_note", "change", "date", "before_after", "related_records", "query_draft", "source"]),
     "drawer section order is the frozen nine-item sequence",
   );
   check(MONITORING_JOURNEY_DRAWER_FALLBACK_TEXTS.eventCategory === "类别待确认", "category fallback is fixed");
