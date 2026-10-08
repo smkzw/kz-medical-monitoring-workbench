@@ -1081,7 +1081,10 @@ def create_medical_monitoring_router(
                             version_label=str(latest.public_title or latest.entry_id)[:200],
                             version_date=str(getattr(latest, "registered_at", "") or "")[:10]
                             or "1970-01-01",
-                            applicability_status="active",
+                            # R27攻坚：同 main.py 运行门自愈——曾写"active"
+                            # 非法枚举值，register 必抛且被下方 except 吞掉
+                            # （抽屉恒空）；取值论证见 main.py R27 注释。
+                            applicability_status="project_effective_confirmed",
                             operational_effective_from=str(
                                 getattr(latest, "registered_at", "") or ""
                             )[:10] or "1970-01-01",
