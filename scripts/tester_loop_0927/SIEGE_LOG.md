@@ -4,6 +4,109 @@
 
 ---
 
+## R28 攻坚·第 1 次（2026-10-09，攻坚工程师-R28-第1次）
+
+### 0. 结论先行
+
+**墙未复发：本轮独立复现两遍全新幂等键全链全绿，零阻断、零代码改动、零重启。**
+R27 攻坚修复（eae38b14）与 R27 轮次修复（9f5f8101）之后的新 build
+（backend_build_id=**api-75f010c43fde3f82**，前端 expectedBackendBuildId 配对一致）下，
+常驻项目「MX循开考-CSU」（proj_user_6ef58ac151e1）以两个全新幂等键各走完
+run-setup/options → workspace/bootstrap（留证）→ prepare-and-start →
+progress completed → publication available → result-entry →
+results/{rct}/overview 可读（两遍投影均 **1,241,039 字节/41 发现/16 受试者**，
+逐字节一致，与 R25/R26/R27 绿路径同源）。R19/R27 修复在新 build 在役：
+代码亲读在位、回归亲测绿。终态磁盘 31 条全部 completed+result_available=1、
+**waiting_start=0**。
+
+### 1. 环境前置（复现前，未重启任何服务）
+
+- 8911（pid 26563，127.0.0.1 IPv4 监听）`/api/health` 200（runtime_store
+  integrity ok, schema v16）；`/api/runtime-readiness` status=ready、
+  backend_build_id=**api-75f010c43fde3f82**，与 5178（node pid 26604）
+  `runtime-build.json` expectedBackendBuildId **配对一致**
+  （frontendBuildId=web-1f04fb05696a5e24）。该 build 晚于 R27 攻坚收尾时的
+  api-8f8b335e0cdb6221（期间经 R27 轮次修复 9f5f8101 + 归档 4e7fbade 重建，
+  HEAD=4e7fbade，源码树 clean，仅 tester_loop 台账文件有未提交改动）。
+  本轮全程未重启。
+- 既有修复在新 build 在位（本轮亲读源码）：
+  `packages/medical_monitoring/runtime/run_entry.py:378`
+  `ensure_builtin_global_default()`（R19），调用点
+  `packages/medical_monitoring/api/r7_product/run_routes.py:199`
+  （`registry.reserve()`（:222）之前）；`services/api/app/main.py:1205` 与
+  `services/api/app/medical_monitoring_router.py:1087`
+  `applicability_status="project_effective_confirmed"`（R27）。
+- 复现前磁盘基线：launch_registry **29 条全部 completed+result_available=1**、
+  waiting_start=0、completed 未发布=0；execution_profiles
+  `global_default|*|1` 在位；`GET /protocol-versions` → 1 条 confirmed
+  （protov_d952458e…，applicability_status=project_effective_confirmed，
+  R27 自愈种入那条，非手工）。种子 attempt
+  stg-cd69899943ba42618f589ba07a134a59 仍在（200，profile_ready）。
+
+### 2. 复现（任务①）——两遍全链（驱动 `r28s_siege_repro.py`，证据
+`r28s_siege_evidence.jsonl` 50 行、0 阻断）
+
+忠实界面路径（不先 workspace/bootstrap；bootstrap 仅按任务书列名留证实测，
+两遍均 200 replayed=true revision=1 幂等零改动）。
+
+**第一遍（22:54:55Z 起，key=r28s-fresh-b899f11e021c，链路壁钟 14s）**：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线双侧 | mapping-candidates 200（1063ms，**candidates_ready，confirmation_status=confirmed**，顶层 facts_generated=false 为 R25 §7 已录投影怪癖）、facts 200（945ms，**ready**，10 表/591 行/3038 值 100% 往返核验）、project/open 200（951ms，**current**）、protocol-versions 200（921ms，1 confirmed）、runs 200——预置台与运行门无口径差 |
+| run-setup/options | 200，1016ms，snapshot:ef8692acfbab4d2a9846916f（与历史 registry 指纹同源） |
+| workspace/bootstrap（留证） | 200，968ms，replayed=true revision=1 |
+| prepare-and-start | **200，1159ms**，run:ffbc38bcc47ddfe063aeccca…（registry sequence 30，manifest_digest 回到 f58ccf16c4f3 同源） |
+| progress | 首轮询即 completed（percent=100.0，polls=1；result_available 首轮询 false，发布后终态 1，R20 §4 记录的同型投影时序） |
+| publication | POST 200→**available**（1418ms） |
+| result-entry | 200，rct=result-context:f20e389cda3f4ca5a3b6c2a9bdcff3e4 |
+| results/{rct}/overview | 200，1184ms，**1,241,039 字节、41 发现/16 受试者**，identity.project_ref=proj_user_6ef58ac151e1 |
+
+**第二遍=重验（任务③，22:55:25Z 起，key=r28s-fresh-c28a51ab12c1，壁钟 15s）**：
+同链全绿：options 200（1161ms，snapshot 同源）→ bootstrap 200 replayed →
+prepare-and-start **200**（1217ms，run:794b65200ce0385d585714c4…，sequence 31）
+→ progress completed（polls=1）→ publication **available**（1457ms）→
+entry 200（rct=result-context:f7a1e4bb9fdc4ea595dc7111612e4894）→ overview 200
+（1221ms，**1,241,039 字节、41 发现/16 受试者**，chain_ok=True）。两遍序列化
+字节数与 R25/R26/R27 五读（1,241,039）**逐字节一致**。
+
+### 3. 修复（任务②）与口径差对照
+
+**无需新修复，本轮零代码改动、零重启。** 两侧口径在本轮无分叉：预置台
+（mapping confirmed / facts ready / project current / 方案版本 confirmed 在位）
+与运行启动门（run-setup/options 200 + prepare-and-start 200）读数一致。
+本轮若复现 422/409/卡「等待开始」，对照方案为驱动内 `backend_truth()`
+（mapping/facts/project/open/protocol-versions 同刻快照，较 R26 驱动新增
+protocol-versions——上一道墙 R27 正是该门）——已装备但未触发（0 阻断）。
+
+既有修复在役证明（本轮全部亲测）：
+
+- R19：代码在位（见 §1）；`pytest tests/test_medical_monitoring_r27_protocol_gate_selfheal.py tests/test_medical_monitoring_r7_product_router.py -k "r19_siege or protocol or selfheal" -q` → **6 passed**（2.33s）。
+- R27：同上 6 passed 含 selfheal 2/2（门经自愈种入合法枚举并放行 / 无方案docx 时保持 fail-closed）。
+- 全量：`pytest tests/test_medical_monitoring_r7_product_router.py tests/test_medical_monitoring_r27_protocol_gate_selfheal.py -q` → **99 passed**（43.41s；97 路由 + 2 门自愈）。
+
+### 4. 观察与边界（不拦链路，转台账观察）
+
+- **sequence 29 的 manifest_digest 分叉已核非缺陷**：该条为 R27 归档后界面键
+  监查（monitoring_ad43781e…，2026-10-08T18:22Z，mode=daily/full 与我两遍
+  相同），digest e49f95084811 与历史 f58ccf16c4f3 不同——亲读 registry 行：
+  其 `rule_tokens_json=["rule-revision:5d00d4ce2f2622ce11b3d029"]`（界面勾选
+  规则修订令牌），而我两遍 `risk_rule_tokens: []`（默认规则集）——**有效输入
+  不同故 manifest 不同**，属正常语义；该运行自身 completed+available 收口。
+- progress 首轮询 `result_available=false` 与 registry 终态 1 的瞬差：R20 §4
+  同型投影时序，发布 available 后一致，两遍均复现，非缺陷。
+- 本轮结论仅覆盖「运行启动→完成→发布→可读」墙；R27 §7 所列（自愈种入的
+  version_date/operational_effective_from 兜底 1970-01-01、双副本自愈待收敛、
+  version_label 截断上限 200 vs 80）、R25 §7 所列（409 文案语义偏差、
+  candidates 投影怪癖、偶发 10-22s 慢调用家族）沿台账，本轮未触碰。
+- 浏览器像素级全链回归未执行（工程验证身份以 API 驱动+状态机代码核验为
+  口径；界面路径的自动收口行为已有 Loop.jsx 代码佐证，R25 §3）。
+
+留痕文件：`r28s_siege_repro.py`、`r28s_siege_evidence.jsonl`（两遍全链）、
+本日志节。
+
+---
+
 ## R27 攻坚·第 1 次（2026-10-08，攻坚工程师-R27-第1次）
 
 ### 0. 结论先行
