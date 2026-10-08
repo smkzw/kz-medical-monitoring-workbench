@@ -485,3 +485,21 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 自检（19:26:52 实测）：① 8911 `/api/runtime-readiness` ready:true（backend_build_id=api-272b43c31e966e99，runtime_schema_version=16——代码变更后新指纹）；② `http://localhost:5178/monitoring` HTTP 200；③ 5178 `/runtime-build.json` expectedBackendBuildId=api-272b43c31e966e99 与 8911 一致（配对通过）。
 - 波动如实记录：vite 启动窗口（19:26:19）有一次 /api/ai-gateway/status 代理 ECONNREFUSED（API 尚在启动），终验三条件全过后未复发；`/tmp/mm_api_8911.log` 全程 0 字节（--log-level warning 无告警）。
 - 纪律：零业务管道推进、零 runs/ 数据修改（含 R26-02 诊断用的 sqlite/manifest 均只读 mode=ro）。
+
+## 2026-10-08T17:41-17:47Z（R27D 开考位预置·守护员第9次复验：R26轮后修复员重启（api-272b43c3）后三条件仍全过，零重复预置）
+
+- 操作者：开考预置守护员-R27（D位）。动作：查存量 → 三条件现场实测全过 → 直接复用。**零新建、零 AI 作业、零代码修复、零重启、零启动运行**。
+- 环境漂移（本轮之前他位动作，非本轮）：R26轮后·修复员 17:26Z 按 R26-01…05+R24-01 修复并双重启 8911+5178 → build api-272b43c31e966e99、API pid 87131（本员 lsof 实测同值）；5178 本员 lsof 实测 node pid 87162。
+- 存量检查现场实测（ask 步骤0）：`GET /api/projects` → 仅 1 项目 proj_user_6ef58ac151e1 / MX循开考-CSU / active（modules 含 medical_monitoring，real_source_slice）；mapping-candidates → confirmation_status=confirmed / draft monmapdraft_73abe5c6c9561a9e95eec2056991 v80 status=confirmed / draft.user_questions=0 项 / 60候选（候选数与 R19D-R26D 零漂移）；facts → state=ready（values=source_values_verified=3038，message「可用于监查的数据已生成，可以开始监查。」，facts-manifest.json 在盘 mtime Oct 5 22:44 零漂移）；project/open → current/complete/openMode=edit/canView/canEdit「项目格式正常，可以继续使用。」；study-documents HTTP 200 ready=true；run-setup/options 200。
+- 只读探障：main.py:5111+5121 marker 修复在位（行号自 R26D 的 5029/5039 平移，修复本身未动）；contracts.py:53-54=V5；本项目 workspace launch_registry Python sqlite3 只读直查（uri mode=ro）=mm-r7-w01r26-launch-registry-v5（文件 mtime Oct 8 16:37 本轮窗口前被触碰，marker 复测仍 v5，非缺陷）；8911 readiness ready:true（backend_build_id=api-272b43c31e966e99，runtime_schema_version=16）与 5178 [::1]/monitoring=200、runtime-build.json expectedBackendBuildId 配对一致（frontendBuildId=web-5c52de3cbd52918c）；ai-gateway/status 只读探看 configured=true 无 route_validation_errors/missing_env，未做付费 probe；runs 26 条全部 completed 且 result_available=true（R26D 后 +4 为 R26/R27 开考/攻坚角色所启动，非本轮）；8910/5177 lsof 均 0 监听（沿 R11 起，未触碰）。
+- 观察：candidates 投影怪癖沿 R21D-R26D 持续（顶层 facts_generated=False / summary pending_confirmation_count=60、user_question_count=1，与权威 confirmed/facts ready 终态不一致），提请修复员核投影字段语义；本轮 API 全程响应正常（0.8-1.7s），无 R25/R26 记录的启动期挂起波动复发。
+- 留痕：`R5_SEEDED_PROJECT.md` R27D 节。本轮无新驱动脚本/状态文件（复用即结论）。
+- 纪律：零业务管道推进、零项目数据触碰、零代码修改；8910/5177 全程仅只读 lsof（本轮均无监听），未 kill 未重启未触碰。
+
+## 2026-10-08T18:0xZ（R27·攻坚工程师：R27-01修复 eae38b14 后 8911+5178 标准重启）
+
+- 操作者：攻坚工程师-R27-第1次。背景：R26-05 方案版本门自愈死代码修复（eae38b14，services 改动）需重启加载并重建指纹配对。
+- 重启命令：kill 仅限 `lsof -ti:8911`（87131）/`lsof -ti:5178`（87162）；uvicorn 以 WORKBENCH_RUNTIME_DIR=…/tester_loop_iso_20260928/runtime、WORKBENCH_LOCAL_SINGLE_USER=1、WORKBENCH_AI_RUNTIME=api、WORKBENCH_MONITORING_AI_PARALLELISM=2 启动 → pid 93624；vite 以 VITE_API_PROXY_TARGET=http://127.0.0.1:8911 启动 → pid 93671 监听 [::1]:5178。
+- 三条件自检（18:07 实测）全过：① 8911 `/api/runtime-readiness` ready、backend_build_id=**api-8f8b335e0cdb6221**（services 指纹变更，实证修复加载）；② `http://localhost:5178/monitoring` 200；③ runtime-build.json expectedBackendBuildId=api-8f8b335e0cdb6221 配对一致（frontendBuildId=web-5c52de3cbd52918c 不变）。
+- 修复后行为实证：GET /protocol-versions（先前 items=[]）自愈种入 protov_d952458e7f816a46e614f900（status=confirmed、applicability_status=project_effective_confirmed）；同项目两遍全新幂等键 prepare-and-start 200 → completed → available → overview 可读（1,241,039B/41发现/16受试者，与 R25/R26 逐字节一致）；registry 终态 28 条全部 completed+result_available=1、waiting_start=0。
+- 纪律：kill/重启仅动 8911/5178；8910/5177 未触碰（lsof 0 监听）；sqlite 诊断均只读 mode=ro（register 写沙箱副本，live 写全部经 API 设计端点/服务路径）。

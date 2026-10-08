@@ -4,6 +4,190 @@
 
 ---
 
+## R27 攻坚·第 1 次（2026-10-08，攻坚工程师-R27-第1次）
+
+### 0. 结论先行
+
+**墙以第三种形态复发：R26-05 新方案版本门（409 `protocol_version_required`）
+拦死常驻项目，其内建自愈因非法枚举值是死代码——已核验方案docx的项目不存在
+任何用户可达的方案版本确认路径，被永久拦在启动门外。** 最小根因修复（2 行：
+两处自愈的 `applicability_status="active"` → `"project_effective_confirmed"`，
+commit eae38b14）+回归测试（修复前红/修复后绿）+8911/5178 标准重启
+（新指纹 api-8f8b335e0cdb6221 配对一致）后，同项目两遍全新幂等键全链绿
+（completed→available→可读，投影 1,241,039 字节/41 发现/16 受试者，与
+R25/R26 三读逐字节一致）。未跳门：项目状态由修复后的设计自愈路径
+（R22-01 语义）真实补齐。
+
+### 1. 环境前置（复现前，未重启任何服务）
+
+- 8911（pid 87131，127.0.0.1 IPv4 监听）`/api/health` 200（schema v16）；
+  `/api/runtime-readiness` ready、backend_build_id=**api-272b43c31e966e99**
+  （R26 攻坚时 api-589520532fc5317d；期间经 R26 轮次修复 e2772c4a——R26-01..05
+  +R24-01——重建并已由 R27D 守护员 17:41Z 复验三条件配对一致），
+  与 5178（vite node pid 87162，仅监听 [::1]:5178）`runtime-build.json`
+  expectedBackendBuildId 配对一致（frontendBuildId=web-5c52de3cbd52918c）。
+- R19 修复在新 build 在位（本轮亲读源码）：`packages/medical_monitoring/
+  runtime/run_entry.py:377` `ensure_builtin_global_default()`、调用点
+  `api/r7_product/run_routes.py:199`（reserve 之前）。
+- 复现前磁盘基线：launch_registry 26 条全部 completed+result_available=1、
+  manifest_digest 统一 f58ccf16c4f3、waiting_start=0（seq 25/26 为界面键
+  monitoring_*，R26 轮次后角色所启动，已收口）；execution_profiles
+  `global_default|*|1` 在位。
+
+### 2. 复现（任务①）——第一遍即 BLOCKED（驱动 `r27s_siege_repro.py`，
+证据 `r27s_siege_evidence.jsonl` 前段）
+
+忠实界面路径（不先 workspace/bootstrap；bootstrap 仅按任务书列名留证实测，
+200 replayed=true revision=1 幂等零改动）。17:50:50Z
+（key=r27s-fresh-e6f117fbef09）：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线双侧 | mapping-candidates 200（1004ms，candidates_ready，confirmed）、facts 200（899ms，**ready**）、project/open 200（903ms，**current**）、runs 200——预置台全绿 |
+| run-setup/options | 200，979ms，snapshot:ef8692acfbab4d2a9846916f（与历史 registry 指纹同源） |
+| workspace/bootstrap（留证） | 200，902ms，replayed=true revision=1 |
+| prepare-and-start | **409 `{"code":"protocol_version_required","message":"先完成方案版本确认：当前项目尚无已确认且可解析的方案版本……"}`，2566ms** |
+| 被拒同刻后端真实状态 | mapping 200（1023ms，candidates_ready）/ facts 200（916ms，ready）/ project/open 200（919ms，current）——**预置台口径与运行门口径当场分叉** |
+| 磁盘 launch_registry | 26 条全部 completed（复现前基线），无 waiting_start；`GET /protocol-versions` → **items=[]** |
+
+### 3. 根因（两侧口径差钉到代码行）
+
+口径差本质：**接入管线侧 candidates_ready/ready/current 全部为真，运行启动门
+拒的是「方案版本列表为空」；而补齐它的唯一自动路径（自愈）因传了非法枚举值
+必然抛错、被静默吞掉——自愈是死代码，前端又没有手动确认路径**：
+
+1. `packages/medical_monitoring/api/r7_product/run_routes.py:142-149`
+   （R26-05 门，e2772c4a 引入）：`context.protocol_version_gate(canonical)`
+   命中即 409 `protocol_version_required`。门本身语义正确（fail-closed，
+   无方案依据的运行不得产出医学结论），本轮**不动门**。
+2. `services/api/app/main.py:1204-1245`（修复前行号）`_r7_protocol_version_gate`：
+   `_has_confirmed_version()`（:1218-1223，查 protocol-versions 列表
+   status=confirmed）为假 → 调自愈（:1236）→ `except Exception: pass`
+   （**:1237-1239**，静默吞）→ 再判仍假 → 409（:1242+）。
+3. 自愈本体 `services/api/app/main.py:1164-1201`
+   `_auto_register_confirmed_protocol_version`：调用
+   `authoring.register_protocol_version(...)` 时传
+   **`applicability_status="active"`（修复前 :1196）**——非法值。合法枚举仅
+   `version_date_only / project_effective_confirmed / site_specific`
+   （`monitoring_protocol_rules.py:13-17`），`ProtocolSourceVersion.create`
+   于 `monitoring_protocol_rules.py:1182` 经 `_validate_enum`
+   （**:410-415**）必抛 `MonitoringProtocolRuleError` → 被第 2 条的
+   except 吞掉。**自愈自引入起一次都不能成功。**
+4. 同一缺陷的第二副本：`services/api/app/medical_monitoring_router.py:1077-1094`
+   GET `/protocol-versions` 的 R22-01 抽屉自愈，同样传 `"active"`
+   （修复前 :1084）+ 同样的 `except Exception: pass`（修复后 :1095）——抽屉恒空。
+5. **用户可达路径缺失**：前端对 `/protocol-versions` 只有 GET
+   （`frontend/src/features/medical-monitoring/medicalMonitoringApi.mjs:50`），
+   `frontend/src` 零处调用 POST `/protocol-versions`
+   （medical_monitoring_router.py:1141 注册端点无前端调用方）——门文案
+   「请前往『方案事实与规则发布』确认方案版本」对用户实际不可达。
+6. 缺陷引入点：git blame 两处 `"active"` 均为 e2772c4a（R26 轮修复提交，
+   2026-10-08）；门也是该提交新增——**门上线即带死自愈**，R27D 守护员
+   17:41Z 预检未探运行门故未发现。
+7. R19/R25 修复与本案正交且仍在役：本轮 global_default 在位（422 未复现）、
+   复现前无 in-flight 遗留（409 in_flight_conflict 未复现）。
+
+### 4. 修复（任务②，最小根因修复，2 行 + 注释，不跳门）
+
+`"active"` 的语义意图是「项目级生效中」，对应合法枚举
+`project_effective_confirmed`（且 `create()` 要求的
+`operational_effective_from` 两处调用本就传入——该参数仅在
+project_effective_confirmed 下生效；`current_published_pack`
+（`monitoring_protocol_rule_repository.py:2368+`）解析规则包也只认
+project_effective_confirmed 版本）：
+
+- `services/api/app/main.py`：`_auto_register_confirmed_protocol_version`
+  的 `applicability_status="active"` → `"project_effective_confirmed"`
+  （附 R27 攻坚注释：非法枚举→必抛→被吞→409 死锁成因与取值论证）。
+- `services/api/app/medical_monitoring_router.py`：R22-01 抽屉自愈同步修正
+  （同因同修，抽屉自愈恢复工作——修复后实证：GET protocol-versions 即种入
+  `protov_d952458e7f816a46e614f900`，status=confirmed、
+  applicability_status=project_effective_confirmed、源
+  src_proj_user_6ef58ac151e1_protocol_docx_b6e1bceb269c）。
+
+回归测试（`tests/test_medical_monitoring_r27_protocol_gate_selfheal.py`，
+沙箱驱动真实 `_r7_protocol_version_gate`）：
+
+- `test_r27_gate_self_heal_registers_confirmed_version_and_passes`：
+  已登记+内容校验通过（parsed/ready/allowed）的方案docx 上，门必须经自愈
+  种入 confirmed 版本并放行（返回 None），版本注册值须为合法枚举且
+  幂等（二次过门不重复注册）。**git stash 修复后该测试红**（门吞异常后
+  返回 409 dict），恢复修复后绿——红/绿均本轮亲测。
+- `test_r27_gate_still_fails_closed_without_parsed_protocol_docx`：
+  无方案docx 来源时门保持 fail-closed 409——修复不得放宽门禁。
+
+套件：新文件 2/2 绿（1.51s）；`tests/test_medical_monitoring_r7_product_router.py`
+**97 passed**（44.32s，含 R19 siege 2/2、R26-05 门禁正反用例）；
+`tests/test_monitoring_protocol_rule_api.py` +
+`tests/test_medical_monitoring_module_contract.py` **99 passed**（3.73s）；
+`-k "r19_siege or protocol"` 4 passed；`test_monitoring_protocol_rule_real_my008.py`
+1 passed。
+
+提交：eae38b14『测试循环R27攻坚: 修复R27-01方案版本门自愈死代码……』
+（修复+测试+本轮驱动/诊断/证据脚本），提交在重启之前。
+
+### 5. 重启（标准命令，只动 8911/5178）
+
+- 8911：kill `lsof -ti:8911`（87131）→ uvicorn
+  （WORKBENCH_RUNTIME_DIR=runs/tester_loop_iso_20260928/runtime、
+  WORKBENCH_LOCAL_SINGLE_USER=1、WORKBENCH_AI_RUNTIME=api、
+  WORKBENCH_MONITORING_AI_PARALLELISM=2）→ **pid 93624**。
+- 5178：kill `lsof -ti:5178`（87162）→ vite
+  （VITE_API_PROXY_TARGET=http://127.0.0.1:8911）→ **pid 93671**。
+- 三条件自检全过：① `/api/runtime-readiness` ready、
+  backend_build_id=**api-8f8b335e0cdb6221**（services 改动后新指纹，
+  实证修复已加载）；② `http://localhost:5178/monitoring` 200；
+  ③ runtime-build.json expectedBackendBuildId=api-8f8b335e0cdb6221
+  配对一致（frontendBuildId=web-5c52de3cbd52918c 不变，前端源未动）。
+
+### 6. 重验（任务③，同项目 MX循开考-CSU，两遍全新幂等键全链）
+
+**第一遍（18:08:07Z，key=r27s-fresh-3f7925e9aff4，链路壁钟 12s）**：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线双侧 | mapping 200（964ms，candidates_ready，confirmed）、facts 200（876ms，ready）、project/open 200（894ms，current）、runs 200 |
+| run-setup/options | 200，1030ms，snapshot:ef8692acfbab4d2a9846916f |
+| workspace/bootstrap（留证） | 200，883ms，replayed=true revision=1 |
+| prepare-and-start | **200，1067ms**，run:fb08220896efc848a13b125a…（registry sequence 27）——修复前同刻 409 的同端点 |
+| progress | 首轮询即 completed（percent=100.0，polls=1；result_available 首轮询 false，发布后终态 1，R20 §4 同型投影时序） |
+| publication | POST 200 → **available**（1362ms） |
+| result-entry | 200，rct=result-context:1e25d1a6081b4d24aa4aeb41f3481bf1 |
+| results/{rct}/overview | 200，1101ms，**1,241,039 字节、41 发现/16 受试者**，与 R25/R26 三读逐字节一致 |
+
+**第二遍=复验（key=r27s-fresh-e9d0d0e3af54，壁钟 13s）**：全绿——options 200
+（935ms，snapshot 同源）→ bootstrap 200 replayed → prepare-and-start **200**
+（1106ms，run:cf20c1f07413153e509a1733…，sequence 28）→ progress completed
+（polls=1）→ publication **available**（1359ms）→ entry 200
+（rct=result-context:e702a7caed3e4c48905b1adcba36663c）→ overview 200
+（1303ms，1,241,039 字节、41 发现/16 受试者，chain_ok=True）。
+
+终态磁盘：sequence 1-28 全部 completed+result_available=1、manifest_digest
+统一 f58ccf16c4f3、**waiting_start=0**（本轮新增 27/28 两行）；方案版本列表
+1 条 confirmed（自愈种入，非手工/非脚本直写）。
+
+### 7. 遗留与边界（转台账，不属本轮墙判据）
+
+- 自愈种入的 `version_date/operational_effective_from` 均为兜底
+  1970-01-01（`getattr(latest, "registered_at", "")` 取不到值——
+  SourceRegistryEntry 无该属性名，实为 created_at）：不拦门、语义可用，
+  但日期失真，转台账提请修复员核字段名。
+- 两处自愈逻辑（main.py 与 medical_monitoring_router.py）仍是复制粘贴
+  双副本（历史上已三次同向修），转台账建议收敛为单一共享实现。
+- `version_label` 截断上限不一致：调用方 `[:200]` vs 契约
+  `max_length=80`（ProtocolVersionAuthoringRequest 是路由层的约束，
+  create() 同为 80）——超长文件名标题会在自愈处必抛，同属「自愈静默死」
+  家族的潜在复发点，转台账。
+- R25 §7 所列 409 文案语义偏差（completed+未发布场景）、candidates 投影
+  怪癖、偶发 10-22s 慢调用家族：沿台账，本轮未触碰。
+- 浏览器像素级全链回归未执行（工程验证身份以 API 驱动+状态机代码核验为
+  口径；界面路径的自动收口行为已有 Loop.jsx:1060-1065 代码佐证，R25 §3）。
+
+留痕文件：`r27s_siege_repro.py`、`r27s_gate_diagnose.py`（沙箱钉根因）、
+`r27s_siege_evidence.jsonl`（409 复现+两遍全链）、本日志节。
+
+---
+
 ## R26 攻坚·第 1 次（2026-10-08，攻坚工程师-R26-第1次）
 
 ### 0. 结论先行
