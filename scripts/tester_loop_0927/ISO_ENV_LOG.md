@@ -456,3 +456,23 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 自检（重启后实测）：① 8911 `/api/runtime-readiness` ready:true（backend_build_id=api-589520532fc5317d，runtime_schema_version=16）；② `http://localhost:5178/monitoring` HTTP 200；③ 5178 `/runtime-build.json` expectedBackendBuildId=api-589520532fc5317d 与 8911 一致（配对通过）。
 - 修复生效验证（只读）：本次修复的启动序调整使僵尸租约收割不再可被跳过——重启后 monai_fad0322b3fa2aaf9b8fb9e2c7039 与 monai_cab4f66709ae3c400b7254ccb2f0（attempt 2/2、租约 2026-10-07T22:59 过期、status=running 滞留>4小时）即时转 failed/worker_lease_expired 终态（updated_at 2026-10-08T03:02:17）；队列其余任务正常推进（completed 3887→3920）。此前 00:29 假死重启后同类僵尸存活至次日（对照证据）。
 - 纪律：零业务管道推进、零 runs/ 数据修改（仅 sqlite 只读查询）；8910/5177 仅只读 lsof。
+
+## 2026-10-08 05:41–05:45 +0200（R26·隔离环境守护员：API 假死恢复 8911 重启 + 5178 重启）
+
+- 操作者：隔离环境守护员-R26。背景：ask 报 API 探针 exit=1、前端探针 exit=0。
+- 恢复前实测（05:41:58）：8911 有残留进程 pid 16261（uvicorn，elapsed 39:55）但 `/api/runtime-readiness` 8 秒超时零字节（curl exit=28）——进程假死非缺席（与 R25 00:29 同款故障）；5178 pid 16303 `/monitoring` 200 正常。前提核验：`runs/tester_loop_iso_20260928/runtime` 在盘（72 项）、`~/.config/cms-medical-workbench/ai-runtime.env` 与 `.venv/bin/python` 在位。
+- API 重启（严格按 ask 给定命令，05:42:24）：kill 仅限 `lsof -ti:8911`（杀假死 16261），uvicorn 以 WORKBENCH_RUNTIME_DIR=…/tester_loop_iso_20260928/runtime、WORKBENCH_LOCAL_SINGLE_USER=1、WORKBENCH_AI_RUNTIME=api、WORKBENCH_MONITORING_AI_PARALLELISM=2 启动 → pid 20020；`/tmp/mm_api_8911.log` 全程 0 字节（--log-level warning 下无告警，正常）。
+- vite 重启（严格按 ask 给定命令，05:42:52）：kill 仅限 `lsof -ti:5178`（杀 16303），VITE_API_PROXY_TARGET=http://127.0.0.1:8911 启动 → pid 20086 监听 5178。
+- 自检三条件（等满 15 秒后，05:43:23 实测）全过：① `http://127.0.0.1:8911/api/runtime-readiness` → http 200，ready:true，backend_build_id=api-589520532fc5317d（与 R25 修复员 03:01 重启时一致，本轮无代码变更），runtime_schema_version=16，runtime_store_ready:true，independent_ai ready/configured=true（zhipu-coding-plan / glm-5.3-flash）；② `http://localhost:5178/monitoring` → http 200；③ 5178 `/runtime-build.json` expectedBackendBuildId=api-589520532fc5317d 与 8911 backend_build_id 一致（BUILD_ID_MATCH=YES，frontendBuildId=web-f8b8094c1a14837e）。
+- 波动如实记录：05:43:47 终验复核曾超时一次（curl exit=28 零字节，进程 20020 存活）——疑为启动期后台工作（过期租约收割/AI 队列恢复）短暂持锁；随后 05:44:16–05:44:27 三连测 http 200（~0.73s/次），05:45:19 完整终验三条件再全过，未复发。**一次重启即成，未动用第二次尝试。**
+- 纪律：零业务管道推进、零项目数据触碰、零代码修改；8910/5177 全程仅只读 lsof（本轮均无监听：8910_none / 5177_none），未 kill 未重启未触碰。
+
+## 2026-10-08T03:4x-03:5xZ（R26D 开考位预置·守护员第8次复验：R25修复员+R26守护员重启后三条件仍全过，零重复预置）
+
+- 操作者：开考预置守护员-R26（D位）。动作：查存量 → 三条件现场实测全过 → 直接复用。**零新建、零 AI 作业、零代码修复、零重启、零启动运行**。
+- 存量检查现场实测（ask 步骤0）：`GET /api/projects` → 仅 1 项目 proj_user_6ef58ac151e1 / MX循开考-CSU / active（modules 含 medical_monitoring，real_source_slice）；mapping-candidates → confirmation_status=confirmed / draft monmapdraft_73abe5c6c9561a9e95eec2056991 v80 status=confirmed / user_questions=0 / 60候选；facts → state=ready（values=source_values_verified=3038，message「可用于监查的数据已生成，可以开始监查。」，facts-manifest.json 在盘 mtime Oct 5 22:44 零漂移）；project/open → current/complete/openMode=edit/canView/canEdit；study-documents HTTP 200 ready=true；run-setup/options 200（recommended_mode=daily）。
+- 只读探障：main.py:5029+5039 marker 修复在位（import SCHEMA_VERSION 常量、种子 marker 取该值；行号自 R25D 的 5020/5030 平移，修复本身未动）；contracts.py:53-54=V5；本项目 workspace launch_registry Python sqlite3 只读直查（uri mode=ro）=mm-r7-w01r26-launch-registry-v5；8911 readiness ready:true（backend_build_id=api-589520532fc5317d，pid 20020——R26 隔离环境守护员 05:42+0200 假死恢复重启后的现行进程）与 5178 [::1]（node pid 20086）runtime-build.json expectedBackendBuildId 配对一致（frontendBuildId=web-f8b8094c1a14837e）；runs 22 条全部 completed 且 result_available=true（R25D 后 +3 为 R25 开考/攻坚角色所启动，非本轮）；8910/5177 lsof 均 0 监听（沿 R11 起，未触碰）。
+- 现场波动如实记录：本员首测时（03:48-03:49Z）API 业务端点短暂挂起（/healthz 404 秒回但 /api/projects、readiness 10s 超时零字节），03:49:26Z 起未干预自愈（首测 200 耗时 10.8s，随后 0.76/0.81s 正常）——与 R26 守护员 05:43:47+0200 记录的启动期波动同款，非持续性假死，未动用恢复动作。
+- 观察如实记录：candidates 投影怪癖沿 R21D-R25D 持续（顶层 facts_generated=False / summary pending_confirmation_count=60、user_question_count=1，与权威 confirmed/facts ready 终态不一致），提请修复员核投影字段语义。
+- 留痕：`R5_SEEDED_PROJECT.md` R26D 节。本轮无新驱动脚本/状态文件（复用即结论）。
+2026-10-08 09:29 无损暂停（用户指令）：run dwfrun-4ea04740停于R26测试者阶段（A/C/D已交卷、B在途）。8911/5178有意保持运行供恢复（轮中暂停，环境门探针恢复时为日志回放不重查）；B位浏览器TaskSpace保留不清。恢复=ResumeWorkflowRun同run_id，详见PAUSE_HANDOFF_20261008.md
