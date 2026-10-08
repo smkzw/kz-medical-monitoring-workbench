@@ -31,6 +31,7 @@ from packages.medical_monitoring.admission.mapping_gate import (
     DOC_AUTH_VERIFIER_MODEL,
     DOC_AUTH_VERIFIER_PROVIDER,
 )
+from services.api.app.ai_gateway import AiProviderRuntimeError
 from services.api.app.monitoring_ai_contracts import (
     MONITORING_AI_SCHEMA_VERSION,
     MonitoringAiInputRevision,
@@ -244,6 +245,21 @@ class _RepairingProvider(_Provider):
         if len(self.envelopes) == 1:
             output["claims"] = []
         return output
+
+
+class _RaisingProvider(_Provider):
+    """R27轮（R27-01）：模拟上游持续限流——每次调用都以infra类失败抛出。"""
+
+    def __init__(self, provider: str, model: str):
+        super().__init__(provider, model, analysis=None)
+
+    def run(self, envelope):
+        self.envelopes.append(envelope)
+        raise AiProviderRuntimeError(
+            "openai-compatible-chat-conn/glm-5.3-flash: rate limit — "
+            "All credentials for model glm-5.3-flash are cooling down (HTTP 429)",
+            diagnostics={"failure_code": "provider_sse_error_event"},
+        )
 
 
 class _StaleIdentityThenCorrectProvider(_Provider):
@@ -948,11 +964,25 @@ def test_product_workflow_retries_one_terminal_failure_once() -> None:
     retries = []
     wakes = []
     workflow = object.__new__(MonitoringDocumentAuthorityWorkflow)
-    workflow.repository = SimpleNamespace(
-        retry_terminal=lambda project_id, job_id, **kwargs: retries.append(
-            (project_id, job_id, kwargs["current_input_revision_sha256"])
+
+    # R27轮（R27-01）：自动恢复带预算——fake遵循retry_terminal的
+    # automatic_recovery_limit语义（预算内返回重排队作业，耗尽原样
+    # 返回终态作业）。
+    def fake_retry_terminal(
+        project_id, job_id, *, current_input_revision_sha256,
+        automatic_recovery_limit=None,
+    ):
+        retries.append(
+            (
+                project_id,
+                job_id,
+                current_input_revision_sha256,
+                automatic_recovery_limit,
+            )
         )
-    )
+        return SimpleNamespace(status=MonitoringAiJobStatus.QUEUED)
+
+    workflow.repository = SimpleNamespace(retry_terminal=fake_retry_terminal)
     workflow.worker_wake = lambda: wakes.append(True)
     failed = SimpleNamespace(
         project_id="project",
@@ -972,10 +1002,187 @@ def test_product_workflow_retries_one_terminal_failure_once() -> None:
     )
 
     assert workflow._recover_failed_once((failed, complete)) is True
-    assert retries == [("project", "failed-job", "a" * 64)]
+    assert retries == [
+        ("project", "failed-job", "a" * 64, workflow._AUTOMATIC_RECOVERY_LIMIT)
+    ]
     assert wakes == [True]
-    failed.max_attempts = 4
+    # 预算耗尽（retry_terminal原样返回终态作业）：不得再声称已重排，
+    # 也不得wake——让advance落到failed终态向用户透出失败原因。
+    workflow.repository = SimpleNamespace(retry_terminal=(
+        lambda project_id, job_id, *, current_input_revision_sha256,
+        automatic_recovery_limit=None: SimpleNamespace(
+            status=MonitoringAiJobStatus.FAILED,
+        )
+    ))
     assert workflow._recover_failed_once((failed, complete)) is False
+    assert wakes == [True]
+
+
+def test_recover_failed_once_requeues_only_within_automatic_budget(
+    tmp_path,
+) -> None:
+    """R27轮（R27-01）：infra类失败的自动重试必须有预算上限。
+
+    上游持续限流时，无界自动重排会让advance永远返回analyzing——界面
+    无限「正在核对」且看不到失败原因（ISO实测attempt涨到32、用户挂死
+    两观察窗口）。预算（3）耗尽后advance必须落failed终态。
+    """
+
+    batch = _batch()
+    project_id = "project-document-authority"
+    repository = MonitoringAiRepository(tmp_path / "budget.sqlite")
+    runtime = _runtime(
+        DOC_AUTH_PRIMARY_PROVIDER,
+        DOC_AUTH_PRIMARY_MODEL,
+        "monitoring-document-authority-primary",
+    )
+    service = MonitoringAiService(
+        repository,
+        runtime_resolver=lambda: runtime,
+        provider_factory=lambda _env: _RaisingProvider(
+            DOC_AUTH_PRIMARY_PROVIDER,
+            DOC_AUTH_PRIMARY_MODEL,
+        ),
+    )
+    revision = MonitoringAiInputRevision(
+        project_id=project_id,
+        batch_revision=batch["batch_id"],
+        sources=tuple(
+            MonitoringAiSourceBinding(
+                source_entry_id=item["file_id"],
+                source_content_sha256=item["content_sha256"],
+            )
+            for item in batch["candidates"]
+        ),
+    )
+    service.submit_document_authority_analysis(
+        project_id=project_id,
+        input_revision=revision,
+        candidate_batch=batch,
+        role="primary",
+    )
+    wake_calls = []
+    workflow = object.__new__(MonitoringDocumentAuthorityWorkflow)
+    workflow.repository = repository
+    workflow.worker_wake = lambda: wake_calls.append(True)
+
+    def resting_failed_job():
+        # 驱动作业直到真正落失败终态：retryable失败且attempt预算未尽时
+        # repository.fail会直接回QUEUED继续重试（不落FAILED）。
+        for _ in range(4):
+            service.run_next("budget-worker", claim_identity=service.claim_identity())
+            job = repository.list_jobs(
+                project_id,
+                task_type=MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS.value,
+            )[0]
+            if job.status == MonitoringAiJobStatus.FAILED:
+                return job
+        raise AssertionError("job never rested in failed terminal state")
+
+    outcomes = []
+    for _ in range(4):
+        job = resting_failed_job()
+        assert job.failure_code == "provider_runtime_error"
+        outcomes.append({"recovered": workflow._recover_failed_once((job,))})
+    assert outcomes == [
+        {"recovered": True},
+        {"recovered": True},
+        {"recovered": True},
+        {"recovered": False},
+    ]
+    final = repository.list_jobs(
+        project_id,
+        task_type=MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS.value,
+    )[0]
+    # 预算耗尽后作业停留在失败终态——advance的调用方（resolve路由）
+    # 据此向界面返回409+failure_code/message，不再伪装成「正在核对」。
+    assert final.status == MonitoringAiJobStatus.FAILED
+    assert final.failure_code == "provider_runtime_error"
+
+
+def test_reupload_requeues_terminal_failed_jobs_for_full_recheck(
+    tmp_path,
+) -> None:
+    """R27轮（R27-03）：重新上传同组文件必须真正重发核对。
+
+    作业指纹随内容确定——同组文件的create_or_get只会原样取回既有作业，
+    不会重排终态失败作业；此前「重新上传会触发完整重核」的承诺因此
+    从未兑现（卡死后重传仍永久停留核对中）。start()必须显式重排。
+    """
+
+    protocol = _minimal_docx_bytes()
+    ecrf = _minimal_xlsx_bytes()
+    project_id = "project-document-authority"
+    repository = MonitoringAiRepository(tmp_path / "reupload.sqlite")
+    services = []
+    for role, provider, model in (
+        ("primary", DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL),
+        ("verifier", DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL),
+    ):
+        services.append(MonitoringAiService(
+            repository,
+            runtime_resolver=lambda provider=provider, model=model, role=role: _runtime(
+                provider, model, f"monitoring-document-authority-{role}"
+            ),
+            provider_factory=lambda _env, provider=provider, model=model: _RaisingProvider(
+                provider, model,
+            ),
+        ))
+    wake_calls = []
+    workflow = MonitoringDocumentAuthorityWorkflow(
+        repository,
+        services[0],
+        services[1],
+        SourceRegistryService(SourceRegistryStore(tmp_path / "registry.jsonl")),
+        worker_wake=lambda: wake_calls.append(True),
+    )
+    files = [("protocol.docx", protocol), ("ecrf.xlsx", ecrf)]
+
+    started = workflow.start(
+        project_id=project_id,
+        workspace_dir=tmp_path / "workspace",
+        files=files,
+    )
+    assert started["state"] == "analyzing"
+
+    def drain_to_resting_failure(owner):
+        # 驱动两侧作业直到真正落失败终态（retryable失败在attempt预算
+        # 未尽时直接回QUEUED继续重试，见repository.fail）。
+        for _ in range(4):
+            for index, service in enumerate(services):
+                service.run_next(f"{owner}-{index}", claim_identity=service.claim_identity())
+            statuses = {job.status for job in repository.list_jobs(project_id)}
+            if statuses == {MonitoringAiJobStatus.FAILED}:
+                return
+        raise AssertionError("jobs never rested in failed terminal state")
+
+    drain_to_resting_failure("reupload-initial")
+    assert {job.status for job in repository.list_jobs(project_id)} == {
+        MonitoringAiJobStatus.FAILED,
+    }
+
+    # 自动预算耗尽：失败作业不再被advance重排（预算3次已用满）。
+    for round_index in range(3):
+        drain_to_resting_failure(f"reupload-auto-{round_index}")
+        job_pair = tuple(repository.list_jobs(project_id))
+        assert workflow._recover_failed_once(job_pair) is True
+    drain_to_resting_failure("reupload-final")
+    job_pair = tuple(repository.list_jobs(project_id))
+    assert workflow._recover_failed_once(job_pair) is False
+    assert {job.status for job in job_pair} == {MonitoringAiJobStatus.FAILED}
+
+    # 用户显式动作：重新上传同组文件——终态失败作业必须重新入队。
+    wake_calls.clear()
+    restarted = workflow.start(
+        project_id=project_id,
+        workspace_dir=tmp_path / "workspace",
+        files=files,
+    )
+    assert restarted["state"] == "analyzing"
+    assert restarted.get("previously_analyzed") is None
+    requeued = repository.list_jobs(project_id)
+    assert {job.status for job in requeued} == {MonitoringAiJobStatus.QUEUED}
+    assert wake_calls == [True]
 
 
 def test_project_mismatch_stops_before_user_decision_is_persisted(

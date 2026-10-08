@@ -175,6 +175,18 @@ check(
   renders.documentsCrossChecking.includes("系统正在复核最后几个分歧"),
   "critique progress stays in plain Chinese",
 );
+// R25轮（R25-04）：核对处理中（未达停滞阈值）即显示已用时与在途作业
+// 事实，用户可区分正常慢与挂死；不渲染失败、不渲染警示。
+check(
+  renders.documentsProcessingProgress.includes("本轮核对已进行约")
+    && renders.documentsProcessingProgress.includes("1 项核对作业在队列中")
+    && renders.documentsProcessingProgress.includes("完成前无需任何操作"),
+  "processing state shows factual elapsed and pending-job progress",
+);
+check(
+  !renders.documentsProcessingProgress.includes("无状态变化"),
+  "pre-threshold processing does not show the stall alert",
+);
 check(
   renders.documentsCrossChecking.includes("eCRF 修订说明.pdf")
     && renders.documentsCrossChecking.includes('disabled=""'),

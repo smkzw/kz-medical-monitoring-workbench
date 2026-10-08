@@ -1756,6 +1756,9 @@ function conciseEditorBlockerReason(value) {
 
 function OverviewPage({ projectId, dashboard, dashboardError, workbenchInbox, workbenchInboxError, setActivePage, setSelectedSubject, aiGatewayStatus, setAiGatewayStatus, aiRuns, aiRunsError, refreshWorkbenchInbox }) {
   const [actionError, setActionError] = useState("");
+  // R25轮（R25-07/R25-08）：正在后台标记已读的事项id——防连点重复
+  // 记账，并为「处理最高优先级」按钮提供进行中反馈。
+  const [openingItemId, setOpeningItemId] = useState("");
   if (dashboardError) {
     return (
       <main className="page" data-dashboard-state="unavailable">
@@ -1784,37 +1787,58 @@ function OverviewPage({ projectId, dashboard, dashboardError, workbenchInbox, wo
   };
   const decisionItems = medicalDecisionItems(workbenchInbox);
   const openItem = async (item) => {
+    if (!item || (item.item_id && openingItemId === item.item_id)) return;
     setActionError("");
-    if (item.unread) {
-      try {
-        const response = await fetch(`/api/projects/${projectId}/workbench-inbox/${encodeURIComponent(item.item_id)}/actions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "mark_read", actor: "medical_manager", comment: "opened_from_overview", expected_source_version: item.source_version }),
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.detail || `API ${response.status}`);
-        if (data?.project_id !== projectId) {
-          throw new Error("总览收件箱响应项目身份不匹配，未更新当前收件箱。");
-        }
-        refreshWorkbenchInbox?.(data);
-      } catch (error) {
-        setActionError(`总览收件箱动作失败：${error.message || "network"}`);
-        refreshWorkbenchInbox?.();
-        return;
-      }
-    }
+    // R25轮（R25-07）：先导航、后标记已读。原实现await mark_read
+    // （实测POST 3-5秒、负载高时更久）才跳转且无任何进行中反馈——
+    // 用户点卡片后页面长时间毫无变化，等同「点击无响应」。
+    // 打开目标语境是点击的主要目的，必须立即发生；已读标记是
+    // 附属记账，后台完成，失败时如实提示且条目保持未读（诚实：
+    // 未成功标记的事项仍留在收件箱）。
     if (item.module === "medical_monitoring" && item.target_id) {
       setSelectedSubject?.(item.target_id);
     }
     setActivePage(item.target_page || moduleToPage[item.module] || "overview");
+    if (!item.unread) return;
+    setOpeningItemId(item.item_id);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/workbench-inbox/${encodeURIComponent(item.item_id)}/actions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "mark_read", actor: "medical_manager", comment: "opened_from_overview", expected_source_version: item.source_version }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || `API ${response.status}`);
+      if (data?.project_id !== projectId) {
+        throw new Error("总览收件箱响应项目身份不匹配，未更新当前收件箱。");
+      }
+      refreshWorkbenchInbox?.(data);
+    } catch (error) {
+      // R25轮（R25-07）：导航已完成，记账失败不再阻断或回滚跳转；
+      // 提示语如实说明条目仍未读。
+      setActionError(`已打开该事项，但标记已读未完成（${error.message || "network"}）；该事项仍会留在收件箱。`);
+      refreshWorkbenchInbox?.();
+    } finally {
+      setOpeningItemId("");
+    }
   };
   return (
     <main className="page">
       <SectionTitle
         eyebrow="项目全览"
         title={`统一工作收件箱 · ${decisionItems.length} 项待决策`}
-        action={<button className="primary-button" disabled={!decisionItems.length} title={decisionItems.length ? "打开最高优先级医学决策项" : "当前无未读医学决策项"} onClick={() => decisionItems[0] && openItem(decisionItems[0])}>处理最高优先级</button>}
+        action={(
+          <button
+            className="primary-button"
+            disabled={!decisionItems.length || Boolean(openingItemId)}
+            title={decisionItems.length
+              ? `打开最高优先级未读决策项「${decisionItems[0]?.title || ""}」（医学监查 · ${severityLabel(decisionItems[0]?.priority)}）；跳转后在监查模块中处理，收件箱计数随后台记账更新`
+              : "当前无未读医学决策项"}
+            onClick={() => decisionItems[0] && openItem(decisionItems[0])}
+          >
+            {openingItemId ? "正在打开…" : "处理最高优先级"}
+          </button>
+        )}
       />
       {actionError && <p className="gate-error overview-action-error" role="alert">{actionError}</p>}
       <section className="triage-panel workbench-inbox-panel">
@@ -1834,6 +1858,8 @@ function OverviewPage({ projectId, dashboard, dashboardError, workbenchInbox, wo
               <button
                 className={`table-row inbox-cols clickable ${item.unread ? "unread-row" : "read-row"}`}
                 key={item.item_id}
+                disabled={openingItemId === item.item_id}
+                aria-busy={openingItemId === item.item_id || undefined}
                 onClick={() => openItem(item)}
                 title={item.boundary_note}
               >
