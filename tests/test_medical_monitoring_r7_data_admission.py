@@ -1346,3 +1346,59 @@ def test_unauthorized_principal_cannot_reach_admission_routes(tmp_path: Path) ->
     )
     _assert_error_body(response.json(), status_code=503)
     assert response.json()["code"] == "principal_required"
+
+
+def test_latest_unpromoted_batch_brief_recovers_inflight_check_after_reload(
+    tmp_path: Path,
+) -> None:
+    """R25轮（R25-02）：刷新/重开向导后readiness须能携带在途核对批次。
+
+    R25A/R25B实测：核对完成前整页刷新或收起重开，必需角色回退
+    「尚未添加」，被迫重传两份docx并重等18-35分钟。批简报从
+    document_authority_candidates/batches恢复在途状态（batch_id+文件名），
+    前端据此继续既有核对而非从零重来；已promoted的批次不再报告。
+    """
+
+    from packages.medical_monitoring.api.r7_product.mapping_candidate_routes import (
+        _latest_unpromoted_batch_brief as brief,
+    )
+
+    workspace = tmp_path / "ws"
+    batches = workspace / "document_authority_candidates" / "batches"
+    batches.mkdir(parents=True)
+
+    # 无批次：None。
+    assert brief(workspace) is None
+
+    inflight = {
+        "batch_id": "mmbatch_inflight",
+        "authority_status": "not_adjudicated",
+        "candidates": [
+            {"candidate_id": "c1", "filename": "研究方案_V1.1.docx"},
+            {"candidate_id": "c2", "filename": "DraftCRF_V0.1.docx"},
+        ],
+    }
+    (batches / "mmbatch_inflight.json").write_text(
+        json.dumps(inflight, ensure_ascii=False), encoding="utf-8"
+    )
+    result = brief(workspace)
+    assert result is not None
+    assert result["analysis_token"] == "mmbatch_inflight"
+    assert result["state"] == "analyzing"
+    assert result["files"] == ["研究方案_V1.1.docx", "DraftCRF_V0.1.docx"]
+    assert "继续" in result["guidance"]
+
+    # 已promoted的批次不得报告为在途。
+    promoted = {
+        "batch_id": "mmbatch_done",
+        "authority_status": "promoted",
+        "candidates": [{"candidate_id": "c3", "filename": "研究方案_V1.2.docx"}],
+    }
+    (batches / "mmbatch_done.json").write_text(
+        json.dumps(promoted, ensure_ascii=False), encoding="utf-8"
+    )
+    # mtime排序取最新；确保promoted文件更新（更晚mtime）。
+    import os
+
+    os.utime(batches / "mmbatch_done.json", (2_000_000_000, 2_000_000_000))
+    assert brief(workspace) is None

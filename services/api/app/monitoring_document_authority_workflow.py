@@ -1027,9 +1027,25 @@ class MonitoringDocumentAuthorityWorkflow:
         return jobs[0] if jobs else None
 
     @staticmethod
-    def _pending_state(jobs: tuple[Any, Any], active_state: str) -> dict[str, str] | None:
+    def _pending_state(jobs: tuple[Any, Any], active_state: str) -> dict[str, Any] | None:
         if any(job.status in _ACTIVE for job in jobs):
-            return {"state": active_state, "authority_status": "not_promoted"}
+            active = [job for job in jobs if job.status in _ACTIVE]
+            created = [
+                str(getattr(job, "created_at", "") or "")
+                for job in active
+                if str(getattr(job, "created_at", "") or "")
+            ]
+            return {
+                "state": active_state,
+                "authority_status": "not_promoted",
+                # R25轮（R25-03）：pending不再只是一个无限期词——R25C实测
+                # 归属人工确认后「正在核对」45分钟零状态变化、无超时无提示
+                # 无重试入口。暴露在途作业数与最早入队时间，前端据此显示
+                # 已耗时并在长时间无进展时给出重试指引。队列本身有租约
+                # 超时与attempt上限，worker侧收割（R25-01）保证最终落终态。
+                "pending_job_count": len(active),
+                "pending_since": min(created) if created else "",
+            }
         if any(job.status != MonitoringAiJobStatus.COMPLETED for job in jobs):
             # V5会商L2-1：失败必须可诊断——携带作业级错误码与消息透传。
             failed_jobs = [

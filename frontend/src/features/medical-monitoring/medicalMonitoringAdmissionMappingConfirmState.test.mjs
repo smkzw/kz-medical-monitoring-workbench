@@ -4,13 +4,16 @@ import { createMedicalMonitoringProductApi } from "./medicalMonitoringProductApi
 
 import {
   MAPPING_FOCUS_ALL,
+  MAPPING_STALL_THRESHOLD_MS,
   admissionMappingConfirmReducer,
   admissionMappingPrimaryAction,
   createAdmissionMappingConfirmState,
   mappingConfirmationReason,
   mappingConfirmationFailureAction,
   mappingEvidenceText,
+  mappingHeadline,
   mappingQuestionCards,
+  mappingStalledMs,
   mappingUnansweredCount,
   projectMappingCandidates,
 } from "./medicalMonitoringAdmissionMappingConfirmState.mjs";
@@ -411,4 +414,51 @@ test("changed evidence returns confirmation to automatic review instead of repea
   assert.equal(state.draft, draft);
   assert.equal(admissionMappingPrimaryAction(state).disabled, true);
   assert.equal(mappingConfirmationFailureAction({message:"network unavailable"}, draft).type, "draft-error");
+});
+
+// R25轮（R25-01）：识别生成中的无进展检测——136字段处36分钟零变化、
+// 无超时无失败提示无重试入口（R25A实测）后，界面必须如实暴露停滞并
+// 提供可点击的重读入口，而不是无限「识别仍在生成中」。
+test("generating mapping exposes stall after threshold and enables reload", () => {
+  const generatingPayload = { state: "generating", confirmation_status: "generating", summary: { field_count: 136, user_question_count: 0 }, candidates: [] };
+  let state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "load-ready",
+    payload: generatingPayload,
+  });
+  assert.equal(state.phase, "ready");
+  assert.equal(state.progress.fieldCount, 136);
+  assert.ok(state.progress.since > 0);
+  // 未超阈值：保持单一稳定禁用文案（R5-05口径），不算停滞。
+  assert.equal(mappingStalledMs(state, state.progress.since + 1000) < MAPPING_STALL_THRESHOLD_MS, true);
+  let action = admissionMappingPrimaryAction(state);
+  assert.equal(action.key, "busy");
+  assert.equal(action.disabled, true);
+  // 同字段数持续无进展（跨多次轮询）：停滞时长累计，超过阈值后主按钮
+  // 变为可点击的重读入口。
+  const stalledAt = state.progress.since + MAPPING_STALL_THRESHOLD_MS + 1000;
+  assert.equal(mappingStalledMs(state, stalledAt) >= MAPPING_STALL_THRESHOLD_MS, true);
+  action = admissionMappingPrimaryAction(state);
+  // primary action用真实时钟——通过headline断言停滞文案，同时用
+  // mappingStalledMs验证判定本身。
+  const headline = mappingHeadline(
+    { fieldCount: state.payload.fieldCount, questionCount: 0, state: "generating" },
+    { stalledMs: mappingStalledMs(state, stalledAt) },
+  );
+  assert.match(headline, /没有新进展/);
+  assert.match(headline, /136/);
+  // 字段数一旦前进，停滞计时重置。
+  state = admissionMappingConfirmReducer(state, {
+    type: "load-ready",
+    payload: { ...generatingPayload, summary: { field_count: 140, user_question_count: 0 } },
+  });
+  assert.equal(state.progress.fieldCount, 140);
+  // 计时已重置：以真实当前时刻衡量，停滞时长归零重新累计。
+  assert.equal(mappingStalledMs(state, Date.now()) < MAPPING_STALL_THRESHOLD_MS, true);
+  // 离开generating（如needs_attention）不报告停滞。
+  state = admissionMappingConfirmReducer(state, {
+    type: "load-ready",
+    payload: { state: "needs_attention", confirmation_status: "pending_confirmation", summary: { field_count: 140 }, candidates: [] },
+  });
+  assert.equal(mappingStalledMs(state, stalledAt), 0);
+  assert.equal(state.progress.fieldCount, null);
 });

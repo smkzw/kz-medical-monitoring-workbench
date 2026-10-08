@@ -114,7 +114,13 @@ def test_startup_retires_old_prompt_contracts_before_waking_worker(
         )
         for task_type in MonitoringAiTaskType
     ]
-    assert events == expected + [
+    # R25轮（R25-01）：僵尸租约收割（expire）提前到prompt整编之前且
+    # 独立兜错——supersede链一旦抛异常不得再跳过expire（实测00:29假死
+    # 重启后两行过期running作业存活到次日、批次永远generating）。
+    # 事件序：expire（新前置）→ supersede×N → expire（原位保留）→ wake。
+    assert events == [
+        ("expire", "", "", frozenset(), frozenset()),
+    ] + expected + [
         ("expire", "", "", frozenset(), frozenset()),
         ("wake_both", "", "", frozenset(), frozenset()),
     ]

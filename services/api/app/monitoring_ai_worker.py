@@ -62,6 +62,23 @@ class MonitoringAiWorker:
                 while True:
                     time.sleep(max(1.0, interval_seconds))
                     try:
+                        # R25轮（R25-01/R25-03）：除兜底wake外，周期性收割
+                        # 「running且租约已过期且attempt_count>=max_attempts」的
+                        # 僵尸作业。此前expire_exhausted_leases只在启动恢复与
+                        # 个别路由调用——worker在最后一次允许尝试中消失时
+                        # （进程假死重启、线程意外退出），该行既不能被claim
+                        # 也不会进入终态，上游批次永远停留在generating/
+                        # analyzing，界面无限「仍在生成中」。这里给它一个
+                        # 运行期兜底：过期即落failed（retryable=1）终态，
+                        # 让批次状态机推进到needs_attention/failed并给用户
+                        # 采纳入口。retire_legacy_workflows=False：轮询路径
+                        # 不做合同退役这类重活。
+                        try:
+                            self.service.repository.expire_exhausted_leases(
+                                retire_legacy_workflows=False,
+                            )
+                        except Exception:
+                            pass
                         if self.service.pending_job_count() > 0:
                             self.wake()
                     except Exception:

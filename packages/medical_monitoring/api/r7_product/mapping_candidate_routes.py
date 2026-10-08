@@ -207,6 +207,63 @@ def _read_last_document_check_note(workspace_dir: Any) -> str:
     return f"{note}（记录于 {when[:19]}）" if note and when else note
 
 
+def _latest_unpromoted_batch_brief(workspace_dir: Any) -> dict[str, Any] | None:
+    """R25轮（R25-02）：最近一个尚无登记结果的研究文件核对批次简报。
+
+    文件上传即服务端持久化（document_authority_candidates/batches），但
+    readiness快照只反映已登记（select_document）的角色——核对完成前
+    刷新/收起重开向导，必需角色回退「尚未添加」，用户被迫重传两份docx
+    并重等18-35分钟核对（R25A/R25B实测；xlsx数据与人工裁决本身未丢）。
+    本简报让readiness携带在途批次（batch_id+文件名），前端据此恢复
+    「核对中」状态并继续推进既有核对，而非从零重来。
+    """
+
+    import json as _json
+    from pathlib import Path as _Path
+
+    batches_dir = (
+        _Path(workspace_dir) / "document_authority_candidates" / "batches"
+    )
+    try:
+        batch_files = sorted(
+            (item for item in batches_dir.glob("*.json") if item.is_file()),
+            key=lambda item: item.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        return None
+    if not batch_files:
+        return None
+    # 只看最新一批：更旧且未完成的批次已被最新上传取代，报告它会把
+    # 陈旧核对复活为「进行中」。
+    try:
+        batch = _json.loads(batch_files[0].read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(batch, dict) or not str(batch.get("batch_id") or ""):
+        return None
+    if str(batch.get("authority_status") or "") == "promoted":
+        return None
+    files = [
+        str(item.get("filename") or "").strip()
+        for item in batch.get("candidates", ())
+        if isinstance(item, dict) and str(item.get("filename") or "").strip()
+    ]
+    if not files:
+        return None
+    return {
+        "analysis_token": str(batch["batch_id"]),
+        "state": "analyzing",
+        "headline": "已上传研究文件的核对尚未得出结论",
+        "guidance": (
+            "已上传的研究文件仍在核对或尚未得出结论（此前上传与您作出"
+            "的确认均已保存）。系统会继续推进该批文件的核对并自动返回"
+            "结论；刷新或重开后同样继续，无需重新上传。"
+        ),
+        "files": files,
+    }
+
+
 class AdmissionMappingPipeline(Protocol):
     def generate_dual_candidates(
         self,
@@ -660,6 +717,32 @@ def register_mapping_candidate_routes(
             payload = {"project_id": canonical, **dict(result)}
             if note and not payload.get("ready"):
                 payload["last_check_note"] = note
+            # R25轮（R25-02）：尚无登记结果时携带最近在途核对批次——
+            # 刷新/重开向导后前端恢复「核对中」并继续推进既有核对，
+            # 不再回退「尚未添加」迫使重传重核。任一角色已登记（current）
+            # 时不覆盖，避免把已就绪的部分误标为核对中。
+            if not payload.get("ready") and not any(
+                str(role.get("status") or "") == "current"
+                for role in payload.get("roles", ())
+                if isinstance(role, dict)
+            ):
+                analysis = _latest_unpromoted_batch_brief(
+                    context.workspace_dir(context.root, canonical)
+                )
+                if analysis:
+                    payload["analysis_token"] = analysis["analysis_token"]
+                    payload["state"] = analysis["state"]
+                    payload["headline"] = analysis["headline"]
+                    payload["guidance"] = analysis["guidance"]
+                    payload["files"] = analysis["files"]
+                    for role in payload.get("roles", ()):
+                        if (
+                            isinstance(role, dict)
+                            and role.get("status") == "missing"
+                            and role.get("required_now")
+                            and not role.get("user_declared_missing")
+                        ):
+                            role["status_text"] = "已上传，核对中"
             return payload
         except AdmissionMappingPipelineError as exc:
             return _mapping_error(exc.code)
@@ -915,6 +998,14 @@ def register_mapping_candidate_routes(
                         if str(value).strip()
                     ],
                 }
+                # R25轮（R25-03）：透传pending作业数与最早入队时间，前端
+                # 显示阶段耗时并在长时间无进展时给出重试指引。
+                if result.get("pending_job_count") is not None:
+                    response_payload["pending_job_count"] = int(
+                        result["pending_job_count"]
+                    )
+                if result.get("pending_since"):
+                    response_payload["pending_since"] = str(result["pending_since"])
                 if result.get("decision_version") is not None:
                     response_payload["decision_version"] = int(
                         result["decision_version"]

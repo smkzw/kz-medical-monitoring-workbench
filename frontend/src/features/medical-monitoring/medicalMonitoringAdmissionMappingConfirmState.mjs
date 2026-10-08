@@ -10,6 +10,12 @@ import { semanticQualityPresentation } from "./medicalMonitoringFieldMappingStat
 export const MAPPING_FOCUS_CRITICAL = "critical";
 export const MAPPING_FOCUS_ALL = "all";
 
+// R25轮（R25-01）：识别生成中的「无进展阈值」。证据：健康推进时字段数
+// 数分钟一跳（0→136约20分钟），而单作业极端可到25-40分钟；阈值取30分
+// 钟仅在显著超出健康节奏后提示停滞，不轻易误报（提示只如实陈述「无
+// 新进展」并提供重读入口，不冒充失败结论）。
+export const MAPPING_STALL_THRESHOLD_MS = 30 * 60 * 1000;
+
 export function createAdmissionMappingConfirmState() {
   return {
     phase: "idle", // idle | loading | ready | adopting | adjudicating | drafting | confirming | confirmed | failed
@@ -19,7 +25,24 @@ export function createAdmissionMappingConfirmState() {
     answeredKeys: {}, // question key -> true once the user's answer is saved
     message: "",
     error: null,
+    // R25轮（R25-01）：generating期间最近一次字段数变化的时间戳，用于
+    // 无进展检测（见mappingStalledMs）。
+    progress: { fieldCount: null, since: 0 },
   };
+}
+
+// R25轮（R25-01）：识别仍在生成中且超过阈值无新字段——如实暴露停滞，
+// 让界面不再无限「识别仍在生成中」（R25A实测136字段处36分钟零变化，
+// 无超时无失败提示无重试入口）。
+export function mappingStalledMs(state, now = Date.now()) {
+  const payload = state?.payload;
+  if (!payload) return 0;
+  const generating = payload.state === "generating"
+    || payload.confirmationStatus === "generating";
+  if (!generating) return 0;
+  const since = Number(state?.progress?.since) || 0;
+  if (!since) return 0;
+  return Math.max(0, now - since);
 }
 
 export function confidencePercent(value) {
@@ -115,7 +138,7 @@ function questionText(item) {
   return `请确认「${field}」这一列的识别结果是否符合实际。`;
 }
 
-export function mappingHeadline(payload) {
+export function mappingHeadline(payload, { stalledMs = 0 } = {}) {
   if (!payload) return "正在读取系统识别结果…";
   // R2循环：识别未完成（generating）或尚未识别到任何字段时，禁止
   // 「全部对应关系清晰/无需您补充判断」类定论表述——0字段阶段给出
@@ -125,6 +148,15 @@ export function mappingHeadline(payload) {
   const generating = payload.state === "generating"
     || payload.confirmation_status === "generating";
   if (generating) {
+    // R25轮（R25-01）：生成中且超阈值无新字段时，不再恒显「识别仍在
+    // 生成中」——如实提示停滞时长与可执行动作（重读/等待失败终态后
+    // 的部分结果采纳入口）。
+    if (stalledMs >= MAPPING_STALL_THRESHOLD_MS) {
+      const minutes = Math.floor(stalledMs / 60000);
+      return `已识别 ${payload.fieldCount} 个字段，但已约 ${minutes} 分钟没有新进展`
+        + "——识别可能仍在排队或已停滞。可重新读取识别进度；若识别任务"
+        + "最终失败，系统会给出「采用已识别字段继续」的入口，无需一直等待。";
+    }
     return payload.questionCount > 0
       ? `已识别 ${payload.fieldCount} 个字段（其中 ${payload.questionCount} 个待确认），识别仍在生成中…`
       : `已识别 ${payload.fieldCount} 个字段，识别仍在生成中，完成后会显示结论…`;
@@ -315,10 +347,24 @@ export function admissionMappingConfirmReducer(state, action) {
     case "load-ready":
       {
         const payload = projectMappingCandidates(action.payload);
+        // R25轮（R25-01）：generating期间记录最近一次字段数变化时间——
+        // 字段数前进即重置计时；不变则保留原计时（停滞时长跨轮询累计）。
+        const generating = payload.state === "generating"
+          || payload.confirmationStatus === "generating";
+        const previousCount = state.progress?.fieldCount ?? null;
+        const unchanged = previousCount !== null
+          && Number(previousCount) === payload.fieldCount
+          && Boolean(state.progress?.since);
+        const progress = generating
+          ? (unchanged
+            ? state.progress
+            : { fieldCount: payload.fieldCount, since: Date.now() })
+          : { fieldCount: null, since: 0 };
         const loaded = {
         ...state,
         phase: "ready",
         payload,
+        progress,
         message: action.payload?.state === "generating"
           ? "字段识别仍在生成中，请稍后刷新进度。"
           : action.payload?.state === "needs_attention"
@@ -480,6 +526,17 @@ export function admissionMappingPrimaryAction(state) {
       // （轮询load-start→ready→…循环改写主按钮），点击瞬间被禁用。
       // 自动轮询已持续拉取（R2-05修复），按钮保持单一稳定禁用文案，
       // 不再提供会闪换的手动刷新入口。
+      // R25轮（R25-01）例外：无进展超过阈值（R25A实测136字段处36分钟
+      // 零变化、无任何恢复入口）时，按钮切换为可点击的重读入口——
+      // 停滞态不会闪换（只有跨过阈值那一刻变化一次），且这是用户在
+      // 界面上唯一的主动恢复手段。
+      if (mappingStalledMs(state) >= MAPPING_STALL_THRESHOLD_MS) {
+        return {
+          key: "reload",
+          label: "识别长时间无新进展，重新读取识别结果",
+          disabled: false,
+        };
+      }
       return {
         key: "busy",
         label: "正在生成字段识别结果…（自动刷新进度，无需手动刷新）",

@@ -942,7 +942,12 @@ export function MedicalMonitoringProductLoop({
           signal: controller.signal,
         });
       } else {
-        throw new Error("public result target incomplete");
+        // R25轮（R25-06）：旅程定位信息不完整必须与「结果不可用」可区分
+        // （见projectMonitoringPublicResultError的target_incomplete文案），
+        // 否则结果概览正常时用户仍被一句死文案挡在门外。
+        const incomplete = new Error("public result target incomplete");
+        incomplete.code = "public_result_target_incomplete";
+        throw incomplete;
       }
     } catch (error) {
       setResultLoading(false);
@@ -1580,7 +1585,7 @@ export function MedicalMonitoringProductLoop({
       {resultLoaded ? <MonitoringPublicResultIdentityStrip identity={resultContext.identity} siteScopeText={resultSiteScopeText} /> : null}
       <ProductRouteTabs route={route} resultLoaded={resultLoaded} onOverview={() => navigate("overview")} onQueries={() => navigate("queries")} />
       {wizardOpen && wizard ? <MonitoringWizardView submitting={wizardSubmitting} wizard={{ ...wizard, dataBatches: setup?.dataBatches || [], serverSummary: setup?.serverSummary || {}, errorText: wizardError || wizard.errorText }} previewText={previewText} previewBusy={previewBusy} previewOpen={previewOpen} onClose={closeWizard} onSelect={changeWizard} onAdvance={(direction) => direction > 0 && wizard.step === 4 ? submitWizard() : advanceWizard(direction)} onPreviewTextChange={setPreviewText} onPreview={requestPreview} onOpenPreview={() => setPreviewOpen(true)} onClosePreview={() => { setPreviewOpen(false); changeWizard("preview", null); changeWizard("previewCandidateId", ""); }} onConfirmPreview={confirmPreview} canConfirmPreview={Boolean(wizard.previewCandidateId)} /> : null}
-      {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button></section> : null}
+      {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><div className="monitoring-product-state-panel-actions"><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button>{resultError?.code === "public_result_target_incomplete" && resultToken ? <button type="button" className="monitoring-product-button is-small" onClick={() => navigate("overview", { subject_ref: "", site_ref: "", spine_ref: "", window_start: "", window_end: "", risk_instance_ref: "", risk_anchor_ref: "", event_ref: "", visit_ref: "" })}>返回结果概览</button> : null}</div></section> : null}
       {!loadingBody && !resultError && !setupHistoryError && publicRunToken && !resultToken ? <MonitoringPublicProgressSurface progress={progress} error={progressError} loading={progressLoading} onRefresh={() => setRefreshEpoch((value) => value + 1)} onBack={() => navigate("overview", { public_run_token: "" })} onOpenResult={() => openResult(publicRunToken)} /> : null}
       {!loadingBody && !resultError && !setupHistoryError && resultLoaded ? (
         <div className="monitoring-product-result-body">

@@ -431,3 +431,28 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 自检（重启后实测）：8911 `/api/runtime-readiness` ready:true（backend_build_id=api-157c89f897d07331，较此前 api-06744bbced9d86a2 更替，源为本轮代码修复）；5178 `/monitoring` HTTP 200；5178 `/runtime-build.json` expectedBackendBuildId=api-157c89f897d07331 与 8911 一致（配对通过）。
 - 诊断性验证（隔离环境内，被测动作本身）：①R24-03：proj_user_e08934f9a5a7 mapping-draft/confirm 修复前 500 mapping_bridge_failed（复现2次）→ 修复后 409 mapping_reconciliation_required（业务状态），adjudicate 200 且 AI 裁决队列推进（completed 33→35，46问收敛中，固有耗时非缺陷）；②R18-03：proj_user_6ef58ac151e1（历史 CONFIRMED draft v80）prepare-and-start 放行（run:4d16d078 创建，语义正确）；proj_user_e08934f9a5a7（未确认）被来源就绪门+映射确认门双阻断（readiness unconfirmed 详案）。
 - 副作用如实记录：验证 R18-03 放行分支时在常驻项目 proj_user_6ef58ac151e1 上创建了 1 条真实运行 run:4d16d078ea9ae0d29ae898ae（该项目的正常行为，18→19 条）；e08934f9a5a7 的裁决队列被诊断调用推进（继续收敛，非破坏）。
+
+## 2026-10-08 00:29-00:31（R25·隔离环境守护员：API 假死恢复 8911 重启 + 5178 重启）
+
+- 操作者：隔离环境守护员-R25。背景：ask 报 API 探针 exit=1、前端探针 exit=0。恢复前实测（00:29:03）：8911 有残留进程 pid 69228（uvicorn，elapsed 33:22）但 `/api/runtime-readiness` 8 秒超时零字节返回（curl exit=28）——进程假死非缺席；5178 有 pid 66348。前提核验：`runs/tester_loop_iso_20260928/runtime` 在盘（71 项）、`~/.config/cms-medical-workbench/ai-runtime.env` 与 `.venv/bin/python` 在位。
+- API 重启（严格按 ask 给定命令，00:29:40）：kill 仅限 `lsof -ti:8911`（杀掉假死 69228），uvicorn 以 WORKBENCH_RUNTIME_DIR=…/tester_loop_iso_20260928/runtime、WORKBENCH_LOCAL_SINGLE_USER=1、WORKBENCH_AI_RUNTIME=api、WORKBENCH_MONITORING_AI_PARALLELISM=2 启动 → pid 74159，/tmp/mm_api_8911.log 无输出（--log-level warning 下 uvicorn 启动横幅属 INFO 级，正常）。
+- vite 重启（严格按 ask 给定命令，00:29:47）：kill 仅限 `lsof -ti:5178`，VITE_API_PROXY_TARGET=http://127.0.0.1:8911 启动 → vite node pid 74210 监听 [::1]:5178。
+- 自检三条件（等满 15 秒后，00:30:15 首测 + 00:30:55 终验）全过：① `http://127.0.0.1:8911/api/runtime-readiness` → http 200，ready:true，backend_build_id=api-157c89f897d07331，runtime_schema_version=16，runtime_store_ready:true，independent_ai ready/configured=true（zhipu-coding-plan / glm-5.3-flash）；② `http://localhost:5178/monitoring` → http 200；③ 5178 `/runtime-build.json` expectedBackendBuildId=api-157c89f897d07331 与 8911 backend_build_id 完全一致（BUILD_ID_MATCH=YES，frontendBuildId=web-61cf3eec89de9bcb）。
+- 时序如实记录：00:30:15 首测时 readiness 曾连接被拒（curl exit=7）——pid 74159 已起但应用仍在初始化（约 60 秒完成 listen+ready），非重启失败；00:30:42 起 ready:true 持续。一次重启即成，未用第二次尝试。
+- 纪律：本轮零业务管道推进、零项目数据触碰；8910/5177 全程仅只读 lsof（本轮均无监听），未 kill 未重启未触碰。
+
+## 2026-10-08T00:5xZ（R25D 开考位预置·守护员第7次复验：R24修复+R25守护员假死恢复重启后三条件仍全过，零重复预置）
+
+- 操作者：开考预置守护员-R25（D位）。动作：查存量 → 三条件现场实测全过 → 直接复用。**零新建、零 AI 作业、零代码修复、零重启、零启动运行**。
+- 存量检查现场实测（ask 步骤0）：`GET /api/projects` → 仅 1 项目 proj_user_6ef58ac151e1 / MX循开考-CSU / active（modules 含 medical_monitoring）；mapping-candidates → confirmation_status=confirmed / draft monmapdraft_73abe5c6c9561a9e95eec2056991 v80 status=confirmed / user_questions=0 / 60候选；facts → state=ready（10表/591行/3038值全核验，message「可用于监查的数据已生成，可以开始监查。」，facts-manifest.json 在盘 mtime Oct 5 22:44 零漂移）；project/open → current/complete/openMode=edit/canView/canEdit；study-documents HTTP 200 ready=true；run-setup/options 200（recommended_mode=daily）。
+- 只读探障：main.py:5020+5030 marker 修复在位（import SCHEMA_VERSION 常量、种子 marker 取该值；行号自 R24 轮的 4936/4946 平移，修复本身未动）；contracts.py:53-54=V5；本项目 workspace launch_registry Python sqlite3 只读直查（uri mode=ro）=mm-r7-w01r26-launch-registry-v5；8911 readiness ready:true（backend_build_id=api-157c89f897d07331，pid 74159——R25 隔离环境守护员 00:29 假死恢复重启后的现行进程）与 5178 [::1]（node pid 74210）runtime-build.json expectedBackendBuildId 配对一致；runs 19 条全部 completed（R24D 后 +4：R24 开考/攻坚 +3、R24 轮修复员诊断验证 run:4d16d078 +1，非本轮）；8910/5177 lsof 均 0 监听（沿 R11 起，未触碰）。
+- 观察如实记录：candidates 投影怪癖沿 R21D-R24D 持续（顶层 facts_generated=False / summary pending_confirmation_count=60、user_question_count=1，与权威 confirmed/facts ready 终态不一致），提请修复员核投影字段语义。
+- 留痕：`R5_SEEDED_PROJECT.md` R25D 节。本轮无新驱动脚本/状态文件（复用即结论）。
+
+## 2026-10-08 03:01–03:03 UTC（测试循环R25·修复员：隔离环境 API+vite 双重启）
+
+- 操作者：修复员（R25 待修清单 R25-01/R25-06/R25-02/R25-03）。动作：API 8911 与 vite 5178 均重启（指纹配对要求）；8910/5177 未触碰（无监听）。
+- 重启命令：按 ask 给定（API：WORKBENCH_RUNTIME_DIR=runs/tester_loop_iso_20260928/runtime、WORKBENCH_LOCAL_SINGLE_USER=1、WORKBENCH_AI_RUNTIME=api、WORKBENCH_MONITORING_AI_PARALLELISM=2；vite：VITE_API_PROXY_TARGET=http://127.0.0.1:8911）。
+- 自检（重启后实测）：① 8911 `/api/runtime-readiness` ready:true（backend_build_id=api-589520532fc5317d，runtime_schema_version=16）；② `http://localhost:5178/monitoring` HTTP 200；③ 5178 `/runtime-build.json` expectedBackendBuildId=api-589520532fc5317d 与 8911 一致（配对通过）。
+- 修复生效验证（只读）：本次修复的启动序调整使僵尸租约收割不再可被跳过——重启后 monai_fad0322b3fa2aaf9b8fb9e2c7039 与 monai_cab4f66709ae3c400b7254ccb2f0（attempt 2/2、租约 2026-10-07T22:59 过期、status=running 滞留>4小时）即时转 failed/worker_lease_expired 终态（updated_at 2026-10-08T03:02:17）；队列其余任务正常推进（completed 3887→3920）。此前 00:29 假死重启后同类僵尸存活至次日（对照证据）。
+- 纪律：零业务管道推进、零 runs/ 数据修改（仅 sqlite 只读查询）；8910/5177 仅只读 lsof。

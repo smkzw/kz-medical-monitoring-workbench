@@ -647,6 +647,20 @@ export function projectMonitoringPublicResultError(error) {
       text: MONITORING_PUBLIC_RESULT_CENTER_OUT_OF_SCOPE_TEXT,
     });
   }
+  // R25轮（R25-06）：受试者旅程视图需要完整的定位信息（中心+受试者+
+  // 主轴+时间窗）。缺失时此前与「结果整体不可用」共用同一句死文案
+  // 「本次结果暂不可查看」——但此时结果概览往往正常，误导用户以为
+  // 整次结果坏了。如实区分：旅程定位信息不完整≠结果不可用。
+  if (code === "public_result_target_incomplete") {
+    return freeze({
+      kind: "unavailable",
+      code,
+      text: "该受试者的医学旅程内容暂未就绪：系统缺少可定位的旅程信息"
+        + "（中心/受试者/时间窗不完整，常见于旅程尚未生成或数据未提供）。"
+        + "本次监查结果本身可查看，请返回结果概览选择其他受试者，"
+        + "或稍后重新进入。",
+    });
+  }
   return freeze({
     kind: "unavailable",
     code,

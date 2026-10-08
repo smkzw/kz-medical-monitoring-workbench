@@ -14,13 +14,16 @@ import {
 } from "./medicalMonitoringAdmissionWizardState.mjs";
 import {
   MAPPING_FOCUS_ALL,
+  MAPPING_STALL_THRESHOLD_MS,
   admissionMappingConfirmReducer,
   admissionMappingPrimaryAction,
   createAdmissionMappingConfirmState,
   mappingCandidateKey,
   mappingConfirmationReason,
   mappingConfirmationFailureAction,
+  mappingHeadline,
   mappingQuestionCards,
+  mappingStalledMs,
   mappingUnansweredCount,
 } from "./medicalMonitoringAdmissionMappingConfirmState.mjs";
 import { semanticQualityPresentation } from "./medicalMonitoringFieldMappingState.mjs";
@@ -80,7 +83,12 @@ function documentRoleLabel(role) {
   return DOCUMENT_ROLE_LABELS[role] || "研究文件";
 }
 
-function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onContentConfirm, onIdentityConfirm, confirmingEntries = {}, confirmedEntries = {} }) {
+// R25轮（R25-03）：研究文件核对单阶段停滞阈值。健康核对单阶段约
+// 2-20分钟（R25A/R25B实测6.5-18.5分钟）；20分钟无状态变化才提示，
+// 避免把慢作业误报为停滞。提示只陈述事实（无状态变化）并给重试入口。
+const DOCUMENT_STAGE_STALL_MS = 20 * 60 * 1000;
+
+function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onContentConfirm, onIdentityConfirm, confirmingEntries = {}, confirmedEntries = {}, stageElapsedMs = 0 }) {
   const [choices, setChoices] = useState({});
   const [identityNote, setIdentityNote] = useState("");
   const [identityBusy, setIdentityBusy] = useState(false);
@@ -92,6 +100,12 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
     "uploading", "analyzing", "reviewing", "adjudicating", "cross_checking",
   ]
     .includes(state.phase);
+  // R25轮（R25-03）：核对在单一阶段停留超过阈值（R25C实测归属确认后
+  // 45分钟零状态变化、无超时无提示无重试入口）时如实提示停滞并给出
+  // 重试入口。核对作业本身有租约超时与尝试上限，worker侧收割（R25-01）
+  // 保证最终落终态——这里只做诚实的等待体验，不虚报失败。
+  const stageStalled = processing && stageElapsedMs >= DOCUMENT_STAGE_STALL_MS;
+  const stageStalledMinutes = Math.floor(stageElapsedMs / 60000);
   const userChoices = Array.isArray(payload.user_choices) ? payload.user_choices : [];
   const allAnswered = userChoices.every(
     (choice) => typeof choices[choice.role] === "string",
@@ -125,6 +139,22 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
           这组文件与此前上传的内容完全一致，系统直接复用已有核对结论；
           如需重新核对，请更换文件版本后上传。
         </p>
+      ) : null}
+      {stageStalled ? (
+        <div className="monitoring-admission-warning" role="alert" style={{ display: "grid", gap: 6 }}>
+          <strong>
+            研究文件核对已在「{payload.headline || "当前阶段"}」停留约 {stageStalledMinutes} 分钟且无状态变化。
+          </strong>
+          <span>
+            {Number(payload.pending_job_count) > 0
+              ? `系统有 ${Number(payload.pending_job_count)} 项核对作业在队列中（最早入队 ${String(payload.pending_since || "").replace("T", " ").slice(0, 19) || "时间未知"}）。`
+              : "核对作业可能仍在排队等待系统资源。"}
+            长时间无进展时，可点击「重新核对研究文件」重试；若持续无进展，重新上传文件版本会触发完整重核。已上传的文件与您的确认不会被丢失。
+          </span>
+          <button type="button" className="monitoring-admission-secondary" onClick={onRetry}>
+            重新核对研究文件
+          </button>
+        </div>
       ) : null}
       <ul>
         {(payload.roles || []).map((item) => (
@@ -353,9 +383,22 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
   const drafting = mappingState.phase === "drafting";
   const quality = drafting ? semanticQualityPresentation(mappingState.draft?.semantic_quality) : null;
   const payload = mappingState.payload;
+  // R25轮（R25-01）：generating超阈值无新字段时，headline如实切换为
+  // 停滞提示（含可执行指引），不再恒显「识别仍在生成中」。轮询每2.5秒
+  // 重渲一次，停滞时长随之刷新。
+  const stalledMs = mappingStalledMs(mappingState);
   const headline = mappingState.phase === "adjudicating"
     ? "系统正在进一步核对少量疑点"
-    : payload?.headline || "正在读取系统识别结果…";
+    : stalledMs >= MAPPING_STALL_THRESHOLD_MS
+      ? mappingHeadline(
+        {
+          fieldCount: payload?.fieldCount || 0,
+          questionCount: payload?.questionCount || 0,
+          state: payload?.state,
+        },
+        { stalledMs },
+      )
+      : payload?.headline || "正在读取系统识别结果…";
   const tables = payload?.tableSummaries || [];
   const questionTableCount = tables.filter((table) => table.questionCount > 0).length;
   const visibleCandidates = candidates.slice(0, fieldBatch);
@@ -599,6 +642,20 @@ export function MedicalMonitoringAdmissionWizardView({
   const resolvedMappingState = mappingState || createAdmissionMappingConfirmState();
   const resolvedFactState = factState || { phase: "idle", error: null };
   const error = state?.error || resolvedMappingState?.error || resolvedFactState.error || null;
+  // R25轮（R25-03）：研究文件核对的单阶段停留计时——阶段键变化即重置，
+  // 超过DOCUMENT_STAGE_STALL_MS时DocumentReadinessPanel给出停滞提示
+  // 与重试入口（R25C实测归属确认后45分钟零状态变化无提示无重试）。
+  const documentStageRef = useRef({ stage: "", since: 0 });
+  const documentStageKey = String(
+    documentState?.payload?.state || documentState?.phase || "",
+  );
+  if (documentStageKey && documentStageRef.current.stage !== documentStageKey) {
+    documentStageRef.current = { stage: documentStageKey, since: Date.now() };
+  }
+  const documentStageElapsedMs = documentStageRef.current.stage === documentStageKey
+    && documentStageRef.current.since
+    ? Date.now() - documentStageRef.current.since
+    : 0;
   // R4循环：目录型input收到文件级注入时files.length为0且此前零反馈。
   const [filePickNotice, setFilePickNotice] = useState("");
   const steps = admissionStepView(state);
@@ -860,6 +917,7 @@ export function MedicalMonitoringAdmissionWizardView({
               onIdentityConfirm={onDocumentIdentityConfirm}
               confirmingEntries={confirmingEntries}
               confirmedEntries={confirmedEntries}
+              stageElapsedMs={documentStageElapsedMs}
             />
             {documentState?.payload?.ready ? (
               <MappingConfirmPanel
@@ -1074,7 +1132,16 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         state.attemptId,
       );
       if (documentRequestGeneration.current === generation) {
-        setDocumentState({ phase: "ready", payload, error: null });
+        // R25轮（R25-02）：readiness快照可能携带在途核对批次
+        // （analysis_token+state=analyzing，后端R25-02修复）——此前恒置
+        // phase="ready"，刷新/重开向导后在途核对永不恢复轮询，必需角色
+        // 显示「尚未添加」迫使重传重核。统一走documentPhaseFromPayload：
+        // 有在途批次即恢复analyzing轮询（继续既有核对，不重传）。
+        setDocumentState({
+          phase: documentPhaseFromPayload(payload),
+          payload,
+          error: null,
+        });
       }
     } catch (error) {
       if (documentRequestGeneration.current === generation) {
