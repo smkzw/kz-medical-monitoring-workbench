@@ -1193,7 +1193,16 @@ def _auto_register_confirmed_protocol_version(project_id: str):
         version_label=str(latest.public_title or latest.entry_id)[:200],
         version_date=str(getattr(latest, "registered_at", "") or "")[:10]
         or "1970-01-01",
-        applicability_status="active",
+        # R27攻坚：applicability_status 必须取 PROTOCOL_APPLICABILITY_STATUSES
+        # 枚举（monitoring_protocol_rules.py:13）。曾写"active"——非法值，
+        # register_protocol_version 必抛 MonitoringProtocolRuleError，被本门
+        # except 吞掉后照旧 409：自愈成死代码，前端又无 POST /protocol-versions
+        # 调用（medicalMonitoringApi.mjs 仅 GET），已核验方案docx的常驻项目
+        # 被永久拦在启动门外。取 project_effective_confirmed：本调用传入
+        # operational_effective_from（version_date_only 下该参数无效），
+        # 且 current_published_pack（monitoring_protocol_rule_repository.py:
+        # 2368）只对 project_effective_confirmed 版本解析规则包。
+        applicability_status="project_effective_confirmed",
         operational_effective_from=str(
             getattr(latest, "registered_at", "") or ""
         )[:10] or "1970-01-01",
