@@ -1219,6 +1219,17 @@ def promote_document_authority_from_jobs(
         "authority_status": "promoted",
         "promotion_receipt_sha256": receipt_sha256,
         "registrations": registrations,
+        # R26轮（R26-01）：把「用户裁决为缺失」的角色随晋升结果带回。
+        # 裁决在workflow层已跨请求持久化；内容差异确认等后续resolve
+        # 的请求体不再携带user_role_selections，路由层若只看请求体
+        # 会漏写缺失声明（readiness恒missing→第3步死锁）。
+        "user_declared_missing_roles": [
+            str(item.get("role") or "")
+            for item in resolution.get("resolved_roles", ())
+            if item.get("user_adjudicated")
+            and item.get("status") == "missing"
+            and not str(item.get("candidate_id") or "").strip()
+        ],
         "decision_version": (
             int(frozen_decision["decision_version"])
             if frozen_decision is not None

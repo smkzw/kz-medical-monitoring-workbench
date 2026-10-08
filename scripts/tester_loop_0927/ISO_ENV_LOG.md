@@ -476,3 +476,12 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 观察如实记录：candidates 投影怪癖沿 R21D-R25D 持续（顶层 facts_generated=False / summary pending_confirmation_count=60、user_question_count=1，与权威 confirmed/facts ready 终态不一致），提请修复员核投影字段语义。
 - 留痕：`R5_SEEDED_PROJECT.md` R26D 节。本轮无新驱动脚本/状态文件（复用即结论）。
 2026-10-08 09:29 无损暂停（用户指令）：run dwfrun-4ea04740停于R26测试者阶段（A/C/D已交卷、B在途）。8911/5178有意保持运行供恢复（轮中暂停，环境门探针恢复时为日志回放不重查）；B位浏览器TaskSpace保留不清。恢复=ResumeWorkflowRun同run_id，详见PAUSE_HANDOFF_20261008.md
+
+## 2026-10-08 19:26 +0200（R26轮后·修复员：R26清单修复完毕，API 8911 与 vite 5178 双重启）
+
+- 操作者：修复员（R26 待修清单 R26-01/02/03/04/05 + R24-01）。动作：API 8911 与 vite 5178 均按 ask 给定命令重启（指纹配对要求）；8910/5177 未触碰（无监听）。
+- 修复内容（本轮代码变更）：R26-01 eCRF缺失声明按生效裁决补写（mapping_candidate_routes+document_authority_jobs）；R26-02 PDF原生文本覆盖≥90%降级parsed+限制码（document_candidates+document_authority契约）；R26-03 前端文件输入value重置+网络错误中文包装；R26-04 项目记忆localStorage→sessionStorage（会话隔离防跨用户串选）；R26-05 运行启动方案版本门（run_routes+main gate）；R24-01 处理中不同屏喊缺件+readiness标题点名缺失文件。
+- 重启命令：按 ask 给定（API：WORKBENCH_RUNTIME_DIR=runs/tester_loop_iso_20260928/runtime、WORKBENCH_LOCAL_SINGLE_USER=1、WORKBENCH_AI_RUNTIME=api、WORKBENCH_MONITORING_AI_PARALLELISM=2 → pid 87131；vite：VITE_API_PROXY_TARGET=http://127.0.0.1:8911 → pid 87140）。
+- 自检（19:26:52 实测）：① 8911 `/api/runtime-readiness` ready:true（backend_build_id=api-272b43c31e966e99，runtime_schema_version=16——代码变更后新指纹）；② `http://localhost:5178/monitoring` HTTP 200；③ 5178 `/runtime-build.json` expectedBackendBuildId=api-272b43c31e966e99 与 8911 一致（配对通过）。
+- 波动如实记录：vite 启动窗口（19:26:19）有一次 /api/ai-gateway/status 代理 ECONNREFUSED（API 尚在启动），终验三条件全过后未复发；`/tmp/mm_api_8911.log` 全程 0 字节（--log-level warning 无告警）。
+- 纪律：零业务管道推进、零 runs/ 数据修改（含 R26-02 诊断用的 sqlite/manifest 均只读 mode=ro）。

@@ -14,6 +14,10 @@ from xml.etree import ElementTree
 from openpyxl.utils.exceptions import InvalidFileException
 
 from packages.contracts.workbench_contracts import WritingReferenceDocumentArtifact
+from packages.medical_monitoring.admission.document_authority import (
+    DEGRADED_NATIVE_TEXT_PARSE_COVERAGE_PER_MILLE,
+    ZERO_TEXT_PAGES_UNREAD_DEGRADED_PARSE,
+)
 
 from .listing_file_parser import parse_listing_file
 from .writing_reference_docx import extract_docx_sections
@@ -424,8 +428,29 @@ class MonitoringDocumentCandidateDecomposer:
             item.page_number for item in ocr_evidence if item.status == "recovered"
         }
         unresolved_ocr_pages = set(zero_text_pages) - recovered_pages
-        needs_ocr = suffix == ".pdf" and bool(unresolved_ocr_pages)
-        if not needs_ocr:
+        content_profile = _content_profile(all_blocks, page_count=page_count)
+        # R26轮（R26-02）：文本层降级准入——真实受控eCRF指南PDF常为
+        # 133页原生文本+1页整页图片/分隔页；OCR运行时不可用时该文件
+        # 曾被整体判needs_ocr并在批入口报「全部为扫描版或文件损坏」
+        # 拒收。现按「原生文本」页覆盖率分级（OCR恢复页不计入——预算
+        # 内恢复不能代表文件形态）：覆盖≥90%的PDF降级为parsed（未读
+        # 页以限制码与zero_text证据留痕，不宣称已读）；覆盖率低的真
+        # 扫描版仍needs_ocr，拒收行为不变。
+        native_coverage = _native_page_coverage_per_mille(
+            all_blocks, page_count=page_count
+        )
+        degraded_parse_admitted = (
+            suffix == ".pdf"
+            and bool(unresolved_ocr_pages)
+            and native_coverage
+            >= DEGRADED_NATIVE_TEXT_PARSE_COVERAGE_PER_MILLE
+        )
+        needs_ocr = (
+            suffix == ".pdf"
+            and bool(unresolved_ocr_pages)
+            and not degraded_parse_admitted
+        )
+        if not unresolved_ocr_pages:
             limitations: tuple[str, ...] = ()
         elif self.ocr_runner is None:
             limitations = ("native_text_absent_ocr_required",)
@@ -435,6 +460,10 @@ class MonitoringDocumentCandidateDecomposer:
             limitations = ("ocr_evidence_budget_exhausted",)
         else:
             limitations = ("ocr_recovery_empty",)
+        if degraded_parse_admitted:
+            limitations = limitations + (
+                ZERO_TEXT_PAGES_UNREAD_DEGRADED_PARSE,
+            )
         if uncovered_image_region_pages:
             limitations = limitations + ("image_region_native_text_absent",)
         return MonitoringDocumentCandidate(
@@ -461,7 +490,7 @@ class MonitoringDocumentCandidateDecomposer:
             zero_text_page_samples=tuple(zero_text_pages[:MAX_OCR_PAGE_SAMPLES]),
             ocr_recovery_pages=ocr_evidence,
             limitation_codes=limitations,
-            content_profile=_content_profile(all_blocks, page_count=page_count),
+            content_profile=content_profile,
             image_region_page_count=len(image_region_pages),
             image_region_page_samples=tuple(
                 image_region_pages[:MAX_OCR_PAGE_SAMPLES]
@@ -579,6 +608,26 @@ def _normalize_content_text(value: str) -> str:
     return " ".join(
         re.findall(r"[a-z0-9]+|[\u3400-\u9fff]", value.casefold())
     )
+
+
+def _native_page_coverage_per_mille(
+    blocks: list[tuple[str, str]], *, page_count: int
+) -> int:
+    """Native-text page coverage in per-mille; OCR-recovered pages excluded.
+
+    R26轮（R26-02）：降级准入只看文件自身的文本层形态——OCR预算内的
+    恢复不能把扫描版「变成」文本版。
+    """
+
+    native_pages = {
+        int(match.group(1))
+        for locator, _text in blocks
+        if (match := re.search(r":p([0-9]+)(?::|$)", locator))
+        and not locator.endswith(":ocr")
+    }
+    if page_count <= 0:
+        return 1000 if native_pages else 0
+    return min(1000, len(native_pages) * 1000 // page_count)
 
 
 def _content_profile(

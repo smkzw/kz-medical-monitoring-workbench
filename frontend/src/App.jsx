@@ -494,10 +494,16 @@ const SourceTableHeader = TableHeader.extend({
 });
 
 const INITIAL_PROJECT_ID = import.meta.env.VITE_PROJECT_ID || "";
-// R5冲刺（R1-07）：本浏览器最后选择的项目（关标签重进的回落基准）。
+// R5冲刺（R1-07）：本浏览器最后选择的项目（重进时的回落基准）。
+// R26轮（R26-04）：记忆改为会话级sessionStorage——原localStorage全局
+// 记忆在多人共用同一浏览器实例/同源时互相污染：他人切换项目后，本
+// 会话刷新即被重置到他人项目（R26B实测16:53选中漂移到R26C项目、
+// 16:51未读计数随之清零，多项目环境有误读误操作风险）。会话级记忆
+// 保留「刷新回到本项目」；跨会话无记忆时停留在项目全览（空选中），
+// 绝不默认选中他人项目（R1-07既有语义不变）。
 function readRememberedProjectId() {
   try {
-    return String(globalThis.localStorage?.getItem("workbench:last-project-id") || "");
+    return String(globalThis.sessionStorage?.getItem("workbench:last-project-id") || "");
   } catch {
     return "";
   }
@@ -13353,13 +13359,13 @@ export function App() {
   const emptyListRetriesRef = useRef(0);
   const rememberedProjectIdRef = useRef(readRememberedProjectId());
   const [activeProjectId, setActiveProjectId] = useState(monitoringBrowserState.initialProjectId);
-  // 切换项目时持久记住，供下次冷启动回落（R1-07）。
+  // 切换项目时持久记住，供刷新/重进回落（R1-07；R26-04改会话级）。
   useEffect(() => {
     if (!activeProjectId) return;
     if (rememberedProjectIdRef.current === activeProjectId) return;
     rememberedProjectIdRef.current = activeProjectId;
     try {
-      globalThis.localStorage?.setItem("workbench:last-project-id", activeProjectId);
+      globalThis.sessionStorage?.setItem("workbench:last-project-id", activeProjectId);
     } catch { /* ignore */ }
   }, [activeProjectId]);
   const [dashboard, setDashboard] = useState({ project: null, modules: [], latest_batch: null, pending_approvals: [], recent_risks: [] });
@@ -13614,10 +13620,11 @@ export function App() {
             rememberedProjectIdRef.current,
           );
           if (resolved.projectId && resolved.projectId !== current) {
-            // R5冲刺（R1-07）：记录本浏览器最后选择的项目，关标签重进
-            // 时回到它而非全实例最新创建（可能是他人的）项目。
+            // R5冲刺（R1-07）：记录本会话最后选择的项目，重进时回到它
+            // 而非全实例最新创建（可能是他人的）项目。R26轮（R26-04）：
+            // 写入会话级存储，避免跨用户串选。
             try {
-              globalThis.localStorage?.setItem("workbench:last-project-id", resolved.projectId);
+              globalThis.sessionStorage?.setItem("workbench:last-project-id", resolved.projectId);
               rememberedProjectIdRef.current = resolved.projectId;
             } catch { /* storage unavailable — selection just won't persist */ }
           }

@@ -156,6 +156,7 @@ def _make_app(
     mode_output_provider: Any = None,
     r6_mode_output_provider: Any = None,
     continuity_bridge: Any = None,
+    protocol_version_gate: Any = None,
 ) -> FastAPI:
     app = FastAPI()
 
@@ -185,6 +186,7 @@ def _make_app(
             mode_output_provider=mode_output_provider,
             r6_mode_output_provider=r6_mode_output_provider,
             continuity_bridge=continuity_bridge,
+            protocol_version_gate=protocol_version_gate,
         )
     )
     return app
@@ -210,6 +212,7 @@ def _client(
     mode_output_provider: Any = None,
     r6_mode_output_provider: Any = None,
     continuity_bridge: Any = None,
+    protocol_version_gate: Any = None,
 ) -> TestClient:
     if principal is _SENTINEL:
         principal = _principal()
@@ -230,6 +233,7 @@ def _client(
             mode_output_provider=mode_output_provider,
             r6_mode_output_provider=r6_mode_output_provider,
             continuity_bridge=continuity_bridge,
+            protocol_version_gate=protocol_version_gate,
         )
     )
 
@@ -2320,6 +2324,70 @@ def test_slice07c2_prepare_and_start_resolves_tokens_and_replays(
     assert history_run["run_state"] == "completed"
     assert history_run["result_available"] is False
     assert history_run["main_action"] == "查看本次进度"
+
+
+def test_prepare_and_start_blocked_without_confirmed_protocol_version(
+    tmp_path: Path,
+) -> None:
+    """R26轮（R26-05，D-F3家族）：尚无已确认且可解析的方案版本时，
+    prepare-and-start必须409阻断且不创建任何运行——准备链未闭合的
+    项目不得产出以正常形态发布的监查结果。"""
+
+    def blocking_gate(_project_id: str):
+        return {
+            "code": "protocol_version_required",
+            "message": "先完成方案版本确认……",
+        }
+
+    client = _client(tmp_path, protocol_version_gate=blocking_gate)
+    assert client.post(f"{_base(PROJECT_A)}/workspace/bootstrap").status_code == 200
+    options = client.get(f"{_base(PROJECT_A)}/run-setup/options")
+    assert options.status_code == 200, options.text
+    setup = options.json()
+    payload = {
+        "current_snapshot_token": setup["current_data"]["snapshot_token"],
+        "mode": setup["modes"][0]["mode"],
+        "execution_basis": "full",
+        "baseline_token": None,
+        "risk_rule_tokens": [],
+        "idempotency_key": "blocked-protocol-001",
+    }
+
+    blocked = client.post(f"{_base(PROJECT_A)}/runs/prepare-and-start", json=payload)
+
+    assert blocked.status_code == 409, blocked.text
+    body = blocked.json()
+    assert body["code"] == "protocol_version_required"
+    assert "方案版本" in body["message"]
+    # 阻断不得留下任何运行历史（含waiting_start僵尸预约）。
+    history = client.get(f"{_base(PROJECT_A)}/runs")
+    assert history.status_code == 200, history.text
+    assert history.json()["runs"] == []
+
+
+def test_prepare_and_start_allows_when_protocol_version_gate_passes(
+    tmp_path: Path,
+) -> None:
+    def passing_gate(_project_id: str):
+        return None
+
+    client = _client(tmp_path, protocol_version_gate=passing_gate)
+    assert client.post(f"{_base(PROJECT_A)}/workspace/bootstrap").status_code == 200
+    options = client.get(f"{_base(PROJECT_A)}/run-setup/options")
+    setup = options.json()
+    payload = {
+        "current_snapshot_token": setup["current_data"]["snapshot_token"],
+        "mode": setup["modes"][0]["mode"],
+        "execution_basis": "full",
+        "baseline_token": None,
+        "risk_rule_tokens": [],
+        "idempotency_key": "passing-protocol-001",
+    }
+
+    started = client.post(f"{_base(PROJECT_A)}/runs/prepare-and-start", json=payload)
+
+    assert started.status_code == 200, started.text
+    assert started.json()["replayed"] is False
 
 
 def test_slice07c2_prepare_and_start_start_failure_is_recoverable(

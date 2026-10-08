@@ -18,6 +18,12 @@ REQUIRED_DOCUMENT_ROLES = frozenset({"protocol", "ecrf"})
 AUTO_RESOLVE_CONFIDENCE = 0.9
 REVIEW_CONSENSUS_CONFIDENCE = 0.75
 MAX_DOCUMENT_AUTHORITY_CANDIDATES = 100
+# R26轮（R26-02）：文本层降级准入——原生文本覆盖率（千分比）不低于
+# 该阈值的PDF，即使个别整页无文本且OCR未能恢复（如整页图片/分隔页，
+# 或OCR运行时不可用），也按「已解析+限制码留痕」参与权威核对，不再
+# 整体判needs_ocr拒收。低于阈值的真扫描版仍needs_ocr，行为不变。
+DEGRADED_NATIVE_TEXT_PARSE_COVERAGE_PER_MILLE = 900
+ZERO_TEXT_PAGES_UNREAD_DEGRADED_PARSE = "zero_text_pages_unread_degraded_parse"
 PRIMARY_PROMPT_VERSION = "monitoring-document-authority-primary-v9"
 VERIFIER_PROMPT_VERSION = "monitoring-document-authority-verifier-v9"
 LEGACY_ANALYSIS_PROMPT_PAIRS = frozenset({
@@ -1628,9 +1634,23 @@ def _validate_batch(
                 and recovered_pages == set(zero_text_page_samples)
                 and len(ocr_pages) == zero_text_page_count
             )
+            # R26轮（R26-02）：允许「文本层覆盖率达标的降级解析」——
+            # 显式限制码+content_profile覆盖率双条件，缺一仍判无效，
+            # 防止任意needs_ocr候选被伪标为parsed。
+            profile = raw.get("content_profile") or {}
+            degraded_parse_admitted = (
+                ZERO_TEXT_PAGES_UNREAD_DEGRADED_PARSE
+                in tuple(raw.get("limitation_codes", ()))
+                and int(profile.get("represented_coverage_per_mille") or 0)
+                >= DEGRADED_NATIVE_TEXT_PARSE_COVERAGE_PER_MILLE
+            )
             if (zero_text_page_count or ocr_pages) and raw.get(
                 "extraction_status"
-            ) != ("parsed" if ocr_complete else "needs_ocr"):
+            ) != (
+                "parsed"
+                if (ocr_complete or degraded_parse_admitted)
+                else "needs_ocr"
+            ):
                 raise DocumentAuthorityError(
                     "document_authority_candidate_ocr_status_invalid"
                 )

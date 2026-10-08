@@ -40,6 +40,8 @@ from packages.medical_monitoring.admission.document_authority import (
     build_anonymous_critique_context,
     build_document_authority_project_context,
     document_authority_batch_sha256,
+    DEGRADED_NATIVE_TEXT_PARSE_COVERAGE_PER_MILLE,
+    ZERO_TEXT_PAGES_UNREAD_DEGRADED_PARSE,
     reconcile_document_authority,
     resolve_document_authority_project_identity,
     resolve_document_authority_conflicts,
@@ -230,6 +232,63 @@ def test_revised_candidate_cannot_claim_parsed_when_ocr_failed() -> None:
         for key, value in candidate.items()
         if key != "evidence_revision_sha256"
     })
+
+    with pytest.raises(DocumentAuthorityError, match="ocr_status_invalid"):
+        document_authority_batch_sha256(batch)
+
+
+def _degraded_ocr_batch(coverage_per_mille: int) -> dict:
+    """R26-02：原生文本覆盖占优、个别零文本页OCR未恢复的降级候选。"""
+
+    batch = _ocr_batch()
+    candidate = batch["candidates"][0]
+    evidence = candidate["ocr_recovery_pages"][0]
+    candidate["excerpts"] = []
+    candidate["locator_count"] = 0
+    candidate["locator_index_sha256"] = _digest([])
+    candidate["page_count"] = 10
+    candidate["zero_text_page_count"] = 1
+    candidate["zero_text_page_samples"] = [1]
+    evidence.update({
+        "locator": "",
+        "actual_model": "",
+        "status": "failed",
+        "failure_code": "ocr_runtime_unavailable",
+        "text_sha256": hashlib.sha256(b"").hexdigest(),
+        "character_count": 0,
+    })
+    candidate["limitation_codes"] = [
+        "ocr_recovery_failed",
+        ZERO_TEXT_PAGES_UNREAD_DEGRADED_PARSE,
+    ]
+    profile = _content_profile("a" * 64, ("b" * 64,))
+    profile["represented_page_count"] = 9
+    profile["total_page_count"] = 10
+    profile["represented_coverage_per_mille"] = coverage_per_mille
+    candidate["content_profile"] = profile
+    candidate["evidence_revision_sha256"] = _digest({
+        key: value
+        for key, value in candidate.items()
+        if key != "evidence_revision_sha256"
+    })
+    return batch
+
+
+def test_degraded_parse_with_dominant_native_text_coverage_is_admissible() -> None:
+    # 90%以上原生文本覆盖：OCR未恢复的个别页以限制码留痕，可参与
+    # 权威核对（R26-02：受控eCRF指南PDF不再因1页无文本被整体拒收）。
+    batch = _degraded_ocr_batch(
+        DEGRADED_NATIVE_TEXT_PARSE_COVERAGE_PER_MILLE
+    )
+
+    document_authority_batch_sha256(batch)
+
+
+def test_degraded_parse_marker_without_coverage_is_still_rejected() -> None:
+    # 限制码不能绕过覆盖率门槛：低覆盖（真扫描版）仍判无效。
+    batch = _degraded_ocr_batch(
+        DEGRADED_NATIVE_TEXT_PARSE_COVERAGE_PER_MILLE - 1
+    )
 
     with pytest.raises(DocumentAuthorityError, match="ocr_status_invalid"):
         document_authority_batch_sha256(batch)

@@ -330,17 +330,37 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
         <div className="monitoring-admission-document-upload" style={{ marginTop: 8 }}>
           {/* R12轮（R12-06）：上传入口曾是小字号label且主按钮无引导——
               现显式说明缺什么+醒目上传按钮（CSS提升视觉层级）。 */}
-          <p style={{ margin: "0 0 6px", fontSize: 13, color: "#b4480c", fontWeight: 600 }}>
-            还缺研究文件：请在下方选择研究方案与eCRF（支持 .docx / .pdf / .xlsx），
-            上传后系统会自动核对——这是进入下一步的唯一待办。
-          </p>
+          {/* R24-01（R26轮收口）：核对进行中不再同屏喊「还缺研究文件，
+              这是唯一待办」——两句话互相矛盾（R24-C实测一屏最多5种
+              冲突引导）。处理中只陈述进行中事实；核对落定后才回到
+              缺件待办口径。 */}
+          {processing ? (
+            <p style={{ margin: "0 0 6px", fontSize: 13, color: "var(--monitoring-muted, #6b7785)", fontWeight: 600 }} role="status">
+              系统正在核对已上传的研究文件，请稍候——核对完成后此处会显示
+              仍缺的文件（如有）。
+            </p>
+          ) : (
+            <p style={{ margin: "0 0 6px", fontSize: 13, color: "#b4480c", fontWeight: 600 }}>
+              还缺研究文件：请在下方选择研究方案与eCRF（支持 .docx / .pdf / .xlsx，可一次多选），
+              上传后系统会自动核对——这是进入下一步的唯一待办。
+            </p>
+          )}
           <label className="monitoring-admission-document-picker">
             <input
               type="file"
               multiple
               accept=".docx,.pdf,.xlsx"
               disabled={processing}
-              onChange={(event) => onFiles?.(event.target.files)}
+              onChange={(event) => {
+                // R26轮（R26-03）：①先取数组再清空input.value——浏览器
+                // 对「重选同一组文件」不触发change（值未变化），曾致
+                // 上传失败后第2、3次重选完全静默且零请求发出；②空选择
+                // 可见提示，不静默吞掉用户操作。
+                const selected = Array.from(event.target.files || []);
+                event.target.value = "";
+                if (!selected.length) return;
+                onFiles?.(selected);
+              }}
             />
             {processing
               ? "系统正在识别并交叉核对…"
@@ -348,7 +368,7 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
                 ? "重新上传研究文件并再次核对"
                 : state.phase === "needs_user_input"
                   ? "如仍有文件遗漏，可继续补充上传"
-                  : "选择研究文件（方案 / eCRF）"}
+                  : "选择研究文件（方案 / eCRF，可多选）"}
           </label>
         </div>
       ) : null}
@@ -760,13 +780,16 @@ export function MedicalMonitoringAdmissionWizardView({
                   // R4循环：目录型控件在webkitdirectory模式下accept无效，
                   //文件级注入不会注册且此前零反馈（四轮测试位
                   //「FileChooser未形成选中」之谜）。空选择必须可见提示。
-                  if (!event.target.files?.length) {
+                  // R26轮（R26-03）：先取数组再清空value，重选同一路径
+                  // 也能再次触发导入入口。
+                  const selected = Array.from(event.target.files || []);
+                  event.target.value = "";
+                  if (!selected.length) {
                     setFilePickNotice("未形成选择：该入口只接受文件夹。请选择数据文件夹，或改用下方“选择单个数据文件”。");
-                    event.target.value = "";
                     return;
                   }
                   setFilePickNotice("");
-                  onSourceFilesChange?.(event.target.files);
+                  onSourceFilesChange?.(selected);
                 }}
               />
               <span>选择数据文件夹</span>
@@ -779,13 +802,14 @@ export function MedicalMonitoringAdmissionWizardView({
                 accept=".csv,.xls,.xlsx,.xlsm"
                 disabled={phase === "creating"}
                 onChange={(event) => {
-                  if (!event.target.files?.length) {
+                  const selected = Array.from(event.target.files || []);
+                  event.target.value = "";
+                  if (!selected.length) {
                     setFilePickNotice("未形成选择：请重新选择数据文件。");
-                    event.target.value = "";
                     return;
                   }
                   setFilePickNotice("");
-                  onSourceFilesChange?.(event.target.files);
+                  onSourceFilesChange?.(selected);
                 }}
               />
               <span>选择单个数据文件</span>
@@ -1314,10 +1338,17 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       }
     } catch (error) {
       if (documentRequestGeneration.current === generation) {
+        // R26轮（R26-03）：网络层失败（fetch TypeError「Failed to fetch」
+        // 等）不得裸露英文原文——统一中文包装并给出可执行指引；服务端
+        // 结构化错误仍优先透传其message。
+        const serverMessage = error?.detail?.message;
+        const networkFailed = !Number.isInteger(Number(error?.status)) && !serverMessage;
         setDocumentState((current) => ({
           ...current,
           phase: "failed",
-          error: error?.detail?.message || error?.message || "文件识别失败。",
+          error: serverMessage || (networkFailed
+            ? "研究文件上传未能完成（网络中断或服务未响应）。请重新选择文件上传；若多次失败，可改为每次上传一份。"
+            : error?.message || "文件识别失败。"),
         }));
       }
     } finally {

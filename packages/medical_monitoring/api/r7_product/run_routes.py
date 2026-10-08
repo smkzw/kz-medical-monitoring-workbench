@@ -72,6 +72,11 @@ class RunRouteContext:
     # 以未确认映射产出医学结论比停滞责任更大）。未确认→409阻断。
     # 返回None=放行；返回dict=阻断（code/message透传给前端向导）。
     mapping_confirmation_gate: Any = None
+    # R26轮（R26-05，D-F3家族）：运行启动的方案版本门——「尚无已确认且
+    # 可解析的方案版本」的项目此前仍可发起监查并自动整理发布结果，与
+    # 方案准备面板承诺的前置链矛盾。判据与面板同源（protocol-versions
+    # 列表 status=confirmed）。返回None=放行；dict=409阻断详情。
+    protocol_version_gate: Any = None
 
 
 def register_run_launch_routes(router: APIRouter, context: RunRouteContext) -> None:
@@ -129,6 +134,17 @@ def register_run_launch_routes(router: APIRouter, context: RunRouteContext) -> N
                 return _error_response(
                     409,
                     str(blocked.get("code") or "mapping_confirmation_required"),
+                    str(blocked.get("message") or ""),
+                )
+        # R26轮（R26-05，D-F3家族）：无已确认方案版本→阻断启动。准备链
+        # （研究文件核对→字段映射确认→方案版本确认）未闭合时产出的结果
+        # 曾以「结果可用」的正常形态自动发布——门禁与面板承诺同链收紧。
+        if context.protocol_version_gate is not None:
+            blocked = context.protocol_version_gate(canonical)
+            if blocked is not None:
+                return _error_response(
+                    409,
+                    str(blocked.get("code") or "protocol_version_required"),
                     str(blocked.get("message") or ""),
                 )
 
