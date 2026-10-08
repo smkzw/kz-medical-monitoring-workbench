@@ -1772,6 +1772,15 @@ def _check_mapping_prompt_tool_closure():
 @app.on_event("startup")
 def _recover_monitoring_ai_jobs():
     """Resume queued or lease-expired medical-monitoring AI work."""
+    # R25轮（R25-01）：僵尸租约收割必须先于且独立于prompt版本整编——
+    # 原顺序里supersede_prompt_versions_except一旦抛异常，整个try块
+    # 被「except Exception: pass」吞掉，expire_exhausted_leases不再执行
+    # （实测00:29假死重启后，两行22:59已过期的running作业存活到次日，
+    # 批次永远generating）。先收割再整编，两步各自兜错互不拖累。
+    try:
+        monitoring_ai_repository.expire_exhausted_leases()
+    except Exception:
+        pass
     try:
         for task_type, prompt_version in PROMPT_VERSION_BY_TASK.items():
             current_prompt_versions = DOCUMENT_AUTHORITY_CURRENT_PROMPT_VERSIONS_BY_TASK.get(

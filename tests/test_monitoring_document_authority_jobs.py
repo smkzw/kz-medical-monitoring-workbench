@@ -2774,3 +2774,48 @@ def test_user_selection_cas_serializes_concurrent_writers(tmp_path) -> None:
         "mmcandidate_c",
     }
     assert workflow._decision_revision_path(workspace, batch_id, 2).is_file()
+
+
+def test_pending_state_exposes_queue_depth_and_earliest_enqueued_at() -> None:
+    """R25轮（R25-03）：pending不再是一个无限期词。
+
+    R25C实测归属人工确认后「系统正在识别并交叉核对…」45分钟零状态
+    变化、无超时无提示无重试入口。_pending_state在analyzing/reviewing/
+    adjudicating/cross_checking等在途态携带pending_job_count与
+    pending_since（最早入队时间），前端据此显示已耗时与停滞提示。
+    """
+
+    from services.api.app.monitoring_ai_repository import (
+        MonitoringAiJobStatus,
+    )
+
+    workflow = object.__new__(MonitoringDocumentAuthorityWorkflow)
+
+    def job(status: str, created_at: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            status=MonitoringAiJobStatus(status),
+            created_at=created_at,
+            business_key="k",
+            failure_code="",
+            failure_message="",
+            observed_response_model="",
+        )
+
+    active = (job("queued", "2026-10-07T23:00:00+00:00"),
+              job("running", "2026-10-07T23:05:00+00:00"))
+    pending = workflow._pending_state(active, "reviewing")
+    assert pending is not None
+    assert pending["state"] == "reviewing"
+    assert pending["authority_status"] == "not_promoted"
+    assert pending["pending_job_count"] == 2
+    assert pending["pending_since"] == "2026-10-07T23:00:00+00:00"
+
+    failed = (job("failed", "2026-10-07T23:00:00+00:00"),
+              job("completed", "2026-10-07T23:05:00+00:00"))
+    failed_state = workflow._pending_state(failed, "reviewing")
+    assert failed_state is not None
+    assert failed_state["state"] == "failed"
+    assert "pending_job_count" not in failed_state
+
+    done = (job("completed", "2026-10-07T23:00:00+00:00"),) * 2
+    assert workflow._pending_state(done, "reviewing") is None

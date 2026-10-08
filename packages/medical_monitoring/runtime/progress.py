@@ -399,6 +399,13 @@ def project_audience_progress(
                 ),
             }
         )
+    # R25轮（R25-06）：Store的feed按seq升序（旧→新），而产品前端对
+    # latest_updates的既有契约是「新→旧」并截取前N条（见前端
+    # medicalMonitoringProgressProjection测试夹具10:31→10:26）。此前
+    # 原序透传，前端实际展示的是保留窗内最旧的N条——已完成的运行
+    # 长期以「某工作项·进行中」的陈旧begin事件开头（R25D实测65分钟
+    # 零变化）。在此边界统一反转为最新优先，与前端契约对齐。
+    latest_updates.reverse()
 
     completed_value = source.get("completed")
     total_value = source.get("total")
