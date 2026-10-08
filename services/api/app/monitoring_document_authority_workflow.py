@@ -105,10 +105,23 @@ class MonitoringDocumentAuthorityWorkflow:
             candidate.get("role_hypotheses")
             for candidate in parsable_candidates
         ):
+            # R26轮（R26-02）：拒收必须可诊断——逐文件列出技术状态与
+            # 限制码，不再只给「全部为扫描版」的笼统归因。
+            per_file = "；".join(
+                f"{candidate['filename']}：{candidate['extraction_status']}"
+                + (
+                    f"（{','.join(candidate['limitation_codes'])}）"
+                    if candidate.get("limitation_codes")
+                    else ""
+                )
+                for candidate in batch["candidates"]
+            )
             self._record_last_check_note(
                 workspace_dir,
                 "最近一次研究文件核对结论：未能从这组文件中读取到可核对的内容"
-                "（如全部为扫描版或文件损坏），本次未进入自动核对。",
+                f"（逐文件状态：{per_file}）。文本版PDF请确认非扫描件；"
+                "扫描版暂不能作为权威研究文件，可将该文件角色标记为缺失"
+                "后继续。",
             )
             raise DocumentAuthorityError("document_authority_evidence_incomplete")
         revision = self._input_revision(project_id, batch)

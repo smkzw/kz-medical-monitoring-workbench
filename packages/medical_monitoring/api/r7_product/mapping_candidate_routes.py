@@ -1034,16 +1034,34 @@ def register_mapping_candidate_routes(
             # R7轮（R1-02收口）：用户裁决「该角色缺失」（空candidate_id）
             # 落显式缺失声明——readiness据此不再把该角色算作required，
             # 「选未提供」后ready可转true，出口不再死锁。
-            for selection in request_fields.get("user_role_selections") or ():
+            # R26轮（R26-01）：以「生效裁决」为准而非只看本次请求体——
+            # 裁决已跨请求持久化（workflow层_save_user_selections），用户
+            # 先保存「本次未提供eCRF」、再确认内容差异时，确认后的
+            # resolve请求体不含user_role_selections，旧实现据此漏写
+            # 声明，readiness恒missing、主按钮「请先添加所需文件」永久
+            # 置灰（第3步无出口死锁）。晋升结果回带的
+            # user_declared_missing_roles即持久化裁决的生效形态。
+            effective_selections = [
+                {"role": str(role), "candidate_id": ""}
+                for role in result.get("user_declared_missing_roles") or ()
+                if str(role).strip()
+            ]
+            seen_declared: set[str] = set()
+            for selection in [
+                *effective_selections,
+                *(request_fields.get("user_role_selections") or ()),
+            ]:
                 if not isinstance(selection, Mapping):
                     continue
                 role = str(selection.get("role") or "").strip()
                 if (
                     role in registered_roles
                     or not role
+                    or role in seen_declared
                     or str(selection.get("candidate_id") or "").strip()
                 ):
                     continue
+                seen_declared.add(role)
                 if hasattr(pipeline, "declare_document_missing"):
                     pipeline.declare_document_missing(
                         project_id=canonical,

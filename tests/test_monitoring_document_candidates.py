@@ -511,6 +511,41 @@ def test_pdf_candidate_requires_recovery_for_every_native_zero_page(
     assert candidate.limitation_codes == ("ocr_recovery_empty",)
 
 
+def test_pdf_candidate_degrades_to_parsed_when_native_text_dominant(
+    tmp_path: Path,
+) -> None:
+    """R26-02：12页原生文本+1页零文本（覆盖923‰）且OCR运行时不可用
+    ——真实受控eCRF指南PDF形态。降级为parsed+限制码留痕，不再整体
+    needs_ocr拒收（原行为在批入口报「全部为扫描版」）。"""
+
+    def unavailable(*_args: object) -> str:
+        raise CandidateOcrUnavailableError(
+            "OcrGatewayRuntimeError",
+            requested_model="requested-ocr",
+            provider="test",
+        )
+
+    candidate = MonitoringDocumentCandidateDecomposer(
+        tmp_path / "degraded",
+        ocr_runner=unavailable,
+        ocr_model="requested-ocr",
+        ocr_dpi=200,
+    ).decompose("ecrf-guide.pdf", _dense_native_and_blank_pdf_bytes())
+
+    assert candidate.extraction_status == "parsed"
+    assert candidate.technical_status == "ready"
+    assert candidate.zero_text_page_count == 1
+    assert candidate.zero_text_page_samples == (13,)
+    assert candidate.ocr_recovery_pages[0].status == "failed"
+    assert candidate.ocr_recovery_pages[0].failure_code == (
+        "ocr_runtime_unavailable"
+    )
+    assert "ocr_recovery_failed" in candidate.limitation_codes
+    assert "zero_text_pages_unread_degraded_parse" in candidate.limitation_codes
+    # 未读页不进定位符/摘录：不宣称第13页已读。
+    assert all(":p13" not in excerpt.locator for excerpt in candidate.excerpts)
+
+
 def test_native_excerpt_budget_reserves_space_for_zero_text_page_ocr(
     tmp_path: Path,
 ) -> None:

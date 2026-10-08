@@ -432,6 +432,8 @@ def create_medical_monitoring_r7_product_router(
     risk_snapshot_recorder: Any = None,
     # R24轮（R18-03收尾）：fail-open语义修正——未确认映射的启动阻断门。
     mapping_confirmation_gate: Any = None,
+    # R26轮（R26-05，D-F3家族）：无已确认方案版本的启动阻断门。
+    protocol_version_gate: Any = None,
 ) -> APIRouter:
     """Create the project-scoped R7 product router; no workspace I/O here."""
     # Publication never synthesizes authority.  A caller must inject one
@@ -915,6 +917,7 @@ def create_medical_monitoring_r7_product_router(
         ensure_source_ready=ensure_source_ready,
         source_block_message=source_block_message,
         mapping_confirmation_gate=mapping_confirmation_gate,
+        protocol_version_gate=protocol_version_gate,
     )
     register_run_launch_routes(router, run_route_context)
 

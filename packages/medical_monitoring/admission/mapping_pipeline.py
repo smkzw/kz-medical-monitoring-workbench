@@ -765,12 +765,24 @@ class AdmissionMappingPipeline:
             )
             for item in roles
         )
+        # R26轮（report_C发现3）：未就绪标题如实点名仍缺的必需文件——
+        # 原固定文案「还需补充研究方案或电子病例报告表」的「或」与
+        # 门禁的「与」（两者都需：已识别或声明未提供）语义矛盾。
+        missing_required_labels = [
+            _DOCUMENT_ROLE_LABELS[item["role"]]
+            for item in roles
+            if item["required_now"] and item["status"] != "current"
+        ]
         return {
             "ready": ready,
             "headline": (
                 "研究文件已准备好"
                 if ready
-                else "还需补充研究方案或电子病例报告表"
+                else (
+                    f"还需补充研究文件：{'、'.join(missing_required_labels)}"
+                    if missing_required_labels
+                    else "研究文件核对尚未完成"
+                )
             ),
             "guidance": (
                 "系统会自动完成字段理解和两次独立核对，无需逐项确认。"

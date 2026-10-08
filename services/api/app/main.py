@@ -1159,6 +1159,86 @@ def _r7_mapping_confirmation_gate(project_id: str):
             "请进入数据接入向导第3步完成确认。"
         ),
     }
+
+
+def _auto_register_confirmed_protocol_version(project_id: str):
+    """R22-01自愈（与/protocol-versions列表路由同语义）：已登记且内容
+    校验通过的方案docx自动注册为「已确认且可解析的方案版本」。幂等；
+    供运行启动门在判定前先自愈，避免可自愈状态误伤启动。"""
+
+    authoring = monitoring_rule_authoring_service
+    entries = [
+        item
+        for item in authoring.source_registry.list_entries(project_id)
+        if item.module == "medical_monitoring"
+        and item.source_kind == "protocol_docx"
+        and item.parser_status == "parsed"
+    ]
+    if not entries:
+        return None
+    latest = max(entries, key=lambda item: item.entry_id)
+    validation = authoring.source_registry.current_content_validation(
+        project_id, latest.entry_id
+    )
+    if not (
+        validation is not None
+        and validation.technical_status == "ready"
+        and validation.use_status in {"allowed", "confirmed_after_warning"}
+    ):
+        return None
+    version, _reused = authoring.register_protocol_version(
+        project_id=project_id,
+        source_entry_id=latest.entry_id,
+        protocol_code=str(latest.entry_id)[:80],
+        version_label=str(latest.public_title or latest.entry_id)[:200],
+        version_date=str(getattr(latest, "registered_at", "") or "")[:10]
+        or "1970-01-01",
+        applicability_status="active",
+        operational_effective_from=str(
+            getattr(latest, "registered_at", "") or ""
+        )[:10] or "1970-01-01",
+    )
+    return version
+
+
+def _r7_protocol_version_gate(project_id: str):
+    """R26轮（R26-05，D-F3家族收口）：运行启动的方案版本门（fail-closed）。
+
+    「方案事实与规则发布」面板明示前置链（文件核验→第3步研究文件核对
+    与角色确认→字段映射确认）未完成、尚无已确认且可解析的方案版本时，
+    此前仍可发起监查并自动整理发布结果——准备链与执行门禁不符，未闭合
+    链产出的结果以正常可用形态呈现。现与映射确认门同链阻断：判据与
+    面板同源（protocol-versions列表 status=confirmed）。返回None=放行；
+    dict=409阻断详情。
+    """
+
+    def _has_confirmed_version() -> bool:
+        return any(
+            str(getattr(item, "status", "") or "") == "confirmed"
+            for item in monitoring_protocol_rule_repository.list_protocol_versions(
+                project_id
+            )
+        )
+
+    try:
+        if _has_confirmed_version():
+            return None
+        # 先按列表路由同语义自愈（R22-01），再判一次。
+        _auto_register_confirmed_protocol_version(project_id)
+    except Exception:
+        # 自愈失败不掩盖判定——继续按当前列表判定。
+        pass
+    if _has_confirmed_version():
+        return None
+    return {
+        "code": "protocol_version_required",
+        "message": (
+            "先完成方案版本确认：当前项目尚无已确认且可解析的方案版本，"
+            "确认完成前不会启动医学监查（无方案依据的运行不产出医学结论）。"
+            "请前往「医学监查 → 数据接入」完成研究文件核对与字段映射确认，"
+            "再在「方案事实与规则发布」中确认方案版本。"
+        ),
+    }
 monitoring_mapping_activation_service = MonitoringMappingActivationService(
     monitoring_mapping_draft_repository
 )
@@ -4347,6 +4427,8 @@ app.include_router(
         risk_snapshot_recorder=_record_r7_publication_risk_snapshot,
         # R24轮（R18-03收尾）：fail-open语义修正——未确认映射阻断启动。
         mapping_confirmation_gate=_r7_mapping_confirmation_gate,
+        # R26轮（R26-05，D-F3家族收口）：无已确认方案版本阻断启动。
+        protocol_version_gate=_r7_protocol_version_gate,
     )
 )
 app.include_router(

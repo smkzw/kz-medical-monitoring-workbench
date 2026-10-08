@@ -326,6 +326,10 @@ class FakeMappingPipeline:
         self.calls.append(("select_document", kwargs))
         return {"version": 1}
 
+    def declare_document_missing(self, **kwargs: Any) -> Mapping[str, Any]:
+        self.calls.append(("declare_document_missing", kwargs))
+        return {"version": 1}
+
 
 def test_real_semantic_quality_is_safely_projected_without_hashes() -> None:
     quality = evaluate_mapping_semantic_quality(fields=()).as_payload()
@@ -517,6 +521,51 @@ def test_document_authority_promotion_is_server_wired_and_publicly_plain(
         if name == "select_document"
     ]
     assert [item["role"] for item in selections] == ["protocol", "ecrf"]
+
+
+def test_promoted_missing_declaration_survives_selection_free_resolve(
+    tmp_path: Path,
+) -> None:
+    """R26-01：裁决先保存、内容差异确认后推进的resolve请求体不再携带
+    user_role_selections——缺失声明必须依据晋升结果回带的生效裁决补写，
+    否则readiness恒missing、主按钮永久置灰（第3步死锁）。"""
+
+    mapping = FakeMappingPipeline()
+
+    def promote(**kwargs: Any) -> Mapping[str, Any]:
+        return {
+            "authority_status": "promoted",
+            "promotion_receipt_sha256": "f" * 64,
+            "registrations": [
+                {
+                    "role": "protocol",
+                    "source_entry_id": "source-protocol-internal",
+                },
+            ],
+            "user_declared_missing_roles": ["ecrf"],
+        }
+
+    client = _client(
+        tmp_path / "runtime",
+        mapping_pipeline=mapping,
+        document_authority_promoter=promote,
+    )
+    response = client.post(
+        f"{_base()}/data-admissions/attempt-0001/study-documents/resolve",
+        json={
+            "batch_id": f"mmbatch_{'a' * 24}",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ready"] is True
+    declarations = [
+        kwargs
+        for name, kwargs in mapping.calls
+        if name == "declare_document_missing"
+    ]
+    assert [item["role"] for item in declarations] == ["ecrf"]
+    assert declarations[0]["attempt_id"] == "attempt-0001"
 
 
 @pytest.mark.parametrize(
