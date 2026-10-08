@@ -196,6 +196,23 @@ class WorkbenchInboxService:
     def inbox(self, project_id: str, actor: str = "medical_manager", limit: int = 80) -> WorkbenchInboxResult:
         self._assert_project_available(project_id)
         items = self._build_items(project_id)
+        return self._hydrate_inbox_result(project_id, items, actor=actor, limit=limit)
+
+    def _hydrate_inbox_result(
+        self,
+        project_id: str,
+        items: List[WorkbenchItem],
+        *,
+        actor: str,
+        limit: int = 80,
+    ) -> WorkbenchInboxResult:
+        """R25轮（R25-05）：读态注水与汇总从已构建清单一次性完成。
+
+        大项目整库构建一次实测2-4秒；动作路径（apply_action）此前经
+        self.inbox()把整库再构建一遍，等待翻倍。抽取本助手让构建结果
+        复用，语义不变（读态/排序/可见截断/汇总口径与inbox一致）。
+        """
+
         read_versions = _read_versions(self.store.records(project_id, actor))
         hydrated = [
             item.model_copy(update={"unread": read_versions.get(item.item_id) != item.source_version})
@@ -331,7 +348,13 @@ class WorkbenchInboxService:
                 created_at=created_at,
             )
         )
-        return self.inbox(project_id, actor=request.actor)
+        # R25轮（R25-05）：复用本次校验用已构建清单，不再经self.inbox()
+        # 把整库重新构建一遍（动作响应等待从两次构建降到一次）。
+        return self._hydrate_inbox_result(
+            project_id,
+            list(current_items.values()),
+            actor=request.actor,
+        )
 
     def apply_rux_risk_disposition(
         self,

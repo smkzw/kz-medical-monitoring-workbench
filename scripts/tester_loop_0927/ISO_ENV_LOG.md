@@ -503,3 +503,12 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 三条件自检（18:07 实测）全过：① 8911 `/api/runtime-readiness` ready、backend_build_id=**api-8f8b335e0cdb6221**（services 指纹变更，实证修复加载）；② `http://localhost:5178/monitoring` 200；③ runtime-build.json expectedBackendBuildId=api-8f8b335e0cdb6221 配对一致（frontendBuildId=web-5c52de3cbd52918c 不变）。
 - 修复后行为实证：GET /protocol-versions（先前 items=[]）自愈种入 protov_d952458e7f816a46e614f900（status=confirmed、applicability_status=project_effective_confirmed）；同项目两遍全新幂等键 prepare-and-start 200 → completed → available → overview 可读（1,241,039B/41发现/16受试者，与 R25/R26 逐字节一致）；registry 终态 28 条全部 completed+result_available=1、waiting_start=0。
 - 纪律：kill/重启仅动 8911/5178；8910/5177 未触碰（lsof 0 监听）；sqlite 诊断均只读 mode=ro（register 写沙箱副本，live 写全部经 API 设计端点/服务路径）。
+
+## 2026-10-08T23:2x+0200（R27待修清单修复员：R27-01/03 + R25-04/05/07/08 修复后 8911+5178 双重启）
+
+- 操作者：修复员（R27分诊清单 R27-01/R27-03/R25-04/R25-05/R25-07/R25-08）。动作：API 8911 与 vite 5178 均按 ask 给定命令重启（API pid 26563，vite pid 26582）；8910/5177 未触碰。
+- 修复内容：R27-01 研究文件核对自动恢复加预算（_recover_failed_once 传 automatic_recovery_limit=3，预算耗尽落 failed 终态→resolve 409 透出 failure_code/message；前端诊断文案渲染）+ 前端长等待进度行（R25-04）；R27-03 analyze 对同批终态失败作业显式重排（start()，不受自动预算限，重传即完整重核）+横幅措辞对齐；R25-07/R25-08 总览收件箱 openItem 先导航后后台记账（原实现 await mark_read 3-30s 无反馈=点击无响应）+按钮语义具体化+防连点；R25-05 apply_action 单次构建（原整库重建两次，动作等待减半；写锁根治未动）。
+- 重启命令：按 ask 给定（WORKBENCH_RUNTIME_DIR=runs/tester_loop_iso_20260928/runtime、WORKBENCH_LOCAL_SINGLE_USER=1、WORKBENCH_AI_RUNTIME=api、WORKBENCH_MONITORING_AI_PARALLELISM=2；vite VITE_API_PROXY_TARGET=http://127.0.0.1:8911）。
+- 三条件自检（23:26-23:29 实测）全过：① 8911 /api/runtime-readiness ready:true（backend_build_id=api-75f010c43fde3f82）；② http://localhost:5178/monitoring HTTP 200；③ 5178 runtime-build.json expectedBackendBuildId=api-75f010c43fde3f82 与 8911 配对一致。
+- 修复后行为实证（UI 走查）：CSU 总览收件箱卡片点击→立即跳 /monitoring（无 3-5s 空窗），后台记账完成计数 -1/-1 一致；「处理最高优先级」tooltip 具体到事项标题、点击即跳、计数随后台更新；R27B 向导第3步显示新进度行「本轮核对已进行约 0 分钟；系统有 1 项核对作业在队列中…」，且 20:16 起滞留的 primary 失败作业被自动恢复重新入队（failed→running，attempt 33/34 租约心跳中）——原「入队后永久滞留」链路已被预算化自愈取代。
+- 纪律：零业务管道推进；runs/ 与 sqlite 诊断均只读 mode=ro；8910/5177 全程未触碰。

@@ -26,7 +26,10 @@ from .monitoring_ai_contracts import (
     MonitoringAiTaskType,
     content_sha256,
 )
-from .monitoring_ai_repository import MonitoringAiRepository
+from .monitoring_ai_repository import (
+    MonitoringAiRepository,
+    MonitoringAiStateConflictError,
+)
 from .monitoring_document_authority_jobs import (
     load_document_authority_analysis_run,
     promote_document_authority_from_jobs,
@@ -141,6 +144,11 @@ class MonitoringDocumentAuthorityWorkflow:
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
             f"document-authority-analysis:primary:{_ANALYSIS_GENERATION}:{batch['batch_id']}",
         )
+        existing_verifier = self._optional_job(
+            project_id,
+            MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
+            f"document-authority-analysis:verifier:{_ANALYSIS_GENERATION}:{batch['batch_id']}",
+        )
         previously_analyzed = (
             existing_primary is not None
             and str(getattr(existing_primary, "status", "").value
@@ -159,6 +167,32 @@ class MonitoringDocumentAuthorityWorkflow:
             candidate_batch=batch,
             role="verifier",
         )
+        # R27轮（R27-03）：重新上传是用户的显式重核动作。作业指纹随内容
+        # 确定——同组文件的create_or_get只会原样取回既有作业行，不会重排
+        # 已落终态失败的作业；此前卡死诊断横幅承诺「重新上传会触发完整
+        # 重核」因此从未兑现（重传后仍永久停在核对中）。这里对同批既有
+        # 终态失败作业显式重排（不受_automatic_recovery_limit限制——
+        # 自动预算只约束advance轮询路径的无感重试，不约束用户动作），
+        # 让「重新上传→完整重核」成为真实可用的恢复路径。
+        for existing in (existing_primary, existing_verifier):
+            if existing is None or existing.contract_retirement_code:
+                continue
+            if existing.status not in {
+                MonitoringAiJobStatus.FAILED,
+                MonitoringAiJobStatus.BLOCKED,
+                MonitoringAiJobStatus.STALE_INPUT,
+            }:
+                continue
+            try:
+                self.repository.retry_terminal(
+                    existing.project_id,
+                    existing.job_id,
+                    current_input_revision_sha256=existing.input_revision_sha256,
+                )
+            except MonitoringAiStateConflictError:
+                # 输入版本并发变化等竞态：不阻断本次上传的202响应，
+                # advance轮询会按既有状态机继续处理。
+                continue
         self.worker_wake()
         result = {"state": "analyzing", "batch_id": batch["batch_id"]}
         if previously_analyzed:
@@ -1093,7 +1127,7 @@ class MonitoringDocumentAuthorityWorkflow:
 
     # R11轮（R11-01）：基础设施/提供方类失败码——瞬时故障（代理503、
     # SSE中断、上游5xx）不是内容性判定，不得被指纹去重或重试预算固化为
-    # 终态结论；这类失败可无限次自动重试。
+    # 终态结论；这类失败可自动重试。
     _INFRA_FAILURE_CODES = frozenset({
         "provider_runtime_error",
         "provider_sse_error_event",
@@ -1106,6 +1140,16 @@ class MonitoringDocumentAuthorityWorkflow:
         "network_error",
         "proxy_error",
     })
+
+    # R27轮（R27-01）：infra类失败的自动重试预算。原实现「无限次自动
+    # 重试」在上游持续限流（如glm-5.3-flash全credential 429冷却两小时）
+    # 时，每次resolve轮询都重排重跑、作业attempt无界增长（ISO实测涨到
+    # 32），且advance永远返回analyzing——界面无限「正在核对」，真实
+    # 失败原因对用户完全不可见（第3步全链挂死表象）。预算内瞬断仍可
+    # 无感自愈；预算耗尽后不再静默重排，advance落failed终态，resolve
+    # 据此409+failure_code/message，界面如实呈现原因与恢复入口。用户
+    # 显式动作（重新上传研究文件）不受此预算限制，见start()。
+    _AUTOMATIC_RECOVERY_LIMIT = 3
 
     @classmethod
     def _is_infra_failure(cls, job: Any) -> bool:
@@ -1127,15 +1171,29 @@ class MonitoringDocumentAuthorityWorkflow:
             # 重新核对仍瞬间同409）。
             if self._is_infra_failure(job) or job.max_attempts <= 2:
                 retryable.append(job)
+        requeued = False
         for job in retryable:
-            self.repository.retry_terminal(
-                job.project_id,
-                job.job_id,
-                current_input_revision_sha256=job.input_revision_sha256,
-            )
-        if retryable:
+            try:
+                retried = self.repository.retry_terminal(
+                    job.project_id,
+                    job.job_id,
+                    current_input_revision_sha256=job.input_revision_sha256,
+                    # R27轮（R27-01）：自动恢复限预算；耗尽后retry_terminal
+                    # 原样返回终态作业，不再重排。
+                    automatic_recovery_limit=self._AUTOMATIC_RECOVERY_LIMIT,
+                )
+            except MonitoringAiStateConflictError:
+                # 输入版本并发变化等竞态：留给下一次advance判定，不阻断。
+                continue
+            if retried.status not in {
+                MonitoringAiJobStatus.FAILED,
+                MonitoringAiJobStatus.BLOCKED,
+                MonitoringAiJobStatus.STALE_INPUT,
+            }:
+                requeued = True
+        if requeued:
             self.worker_wake()
-        return bool(retryable)
+        return requeued
 
 
 __all__ = ["MonitoringDocumentAuthorityWorkflow"]

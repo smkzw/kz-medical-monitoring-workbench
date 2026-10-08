@@ -47,6 +47,26 @@ function requestKey(prefix) {
   return `${prefix}-${random}`;
 }
 
+// R27轮（R27-01）：resolve 409（mapping_document_authority_failed）携带
+// detail.detail.failure_code/failure_message——上游持续限流等真实原因。
+// 旧实现只显示通用message（「见诊断信息」）却从不渲染诊断内容，承诺
+// 与行为不符。这里把作业级失败原因拼进错误文案（后端已截断到400字）。
+function documentAuthorityFailureText(error) {
+  if (error?.detail?.code !== "mapping_document_authority_failed") return "";
+  const detail = error?.detail?.detail || {};
+  const code = String(detail.failure_code || "").trim();
+  const message = String(detail.failure_message || "").trim();
+  if (!code && !message) return "";
+  const clipped = message.length > 300 ? `${message.slice(0, 300)}…` : message;
+  return `失败原因：${clipped || code}${code ? `（${code}）` : ""}`;
+}
+
+function documentAuthorityErrorText(error, fallback) {
+  const base = error?.detail?.message || error?.message || fallback;
+  const failureText = documentAuthorityFailureText(error);
+  return failureText ? `${base}\n${failureText}` : base;
+}
+
 export async function loadOrStartAdmissionMapping(api, projectId, attemptId) {
   try {
     return await api.listDataAdmissionMappingCandidates(
@@ -105,7 +125,11 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
   // 重试入口。核对作业本身有租约超时与尝试上限，worker侧收割（R25-01）
   // 保证最终落终态——这里只做诚实的等待体验，不虚报失败。
   const stageStalled = processing && stageElapsedMs >= DOCUMENT_STAGE_STALL_MS;
-  const stageStalledMinutes = Math.floor(stageElapsedMs / 60000);
+  // R25轮（R25-04）：长等待（实测18.5-45分钟）此前零反馈，用户无法区分
+  // 正常慢与挂死。处理中即显示已用时与在途作业事实（对比导入阶段
+  // 「已用时3秒」的示范）；到停滞阈值后再切换为停滞警示（见下）。
+  const stageRunningMinutes = Math.max(0, Math.floor(stageElapsedMs / 60000));
+  const pendingJobCount = Number(payload.pending_job_count);
   const userChoices = Array.isArray(payload.user_choices) ? payload.user_choices : [];
   const allAnswered = userChoices.every(
     (choice) => typeof choices[choice.role] === "string",
@@ -143,18 +167,28 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
       {stageStalled ? (
         <div className="monitoring-admission-warning" role="alert" style={{ display: "grid", gap: 6 }}>
           <strong>
-            研究文件核对已在「{payload.headline || "当前阶段"}」停留约 {stageStalledMinutes} 分钟且无状态变化。
+            研究文件核对已在「{payload.headline || "当前阶段"}」停留约 {stageRunningMinutes} 分钟且无状态变化。
           </strong>
           <span>
-            {Number(payload.pending_job_count) > 0
-              ? `系统有 ${Number(payload.pending_job_count)} 项核对作业在队列中（最早入队 ${String(payload.pending_since || "").replace("T", " ").slice(0, 19) || "时间未知"}）。`
+            {pendingJobCount > 0
+              ? `系统有 ${pendingJobCount} 项核对作业在队列中（最早入队 ${String(payload.pending_since || "").replace("T", " ").slice(0, 19) || "时间未知"}）。`
               : "核对作业可能仍在排队等待系统资源。"}
-            长时间无进展时，可点击「重新核对研究文件」重试；若持续无进展，重新上传文件版本会触发完整重核。已上传的文件与您的确认不会被丢失。
+            长时间无进展时，可点击「重新核对研究文件」重试；若持续无进展，重新上传研究文件（相同或新版本均可）会重新发起完整核对。已上传的文件与您的确认不会被丢失。
           </span>
           <button type="button" className="monitoring-admission-secondary" onClick={onRetry}>
             重新核对研究文件
           </button>
         </div>
+      ) : processing ? (
+        // R25轮（R25-04）：处理中即给出事实性进度反馈——已用时与在途
+        // 作业数，不虚报进度也不渲染失败，用户可据此区分正常慢与停滞。
+        <p className="monitoring-admission-stage-progress" role="status" style={{ margin: 0, fontSize: 13, color: "var(--monitoring-muted, #6b7785)" }}>
+          本轮核对已进行约 {stageRunningMinutes} 分钟
+          {pendingJobCount > 0
+            ? `；系统有 ${pendingJobCount} 项核对作业在队列中（最早入队 ${String(payload.pending_since || "").replace("T", " ").slice(0, 19) || "时间未知"}）`
+            : ""}
+          。完成前无需任何操作，页面会自动更新核对结果。
+        </p>
       ) : null}
       <ul>
         {(payload.roles || []).map((item) => (
@@ -372,7 +406,11 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
           </label>
         </div>
       ) : null}
-      {state.error ? <p className="monitoring-admission-warning" role="alert">{state.error}</p> : null}
+      {state.error ? (
+        <p className="monitoring-admission-warning" role="alert" style={{ whiteSpace: "pre-line" }}>
+          {state.error}
+        </p>
+      ) : null}
       {state.phase === "failed" && !userChoices.length ? (
         <button type="button" className="monitoring-admission-secondary" onClick={onRetry}>
           重新核对研究文件
@@ -438,6 +476,14 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
         识别完成前可能小于导入概况的表数；系统不会把代码对照表、名册页等
         辅助表静默排除在识别之外。
       </p>
+      {/* R25轮（R25-04）：识别生成期给出事实性时间反馈（自最近一次识别
+          进展起计），与停滞阈值内的正常慢区分于「挂死」；达到阈值后由
+          上方headline切换为停滞提示，此处不再重复。 */}
+      {payload?.state === "generating" && stalledMs > 0 && stalledMs < MAPPING_STALL_THRESHOLD_MS ? (
+        <p className="monitoring-admission-minor" role="status" style={{ margin: "0 0 6px" }}>
+          识别已进行约 {Math.max(0, Math.floor(stalledMs / 60000))} 分钟（自最近一次识别进展起计）；页面每2.5秒自动刷新，完成前无需操作。
+        </p>
+      ) : null}
       {tables.length ? (
         <details className="monitoring-admission-table-details">
           <summary>
@@ -1278,7 +1324,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           setDocumentState((current) => ({
             ...current,
             phase: "failed",
-            error: error?.detail?.message || error?.message || "研究文件核对失败。",
+            error: documentAuthorityErrorText(error, "研究文件核对失败。"),
           }));
         }
         return;
@@ -1443,10 +1489,12 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           // 都取自payload，清空会让「可裁决」提示与裁决控件同时消失，
           // 把用户锁死在第3步（报告C的document_authority_candidate_
           // not_promotable死锁）。
+          // R27轮（R27-01）：失败原因（上游限流等）随409透出，不再
+          // 只给「见诊断信息」却无诊断内容。
           setDocumentState((current) => ({
             ...current,
             phase: "failed",
-            error: error?.detail?.message || error?.message || "研究文件核对失败。",
+            error: documentAuthorityErrorText(error, "研究文件核对失败。"),
           }));
         }
       } finally {
