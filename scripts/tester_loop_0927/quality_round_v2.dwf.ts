@@ -123,6 +123,8 @@ const WBABS = "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作�
 const LOOP = WB + "/scripts/tester_loop_0927";
 const STAGE = "tester_staging_0927";
 const STATE_FILE = LOOP + "/STATE_V2.json";
+const STATE_ABS = "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/STATE_V2.json";
+const LOOP_ABS = "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927";
 const RUNNER = "/Users/smkzw/.codex/tools/conference_session_runner.py";
 const STALLMIN = 45;
 const CLEANSTREAKNEED = 2;
@@ -317,7 +319,7 @@ if (!state) {
       "你负责把上一代多轮制循环的落盘状态重建为单轮制v2的初始状态。只读文件与归纳，绝不修改任何产品代码、绝不碰运行数据。" +
       "重建以权威落盘为准：STATE.json（轮次/未决计数）优先，各轮 REPORT.md 的遗留清单补全明细。查不清的字段如实留空，不编造。" + HONESTY,
   }).ask<BootstrapState>(
-    "任务：读取 " + LOOP + "/STATE.json 与 " + LOOP + "/round_23/REPORT.md（若不存在则取 round_22），重建未决发现清单：\n" +
+    "任务：读取 " + LOOP + "/STATE.json 与 STATE.json 所载轮次对应的 round_<两位轮次>/REPORT.md（缺则逐轮向前取最近存在者），重建未决发现清单：\n" +
     "1. round 与 cleanStreak 取 STATE.json；registry 重建其 openFindings 对应的未决条目（待修复/待复测），每条尽量从最近各轮 REPORT.md 的遗留清单补全 id/title/severity/status/round/what/evidence/repro/fixHint；\n" +
     "2. 搁置条目不进 registry（历史上限内打包搁置，最终清理时统一处置）；\n" +
     "3. 若 STATE.json 与 REPORT.md 数字不一致，以 REPORT.md 明细为准并在 note 说明；\n" +
@@ -698,12 +700,12 @@ if (round >= 3 && cleanStreak >= CLEANSTREAKNEED) {
   ]);
   await world.run("bash", [
     "-c",
-    "rm -rf 'implementation/workbench/runs/tester_loop_iso_20260928' '/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/tester_staging_0927' 'implementation/workbench/tester_staging_0927' /tmp/tester_channel_probe /tmp/channel_probe_v2 2>/dev/null || true\n" +
+    "rm -rf '/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/tester_loop_iso_20260928' '/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/tester_staging_0927' '/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/tester_staging_0927' /tmp/tester_channel_probe /tmp/channel_probe_v2 2>/dev/null || true\n" +
     "rm -f /tmp/mm_api_8911.log /tmp/mm_vite_5178.log 2>/dev/null || true\n" +
-    "find implementation/workbench/scripts/tester_loop_0927/logs -maxdepth 1 -type d -name 'round_*' 2>/dev/null | sort | awk '{a[NR]=\$0} END{for(i=1;i<=NR-3;i++) print a[i]}' | xargs rm -rf 2>/dev/null || true\n" +
+    "find " + LOOP_ABS + "/logs -maxdepth 1 -type d -name 'round_*' 2>/dev/null | sort | awk '{a[NR]=\$0} END{for(i=1;i<=NR-3;i++) print a[i]}' | xargs rm -rf 2>/dev/null || true\n" +
     "echo '收敛全量清理完成（运行时/测试材料/临时件已清，报告与台账保留）'",
   ]);
-  await world.run("bash", ["-c", "cat > " + STATE_FILE + " <<'ZCODEJSON'\n" + JSON.stringify({ round, cleanStreak, strategyNote: recap.strategyNote, registry: [], baselineFailures, channelOk: chanObj(channelOk), campaignDone: true }) + "\nZCODEJSON"]);
+  await world.run("bash", ["-c", "cat > " + STATE_ABS + " <<'ZCODEJSON'\n" + JSON.stringify({ round, cleanStreak, strategyNote: recap.strategyNote, registry: [], baselineFailures, channelOk: chanObj(channelOk), campaignDone: true }) + "\nZCODEJSON"]);
   return {
     conclusion: "质量循环收敛收官：连续" + CLEANSTREAKNEED + "轮清洁，全员走通且无未决P0/P1。详见 " + LOOP + "/DELIVERY.md。单轮制循环已标记campaignDone，后续启动将自动空转保护。",
     findings: [],
@@ -717,14 +719,14 @@ phase("轮末退役：状态落盘与定期瘦身");
 const nextRegistry = registry.filter((f) => f.status !== "已验证");
 const persistRun = await world.run("bash", [
   "-c",
-  "cat > " + STATE_FILE + " <<'ZCODEJSON'\n" + JSON.stringify({ round, cleanStreak, strategyNote: recap.strategyNote, registry: nextRegistry, baselineFailures, channelOk: chanObj(channelOk), campaignDone: false }) + "\nZCODEJSON\nwc -c " + STATE_FILE,
+  "cat > " + STATE_ABS + " <<'ZCODEJSON'\n" + JSON.stringify({ round, cleanStreak, strategyNote: recap.strategyNote, registry: nextRegistry, baselineFailures, channelOk: chanObj(channelOk), campaignDone: false }) + "\nZCODEJSON\nwc -c " + STATE_ABS,
 ]);
 const trimRun = await world.run("bash", [
   "-c",
   "rm -rf /tmp/tester_channel_probe /tmp/channel_probe_v2 2>/dev/null || true; " +
   "rm -f /tmp/mm_api_8911.log /tmp/mm_vite_5178.log 2>/dev/null || true; " +
-  "find implementation/workbench/scripts/tester_loop_0927/logs -maxdepth 1 -type d -name 'round_*' 2>/dev/null | sort | awk '{a[NR]=\$0} END{for(i=1;i<=NR-3;i++) print a[i]}' | xargs rm -rf 2>/dev/null || true; " +
-  "du -sh implementation/workbench/runs/tester_loop_iso_20260928 2>/dev/null | awk '{print \"隔离运行时体量：\" $1}'",
+  "find " + LOOP_ABS + "/logs -maxdepth 1 -type d -name 'round_*' 2>/dev/null | sort | awk '{a[NR]=\$0} END{for(i=1;i<=NR-3;i++) print a[i]}' | xargs rm -rf 2>/dev/null || true; " +
+  "du -sh " + WBABS + "/runs/tester_loop_iso_20260928 2>/dev/null | awk '{print \"隔离运行时体量：\" $1}'",
 ]);
 log("轮末退役完成：" + persistRun.stdout.trim().split("\n").pop() + "；本轮成员随run结束全部退役，下一轮由新run从 STATE_V2.json 无缝接续。" + trimRun.stdout.trim());
 
