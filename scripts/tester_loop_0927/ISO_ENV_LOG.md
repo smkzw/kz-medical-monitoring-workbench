@@ -534,3 +534,4 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 纪律：零业务管道推进、零 runs/ 写入（sqlite 诊断只读 mode=ro）；8910/5177 全程未触碰。
 2026-10-09 08:41 zhipu-coding-plan彻底摘除（用户指令）：independent_ai改绑independent_ai__deepseek_v4_flash（deepseek直连，非编码计划）；两条zhipu档案enabled=false。台账实证zhipu历史0次调用（cms-router 4738+ollama-cloud 2808为主）；该绑定系循环前配置继承（R12D换绑前备份已证），非本轮成员所设。备份=*.pre_zhipu_purge_1009
 2026-10-09 10:43 轮中无损暂停（用户指令：完成当前细节点即停）：run dwfrun-9077e4cd停于R29分诊在途（四测试位已交卷28条原始发现）。8911/5178有意保持运行供恢复；在途现场不清。恢复=ResumeWorkflowRun同run_id，详见PAUSE_HANDOFF_20261009.md
+2026-10-09 16:03 恢复执行（用户指令）+通道核验：cms-router/glm-5.3-flash探针passed:true（3267ms真实往返）——R29期间B/C位的429系上游凭证冷却暂态，已自愈；角色绑定核对=考场与主运行时8/8完全一致（independent_ai=deepseek与用户现行配置相同）。run dwfrun-9077e4cd已Resume，R29分诊起续跑
