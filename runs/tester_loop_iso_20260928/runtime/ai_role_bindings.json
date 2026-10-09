@@ -1,0 +1,110 @@
+{
+ "bindings": {
+  "document_authority_primary_ai": {
+   "capability_evidence_model": "",
+   "capability_evidence_profile_id": "",
+   "capability_reason": "",
+   "capability_status": "unverified",
+   "capability_verified_at": "",
+   "enabled": true,
+   "model": "glm-5.3-flash",
+   "profile_id": "document_authority_primary_ai__medical_monitoring_ai__cms_router_glm53flash",
+   "reasoning_effort": "high",
+   "role_id": "document_authority_primary_ai",
+   "thinking": "enabled"
+  },
+  "document_authority_verifier_ai": {
+   "capability_evidence_model": "",
+   "capability_evidence_profile_id": "",
+   "capability_reason": "",
+   "capability_status": "unverified",
+   "capability_verified_at": "",
+   "enabled": true,
+   "model": "deepseek-v4.1-flash",
+   "profile_id": "document_authority_verifier_ai__medical_monitoring_verifier_ai__ollama_cloud_dsv",
+   "reasoning_effort": "high",
+   "role_id": "document_authority_verifier_ai",
+   "thinking": "enabled"
+  },
+  "independent_ai": {
+   "capability_evidence_model": "",
+   "capability_evidence_profile_id": "",
+   "capability_reason": "",
+   "capability_status": "unverified",
+   "capability_verified_at": "",
+   "enabled": true,
+   "model": "deepseek-v4-flash",
+   "profile_id": "independent_ai__deepseek_v4_flash",
+   "reasoning_effort": "high",
+   "role_id": "independent_ai",
+   "thinking": "enabled"
+  },
+  "medical_monitoring_ai": {
+   "capability_evidence_model": "",
+   "capability_evidence_profile_id": "",
+   "capability_reason": "",
+   "capability_status": "unverified",
+   "capability_verified_at": "",
+   "enabled": true,
+   "model": "glm-5.3-flash",
+   "profile_id": "medical_monitoring_ai__cms_router_glm53flash",
+   "reasoning_effort": "high",
+   "role_id": "medical_monitoring_ai",
+   "thinking": "enabled"
+  },
+  "medical_monitoring_verifier_ai": {
+   "capability_evidence_model": "",
+   "capability_evidence_profile_id": "",
+   "capability_reason": "",
+   "capability_status": "unverified",
+   "capability_verified_at": "",
+   "enabled": true,
+   "model": "deepseek-v4.1-flash",
+   "profile_id": "medical_monitoring_verifier_ai__ollama_cloud_dsv41",
+   "reasoning_effort": "high",
+   "role_id": "medical_monitoring_verifier_ai",
+   "thinking": "enabled"
+  },
+  "ocr": {
+   "capability_evidence_model": "",
+   "capability_evidence_profile_id": "",
+   "capability_reason": "专用 OCR 模型已进入白名单",
+   "capability_status": "specialized_whitelisted",
+   "capability_verified_at": "",
+   "enabled": true,
+   "model": "PaddleOCR-VL-1.6",
+   "profile_id": "ocr_paddle_official",
+   "reasoning_effort": "low",
+   "role_id": "ocr",
+   "thinking": "disabled"
+  },
+  "translation_body": {
+   "capability_evidence_model": "",
+   "capability_evidence_profile_id": "",
+   "capability_reason": "",
+   "capability_status": "unverified",
+   "capability_verified_at": "",
+   "enabled": true,
+   "model": "dawncr0w--Hy-MT2-30B-A3B-oQ8-MLX",
+   "profile_id": "translation_body_local_omlx",
+   "reasoning_effort": "low",
+   "role_id": "translation_body",
+   "thinking": "disabled"
+  },
+  "translation_support": {
+   "capability_evidence_model": "",
+   "capability_evidence_profile_id": "",
+   "capability_reason": "",
+   "capability_status": "unverified",
+   "capability_verified_at": "",
+   "enabled": true,
+   "model": "deepseek-v4-flash",
+   "profile_id": "deepseek_translation_support",
+   "reasoning_effort": "max",
+   "role_id": "translation_support",
+   "thinking": "enabled"
+  }
+ },
+ "revision": 28,
+ "schema_version": "ai_role_bindings_v2"
+}
