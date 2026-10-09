@@ -533,3 +533,4 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 测试：tests/test_public_result_journey_digest_r28.py 4/4（含种子→运行→发布→结果→旅程整链、旧冻结浮点读时修复、AESER 派生位；修复回退变异验证 3/3 必败）；相关套件 111 passed（freeze/facts×2/doc-authority/data-admission/batch-rule-runner）+ r7 router 96/97（1 失败 test_late_project_dispatchers… 为改动前 HEAD 已然失败的既有并发用例，与本轮修复无关，已留证）；frontend node --test $(find src -name '*.test.mjs') 84/84。
 - 纪律：零业务管道推进、零 runs/ 写入（sqlite 诊断只读 mode=ro）；8910/5177 全程未触碰。
 2026-10-09 08:41 zhipu-coding-plan彻底摘除（用户指令）：independent_ai改绑independent_ai__deepseek_v4_flash（deepseek直连，非编码计划）；两条zhipu档案enabled=false。台账实证zhipu历史0次调用（cms-router 4738+ollama-cloud 2808为主）；该绑定系循环前配置继承（R12D换绑前备份已证），非本轮成员所设。备份=*.pre_zhipu_purge_1009
+2026-10-09 10:43 轮中无损暂停（用户指令：完成当前细节点即停）：run dwfrun-9077e4cd停于R29分诊在途（四测试位已交卷28条原始发现）。8911/5178有意保持运行供恢复；在途现场不清。恢复=ResumeWorkflowRun同run_id，详见PAUSE_HANDOFF_20261009.md
