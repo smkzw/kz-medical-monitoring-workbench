@@ -265,6 +265,22 @@ function normalizeIndicator(value = {}, index = 0) {
 
 // W01-R26 A12：Finding DTO边界对象。稳定finding_id/subject/site/事件与
 // 时间窗/状态/分类型claims/逐条source refs——真实Finding卡的数据来源。
+// R28-09：DTO的claim源文本常自带「依据：/发现：/行动项：」前缀，渲染层
+// 再按kind补一次标签即成「依据：依据：…」（41张卡DOM层重复）。归并口径
+// =投影层剥去源文本里重复的kind标签前缀，渲染层只呈现一次。
+const CLAIM_KIND_LABELS = { basis: "依据", finding: "发现", action: "行动项" };
+function stripClaimKindPrefix(kind, text) {
+  const label = CLAIM_KIND_LABELS[kind];
+  if (!label) return text;
+  const pattern = new RegExp(`^${label}[：:]\\s*`);
+  let cleaned = text;
+  // 上限3次：防退化输入，同时兼容源文本本身已叠加多层前缀的情况。
+  for (let index = 0; index < 3 && pattern.test(cleaned); index += 1) {
+    cleaned = cleaned.replace(pattern, "");
+  }
+  return cleaned;
+}
+
 function normalizeFindingCard(value = {}) {
   const claims = (Array.isArray(value.claims) ? value.claims : [])
     .map((claim) => {
@@ -274,7 +290,7 @@ function normalizeFindingCard(value = {}) {
       if (!text) return null;
       return {
         kind,
-        text,
+        text: stripClaimKindPrefix(kind, text),
         evidenceIds: Array.isArray(claim.evidence_ids)
           ? claim.evidence_ids.map((id) => clean(id)).filter(Boolean)
           : [],
@@ -521,12 +537,20 @@ function selectedSubjectWindow(payload, subject, route) {
 function MonitoringProductWorkbar({ state, onAction, omitComparisonClaim = false }) {
   const workbar = state?.workbar;
   const selectedRun = state?.selectedRun;
+  // R28-08：读取中/暂不可读取时不得给出「尚无已选择的监查记录」这种
+  // 结论式空态——刷新恢复期workbar曾显示该句，用户误以为选择被清空
+  // （result token其实仍在URL中正常恢复）。三种状态如实分开。
+  const emptyDetails = state?.kind === "loading"
+    ? "正在读取本次监查记录…"
+    : state?.kind === "unavailable"
+      ? "本次监查记录暂不可读取"
+      : "当前项目尚无已选择的监查记录";
   const details = selectedRun
     ? [
       selectedRun.dataCutoffText,
       omitComparisonClaim ? "" : selectedRun.comparisonRangeText,
     ].filter(Boolean).join(" · ")
-    : "当前项目尚无已选择的监查记录";
+    : emptyDetails;
   const invoke = (target) => {
     if (!target) return;
     onAction?.(target);
@@ -1591,6 +1615,19 @@ export function MedicalMonitoringProductLoop({
       {resultLoaded ? <MonitoringPublicResultIdentityStrip identity={resultContext.identity} siteScopeText={resultSiteScopeText} /> : null}
       <ProductRouteTabs route={route} resultLoaded={resultLoaded} onOverview={() => navigate("overview")} onQueries={() => navigate("queries")} />
       {wizardOpen && wizard ? <MonitoringWizardView submitting={wizardSubmitting} wizard={{ ...wizard, dataBatches: setup?.dataBatches || [], serverSummary: setup?.serverSummary || {}, errorText: wizardError || wizard.errorText }} previewText={previewText} previewBusy={previewBusy} previewOpen={previewOpen} onClose={closeWizard} onSelect={changeWizard} onAdvance={(direction) => direction > 0 && wizard.step === 4 ? submitWizard() : advanceWizard(direction)} onPreviewTextChange={setPreviewText} onPreview={requestPreview} onOpenPreview={() => setPreviewOpen(true)} onClosePreview={() => { setPreviewOpen(false); changeWizard("preview", null); changeWizard("previewCandidateId", ""); }} onConfirmPreview={confirmPreview} canConfirmPreview={Boolean(wizard.previewCandidateId)} /> : null}
+      {loadingBody && resultToken && !resultError ? (
+        /* R28-05：结果层首屏在途必须给诚实读取态——此前整个正文区空白
+           （4秒时正文仅161字符），用户无从区分「慢」与「坏」。 */
+        <section className="monitoring-product-state-panel is-loading" role="status" aria-live="polite" aria-busy="true">
+          <strong>{routeView === "evidence" ? "正在读取原始来源…" : "正在读取本次结果…"}</strong>
+          <span>读取需要完成冻结结果包的完整性校验；大数据集项目可能需要数十秒，请稍候，无需反复刷新。</span>
+          <div className="monitoring-product-loading-bars" aria-hidden="true">
+            <i style={{ width: "62%" }} />
+            <i style={{ width: "84%" }} />
+            <i style={{ width: "46%" }} />
+          </div>
+        </section>
+      ) : null}
       {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><div className="monitoring-product-state-panel-actions"><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button>{resultError?.code === "public_result_target_incomplete" && resultToken ? <button type="button" className="monitoring-product-button is-small" onClick={() => navigate("overview", { subject_ref: "", site_ref: "", spine_ref: "", window_start: "", window_end: "", risk_instance_ref: "", risk_anchor_ref: "", event_ref: "", visit_ref: "" })}>返回结果概览</button> : null}</div></section> : null}
       {!loadingBody && !resultError && !setupHistoryError && publicRunToken && !resultToken ? <MonitoringPublicProgressSurface progress={progress} error={progressError} loading={progressLoading} onRefresh={() => setRefreshEpoch((value) => value + 1)} onBack={() => navigate("overview", { public_run_token: "" })} onOpenResult={() => openResult(publicRunToken)} /> : null}
       {!loadingBody && !resultError && !setupHistoryError && resultLoaded ? (

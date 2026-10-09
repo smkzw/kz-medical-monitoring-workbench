@@ -13474,6 +13474,12 @@ export function App() {
   const [dashboardReadError, setDashboardReadError] = useState(null);
   const [sourceManifests, setSourceManifests] = useState({});
   const [sourceManifestReadErrors, setSourceManifestReadErrors] = useState({});
+  // R30-03：来源清单读取进行态与重试入口——恢复期中间态不得落「功能
+  // 未配置」结论。
+  const [sourceManifestRequestNonce, setSourceManifestRequestNonce] = useState(0);
+  const retrySourceManifestRead = useCallback(() => {
+    setSourceManifestRequestNonce((current) => current + 1);
+  }, []);
   const [workbenchInbox, setWorkbenchInbox] = useState(null);
   const [workbenchInboxReadError, setWorkbenchInboxReadError] = useState(null);
   const [selectedSubject, setSelectedSubject] = useState(monitoringBrowserState.initialSubjectId);
@@ -13738,7 +13744,16 @@ export function App() {
         if (!cancelled) {
           clearTimeout(timeout);
           setProjects([]);
-          setActiveProjectId((current) => initialMedicalMonitoringProductRouteRef.current.isProduct ? current : "");
+          // R30-01：列表读取失败不再清空工作区。URL深链或本会话已有明确
+          // 项目身份时保留选中——项目级读取（来源清单/总览/监查工作区）
+          // 不依赖全局列表，恢复后无需重建上下文；列表错误与重试入口照
+          // 常呈现。完全没有项目身份时才回落为空选。
+          const deepLinkedProjectId = initialMonitoringRouteRef.current.project_id || "";
+          setActiveProjectId((current) => (
+            initialMedicalMonitoringProductRouteRef.current.isProduct
+              ? current
+              : current || deepLinkedProjectId || rememberedProjectIdRef.current
+          ));
           setMonitoringProjectRouteError("");
           setProjectsLoadError("项目列表加载失败或超时（超过20秒未返回）。请点击重试；若持续失败请检查服务状态。");
           setProjectsLoaded(true);
@@ -13816,7 +13831,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeProjectId, isMedicalMonitoringProductRoute]);
+  }, [activeProjectId, isMedicalMonitoringProductRoute, sourceManifestRequestNonce]);
 
   useEffect(() => {
     if (isMedicalMonitoringProductRoute) {
@@ -13958,7 +13973,47 @@ export function App() {
     };
   }, [activeProjectId, isMedicalMonitoringProductRoute]);
 
+  // R30-03：当前项目的来源清单读取阶段——ready=已读到；error=读取失败；
+  // pending=在途/未开始。中间态不得落「功能未配置」结论。
+  const activeManifestReadState = !activeProjectId
+    ? "none"
+    : sourceManifests[activeProjectId]
+      ? "ready"
+      : (sourceManifestReadErrors[activeProjectId] ? "error" : "pending");
+
   const page = useMemo(() => {
+    // R30-03：模块门未读到配置清单时的诚实态——在途=读取中；失败=读
+    // 取失败+重试；只有清单确实读到且无该模块绑定时才渲染「功能未配
+    // 置」。无项目身份时维持原有未选择项目口径。
+    const moduleGateFallback = (moduleKey) => {
+      if (!activeProjectId || activeManifestReadState === "none") {
+        return <ModuleUnavailablePage moduleKey={moduleKey} />;
+      }
+      if (activeManifestReadState === "pending") {
+        return (
+          <main className="page">
+            <section className="panel empty-state" role="status" aria-live="polite">
+              正在读取项目与模块配置，请稍候…
+            </section>
+          </main>
+        );
+      }
+      if (activeManifestReadState === "error") {
+        return (
+          <main className="page">
+            <section className="panel empty-state" role="alert">
+              <p>项目模块配置读取失败，当前无法确认该项目是否已启用该模块。请重试；若持续失败请检查服务状态。</p>
+              <p style={{ marginTop: 12 }}>
+                <button type="button" className="primary-button" onClick={retrySourceManifestRead}>
+                  重试读取配置
+                </button>
+              </p>
+            </section>
+          </main>
+        );
+      }
+      return <ModuleUnavailablePage moduleKey={moduleKey} />;
+    };
     if (isMedicalMonitoringPage(activePage)) {
       return (
         <MedicalMonitoringRouteOutlet
@@ -13974,6 +14029,9 @@ export function App() {
             globalThis.location?.reload?.();
           }}
           projectsLoaded={projectsLoaded && !projectsLoadError}
+          listReadFailed={Boolean(projectsLoadError)}
+          manifestReadState={activeManifestReadState}
+          onRetryManifestRead={retrySourceManifestRead}
         />
       );
     }
@@ -14004,17 +14062,17 @@ export function App() {
             onOpenApprovals={() => refreshDashboard().finally(() => setActivePage("approvals"))}
           />
         )
-        : <ModuleUnavailablePage moduleKey="evidence_design" />;
+        : moduleGateFallback("evidence_design");
     }
     if (activePage === "eligibility") {
       return eligibilityRouteProjectId
         ? <EligibilityPage projectId={activeProjectId} routeProjectId={eligibilityRouteProjectId} />
-        : <ModuleUnavailablePage moduleKey="eligibility_review" />;
+        : moduleGateFallback("eligibility_review");
     }
     if (activePage === "tfl") {
       return activeManifest?.route_bindings?.data_analysis_tfl
         ? <PlannedModulePage moduleKey="tfl" projectId={activeProjectId} />
-        : <ModuleUnavailablePage moduleKey="data_analysis_tfl" />;
+        : moduleGateFallback("data_analysis_tfl");
     }
     if (activePage === "writing") {
       if (runtimeReadiness.status !== "ready") {
@@ -14027,7 +14085,7 @@ export function App() {
       }
       return activeManifest?.route_bindings?.medical_writing
         ? <WritingPage key={activeProjectId} projectId={activeProjectId} projectHeader={activeManifest?.header_project} projectSourceMode={activeManifest?.source_mode || ""} aiGatewayStatus={aiGatewayStatus} refreshDashboard={refreshDashboard} onNavigationGuardChange={setWritingNavigationGuard} />
-        : <ModuleUnavailablePage moduleKey="medical_writing" />;
+        : moduleGateFallback("medical_writing");
     }
     if (activePage === "safety") {
       return activeManifest?.route_bindings?.safety_pv
@@ -14053,13 +14111,13 @@ export function App() {
             }}
           />
         )
-        : <ModuleUnavailablePage moduleKey="safety_pv" />;
+        : moduleGateFallback("safety_pv");
     }
     if (activePage === "sourceRegistry") {
       return <SourceRegistryPage projectId={activeProjectId} onOpenModule={(module) => requestActivePage(moduleToPage[module] || "overview")} />;
     }
     return <ApprovalPage projectId={activeProjectId} dashboard={dashboard} refreshDashboard={refreshDashboard} />;
-  }, [activePage, activeProjectId, activeManifest, dashboard, dashboardReadError, workbenchInbox, workbenchInboxReadError, selectedSubject, aiGatewayStatus, aiRuns, aiRunsReadError, eligibilityRouteProjectId, monitoringRouteProjectId, runtimeReadiness, refreshRuntimeReadiness, requestActivePage, requestMedicalMonitoringProductRouteChange, returnFromMedicalMonitoringProduct, medicalMonitoringProductRouteState]);
+  }, [activePage, activeProjectId, activeManifest, activeManifestReadState, retrySourceManifestRead, dashboard, dashboardReadError, workbenchInbox, workbenchInboxReadError, selectedSubject, aiGatewayStatus, aiRuns, aiRunsReadError, eligibilityRouteProjectId, monitoringRouteProjectId, runtimeReadiness, refreshRuntimeReadiness, requestActivePage, requestMedicalMonitoringProductRouteChange, returnFromMedicalMonitoringProduct, medicalMonitoringProductRouteState, projectsLoaded, projectsLoadError]);
 
   return (
     <>

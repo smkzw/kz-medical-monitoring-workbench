@@ -2118,6 +2118,19 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
   const legacyDraftRows = queryFindingsMeta.shape === "legacy_query_drafts" ? queryDraftRows : [];
   const FINDING_STATE_LABELS = { open: "待核实", confirmed: "已确认", closed: "已关闭" };
   const CLAIM_KIND_LABELS = { basis: "依据", finding: "发现", action: "行动项" };
+  // R28-09：Finding卡面向医学经理的域标签——facts.<domain>内部存储路径
+  // 不再裸露；未知域回落「数据域 <key>」不虚构。映射以投影已声明的
+  // domain_encodings为准。
+  const findingDomainLabels = new Map(
+    (Array.isArray(projection.domains) ? projection.domains : [])
+      .map((item) => [String(item?.domain || ""), String(item?.shortLabel || item?.label || "").trim()])
+      .filter(([key, label]) => key && label),
+  );
+  const factsPathLabel = (path) => {
+    const match = /^facts\.([a-z0-9_]+)$/i.exec(String(path || "").trim());
+    if (!match) return String(path || "").trim();
+    return findingDomainLabels.get(match[1]) || `数据域 ${match[1]}`;
+  };
   const aiAccepted = aiFindings.filter((item) => item.state === "accepted").length;
   const aiEscalated = aiFindings.filter((item) => item.state === "escalated").length;
   const aiGaps = aiFindings.filter((item) => item.state === "unverifiable_gap" || item.state === "coverage_gap").length;
@@ -2187,7 +2200,10 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
       ) : null}
       {findingCards.length || legacyDraftRows.length || (queryFindingsMeta.shape === "finding_dto_v1" && queryFindingsMeta.state !== "not_applicable") ? (
         <section className="monitoring-panel monitoring-panel-wide" data-monitoring-finding-cards>
-          <div className="monitoring-section-heading"><span className="monitoring-eyebrow">真实发现</span><h2>发现（{findingCards.length} 条 · 载荷形态 {queryFindingsMeta.shape === "legacy_query_drafts" ? "旧版draft载荷" : "Finding DTO"}）</h2></div>
+          {/* R28-09：区块标题面向医学经理——「载荷形态 Finding DTO」是
+              开发态调试词汇，不再出现在页面标题；载荷形态差异仅在旧版
+              draft形态的说明行如实呈现。 */}
+          <div className="monitoring-section-heading"><span className="monitoring-eyebrow">真实发现</span><h2>发现（{findingCards.length} 条）</h2></div>
           {findingCards.length ? (
             <ul className="monitoring-query-card-list">
               {findingCards.map((item) => {
@@ -2196,6 +2212,11 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
                 const windowText = item.windowStart || item.windowEnd
                   ? `${item.windowStart || "未知"} — ${item.windowEnd || "未知"}`
                   : "时间窗待确认";
+                // R28-09：事件字段为空时不再断言「未关联具体事件」——依据
+                // 段常已绑定具体事件+日期，两种表述同屏自相矛盾；改为如实
+                // 的「绑定待确认」（未知≠不存在）。
+                const eventText = item.eventRef || "事件绑定待确认";
+                const subjectLabel = (item.subjectRef && subjectsByRef.get(item.subjectRef)?.subject_label) || item.subjectRef;
                 return (
                   <li key={item.findingId} className="monitoring-query-card" data-query-finding={item.findingId} data-finding-state={item.findingState} data-finding-kind={item.scopeKind || "finding"}>
                     <header className="monitoring-query-card-head">
@@ -2203,13 +2224,13 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
                       <strong>{item.findingId}</strong>
                       <span className="monitoring-query-card-target">
                         受试者{" "}
-                        <button type="button" className="monitoring-subject-link" onClick={() => onSubjectSelect?.({ subject_ref: item.subjectRef, site_ref: item.siteRef })}>{item.subjectRef || "—"}</button>
+                        <button type="button" className="monitoring-subject-link" onClick={() => onSubjectSelect?.({ subject_ref: item.subjectRef, site_ref: item.siteRef })}>{subjectLabel || "—"}</button>
                         {" "}· 中心 {item.siteRef || "—"}
                       </span>
                     </header>
                     <div className="monitoring-query-card-body">
                       <section aria-label="事件与时间窗"><h3>事件与时间窗</h3>
-                        <p data-finding-event-ref={item.eventRef || ""}>{item.eventRef || "未关联具体事件"} · {windowText}</p>
+                        <p data-finding-event-ref={item.eventRef || ""}>{eventText} · {windowText}</p>
                       </section>
                       <section aria-label="分类型主张"><h3>分类型主张</h3>
                         <ul className="monitoring-claim-list">
@@ -2222,7 +2243,7 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
                         <ul>
                           {sourceRefs.map((ref, refIndex) => (
                             <li key={ref.evidenceId || refIndex} data-source-evidence-id={ref.evidenceId}>
-                              {ref.path ? `${ref.path} · ${ref.recordId || ""} · ${ref.field || ""}` : ref.evidenceId}
+                              {ref.path ? `${factsPathLabel(ref.path)} · ${ref.recordId || ""} · ${ref.field || ""}` : ref.evidenceId}
                               {/* R21轮（R21-01）：risk_instance_ref必须用riski-
                                   实例引用（item.riskId来自risk_instance_id，
                                   已是riski-格式）；此前误用risk-引用格式致

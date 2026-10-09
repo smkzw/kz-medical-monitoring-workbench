@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +21,17 @@ MEDICAL_MODULE_LABELS: Mapping[str, str] = {
     "safety_pv": "安全信号与PV协同",
     "approvals": "审批中心",
 }
+
+
+# R30-01：项目列表接口常态超时的根因之一——每次构建清单都对每个监查
+# 用户项目执行 latest_fact_materialization_ready，其内部完整打开项目
+# 运行库（schema校验+DDL+迁移扫描+meta写入），后台长任务（复核作业、
+# resolve）持有写锁时单次打开可阻塞至busy_timeout(10s)，几十个项目叠
+# 加即70–120s。列表面（项目选择器/总看板/本地单用户身份中间件）允许
+# 短TTL缓存与预算内陈旧复用；单项目门禁路径（build_manifest，R18-03
+# 横幅/运行设置统一判据）不走缓存、保持精确。
+_MATERIALIZED_STATUS_TTL_SECONDS = 60.0
+_LIST_COMPUTE_BUDGET_SECONDS = 8.0
 
 
 @dataclass(frozen=True)
@@ -261,6 +274,10 @@ class ProjectSourceManifestService:
             "proj_mgk10_sar_real": "proj_mgk10_sar_real",
             "proj_ra_greenfield_sandbox": "proj_ra_greenfield_sandbox",
         }
+        # R30-01：清单面的物化就绪缓存（见模块级注释）。键为
+        # (project_id, workspace路径)，值为(单调时刻, bool)。
+        self._materialized_lock = threading.Lock()
+        self._materialized_cache: Dict[tuple, tuple] = {}
 
     @staticmethod
     def parse_include_reference_projects(value: Optional[str]) -> bool:
@@ -315,7 +332,9 @@ class ProjectSourceManifestService:
             raise KeyError(project_id)
         return self._user_project_manifest(record)
 
-    def list_public_projects(self) -> List[Dict[str, object]]:
+    def list_public_projects(
+        self, *, _deadline: Optional[float] = None
+    ) -> List[Dict[str, object]]:
         projects = []
         if self.include_reference_projects:
             projects.extend(
@@ -323,11 +342,65 @@ class ProjectSourceManifestService:
                 for project_id in self.canonical_project_ids()
             )
         if self.user_project_store:
-            projects.extend(
-                self._user_project_manifest(record).public_project_dict()
-                for record in self.user_project_store.records()
+            # R30-01：预算内的物化状态计算——超预算后复用上一轮结果
+            #（允许陈旧）而不是让整个列表（以及本地单用户身份中间件的
+            # 每个请求）同步阻塞在长任务持有的运行库写锁上。从未算过的
+            # 项目仍会精确计算一次（不得以缓存缺失虚构状态）。
+            deadline = (
+                _deadline
+                if _deadline is not None
+                else time.monotonic() + _LIST_COMPUTE_BUDGET_SECONDS
             )
+            for record in self.user_project_store.records():
+                materialized: Optional[bool] = None
+                if "medical_monitoring" in (record.modules or ()):
+                    materialized = self._monitoring_materialized_for_list(
+                        record.project_id, deadline
+                    )
+                projects.append(
+                    self._user_project_manifest(
+                        record, monitoring_materialized=materialized
+                    ).public_project_dict()
+                )
         return projects
+
+    def list_project_ids(self) -> List[str]:
+        """Cheap project-id scope for surfaces that never need manifests.
+
+        R30-01：本地单用户身份中间件此前对每个HTTP请求执行完整
+        list_public_projects()（含逐项目运行库物化检查）——列表计算慢时
+        整个服务所有请求排队。身份作用域只需要项目id，不构建清单。
+        """
+
+        ids: List[str] = []
+        if self.include_reference_projects:
+            ids.extend(self.canonical_project_ids())
+        if self.user_project_store:
+            ids.extend(
+                record.project_id for record in self.user_project_store.records()
+            )
+        return ids
+
+    def _monitoring_materialized_for_list(
+        self, project_id: str, deadline: float
+    ) -> bool:
+        """TTL缓存 + 超预算陈旧复用的物化就绪读取（仅供清单/列表面）。"""
+
+        workspace = _monitoring_runtime_root() / project_id
+        key = (project_id, str(workspace))
+        now = time.monotonic()
+        with self._materialized_lock:
+            entry = self._materialized_cache.get(key)
+            if entry is not None and (now - entry[0]) < _MATERIALIZED_STATUS_TTL_SECONDS:
+                return bool(entry[1])
+        if now >= deadline and entry is not None:
+            # 预算已耗尽：宁可给上一轮（≤TTL+本次预算窗口）的结果，也不
+            # 让清单请求在长任务锁上排队数分钟。门禁路径不受此影响。
+            return bool(entry[1])
+        value = _monitoring_facts_materialized(project_id)
+        with self._materialized_lock:
+            self._materialized_cache[key] = (time.monotonic(), bool(value))
+        return bool(value)
 
     def public_manifest(self, project_id: str) -> Dict[str, object]:
         return self.build_manifest(project_id).public_dict()
@@ -362,8 +435,23 @@ class ProjectSourceManifestService:
             notes=list(notes),
         )
 
-    def _user_project_manifest(self, record: UserProjectRecord) -> ProjectSourceManifest:
+    def _user_project_manifest(
+        self,
+        record: UserProjectRecord,
+        *,
+        monitoring_materialized: Optional[bool] = None,
+    ) -> ProjectSourceManifest:
         project_id = record.project_id
+        # R30-01：原实现对同一项目连续调用两次 _monitoring_facts_materialized
+        #（状态+备注各一次），每次都完整打开项目运行库；现只算一次，
+        # 清单调用方可经 monitoring_materialized 注入缓存值。
+        if monitoring_materialized is None:
+            monitoring_materialized = _monitoring_facts_materialized(project_id)
+        monitoring_note = (
+            ["事实物化完成：监查链已就绪。"]
+            if monitoring_materialized
+            else ["数据接入待完成：上传Data Listing后进入监查。"]
+        )
         return ProjectSourceManifest(
             project_id=project_id,
             aliases=[project_id],
@@ -409,14 +497,10 @@ class ProjectSourceManifestService:
                             project_id,
                             implementation_status=(
                                 "real_source_slice"
-                                if _monitoring_facts_materialized(project_id)
+                                if monitoring_materialized
                                 else "intake_pending"
                             ),
-                            notes=(
-                                ["事实物化完成：监查链已就绪。"]
-                                if _monitoring_facts_materialized(project_id)
-                                else ["数据接入待完成：上传Data Listing后进入监查。"]
-                            ),
+                            notes=monitoring_note,
                         )
                     ]
                     if "medical_monitoring" in (record.modules or ())

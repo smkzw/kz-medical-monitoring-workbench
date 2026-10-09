@@ -416,6 +416,22 @@ export function routeStateForMedicalMonitoringWorkspaceView(state, view, patch =
       delete next.risk_instance_ref;
     }
   }
+  // R28-08：查询工作区是项目级清单。旅程页「返回查询工作区」此前把上
+  // 一个受试者的site/subject/时间窗/事件焦点参数一并带入——查询列表被
+  // 静默限缩到该受试者所在中心，不同受试者旅程页进入同一按钮落点不一
+  // 致（实测24004落概览、21001正常）。进入queries时清除旅程焦点参数，
+  // 统一回到全项目口径（result token仍保留）。
+  if (view === "queries") {
+    delete next.site_ref;
+    delete next.subject_ref;
+    delete next.spine_ref;
+    delete next.window_start;
+    delete next.window_end;
+    delete next.visit_ref;
+    delete next.event_ref;
+    delete next.risk_anchor_ref;
+    delete next.risk_instance_ref;
+  }
   if (["journey", "profile", "timeline"].includes(view)) delete next.source_locator_ref;
   return next;
 }

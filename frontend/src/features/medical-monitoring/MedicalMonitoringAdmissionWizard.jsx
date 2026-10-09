@@ -128,7 +128,16 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
   // R25轮（R25-04）：长等待（实测18.5-45分钟）此前零反馈，用户无法区分
   // 正常慢与挂死。处理中即显示已用时与在途作业事实（对比导入阶段
   // 「已用时3秒」的示范）；到停滞阈值后再切换为停滞警示（见下）。
-  const stageRunningMinutes = Math.max(0, Math.floor(stageElapsedMs / 60000));
+  // R28-11：「本轮核对已进行约 N 分钟」此前按页面加载时刻起算，刷新后
+  // 归零并与同屏「最早入队」时间戳自相矛盾（A/C两会话复现）。响应已携
+  // 带在途作业最早入队时间（pending_since，UTC ISO），优先按它计算；
+  // 缺失时回退页面内阶段计时。停滞检测仍用页面内阶段计时（口径=本页
+  // 观察到的无状态变化时长，阶段键变化重置）。
+  const stageMinutesThisSession = Math.max(0, Math.floor(stageElapsedMs / 60000));
+  const pendingSinceMs = Date.parse(String(payload.pending_since || "").trim());
+  const roundElapsedMinutes = Number.isFinite(pendingSinceMs)
+    ? Math.max(0, Math.floor((Date.now() - pendingSinceMs) / 60000))
+    : stageMinutesThisSession;
   const pendingJobCount = Number(payload.pending_job_count);
   const userChoices = Array.isArray(payload.user_choices) ? payload.user_choices : [];
   const allAnswered = userChoices.every(
@@ -167,7 +176,7 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
       {stageStalled ? (
         <div className="monitoring-admission-warning" role="alert" style={{ display: "grid", gap: 6 }}>
           <strong>
-            研究文件核对已在「{payload.headline || "当前阶段"}」停留约 {stageRunningMinutes} 分钟且无状态变化。
+            研究文件核对已在「{payload.headline || "当前阶段"}」停留约 {stageMinutesThisSession} 分钟且无状态变化。
           </strong>
           <span>
             {pendingJobCount > 0
@@ -183,7 +192,7 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
         // R25轮（R25-04）：处理中即给出事实性进度反馈——已用时与在途
         // 作业数，不虚报进度也不渲染失败，用户可据此区分正常慢与停滞。
         <p className="monitoring-admission-stage-progress" role="status" style={{ margin: 0, fontSize: 13, color: "var(--monitoring-muted, #6b7785)" }}>
-          本轮核对已进行约 {stageRunningMinutes} 分钟
+          本轮核对已进行约 {roundElapsedMinutes} 分钟
           {pendingJobCount > 0
             ? `；系统有 ${pendingJobCount} 项核对作业在队列中（最早入队 ${String(payload.pending_since || "").replace("T", " ").slice(0, 19) || "时间未知"}）`
             : ""}

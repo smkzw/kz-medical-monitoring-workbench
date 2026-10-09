@@ -671,9 +671,16 @@ async def bind_local_single_user_identity(request: Request, call_next):
         local_single_user_enabled(os.environ.get(LOCAL_SINGLE_USER_ENV))
         and resolve_monitoring_principal_from_request(request) is None
     ):
-        projects = project_source_manifest_service.list_public_projects()
+        # R30-01：身份作用域只需要项目id清单。此前每个HTTP请求都在事件
+        # 循环内同步执行完整list_public_projects()（逐项目打开运行库做
+        # 物化检查）——后台长任务持锁时单次可达70–120s且阻塞整个事件
+        # 循环，全服务所有请求排队（实测连续20分钟不可用窗口的根因）。
+        # 现改用免清单的list_project_ids()并移出事件循环线程。
+        project_scope = await run_in_threadpool(
+            project_source_manifest_service.list_project_ids
+        )
         request.state.monitoring_principal = build_local_single_user_principal(
-            project["project_id"] for project in projects
+            project_scope
         )
     return await call_next(request)
 
@@ -5016,10 +5023,10 @@ def list_projects():
 @app.delete("/api/projects/{project_id}")
 def archive_project(project_id: str):
     """归档项目（软删除）：从列表与选择器隐藏；磁盘数据保留可恢复。"""
-    archived_ids = user_project_store.archived_project_ids()
-    known = any(
-        p.get("project_id") == project_id
-        for p in project_source_manifest_service.list_public_projects()
+    # R30-01：known判定此前遍历完整list_public_projects()（逐项目运行库
+    # 物化检查）；项目id存在性只需要免清单的id作用域。
+    known = project_id in set(
+        project_source_manifest_service.list_project_ids()
     ) or project_id in {rec.project_id for rec in user_project_store.records()}
     if not known:
         raise HTTPException(status_code=404, detail="project not found")
