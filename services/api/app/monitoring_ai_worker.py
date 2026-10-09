@@ -79,6 +79,14 @@ class MonitoringAiWorker:
                             )
                         except Exception:
                             pass
+                        # R29-01：queued侧滞留收割——「失败→重试→再排队」
+                        # 循环占用无租约可管，按dwell_since总滞留上限把超阈
+                        # 值作业落可重试终态；显式重试重置基线。暂停项目不
+                        # 收割（有意停靠≠滞留）。
+                        try:
+                            self.service.repository.fail_queued_jobs_exceeding_dwell()
+                        except Exception:
+                            pass
                         if self.service.pending_job_count() > 0:
                             self.wake()
                     except Exception:

@@ -81,19 +81,80 @@ def _change_band_records(risks: Sequence[R5RiskRecord]) -> tuple[R5RiskRecord, .
     return tuple(item for item in risks if item.change_kind != "continued" or item.change_cause is not None)
 
 
+# R28-10：请核实事项卡的域差异化核查指向——监查员能据卡直接定位要核对
+# 的原始记录面，而不是面对一句通用话逐卡点开。缺失域回落通用指向。
+_DOMAIN_VERIFY_HINTS = {
+    "ae": "请核对AE页原始记录（发生日期、严重程度、与试验药关系及转归）与录入是否一致",
+    "mh": "请核对既往病史页原始记录（疾病诊断、起止时间）与录入是否一致",
+    "cm": "请核对合并用药医嘱/用药记录（药物名称、剂量、起止日期、适应证）与录入是否一致",
+    "ip": "请核对试验药物发放/回收记录（药物编号、数量、日期）与录入是否一致",
+    "lab_exam": "请核对检验/检查报告单（项目、结果值、单位、采样日期）与录入是否一致",
+    "hospital_procedure": "请核对住院/操作记录（出院诊断、操作名称、起止日期）与录入是否一致",
+    "symptom_efficacy": "请核对症状/疗效评估原始记录（评估量表、评分、评估日期）与录入是否一致",
+    "protocol_compliance": "请核对访视/执行日期与方案规定要求，并确认是否需要按偏离流程上报",
+    "uncategorized": "请核对原始记录、研究方案与数据录入情况",
+}
+
+# R28-10：风险日期状态的说实话表述——绑定不到精确日期时明说状态，
+# 不以任何方式伪造具体日期。
+_DATE_STATE_TEXT = {
+    "exact": "日期精确，以原始记录为准",
+    "partial": "日期部分明确，待回原始记录核对",
+    "conflicted": "日期记录冲突，待核实",
+    "missing": "日期缺失，待确认",
+}
+
+
+def _risk_record_clause(
+    risk: R5RiskRecord,
+    event_by_ref: Optional[Mapping[str, R5EventRecord]],
+    domain_label: str,
+) -> str:
+    """R28-10：发现段的记录定位子句——事件术语+日期尽量具体。
+
+    绑定得到事件时给出事件术语与日期（exact 取真实起止日期）；绑定不到
+    时回落「{域}域记录+日期状态」，明确待核对而非伪造具体事件。
+    """
+
+    event = (
+        event_by_ref.get(risk.event_ref)
+        if (event_by_ref is not None and risk.event_ref)
+        else None
+    )
+    date_text = _DATE_STATE_TEXT.get(risk.date_state, "日期待确认")
+    if event is not None:
+        if risk.date_state == "exact" and event.start_date is not None:
+            start_text = _iso(event.start_date)
+            if event.end_date is not None and event.end_date != event.start_date:
+                date_text = f"{start_text}至{_iso(event.end_date)}"
+            else:
+                date_text = start_text
+        term = str(event.label_zh or "").strip()
+        if term:
+            return f"{term}（{date_text}）"
+    return f"{domain_label}域记录（{date_text}）"
+
+
 def _risk_payload(
     risk: R5RiskRecord,
     receipt_ref: str,
     *,
     subject_label: Optional[str] = None,
+    event_by_ref: Optional[Mapping[str, R5EventRecord]] = None,
 ) -> dict[str, Any]:
     subject_name = subject_label or risk.subject_ref
     domain_label = DOMAIN_ENCODING.get(risk.domain, {}).get("short_label_zh", risk.domain)
+    # R28-10：请核实事项卡模板注入差异化信息——依据段引用规则名
+    # （risk_type_zh），发现段注入事件术语与日期（record_clause），行动项
+    # 按医学域给出具体核对指向。此前三段文本仅绑定受试者号，55张卡
+    # 一字不差（只差受试者号），零决策信息。
+    record_clause = _risk_record_clause(risk, event_by_ref, domain_label)
+    verify_hint = _DOMAIN_VERIFY_HINTS.get(risk.domain, _DOMAIN_VERIFY_HINTS["uncategorized"])
     evidence_summary = {
         "why_reminded": f"{risk.risk_type_zh}可能影响受试者安全性评价或方案符合性判断，需要沿原始记录核实。",
-        "basis": f"依据当前项目监查规则及已绑定的{domain_label}域记录。",
-        "finding": f"发现{subject_name}存在“{risk.risk_type_zh}”相关记录。",
-        "action_item": "请核对原始记录、研究方案与数据录入情况，并确认是否需要发出数据核查问题。",
+        "basis": f"依据当前项目监查规则「{risk.risk_type_zh}」及已绑定的{domain_label}域记录。",
+        "finding": f"发现{subject_name}存在“{risk.risk_type_zh}”相关记录：{record_clause}。",
+        "action_item": f"{verify_hint}，并确认是否需要发出数据核查问题。",
         "supporting_evidence": "已定位到支持该风险提示的原始记录。",
         "counter_evidence": "当前证据包未提供可直接排除该风险的记录。",
         "risk_history": {
@@ -106,8 +167,8 @@ def _risk_payload(
             "not_comparable": "本次暂不可比较",
         }.get(risk.change_kind, "本次状态待核对"),
         "query_draft": (
-            f"依据当前项目监查规则；发现{subject_name}存在“{risk.risk_type_zh}”相关记录；"
-            "请核实原始记录与医学判断是否一致，并按需补充说明或更正。"
+            f"依据当前项目监查规则「{risk.risk_type_zh}」；发现{subject_name}存在"
+            f"“{risk.risk_type_zh}”相关记录：{record_clause}；{verify_hint}。"
         ),
     }
     if risk.risk_key == "s7-risk-key-pd-10008":

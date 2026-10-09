@@ -299,13 +299,21 @@ class MonitoringAiRepository:
         path: Path,
         *,
         lease_seconds: int = 300,
+        queue_dwell_timeout_seconds: int = 7200,
         clock=_utc_now,
     ):
         if lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
+        if queue_dwell_timeout_seconds <= 0:
+            raise ValueError("queue_dwell_timeout_seconds must be positive")
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.lease_seconds = lease_seconds
+        # R29-01：queued作业总滞留上限（自dwell_since起算）。租约与attempt
+        # 预算只约束单次执行与自动恢复次数，管不住「失败→显式/自动重试→
+        # 再排队」的循环占用；超阈值即落可重试终态（fail_queued_jobs_
+        # exceeding_dwell），队列横幅不再被单个作业无限期占住。
+        self.queue_dwell_timeout_seconds = queue_dwell_timeout_seconds
         self.clock = clock
         self._initialize()
 
@@ -563,6 +571,15 @@ class MonitoringAiRepository:
                     "ALTER TABLE monitoring_ai_jobs "
                     "ADD COLUMN observed_response_model TEXT NOT NULL DEFAULT ''"
                 )
+            if "dwell_since" not in job_columns:
+                # R29-01：队列滞留基线——首装入队时=created_at；显式重试
+                # （产品动作）重置为当下，自动恢复不重置。队列收割据此把
+                # 超阈值滞留的queued作业落可重试终态，不再无限占用
+                # 「队列中」横幅（R29实测单作业滞留≥5.7小时无终态）。
+                connection.execute(
+                    "ALTER TABLE monitoring_ai_jobs "
+                    "ADD COLUMN dwell_since TEXT NOT NULL DEFAULT ''"
+                )
             legacy_retirement_codes = ",".join(
                 "?" for _ in _LEGACY_CONTRACT_RETIREMENT_FAILURE_CODES
             )
@@ -607,8 +624,8 @@ class MonitoringAiRepository:
                         input_revision_json, input_revision_sha256,
                         input_payload_json, input_payload_sha256,
                         prompt_version, profile_id, provider, requested_model,
-                        max_attempts, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        max_attempts, created_at, updated_at, dwell_since
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         job_id,
@@ -625,6 +642,7 @@ class MonitoringAiRepository:
                         request.provider,
                         request.requested_model,
                         request.max_attempts,
+                        _iso(now),
                         _iso(now),
                         _iso(now),
                     ),
@@ -970,6 +988,99 @@ class MonitoringAiRepository:
             )
             connection.commit()
         return int(updated.rowcount)
+
+    def fail_queued_jobs_exceeding_dwell(
+        self,
+        *,
+        project_id: str = "",
+        timeout_seconds: int | None = None,
+    ) -> int:
+        """R29-01：把滞留超阈值仍处queued的作业落为可重试终态。
+
+        租约超时（``expire_exhausted_leases``）只治理running侧僵尸；queued
+        侧在「失败→重试→再排队」循环中可无限期占用队列（R29实测单作业
+        滞留≥5.7小时、横幅持续「队列中」而无终态）。本收割按dwell_since
+        总滞留基线兜底：超时即failed（failure_code=queue_dwell_timeout、
+        retryable=1），用户可显式重试（重试会重置基线重新计时）。项目队
+        列被用户暂停（queue_control.paused=1）时不收割——暂停是有意的停
+        靠，不是滞留。返回收割行数。
+        """
+
+        now = self.clock()
+        threshold = self.queue_dwell_timeout_seconds if timeout_seconds is None else timeout_seconds
+        if threshold <= 0:
+            raise ValueError("queue dwell timeout must be positive")
+        cutoff = _iso(now - timedelta(seconds=threshold))
+        # 存量行（本列加入前的旧queued作业）无dwell_since，按created_at
+        # 兜底计时，避免升级后旧僵尸作业永不被收割。
+        dwell_clause = (
+            "(candidate.dwell_since != '' AND candidate.dwell_since < ?"
+            " OR candidate.dwell_since = '' AND candidate.created_at < ?)"
+        )
+        pause_clause = (
+            "NOT EXISTS ("
+            " SELECT 1 FROM monitoring_ai_queue_control AS control"
+            " WHERE control.project_id = candidate.project_id AND control.paused = 1)"
+        )
+        clauses = [
+            "candidate.status = ?",
+            dwell_clause,
+            pause_clause,
+        ]
+        parameters: list[Any] = [
+            MonitoringAiJobStatus.QUEUED.value,
+            cutoff,
+            cutoff,
+        ]
+        if project_id.strip():
+            clauses.append("candidate.project_id = ?")
+            parameters.append(project_id.strip())
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            updated = connection.execute(
+                """
+                UPDATE monitoring_ai_jobs AS candidate
+                SET status = ?, lease_owner = '', lease_expires_at = '',
+                    failure_code = ?, failure_message = ?, retryable = 1,
+                    updated_at = ?
+                WHERE
+                """
+                + " AND ".join(clauses),
+                (
+                    MonitoringAiJobStatus.FAILED.value,
+                    "queue_dwell_timeout",
+                    (
+                        "作业在队列中滞留超过 "
+                        f"{threshold} 秒仍未获得执行终态（常见于上游持续故障"
+                        "期间的反复重排）；已移出队列。请处理后显式重试，"
+                        "重试将重新计时。"
+                    ),
+                    _iso(now),
+                    *parameters,
+                ),
+            )
+            connection.commit()
+        return int(updated.rowcount)
+
+    def queued_dwell_oldest(self, *, project_id: str = "") -> str:
+        """R29-01诊断投影：当前queued作业中最早的滞留基线（ISO串）。
+
+        存量行无dwell_since时回落created_at，与收割口径一致。
+        """
+
+        clauses = ["status = ?"]
+        parameters: list[Any] = [MonitoringAiJobStatus.QUEUED.value]
+        if project_id.strip():
+            clauses.append("project_id = ?")
+            parameters.append(project_id.strip())
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT MIN(CASE WHEN dwell_since != '' THEN dwell_since"
+                " ELSE created_at END) FROM monitoring_ai_jobs WHERE "
+                + " AND ".join(clauses),
+                tuple(parameters),
+            ).fetchone()
+        return str(row[0]) if row and row[0] else ""
 
     def heartbeat(self, project_id: str, job_id: str, owner: str) -> MonitoringAiJob:
         now = self.clock()
@@ -2002,11 +2113,16 @@ class MonitoringAiRepository:
                 and int(candidate_count["candidate_count"]) > 0
             )
             next_max_attempts = int(row["attempt_count"]) + 2
+            # R29-01：显式重试是产品动作，重置队列滞留基线重新计时；自动
+            # 恢复（预算内）不重置——故障风暴中的循环重排仍受总滞留上限
+            # 约束，不会无限刷新占用「队列中」横幅。
+            explicit_retry = automatic_recovery_limit is None
             updated = connection.execute(
                 """
                 UPDATE monitoring_ai_jobs
                 SET status = ?, max_attempts = ?, retryable = 0,
                     automatic_recovery_count = automatic_recovery_count + ?,
+                    dwell_since = CASE WHEN ? = 1 THEN ? ELSE dwell_since END,
                     failure_code = '', failure_message = '',
                     lease_owner = '', lease_expires_at = '', updated_at = ?
                 WHERE project_id = ? AND job_id = ?
@@ -2021,6 +2137,8 @@ class MonitoringAiRepository:
                     ),
                     next_max_attempts,
                     int(automatic_recovery_limit is not None),
+                    1 if explicit_retry else 0,
+                    _iso(now),
                     _iso(now),
                     project_id,
                     job_id,
