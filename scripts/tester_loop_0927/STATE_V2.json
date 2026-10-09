@@ -1,0 +1,2140 @@
+{
+ "round": 30,
+ "cleanStreak": 0,
+ "strategyNote": "R31策略（满2轮未决项逐簇换法，均与之前不同）：①第3步——中段预置从『决定』变『机制』：分发脚本开考前用种子脚本真实创建『已过第3步、映射待确认』项目并经API硬校验，缺位不开考；从零位只留1个探路位，冒烟清单=R30-01/03修复首验（含长作业期间/api/projects延迟断言）+R29-06事件明细原子子路径（连续第2轮）+R29-01收割验证（种入人为滞留作业看2小时收割是否真实触发）；②第3步四缺按一份可靠性规格批量收口：阶段超时对齐45分钟测试纪律或提供心跳+人工旁路（R29-01收割视界2h>纪律45min的错配坐实），R29-02/03/04/05（届满2轮）并入，计时器组件两种失真（R28-11已修+R29-04未修）一次修全，B#F1复核63min/C#3差异确认51min/A#1识别0项终态错误等8条未立单症状须下轮分诊定性；③检出层先解锁『看得见』再谈『抓得全』：R27-05低风险422明细（连续3轮未修）升格检出验收关键前置，UAS7/SITEID两映射缺口可直接定向补，三件裁决同批提请负责人=CM空适应症口径冲突（新）+R28-06方案A/B（第3轮）+R30-11奥马珠单抗是否入规则；④稳定性并案调查：R30-02冻结与既往计时器/渲染组件簇并案，R28-05/08/09随D位下轮界面复测；⑤台账与流程从口头到机械（第2次提案升格硬请求）：归档/分发脚本硬校验离账单必须有处置依据否则归档失败或所有者书面豁免；R22-01 critical立即补立；时钟锚点写进交付清单并机械校验。",
+ "registry": [
+  {
+   "id": "R1-15",
+   "round": 1,
+   "title": "LBHCV/Code_List 缺中文标注、表标注口径不一",
+   "where": "表结构列表（数据接入）",
+   "what": "表结构列表中 LBHCV 与 Code_List 两表缺中文标注，54 表标注口径不一致。",
+   "severity": "low",
+   "category": "cosmetic",
+   "evidence": "R1-D 观察（MY008 大清单）；RUX 54 表「域代码--中文名」信息设计获 R3-B 正面评价，MY008 两表无人核对（round_03/REPORT.md 遗留清单注）。",
+   "repro": "导入 MY008 清单→查看表结构列表的中文标注覆盖。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_01/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R1 立单【low·未确认】，单源。",
+   "fixHint": "补齐两表中文标注，统一表标注口径。",
+   "status": "待复测"
+  },
+  {
+   "id": "R2-04",
+   "round": 2,
+   "title": "人工裁决声称记入裁决记录、界面不可检索",
+   "where": "审批中心/来源台账（人工归属确认留痕）",
+   "what": "人工归属确认声称「会记入裁决记录」，但审批中心与来源台账均无该人工裁决的可检索条目——治理动作界面不可追溯。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R2-B 首报；R5-C 见证 identity_overrides 裁决留痕（操作人＋时间戳＋说明持久化，兑现承诺一半）；R6-C 实证来源台账审计闭环（含理由与时间戳、双版本沿革、2005 个证据片段）——分诊自 R6 起多轮标「建议关闭」未收口。",
+   "repro": "做一次人工归属确认→到审批中心/来源台账检索该裁决条目。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_02/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_06/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R2 立单【medium·未确认】；R6 起多轮附「建议关闭」（R5/R6 两轮正向证据），台账收口悬置。",
+   "fixHint": "台账收口关闭（建议关闭已连续多轮）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R2-07",
+   "round": 2,
+   "title": "建项必填项无预标记",
+   "where": "新建项目表单",
+   "what": "新建项目表单必填项无预标记，提交失败后才红字报错。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R2-C 观察（round_02/REPORT.md 第三节第五组）。",
+   "repro": "打开新建项目表单→观察必填项预标记→提交空表单看报错形态。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_02/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R2 立单【low·未确认】，单源。",
+   "fixHint": "必填项加预标记（*或等价标识）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R2-08",
+   "round": 2,
+   "title": "「II/III期」渲染为 MW-IIIII",
+   "where": "项目代号/顶栏元数据",
+   "what": "研究分期「II/III期」在项目代号中渲染为 MW-IIIII（5 个连续 I），无法辨读。",
+   "severity": "low",
+   "category": "cosmetic",
+   "evidence": "R2-B 观察（round_02/REPORT.md 第三节第四组）。",
+   "repro": "以 II/III 期建项→查看项目代号渲染。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_02/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "R2 立单【low·已确认】。",
+   "fixHint": "分期罗马数字合成逻辑修正（II/III 不得折叠为 IIIII）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R2-09",
+   "round": 2,
+   "title": "来源台账术语与命名不一致",
+   "where": "来源台账",
+   "what": "来源台账术语不一致：中英角色代码混用、「证据片段/内容片段」混用、方案来源显示 docx 内部模板名而非上传文件名、「0个段落0张表」仍判「匹配」。",
+   "severity": "low",
+   "category": "cosmetic",
+   "evidence": "R2-B 首报；R3-A-03 再观察到模板名显示（round_03/REPORT.md 遗留清单）。",
+   "repro": "打开来源台账→检查角色代码、片段术语、来源文件名与匹配判定文案。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_02/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_03/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R2 立单【low·未确认】；双源观察。",
+   "fixHint": "统一台账术语与来源命名口径；零内容匹配不应判「匹配」。",
+   "status": "待复测"
+  },
+  {
+   "id": "R2-12",
+   "round": 2,
+   "title": "千条字段一次性渲染页面极重",
+   "where": "「查看全部字段的识别结果」视图",
+   "what": "「查看全部字段的识别结果」一次性渲染上千条字段致页面极重，两次截图均超时，快照单次 170–180KB。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R2-D 观察（round_02/REPORT.md 第三节第三组）；与 R3-11（超长瀑布流无悬浮操作条）同族。",
+   "repro": "MY008 识别进行中/完成后打开「查看全部字段的识别结果」→观察页面重量与截图可行性。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_02/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R2 立单【low·未确认】，单源。",
+   "fixHint": "分页/虚拟滚动渲染大字段列表。",
+   "status": "待复测"
+  },
+  {
+   "id": "R3-03",
+   "round": 3,
+   "title": "编辑器面板覆盖左侧导航与抽屉关闭按钮",
+   "where": "医学写作·研究设计引导编辑器面板",
+   "what": "面板覆盖左侧导航与抽屉关闭按钮，点击被拦截，只能靠坐标点击逃生。",
+   "severity": "high",
+   "category": "ux_issue",
+   "evidence": "R3-B 附命中测试数据（round_03/REPORT.md 第三节第四组）；R3 修复 0aea510（折叠侧栏命中）；R9 批次另修 R5-02 抽屉背景板拦截（903999f）。",
+   "repro": "打开研究设计引导编辑器→尝试点击左侧导航/抽屉关闭按钮（命中测试）。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_03/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "R3 立单【high·已确认】；R25 §六仍计入 P1（high）。",
+   "fixHint": "已修（0aea510）；随抽屉/覆盖层交互定向复测。",
+   "status": "待复测"
+  },
+  {
+   "id": "R3-04",
+   "round": 3,
+   "title": "模块勾选跨会话残留＋无补开/归档入口",
+   "where": "新建项目（启用医学监查模块勾选）/项目生命周期",
+   "what": "「启用医学监查模块」勾选跨会话残留导致误建无模块项目，且无事后补开模块、无删除/归档入口——B 建出的 3 个垃圾项目只能靠复盘官经 API 归档。",
+   "severity": "high",
+   "category": "product_bug",
+   "evidence": "R3-B 边界测试（round_03/REPORT.md 第三节第二组）；R3 修复 0aea510（勾选残留与模块补开）。",
+   "repro": "勾选/不勾选模块→关闭会话→再建项观察勾选残留；对无模块项目寻找补开/归档入口。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_03/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "R3 立单【high·已确认】；R25 §六仍计入 P1（high）。",
+   "fixHint": "已修（0aea510）；复测勾选不残留＋模块可补开。",
+   "status": "待复测"
+  },
+  {
+   "id": "R3-11",
+   "round": 3,
+   "title": "超长瀑布流无悬浮操作条",
+   "where": "全表字段视图",
+   "what": "全表字段超长瀑布流（>8000px）无底部悬浮操作条，主按钮沉在页面绝对底部。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R3-C 观察（round_03/REPORT.md 第三节第一组）；与 R2-12 同族。",
+   "repro": "打开全表字段视图→滚动到底寻找主按钮。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_03/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R3 立单【low·未确认】，单源。",
+   "fixHint": "加底部悬浮操作条。",
+   "status": "待复测"
+  },
+  {
+   "id": "R3-13",
+   "round": 3,
+   "title": "模块徽标语境混乱",
+   "where": "新建项目对话框头部",
+   "what": "从总看板打开新建对话框头部显示「医学写作」（模块徽标语境混乱）。",
+   "severity": "low",
+   "category": "cosmetic",
+   "evidence": "R3-B 观察（round_03/REPORT.md 第三节第二组）。",
+   "repro": "从总看板打开新建项目对话框→观察头部徽标。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_03/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R3 立单【low·未确认】，单源。",
+   "fixHint": "徽标随入口语境切换。",
+   "status": "待复测"
+  },
+  {
+   "id": "R4-06",
+   "round": 4,
+   "title": "目录导入静默忽略非数据文件",
+   "where": "数据接入第 1 步（目录导入）",
+   "what": "xlsx+docx 混合目录只导入 xlsx，概况无「另 2 份 docx 被跳过」提示。",
+   "severity": "low",
+   "category": "product_bug",
+   "evidence": "R4-D 观察；R8-C 混合目录明确提示忽略 2 个 docx（修复正向证据，round_08/REPORT.md 第一节）；R7「自动分流」弱正向。",
+   "repro": "导入含 xlsx+docx 的目录→查看概况是否有跳过提示。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_04/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_08/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R4 立单【low·未确认】；R8-C 已见明确提示（弱正向），待复测收口。",
+   "fixHint": "提示已出现（R8 证据）；复测后关闭。",
+   "status": "待复测"
+  },
+  {
+   "id": "R5-02",
+   "round": 5,
+   "title": "「方案事实与规则发布」抽屉背景板拦截导航",
+   "where": "「方案事实与规则发布」抽屉",
+   "what": "抽屉的全屏背景板拦截「返回项目总看板」与左侧全部导航。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "R5-B 实测被挡（elementFromPoint 取证，round_05/REPORT.md 第三节）；R9 修复批次含 R5-02（903999f）。",
+   "repro": "打开「方案事实与规则发布」抽屉→尝试点击左侧导航/「返回项目总看板」。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_05/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_09/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R5 立单【medium·未确认】；已修 903999f 待复测。",
+   "fixHint": "已修（903999f）；随抽屉交互复测。",
+   "status": "待复测"
+  },
+  {
+   "id": "R5-05",
+   "round": 5,
+   "title": "映射/复核期间主按钮周期性闪烁禁用",
+   "where": "映射候选与复核期间底部主按钮",
+   "what": "底部主按钮每数秒在禁用/启用间闪烁，点击瞬间被禁用——轮询定时器直接篡改按钮状态。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "R5-B 观察（round_05/REPORT.md 第三节）；R9 修复批次含 R5-05（903999f）。",
+   "repro": "映射候选生成/复核期间观察主按钮状态并尝试点击。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_05/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_09/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R5 立单【medium·未确认】；已修 903999f 待复测。",
+   "fixHint": "已修（903999f）；轮询不得直接改写按钮态。",
+   "status": "待复测"
+  },
+  {
+   "id": "R7-02",
+   "round": 7,
+   "title": "首屏项目列表误显「暂无项目」且不自愈",
+   "where": "首屏项目列表",
+   "what": "首屏项目列表误显「暂无项目」且不自愈，手动刷新一次立即出现。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "R7-D 观察（round_07/REPORT.md 第三节）；R9 修复批次含 R7-02（903999f 首屏假空态）。",
+   "repro": "打开首页→观察列表空态与自愈/刷新行为。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_07/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_09/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R7 立单【medium·未确认】；已修 903999f 待复测。",
+   "fixHint": "已修（903999f）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R7-03",
+   "round": 7,
+   "title": "「最近一次核对结论」跨档案组污染",
+   "where": "研究文件核对区（最近一次核对结论）",
+   "what": "「最近一次核对结论」跨档案组污染：仅 PDF 组的失败结论一直挂在已含识别方案的档案组上。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R7-B 观察（round_07/REPORT.md 第二节）；R9 修复批次含 R7-03（903999f 跨批次结论污染）。",
+   "repro": "一组文件识别成功后→上传含失败 PDF 的新档案组→观察结论归属。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_07/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_09/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R7 立单【medium·未确认】；已修 903999f 待复测。",
+   "fixHint": "已修（903999f）；结论按档案组隔离。",
+   "status": "待复测"
+  },
+  {
+   "id": "R8-04",
+   "round": 8,
+   "title": "运行创建后主工作区不自动刷新",
+   "where": "运行创建后主工作区",
+   "what": "运行创建后主工作区不自动刷新，需手动 reload 才出现运行卡片。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R8（round_08/REPORT.md 第三节）；R10 修复 485ff04（向导关闭刷新工作区）待复测。",
+   "repro": "创建监查运行→观察工作区是否自动出现运行卡片。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_08/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_10/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R8 立单【medium·未确认】；已修 485ff04 待复测（R11 未达定向复测）。",
+   "fixHint": "已修（485ff04）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R9-01",
+   "round": 9,
+   "title": "差异确认签核缺可核验证据（无原文摘录/定位）",
+   "where": "研究文档差异确认面板",
+   "what": "要求签核「差异不影响本次监查」，但未识别项无同屏原文摘录或页/段定位（依据位置仅 docx:document_text）——与 R2-02（虚构内容）构成签核链两个方向的诚实性缺陷：一个编内容、一个不给内容。R2-02「依据位置失真」子项已并入本单（R10-C grep 双源证实）。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R9-B 首报；R10-C grep 核出依据位置失真（正文 7 次命中被标注为 filename，round_10/REPORT.md 第一节）；R11 修复批次含 R9-01（24b7bc5 未识别项诚实声明）。",
+   "repro": "差异确认面板出现→对「文件内容」清单逐项做真伪 grep 核验→检查未识别项是否有原文摘录与定位。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_09/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_10/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R9 立单【medium·未确认】；R10-C grep 证据强化（依据位置失真子项并入）；已修 24b7bc5 待复测。",
+   "fixHint": "已修（24b7bc5）；签核面板配原文摘录＋页/段定位，依据位置须真实。",
+   "status": "待复测"
+  },
+  {
+   "id": "R9-03",
+   "round": 9,
+   "title": "顶栏 icon 按钮可访问名称为空",
+   "where": "顶栏 icon 按钮",
+   "what": "顶栏 icon 按钮可访问名称为空（无 aria-label/title，仅内联 SVG）。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "R9-C 键盘专项（round_09/REPORT.md 第三节）；R11 修复批次含 R9-03（24b7bc5 aria-label）。",
+   "repro": "用可访问树检查顶栏 icon 按钮的 accessible name。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_09/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_11/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R9 立单【medium·未确认】；已修 24b7bc5 待复测。",
+   "fixHint": "已修（24b7bc5）；R26 随 C 位键盘法顺路复测。",
+   "status": "待复测"
+  },
+  {
+   "id": "R9-05",
+   "round": 9,
+   "title": "被拒的监查启动尝试零留痕",
+   "where": "监查历史",
+   "what": "被拒的监查启动尝试零留痕：三次拒绝后「查看历史」仍「尚无历史监查记录」——「尝试发生过」在界面上无任何记录。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R9-D（三次 fail-fast 拒绝后核对历史为空，round_09/REPORT.md 第二节）；R11 修复批次含 R9-05（24b7bc5 被拒启动留痕）。",
+   "repro": "触发 fail-fast 拒绝的监查启动→查看监查历史是否有被拒尝试记录。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_09/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_11/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R9 立单【medium·未确认】；已修 24b7bc5 待复测。",
+   "fixHint": "已修（24b7bc5）；「让每个决定可追溯」。",
+   "status": "待复测"
+  },
+  {
+   "id": "R9-06",
+   "round": 9,
+   "title": "关闭「监查历史」抽屉后 nav 覆盖「开始数据接入」按钮",
+   "where": "总看板（监查历史抽屉关闭后）",
+   "what": "关闭「监查历史」抽屉后 nav 覆盖「开始数据接入」按钮，需刷新恢复。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "R9-D（round_09/REPORT.md 第三节）；R11 修复批次含 R9-06（24b7bc5 侧栏 hover 不挤压）。",
+   "repro": "打开并关闭监查历史抽屉→观察「开始数据接入」按钮可见性。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_09/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_11/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R9 立单【medium·未确认】；已修 24b7bc5 待复测。",
+   "fixHint": "已修（24b7bc5）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R10-02",
+   "round": 10,
+   "title": "映射层医学漏检：剂量/途径实质矛盾未被系统提出",
+   "where": "字段映射疑点层（方案 vs 数据剂量/途径核对）",
+   "what": "方案口服每日一次 50/100mg（Ⅱ期）vs eCRF 指南与 EX 数据 160mg Q2W 双周皮下＋3 条注射部位反应 AE＋阿达木单抗合并用药——这样一处方案与数据的实质性矛盾，系统仅提出盲态命名疑点，未提示剂量/途径矛盾，功能上等价于一次植入检测失败。",
+   "severity": "medium",
+   "category": "medical_accuracy",
+   "evidence": "R10-B（十轮最深处旅程，如实标注「已到达范围内未见」，round_10/REPORT.md 第三节）；R12 修复 5220571（方案-vs-数据剂量口径交叉核对写入映射疑点要求）。",
+   "repro": "PSO 材料走映射疑点（方案 50/100mg QD vs 数据 160mg Q2W）→观察疑点清单是否提出剂量/途径矛盾。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_10/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_12/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R10 立单【medium·未确认】（「后续阶段是否补提未验证，如实存疑」）；已修 5220571 待复测，复测天然嵌入 CSU 场景重放。",
+   "fixHint": "已修（5220571）；以 PSO 场景重放验证剂量/途径核对入疑点（应与 EXFRQ 类疑点共存且不加剧死锁）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R10-03",
+   "round": 10,
+   "title": "主内容区在无障碍树中间歇性消失",
+   "where": "主内容区（无障碍树）",
+   "what": "主内容区在无障碍树中间歇性整体消失约 20 秒后自恢复。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R10-B 观察（round_10/REPORT.md 第三节）；R25-C#8（页面半渲染 30–45 秒无加载指示）为同族新证据。",
+   "repro": "长会话/加载期间用可访问树观察主内容区存在性。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_10/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R10 立单【low·未确认】；R25-C 同族新证据强化。",
+   "fixHint": "排查半渲染/重挂载窗口的可访问性与加载指示。",
+   "status": "待修复"
+  },
+  {
+   "id": "R11-01",
+   "round": 11,
+   "title": "infra 失败被文件指纹缓存为不可逆终态结论",
+   "where": "研究文件核对（AI 代理 503/409 场景）",
+   "what": "基础设施错误（503/409 provider_runtime_error）被当作内容性结论按文件指纹缓存——瞬时故障固化为不可逆判定：重传同版文件被「直接复用已有核对结论」拒绝、重核秒回同一错误、「可对文件角色作出裁决」文案在 files:[] 时控件不渲染、无降级放行。R3-05 去重修复的反向失效。",
+   "severity": "critical",
+   "category": "product_bug",
+   "evidence": "R11-C 完整技术证据链（409→指纹缓存→去重拒绝→files:[] 控件不渲染，slotC.log 核验 Proxy Fast-Fail 35+ 处，round_11/REPORT.md 第一节）；已修 24b7bc5（infra 失败不缓存、可无限重试）。",
+   "repro": "AI 代理不可达时提交文档核对→代理恢复后重传同版文件→观察是否触发重新分析而非秒回缓存结论。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_11/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "R11 立单【critical·已确认·已修 24b7bc5】；复测前提＝AI 代理恢复或模拟 503（R12/R13 连续无故障窗口未复测）；R25 §六仍计入 P0。",
+   "fixHint": "已修（24b7bc5）；复测须在故障窗口或模拟 503 下验证「失败不缓存、可无限重试」。",
+   "status": "待复测"
+  },
+  {
+   "id": "R11-02",
+   "round": 11,
+   "title": "「方案事实与规则发布」抽屉渲染 JS 异常原文",
+   "where": "「方案事实与规则发布」抽屉",
+   "what": "抽屉把 JavaScript 异常原文渲染进用户界面（\"Cannot read properties of undefined (reading 'push')\"）。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "R11-A 观察（round_11/REPORT.md 第三节）；R13 修复 3e92d99（抽屉异常原文消毒）。",
+   "repro": "触发抽屉数据异常→观察界面是否出现 JS 异常原文。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_11/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_13/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R11 立单【medium·未确认】；已修 3e92d99 待复测。",
+   "fixHint": "已修（3e92d99）；异常消毒为用户友好文案。",
+   "status": "待复测"
+  },
+  {
+   "id": "R11-04",
+   "round": 11,
+   "title": "「增加特殊关注」死按钮",
+   "where": "运行向导第 3 步（增加特殊关注）",
+   "what": "「增加特殊关注」死按钮——无法按 UAS7/AE 趋势矛盾等添加关注点。R13 修复 3e92d99；R15-D 验证修复生效（流程完整、AI 诚实给出两个解释候选），后继缺陷另立 R15-01（保存死循环）。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R11-D 首报（round_11/REPORT.md 第二节）；R15-D 正面验证（round_15/REPORT.md 第一节「墙体迁移链第五站」）。",
+   "repro": "运行向导第 3 步→点击「增加特殊关注」→验证流程与解释候选。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_11/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_15/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R11 立单【medium·未确认】；R15-D 实测流程完整（修复生效实证），R15 起附「建议关闭」——待台账收口。",
+   "fixHint": "已修（3e92d99）；收口关闭（R15 验证生效，后继缺陷已立 R15-01）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R11-05",
+   "round": 11,
+   "title": "特殊字符报错以原始 FastAPI JSON 整段展示",
+   "where": "新建项目（特殊字符校验报错）",
+   "what": "特殊字符报错以未消化的 FastAPI JSON 数组整段展示（校验本身生效）。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R11-B 边界测试（round_11/REPORT.md 第二节）。",
+   "repro": "用特殊字符项目名建项→观察报错形态。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_11/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R11 立单【low·未确认】，单源。",
+   "fixHint": "错误信息消化为用户可读文案。",
+   "status": "待修复"
+  },
+  {
+   "id": "R12-01",
+   "round": 12,
+   "title": "差异确认成功后界面零反馈零流转",
+   "where": "差异确认（内容确认提交）",
+   "what": "差异确认点击后成功也无反馈（服务端已持久化、界面 15+ 分钟零变化，重跑不再弹差异、台账已记录）——与 R11-01「失败被静默缓存」构成界面↔服务端脱节的两向失效。",
+   "severity": "high",
+   "category": "product_bug",
+   "evidence": "R12-B2（round_12/REPORT.md 第一节）；已修 5220571（差异确认逐条反馈防连点）；R16-B 见「正在记录确认…」反馈迹象（部分缓解，未构成复测）。",
+   "repro": "提交差异确认→观察界面反馈与流转（对照台账是否已记录）。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_12/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_16/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "R12 立单【high·已确认·已修 5220571】；R16-B 弱正向迹象，待正式复测；R25 §六仍计入 P1。",
+   "fixHint": "已修（5220571）；成功路径须有明确反馈与流转。",
+   "status": "待复测"
+  },
+  {
+   "id": "R12-02",
+   "round": 12,
+   "title": "59 表条目全进 Tab 焦点链、无跳过链接",
+   "where": "表结构确认视图",
+   "what": "59 表条目全进 Tab 焦点链，键盘用户到主按钮需 25+ 次 Tab，无跳过链接。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "R12-B 键盘-only（round_12/REPORT.md 第三节）；R14 修复 0f39a2b（Tab 链收敛＋跳过链接）。",
+   "repro": "键盘 Tab 遍历表结构确认视图→测量到主按钮的 Tab 次数。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_12/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_14/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R12 立单【medium·未确认】；已修 0f39a2b 待复测；R26 随 C 位键盘法顺路。",
+   "fixHint": "已修（0f39a2b）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R12-03",
+   "round": 12,
+   "title": "radiogroup 无 aria-checked",
+   "where": "表单 radiogroup",
+   "what": "radiogroup 无 aria-checked。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R12-B（round_12/REPORT.md 第三节）。",
+   "repro": "用可访问树检查 radiogroup 的 aria-checked。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_12/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R12 立单【low·未确认】。",
+   "fixHint": "补 aria-checked；随键盘/可访问性批次。",
+   "status": "待修复"
+  },
+  {
+   "id": "R12-04",
+   "round": 12,
+   "title": "医学写作被静默默认启用且 toast 未解释",
+   "where": "建项模块选择",
+   "what": "医学写作被静默默认启用且 toast 未解释。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R12-B（round_12/REPORT.md 第三节【low·已确认】）。",
+   "repro": "建项后观察模块启用状态与 toast 说明。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_12/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "R12 立单【low·已确认】。",
+   "fixHint": "默认启用需显式说明或默认关闭。",
+   "status": "待修复"
+  },
+  {
+   "id": "R12-07",
+   "round": 12,
+   "title": "运行等待时 8 个模块导航被禁用",
+   "where": "运行等待期导航",
+   "what": "运行等待时除总看板外 8 个模块导航全禁用，与向导文案「离开页面不会停止本次监查」直接矛盾——被阻断用户连去来源台账自查都不行。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "R12-D（round_12/REPORT.md 第一节）；R14 修复 0f39a2b（阻断期导航放行台账/审批）。",
+   "repro": "运行等待期→尝试导航到来源台账/各模块。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_12/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_14/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R12 立单【medium·未确认】；已修 0f39a2b 待复测（R15-D 旅程在运行页未覆盖导航）。",
+   "fixHint": "已修（0f39a2b）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R12-08",
+   "round": 12,
+   "title": "台账把失败空尝试标「已登记」",
+   "where": "来源台账",
+   "what": "台账把失败空尝试标「已登记」，成败不可辨。",
+   "severity": "low",
+   "category": "product_bug",
+   "evidence": "R12-B（round_12/REPORT.md 第三节）。",
+   "repro": "做一次失败的导入尝试→查看台账登记状态。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_12/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R12 立单【low·未确认】。",
+   "fixHint": "失败尝试与成功登记区分标注。",
+   "status": "待修复"
+  },
+  {
+   "id": "R13-02",
+   "round": 13,
+   "title": "疑点问答卡文案破碎且系统判断内容不可见",
+   "where": "疑点问答卡",
+   "what": "疑点问答卡文案破碎且系统判断内容不可见（残句＋只有两个按钮、不展示判断）——医学确认无法溯源；与 R12/R13 疑点层的正面能力构成「能力真实、呈现破碎」的对照。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "R13-B（EXTRT 残句「请确认：而\"给药药物\"值中已含频次\"Q4W\"——」＋判断不可见，round_13/REPORT.md 第一节）；R15 修复 d466bfe（系统判断可见＋残句消毒）。",
+   "repro": "触发疑点问答→观察文案完整性与系统判断展示。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_13/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_15/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R13 立单【medium·未确认】；已修 d466bfe；R25 遗留清单注「本轮弱反证」（R25-B 疑点如实提问且描述准确）。",
+   "fixHint": "已修（d466bfe）；疑点卡完整呈现问题＋系统判断。",
+   "status": "待复测"
+  },
+  {
+   "id": "R13-04",
+   "round": 13,
+   "title": "项目创建无持久化审计等留痕杂项",
+   "where": "项目创建/「最后更新」/通知中心",
+   "what": "项目创建无持久化审计（仅一次性浮层）；「最后更新」仅到分钟；通知中心禁用未开放。",
+   "severity": "low",
+   "category": "product_bug",
+   "evidence": "R13-C（round_13/REPORT.md 第三节）。",
+   "repro": "创建项目→寻找持久化审计记录；检查「最后更新」精度与通知中心状态。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_13/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R13 立单【low·未确认】。",
+   "fixHint": "补持久化审计；时间精度与通知中心开放随小修批次。",
+   "status": "待修复"
+  },
+  {
+   "id": "R15-01",
+   "round": 15,
+   "title": "特殊关注解释候选确认保存死循环",
+   "where": "特殊关注（解释候选确认保存）",
+   "what": "任选候选→确认并保存→再次确认后确认框不关闭、警告「特殊关注点无法可靠拆解，请选择解释候选」反复出现——规则无法保存（墙体迁移链第五站：门层→复核裁决→映射确认→识别完整性→特殊关注保存）。",
+   "severity": "high",
+   "category": "product_bug",
+   "evidence": "R15-D（round_15/REPORT.md 第一节）；已修 d466bfe 待复测。",
+   "repro": "运行向导增加特殊关注→选择解释候选→确认保存→观察确认框与警告循环。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_15/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "R15 立单【high·已确认·已修 d466bfe】；R25 §六仍计入 P1。",
+   "fixHint": "已修（d466bfe）；R26 载体二顺路复测（特殊关注链）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R15-05",
+   "round": 15,
+   "title": "进度页阻断提示句展示层截断",
+   "where": "运行进度页",
+   "what": "进度页阻断提示句展示层截断（DOM 有完整句）。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R15-D（round_15/REPORT.md 第三节）。",
+   "repro": "阻断状态下查看进度页提示句的显示完整度。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_15/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R15 立单【low·未确认】。",
+   "fixHint": "提示句换行/展开，不截断。",
+   "status": "待修复"
+  },
+  {
+   "id": "R15-06",
+   "round": 15,
+   "title": "数据接入第 1 步宽屏信息密度与对齐不足",
+   "where": "数据接入第 1 步（宽屏）",
+   "what": "数据接入第 1 步宽屏信息密度与对齐不足。",
+   "severity": "low",
+   "category": "cosmetic",
+   "evidence": "R15（round_15/REPORT.md 第三节）。",
+   "repro": "宽屏下查看数据接入第 1 步布局。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_15/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R15 立单【low·未确认】。",
+   "fixHint": "宽屏布局密度与对齐优化。",
+   "status": "待修复"
+  },
+  {
+   "id": "R17-01",
+   "round": 17,
+   "title": "疑点作答按钮陈旧会话下静默失效",
+   "where": "疑点作答按钮",
+   "what": "疑点作答按钮在陈旧会话下静默失效：界面 enabled、点击命中、零请求零变化，刷新恢复——「看起来能点但点了等于没点」，用户以为已作答（作答静默丢失）。",
+   "severity": "high",
+   "category": "product_bug",
+   "evidence": "R17-A（round_17/REPORT.md 第三节）；已修 00e505c（陈旧会话自愈）。",
+   "repro": "长时间停留在疑点作答页→提交作答→观察网络请求与状态变化。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_17/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "R17 立单【high·已确认·已修 00e505c】；R26 载体一顺路复测；R25 §六仍计入 P1。",
+   "fixHint": "已修（00e505c）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R17-02",
+   "round": 17,
+   "title": "HTTP 422 在第 3 步被静默吞噬",
+   "where": "数据接入第 3 步（映射候选生成）",
+   "what": "HTTP 422（mapping_document_evidence_incomplete）在第 3 步被静默吞噬，错误只在退回第 2 步后才渲染——用户被困在无错误提示的死锁中。",
+   "severity": "high",
+   "category": "product_bug",
+   "evidence": "R17-C（后端硬性双 current×前端静默吞错，round_17/REPORT.md 第三节）；已修 00e505c（错误醒目渲染）。",
+   "repro": "eCRF 缺失场景提交映射候选→观察第 3 步是否即时呈现 422 错误。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_17/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "R17 立单【high·已确认·已修 00e505c】；R26 载体一顺路复测；R25 §六仍计入 P1。",
+   "fixHint": "已修（00e505c）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R17-03",
+   "round": 17,
+   "title": "第 2 步缺「返回上一步」",
+   "where": "数据接入向导第 2 步",
+   "what": "第 2 步缺「返回上一步」——第 3 步死锁时用户被困（错误信息只在退回第 2 步后才渲染，而第 2 步无返回第 1 步通路）。",
+   "severity": "high",
+   "category": "ux_issue",
+   "evidence": "R17-C（round_17/REPORT.md 第三节）；已修 00e505c（回退导航）。",
+   "repro": "走到第 3 步→尝试返回第 1 步→观察第 2 步导航。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_17/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "R17 立单【high·已确认·已修 00e505c】；R25 §六仍计入 P1。",
+   "fixHint": "已修（00e505c）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R17-04",
+   "round": 17,
+   "title": "建项对话框错误区混入全局后台提示",
+   "where": "新建项目对话框",
+   "what": "建项对话框错误区混入全局后台提示。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R17（round_17/REPORT.md 第三节）。",
+   "repro": "建项出错时观察错误区是否混入无关全局提示。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_17/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R17 立单【low·未确认】。",
+   "fixHint": "错误区只显示本表单错误。",
+   "status": "待修复"
+  },
+  {
+   "id": "R18-02",
+   "round": 18,
+   "title": "重新导入数据文件清空已保存的研究文件角色决定",
+   "where": "数据接入（重新导入数据文件）",
+   "what": "重新导入数据文件清空已保存的研究文件角色决定（eCRF「已确认未提供」回退「尚未添加」）——状态生命周期耦合缺陷。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R18-C（round_18/REPORT.md 第三节）；已修 62bb84a1（角色缺失声明跨 attempt 继承）；R25-C 实测「同一文件重复导入去重正确且明示」构成弱反证。",
+   "repro": "保存 eCRF 角色决定（含「已确认未提供」）→重新导入数据文件→观察角色决定状态。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_18/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R18 立单【medium·未确认】；已修 62bb84a1；R25-C 去重正确为弱反证，待正式复测收口。",
+   "fixHint": "已修（62bb84a1）；复测角色决定跨导入保留。",
+   "status": "待复测"
+  },
+  {
+   "id": "R19-10",
+   "round": 19,
+   "title": "数据文件重复上传静默重导",
+   "where": "数据接入（数据文件重复上传）",
+   "what": "数据文件重复上传静默重导 5.5 分钟（与研究文件区去重策略不一致）。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R19-D（round_19/REPORT.md 第三节）；已修 96976332（数据侧重复导入检测，pipeline.py +43 行）。",
+   "repro": "重复上传同一数据文件→观察是否静默重导。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_19/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_21/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R19 立单【medium·未确认】；已修 96976332 待复测。",
+   "fixHint": "已修（96976332）。",
+   "status": "待复测"
+  },
+  {
+   "id": "R19-11",
+   "round": 19,
+   "title": "旅程深链缺参数不可查看且不恢复",
+   "where": "受试者旅程深链",
+   "what": "旅程深链缺参数不可查看且不恢复。",
+   "severity": "low",
+   "category": "product_bug",
+   "evidence": "R19-D（round_19/REPORT.md 第三节）；R25-D 旅程页 5 次尝试＋带参跳转全部「本次结果暂不可查看」为同族强化（本体不可用已另立 R25-06 critical）。",
+   "repro": "用带参/缺参深链打开旅程页→观察可查看性与恢复。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_19/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R19 立单【low·未确认】；R25 同族强化证据在案。",
+   "fixHint": "深链参数校验与降级恢复；随 R25-06 旅程链复测。",
+   "status": "待修复"
+  },
+  {
+   "id": "R20-02",
+   "round": 20,
+   "title": "零选文件自动接入、数据来源不可追溯",
+   "where": "数据接入第 1 步",
+   "what": "全程不选任何文件直接「开始导入」即推进到第 3 步——59 表＋2 docx 自动接入，界面无 input[type=file] 且不显示预置/来源——「接入」语义被架空，数据来源不可追溯。",
+   "severity": "high",
+   "category": "product_bug",
+   "evidence": "R20-B 键盘-only 开局即立（round_20/REPORT.md 第二节）；已修 e46ca795/62bb84a1（接入概况数据来源可追溯）＋19d4359e（零选择接入可见性）。",
+   "repro": "不选任何文件直接点「开始导入」→观察接入行为与来源展示。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_20/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_23/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "R20 立单【high·已确认·已修】；R25 §六仍计入 P1；多笔修复待合并复测。",
+   "fixHint": "已修（e46ca795/62bb84a1/19d4359e）；复测零选择路径可见且来源可追溯。",
+   "status": "待复测"
+  },
+  {
+   "id": "R20-06",
+   "round": 20,
+   "title": "进度面板终态不收敛",
+   "where": "运行进度面板",
+   "what": "进度面板终态不收敛（整体 100% 而末条「进行中」）。",
+   "severity": "low",
+   "category": "product_bug",
+   "evidence": "R20-D（round_20/REPORT.md 第三节）；R25-D-F2（100% 完成与 Patient Journey 进行中并存 65 分钟）为强化复现。",
+   "repro": "运行完成后观察进度面板终态。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_20/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R20 立单【low·未确认】；R25 强化复证。",
+   "fixHint": "终态收敛；随「双写矛盾」按域处理（并入第 3 步可靠性规格与结果语义专项）。",
+   "status": "待修复"
+  },
+  {
+   "id": "R20-07",
+   "round": 20,
+   "title": "复选框与标签分离",
+   "where": "总看板复选框",
+   "what": "复选框与标签分离（点击标签不切换复选框）。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R20-A（round_20/REPORT.md 第二节）。",
+   "repro": "点击总看板复选框的标签文字→观察选中状态。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_20/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R20 立单【low·未确认】，单源。",
+   "fixHint": "label 与 input 关联。",
+   "status": "待修复"
+  },
+  {
+   "id": "R21-06",
+   "round": 21,
+   "title": "疑点判定不提供样本数据证据",
+   "where": "疑点问答卡",
+   "what": "疑点判定不提供样本数据证据（题干只有字段/归类/置信度 45%，无列样本值）——保守拍板人被迫另开 Excel 核对。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "R21-B（round_21/REPORT.md 第三节）。",
+   "repro": "疑点作答时检查题干是否含样本值/列示例。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_21/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R21 立单【medium·未确认】。",
+   "fixHint": "疑点卡附列样本值；随第 3 步复测载体顺路。",
+   "status": "待修复"
+  },
+  {
+   "id": "R22-02",
+   "round": 22,
+   "title": "复核裁决噪音化（27/28 题零医学信息量）",
+   "where": "复核裁决题集（映射确认上游）",
+   "what": "28 道人工裁决题中 27 题无医学信息量——完全相同的字符串（adverse_event_end_date vs adverse_event_end_date）与同义对（adverse_event_outcome vs ae_outcome）被当作「两轮结论不一致」强推人工裁决，仅 LBSIGNI 一题有真实价值。R3-01 复核死锁的真正上游（噪音产生端一直在制造工作）。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R22-B（问题集 1→28 突变后逐题完成，round_22/REPORT.md 第三节）；已修 3042c74b（复核噪音预过滤，mapping_reconciliation.py +35 行）。",
+   "repro": "走映射确认复核→统计人工裁决题中零信息量（同串/同义对）占比。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_22/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "R22 立单【high·已确认·已修 3042c74b】；R23 起不再计入 P1，本次按最近台账口径记 medium；零界面复测。",
+   "fixHint": "已修（3042c74b 噪音预过滤）；修法次序「噪音预过滤→真分歧裁决→收敛」，R26 载体一复测。",
+   "status": "待复测"
+  },
+  {
+   "id": "R22-07",
+   "round": 22,
+   "title": "「事件明细」假 tab",
+   "where": "结果视图「事件明细」",
+   "what": "「事件明细」假 tab（激活态无独立内容）。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R22（round_22/REPORT.md 第三节）。",
+   "repro": "激活「事件明细」tab→观察是否有独立内容。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_22/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R22 立单【low·未确认】。",
+   "fixHint": "补独立内容或移除假 tab；随存量小修批次。",
+   "status": "待修复"
+  },
+  {
+   "id": "R22-08",
+   "round": 22,
+   "title": "旅程摘要锚点算术对不上",
+   "where": "受试者旅程摘要",
+   "what": "旅程摘要锚点算术对不上（2+0+25=27≠28，「25条」疑硬编码）。",
+   "severity": "low",
+   "category": "product_bug",
+   "evidence": "R22-D（round_22/REPORT.md 第三节）。",
+   "repro": "核对旅程摘要锚点计数求和与总条数。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_22/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R22 立单【low·未确认】。",
+   "fixHint": "锚点计数实时计算，去除硬编码。",
+   "status": "待修复"
+  },
+  {
+   "id": "R24-02",
+   "round": 24,
+   "title": "研究文件核对失败提示笼统、缺文件级原因",
+   "where": "研究文件核对失败提示",
+   "what": "研究文件核对失败提示笼统、缺文件级原因（扫描版/损坏/类型不符/缺内容一律同句）。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R24-A（round_24/REPORT.md 第三节）。",
+   "repro": "提交不同失败形态文件（扫描版/损坏/类型不符）→对比提示文案是否区分。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_24/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R24 立单未标确认态。",
+   "fixHint": "失败提示带文件级原因码；随「第 3 步可靠性规格」。",
+   "status": "待修复"
+  },
+  {
+   "id": "R24-07",
+   "round": 24,
+   "title": "基线机制结构性不可用",
+   "where": "基线/增量与连续性比较",
+   "what": "无显式发布→永久无基线→增量与连续性比较不可选，历史 18 条「结果可用」标签误导。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R24-D（round_24/REPORT.md 第三节）；与 R19-09（基线矛盾，已离账/跳过源码考古）、R23-03（无基线轮「待确认」措辞，已离账转设计评审）同域。",
+   "repro": "多轮运行后→尝试选基线做增量/连续性比较。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_24/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R24 立单未标确认态。",
+   "fixHint": "R25 策略：留在「结果语义诚实专项」随设计评审统一交付。",
+   "status": "待修复"
+  },
+  {
+   "id": "R24-08",
+   "round": 24,
+   "title": "中心识别失败：全库 SITE-UNKNOWN",
+   "where": "结果视图（中心/SITEID 解析）",
+   "what": "中心识别失败：SITEID 数值字段未解析，全库显示 SITE-UNKNOWN。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R24-D（第五数据集 CSU 常驻项目确认现象持续，round_24/REPORT.md 第三节）；PSO SITEID 有值仍全丢确认非数据问题（R22 检测层收敛④）；R25-D-F4 全库 SITE-UNKNOWN 89 处为强化复现。",
+   "repro": "查看结果视图受试者中心字段（对照数据中 SITEID 有值）。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_24/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R24 立单未标确认态；六数据集级稳定现象（R19-07 家族）。",
+   "fixHint": "R25 策略：随映射层专项（SITEID 数值字段解析）。",
+   "status": "待修复"
+  },
+  {
+   "id": "R24-09",
+   "round": 24,
+   "title": "导入第 1 步选择数据文件后不显示文件名",
+   "where": "数据接入第 1 步（文件选择反馈）",
+   "what": "导入第 1 步选择数据文件后不显示文件名（仅「所选文件」占位）。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R24-C（round_24/REPORT.md 第三节）；R5-01「已选择『所选文件』」同族（已关闭）为其前身。",
+   "repro": "选择数据文件→观察文件名是否真实显示。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_24/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R24 立单未标确认态。",
+   "fixHint": "显示真实文件名；随存量小修批次。",
+   "status": "待修复"
+  },
+  {
+   "id": "R24-10",
+   "round": 24,
+   "title": "风险卡片不显示事件术语",
+   "where": "风险卡片（收件箱/风险列表）",
+   "what": "风险卡片不显示事件术语，29 条须逐条点开才能分诊。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R24-C QA 视角＋R24-D（round_24/REPORT.md 第三节）；R25-D-F11（风险卡片无 AE 术语/日期值/严重度/描述）为升级证据，已入结果语义诚实专项评审输入。",
+   "repro": "打开风险卡片列表→检查卡片是否含事件术语。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_24/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R24 立单未标确认态；R25 升级证据（D-F11）在案。",
+   "fixHint": "R25 策略：留在「结果语义诚实专项」随设计评审统一交付。",
+   "status": "待修复"
+  },
+  {
+   "id": "R24-11",
+   "round": 24,
+   "title": "来源台账「当前登记来源」计数与筛选逻辑混乱",
+   "where": "来源台账",
+   "what": "来源台账「当前登记来源」计数与「包含历史版本」筛选逻辑混乱。",
+   "severity": "low",
+   "category": "product_bug",
+   "evidence": "R24（round_24/REPORT.md 第三节）。",
+   "repro": "切换「包含历史版本」筛选→核对「当前登记来源」计数。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_24/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R24 立单未标确认态。",
+   "fixHint": "R25 策略：并入存量小修批次（台账计数）。",
+   "status": "待修复"
+  },
+  {
+   "id": "R24-12",
+   "round": 24,
+   "title": "「为当前项目启用该模块」按钮重渲染竞态",
+   "where": "项目配置（启用模块按钮）",
+   "what": "「为当前项目启用该模块」按钮重渲染竞态（element not connected，未确认）。",
+   "severity": "low",
+   "category": "product_bug",
+   "evidence": "R24（round_24/REPORT.md 第三节）；R23-B 亦见该按钮出现未点击（纪律）。",
+   "repro": "观察启用模块按钮的重渲染与点击稳定性。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_23/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_24/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R24 立单未标确认态（标注「未确认」）。",
+   "fixHint": "R25 策略：并入存量小修批次（按钮竞态）。",
+   "status": "待修复"
+  },
+  {
+   "id": "R25-08",
+   "round": 25,
+   "title": "「处理最高优先级」语义不明",
+   "where": "总看板「处理最高优先级」按钮",
+   "what": "「处理最高优先级」跳模块首页不展示被处理项，单次点击未读决策与高风险开放两个计数各减 2。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R25-D（D-F6，round_25/REPORT.md 第二节）。",
+   "repro": "点击「处理最高优先级」→观察跳转目标、被处理项展示与计数变化。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R25 立单（分诊表 medium）。",
+   "fixHint": "按钮语义与计数逻辑对齐。",
+   "status": "待复测"
+  },
+  {
+   "id": "R25-09",
+   "round": 25,
+   "title": "跨页面四宫格计数矛盾（0/0 vs 高 14）",
+   "where": "项目总看板四宫格",
+   "what": "总看板四宫格一度 0/0 与同屏风险摘要「高 14」并存——加载失败被渲染成与真实 0 不可区分。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R25-D（D-F7，round_25/REPORT.md 第二节）；「双写矛盾」家族（前端把「未加载/未知」渲染成确定的「0」或「缺」）。",
+   "repro": "打开总看板→对比四宫格与同屏风险摘要计数。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R25 立单（分诊表 medium）。",
+   "fixHint": "加载失败/未知与真实 0 区分呈现；并入「双写矛盾」按域处理。",
+   "status": "待修复"
+  },
+  {
+   "id": "R25-10",
+   "round": 25,
+   "title": "时间戳时区/口径不一致、无时区标注",
+   "where": "进度时间戳/顶栏本地时钟/结论落款",
+   "what": "时间戳时区/口径不一致：进度时间戳＋6 小时错位、顶栏本地时钟与结论落款差约 2 小时，均无时区标注。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R25-A（F5）/D（D-F9）（round_25/REPORT.md 第二节）；R15-03（服务端审计时间戳与前端恒差约 2 小时，已离账）与 R24-B F4（台账 UTC/本地混用）为同族历史证据。",
+   "repro": "对比界面时间戳、本机时钟与结论落款。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_15/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R25 立单（分诊表 low）；双源＋历史同族（时钟源未对齐，合规级）。",
+   "fixHint": "统一时钟源/时区并标注（NTP/单一时钟源——沿 R15-03 合规级对齐请求）。",
+   "status": "待修复"
+  },
+  {
+   "id": "R25-11",
+   "round": 25,
+   "title": "「医学监查结果导航」区块恒空",
+   "where": "结果视图「医学监查结果导航」区块",
+   "what": "「医学监查结果导航」区块自始至终为空（容器存在但恒无子内容）。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R25（round_25/REPORT.md 第三节）。",
+   "repro": "打开结果视图→观察该区块内容。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R25 立单（分诊表 low）。",
+   "fixHint": "补内容或移除空容器。",
+   "status": "待修复"
+  },
+  {
+   "id": "R25-12",
+   "round": 25,
+   "title": "结果视图桑基图治疗节点文字重叠",
+   "where": "结果视图桑基图",
+   "what": "结果视图桑基图治疗节点文字重叠，零数据节点仍占位渲染。",
+   "severity": "low",
+   "category": "cosmetic",
+   "evidence": "R25-D（D-F12，round_25/REPORT.md 第二节）。",
+   "repro": "查看桑基图节点文字与零数据节点渲染。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R25 立单（分诊表 low）。",
+   "fixHint": "文字避让与零数据节点过滤。",
+   "status": "待修复"
+  },
+  {
+   "id": "R25-13",
+   "round": 25,
+   "title": "适应症匹配召回不足",
+   "where": "建项适应症匹配",
+   "what": "适应症匹配召回不足：「初治 PNH」等复合写法报「未识别到预期内容」，人工确认负担累积（语义上诚实，只说「未识别到」不虚构差异）。",
+   "severity": "low",
+   "category": "product_bug",
+   "evidence": "R25-A（F4，round_25/REPORT.md 第二节）。",
+   "repro": "用复合写法（如「初治 PNH」）填适应症→观察匹配结果。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R25 立单（分诊表 low）。",
+   "fixHint": "复合/前缀写法的召回策略放宽（保持诚实文案）。",
+   "status": "待修复"
+  },
+  {
+   "id": "R25-14",
+   "round": 25,
+   "title": "项目下拉显示他人项目且无归属/权限标识",
+   "where": "项目下拉",
+   "what": "项目下拉显示他人项目且无归属/权限标识（共享环境可见性现象，数据可达性未验证——各测试者均守纪律未点开）。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R25-A（F6，round_25/REPORT.md 第二节）；R5-04（顶栏下拉混列全部用户项目，已关闭）为其前身。",
+   "repro": "打开项目下拉→观察列表范围与归属标识。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R25 立单（分诊表 low）；数据可达性未验证（如实注明）。",
+   "fixHint": "归属/权限标注或过滤。",
+   "status": "待修复"
+  },
+  {
+   "id": "R25-15",
+   "round": 25,
+   "title": "新建项目多选弹窗无焦点陷阱",
+   "where": "新建项目多选弹窗",
+   "what": "新建项目多选弹窗无焦点陷阱：Tab 可遍历并激活背景页全部 39 个控件，有误触「归档当前项目」等危险操作风险。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "R25-C 键盘专项（round_25/REPORT.md 第二节）。",
+   "repro": "键盘 Tab 遍历新建项目弹窗→观察焦点是否逃逸到背景页。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R25 立单（分诊表 medium）；键盘专项实测。",
+   "fixHint": "弹窗焦点陷阱（focus trap）；R26 随 C 位键盘法复测。",
+   "status": "待修复"
+  },
+  {
+   "id": "R25-16",
+   "round": 25,
+   "title": "文件选择触发控件为无语义 span",
+   "where": "文件选择触发控件",
+   "what": "文件选择触发控件为无语义 span，键盘 Enter/Space 不触发文件选择框。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "R25-C 键盘专项（round_25/REPORT.md 第二节；如实区分了工具限制不记产品缺陷的部分）。",
+   "repro": "键盘聚焦文件选择控件→按 Enter/Space→观察文件框是否弹出。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R25 立单（分诊表 low）；键盘专项实测。",
+   "fixHint": "改用 button/input 语义控件；R26 随 C 位键盘法复测。",
+   "status": "待修复"
+  },
+  {
+   "id": "R25-17",
+   "round": 25,
+   "title": "向导刷新/重开后步骤位置回退",
+   "where": "数据接入向导（步骤位置记忆）",
+   "what": "向导刷新/重开后先显示第 1 步（前 10–20 秒无恢复提示）再延迟自动恢复，不恢复到原步骤位置。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "R25-B（发现 4，round_25/REPORT.md 第二节）；R1-12（刷新后向导回退第 1 步，已关闭）为其前身。",
+   "repro": "第 3 步刷新/重开向导→观察步骤位置恢复行为与恢复提示。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_25/REPORT.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "R25 立单（分诊表 medium）。",
+   "fixHint": "恢复到原步骤位置＋恢复期间提示；并入「第 3 步可靠性规格」。",
+   "status": "待修复"
+  },
+  {
+   "id": "R26-01",
+   "round": 26,
+   "title": "R26-N01 eCRF缺失豁免承诺失信：『本次未提供』裁决保存后门禁不豁免，第3步死锁无出口",
+   "where": "医学监查 → 数据接入向导第3步（研究文件与字段映射确认）",
+   "what": "向导提供「本次未提供电子病例报告表」裁决并承诺「标记缺失表示本研究无此类文件」，用户保存裁决并完成方案代号差异确认后，eCRF 状态仍「尚未添加」，user_declared_missing 未转换为准入豁免，主推进按钮「请先添加所需文件」永久置灰，整页刷新后仍卡同态；补传 PDF 又被拒收（见 R26-N02），向导彻底死锁，字段映射及之后全链不可达",
+   "severity": "critical",
+   "category": "product_bug",
+   "evidence": "report_C.md:24（旅程表 FAIL 记录）、report_C.md:39/49（裁决承诺原文与 DOM 证据）；已 rg 核验 report_C.md:55 原文：`<button id=\"monitoring-admission-primary\" type=\"button\" class=\"monitoring-admission-primary\" aria-disabled=\"true\" disabled=\"\">请先添加所需文件</button>`；整页刷新后向导重读进度仍卡相同状态",
+   "repro": "新建项目并完成 DataListing 导入（第1、2步）→ 第3步上传方案 docx → 归属卡片「确认属于当前项目并继续」→ eCRF 卡片单选「本次未提供电子病例报告表」→「保存选择并继续」→ 内容差异核对点「差异不影响本次监查，继续使用」→ 观察主操作区按钮仍禁用；刷新复验",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_26/report_C.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "单源 critical 按纪律不直接采信。关键反证：同轮 R26-B 走过几乎相同路径却成功——B 因多选上传失败未能传入 eCRF，按界面选项标记「本次未提供」并保存成功（eCRF=已由用户确认未提供），随后正常推进到字段识别（report_B.md:16、61）。两会话分歧点在 C 多出的『方案代号差异确认』环节与 PDF 拒收尝试，提示死锁依赖特定状态序列，需复测锁定触发条件后再升级；独立复核：独立复核确认 R26-N01 真实存在，且已锁定触发条件（未做任何写操作/重启，仅 GET、读文件、浏览器只读观察）。\n\n【现场复现（全新浏览器会话）】Camoufox 新开标签访问 http://localhost:5178，选项目 MX循R26C-RUX-2（proj_user_53a7ee614dd9）→ 医学监查 → 开始数据接入 → 第2步点「下一步」进入第3步：主按钮 DOM 为 `<button id=\"monitoring-admission-primary\" ... aria-disabled=\"true\" disabled=\"\">请先添加所需文件</button>`，与 report_C.md:55 引证逐字一致；角色清单「研究方案已识别/研究者手册可稍后添加/电子病例报告表尚未添加/统计分析计划可稍后添加」；无角色裁决卡（无法再补声明缺失），仅剩上传入口；警告条载明 PDF 拒收（记录于 2026-10-08T15:07:20）。新会话即复现＝非客户端残留，与报告「整页刷新仍卡同态」相符。\n\n【只读 API 对照（同一后端）】GET data-admissions/latest→C 的 attempt stg-2ee9bc44…（profile_ready）；GET …/study-documents：C=ready:false，ecrf{required_now:true,status:missing,user_declared_missing:false,「尚未添加」}；同轮 B（proj_user_5efd0e3cb5ae）=ready:true，ecrf{user_declared_missing:true,「已由用户确认未提供」}。B 反证与 C 发现同真，分歧源于状态序列而非矛盾。\n\n【根因（代码+落盘证据）】工作区 runs/tester_loop_iso_20260928/runtime/medical_monitoring_r7/proj_user_53a7ee614dd9 下：identity_overrides/mmbatch_7a0ae….json（方案代号差异确认，14:53:47）；user_selections/mmbatch_7a0ae….json（用户「本次未提供」裁决已持久化：selections=[{role:ecrf,candidate_id:\"\"}]，15:06:01）；source_registry.jsonl 中该批 promotion receipt 的 decision.selections 同样含 ecrf→\"\" 且 registrations 仅 protocol——即用户裁决确实随批晋升。但 readiness 门禁读的是另一存储（DOCUMENT_MISSING_DECLARATION_KIND），唯一写入口在 mapping_candidate_routes.py:1037-1054：仅当「本次 resolve 请求体」携带 user_role_selections 且该次返回 authority_status=promoted 才写 declare_document_missing。C 的时序：带裁决的 resolve（15:06:01）因方案内容差异未决返回 not_promoted+content_confirmations（monitoring_document_authority_jobs.py:1159-1173），声明未写；用户点「差异不影响本次监查，继续使用」后，前端 submitContentConfirmation 重发 resolve 不携带 userRoleSelections（MedicalMonitoringAdmissionWizard.jsx:1204-1209；medicalMonitoringProductApi.mjs:484-486 空则省略；轮询/归属确认路径同样不带），此次晋升成功但请求体无 selections→声明被静默丢弃→mapping_pipeline.py:740-767 ecrf 仍 required+missing→ready 恒 false→按钮永久禁用。B 无内容差异卡点，裁决当次请求即晋升，声明同请求落库，故走通。触发条件锁定为：缺失裁决与晋升不在同一请求（中间隔内容差异确认/轮询推进）。\n\n【边界说明】当前界面仍有上传入口，若另有机读 eCRF（docx/xlsx）可解；但本研究分发的受控 eCRF 为 PDF 且被拒（R26-N02，last_check_note 佐证），就测试材料而言第3步无出口，字段映射及下游全阻断，critical 定级成立。修复方向与 fixHint 一致：promoted 分支应改从 result 的 frozen decision.selections（或工作流持久化裁决）写声明，而非仅请求体。",
+   "fixHint": "数据接入向导第3步门禁重算链路：user_declared_missing 裁决落库（保存选择并继续 API 返回）后 required-docs 门禁与主按钮 disabled 的重算时机；重点排查「方案代号差异确认」保存与 eCRF 缺失裁决保存之间的顺序依赖/状态覆盖，以及被拒文件（document_authority_candidate_not_promotable）是否污染 required 集合；后端 data-admissions 状态机 + 前端 monitoring 页第3步主按钮状态计算",
+   "status": "待复测"
+  },
+  {
+   "id": "R26-06",
+   "round": 26,
+   "title": "R26-N06 .docx 误入数据文件入口不被前端拦截：占位文件名 + 错误归因到用户没用过的『数据位置』输入框",
+   "where": "医学监查 → 数据接入向导第1步（选择数据）",
+   "what": "数据文件入口声明支持 .csv/.xls/.xlsx/.xlsm，选 .docx 后前端不即时拒绝：显示「已选择\"所选文件\"，共 1 个文件」（占位词替代真实文件名，用户无法核对自己选了什么）；点开始导入报「未找到该数据位置：目录不存在或路径不可访问」——用户走的是文件选择、从未填写数据位置输入框，归因错位，且全程未提示 docx 不受支持",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "report_B.md:41（已 rg 核验）：①显示「已选择\"所选文件\"，共 1 个文件」占位词替代真实文件名；②点「开始导入」后报「未找到该数据位置：目录不存在或路径不可访问。请核对路径后重试」；事件参考号 EVT-20261008T143629-6054a9-admission_source_invalid",
+   "repro": "数据接入 → 选择单个数据文件 → 选任意 .docx → 开始导入 → 读错误文案",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_26/report_B.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "单源 medium，证据含事件参考号 EVT-20261008T143629-6054a9-admission_source_invalid 与完整错误文案，完整采信",
+   "fixHint": "第1步文件选择前端 accept 过滤 + 提交前类型校验与友好文案；错误映射区分「文件选择」与「数据位置」两条来源路径的报错键；顺带修复占位文件名（与 R24-09 同源）",
+   "status": "待修复"
+  },
+  {
+   "id": "R26-07",
+   "round": 26,
+   "title": "R26-N07 Step3 标题「或」与底层强校验「与」语义矛盾，且自称『唯一待办』误导",
+   "where": "医学监查 → 数据接入向导第3步 顶部与引导文案",
+   "what": "Step 3 标题「还需补充研究方案或电子病例报告表」的「或」（至少其一）与底层强校验门禁「与」（两者齐备缺一不可）语义矛盾，正文又强调「这是进入下一步的唯一待办」——用户按「或」补齐其一仍被拦，文案与状态机割裂",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "大标题「还需补充研究方案或电子病例报告表」；正文「还缺研究文件：请在下方选择研究方案与eCRF……这是进入下一步的唯一待办」；实测门禁为方案与 eCRF 双缺即拦（C 位方案已识别+eCRF 裁决缺失仍拦）",
+   "repro": "仅上传研究方案并识别成功后停在第3步 → 对照大标题「或」与正文「唯一待办」和实际强校验门禁",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_26/report_C.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "单源 medium，两段文案直接引文互斥，文本级证据完整，采信",
+   "fixHint": "向导第3步头部标题/提示组件文案改为与实际门禁一致的『与』语义；若产品意图确为『或』，则改门禁计算——二者必须同源（同一常量/规则驱动文案与 disabled 判定）",
+   "status": "待修复"
+  },
+  {
+   "id": "R26-08",
+   "round": 26,
+   "title": "R26-N08 同名项目拦截正确但无一键解决通道，环境遗留迫使测试者偏离指定名",
+   "where": "新建项目对话框 → 「在医学监查配置新研究项目」面板",
+   "what": "重名校验与提示语本身正确（三位测试者一致确认，无绕过、无审核缺陷）——但报错建议加序号后缀却无「一键采用建议后缀 / 切换至已有项目 / 归档旧项目」入口，须手动退格编辑；叠加多轮测试遗留同名项目的环境问题，本轮连续三位测试者撞上同一拦截（A 因此整体 fail，B/C 被迫偏离任务指定名）",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "report_A.md:5、report_B.md:33/36、report_C.md:97-100（均已 rg 核验，三处拦截文案一致）；A/B/C 三位测试者分别被迫停卷或手动改名（B→MX循R26B-PSO-2、C→MX循R26C-RUX-2），A 在『不得改名』约束下直接 fail",
+   "repro": "在已存在同名项目的环境下新建项目 → 只选医学监查 → 填已有项目名 → 点「创建项目」→ 读拦截提示并尝试恢复",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_26/report_A.md",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_26/report_B.md",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_26/report_C.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "现象本身三源独立（A/B/C 均被拦截、文案一致），已达多源采信标准；测试者一致认定拦截为正确行为，本条仅针对恢复通道缺失",
+   "fixHint": "建项失败提示组件加「一键采用建议名称」按钮（后缀自动递增）与「切换至已有项目」入口；测试环境治理：多轮测试间清理遗留项目或为每轮发放可区分项目名——本轮 A 位 fail 的直接卡点即晨间 R26-A 遗留同名项目（调度员已查明：晨间报告成功创建过 MX循R26A-CSU，proj_user_d7637065857b）",
+   "status": "待修复"
+  },
+  {
+   "id": "R26-09",
+   "round": 26,
+   "title": "R26-N09 『已读即从开放计数消失』：查看一条高风险发现即令『高风险开放』14→13，把阅读当处置",
+   "where": "项目总看板头部计数 ↔ 收件箱",
+   "what": "点开收件箱一条高风险发现（仅查看、未处置未关闭）后，『高风险开放』14→13、『未读决策』78→77——『开放风险』计数把阅读行为当作处置行为，语义误导监查员对工作量的判断",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "16:46 未读 78/高开放 14 → 点开收件箱 ae:AE:7 一条 → 16:54 未读 77/高开放 13；项目风险摘要高稳定为 14",
+   "repro": "总看板记下头部计数 → 点开一条高风险收件事项（不处置）→ 回总看板再读计数",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_26/report_D.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "单源 medium，计数变化前后带时间戳实测（16:46→16:54），数值证据完整，采信",
+   "fixHint": "总看板头部计数口径：『高风险开放』应按处置/关闭状态而非已读状态计算；已读与关闭是两个独立事件，点开详情不得改变『开放』语义",
+   "status": "待修复"
+  },
+  {
+   "id": "R26-10",
+   "round": 26,
+   "title": "R26-N10 监查历史 30+ 条完全同质：仅运行 ID 不同、无开始时间戳，自称『按开始时间显示』却不兑现",
+   "where": "医学监查 → 查看历史（抽屉）",
+   "what": "历史记录均为『日常监查/2026-08-19/当前完整数据（不使用比较基线）/结果已整理完成』，仅运行 ID 不同，无开始时间戳，用户无法辨认哪次是哪次",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "历史面板滚动读取 20+ 条字段完全一致仅运行 ID（7ae4bd97、ac0568fd…）变化；面板自称『按开始时间显示最近记录』",
+   "repro": "医学监查 → 查看历史 → 滚动比对条目",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_26/report_D.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "单源 low，直接读取比对，采信",
+   "fixHint": "监查历史条目增加开始时间戳与可区分维度（数据快照指纹/范围/触发人），兑现「按开始时间显示」的自述",
+   "status": "待修复"
+  },
+  {
+   "id": "R26-11",
+   "round": 26,
+   "title": "R26-N11 模块状态矩阵医学监查显示『未开始 · 待决策77』，与本项目 30+ 次已发布运行相悖",
+   "where": "项目总看板 → 模块状态矩阵",
+   "what": "矩阵医学监查行显示「未开始」，而同一项目已有 30+ 条『结果可用·结果已整理完成』的已发布监查运行——状态标签与事实直接矛盾（至少措辞严重含糊）",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "16:54 矩阵文本『医学监查 待决策 77 未开始』；同项目历史 30+ 条已发布运行（D-F9 证据）",
+   "repro": "总看板滚动至模块状态矩阵读医学监查行，对照该项目监查历史",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_26/report_D.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "单源 low，矩阵文本直接读取，采信",
+   "fixHint": "总看板模块状态矩阵的医学监查行状态改由运行/发布状态派生（有已发布结果≠未开始），与『待决策』计数同源计算",
+   "status": "待修复"
+  },
+  {
+   "id": "R26-12",
+   "round": 26,
+   "title": "R26-N12 等待用户输入的状态被提示为『可能在排队等待系统资源』，诱导对不需要重试的状态重试",
+   "where": "医学监查 → 数据接入向导第3步（角色确认停留期间状态提示条）",
+   "what": "60 分钟放置时段（系统实际在等用户选择 eCRF 角色）提示「研究文件核对已在『需要您确认文件角色』停留约 56 分钟且无状态变化。核对作业可能仍在排队等待系统资源」——把等待用户输入误报为资源排队，诱导用户对无需重试的状态执行重试",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "17:48 回来后页面提示原文（report_B.md:65 已 rg 核验）：「研究文件核对已在『需要您确认文件角色』停留约 56 分钟且无状态变化。核对作业可能仍在排队等待系统资源……」——「约 56 分钟」恰为本轮放置时长",
+   "repro": "走到角色确认界面不操作，放置约 1 小时后读提示",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_26/report_B.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "单源 low，提示原文含「约 56 分钟」字样恰与本轮放置时长吻合，文本级证据完整，采信",
+   "fixHint": "状态提示组件区分『等待用户输入』与『系统排队/处理中』两类停留原因：角色确认待选择期间应显示『等待您确认文件角色』并挂起计时文案，不应套用资源排队模板",
+   "status": "待修复"
+  },
+  {
+   "id": "R26-13",
+   "round": 26,
+   "title": "R26-N13 第3步核对状态提示条垂直堆叠、无层级收纳，宽屏左右空白巨大",
+   "where": "医学监查 → 数据接入向导第3步 提示区域",
+   "what": "多组不同语气状态卡片（深色提示/常规提示/微型提示）纵向串联堆砌，圆角、背景色、字号未统一，界面零散（语义矛盾部分已并入 R24-01，本条仅立视觉层）",
+   "severity": "low",
+   "category": "cosmetic",
+   "evidence": "向导内容区 3 块不同语气提示条纵向串联（「系统仍在独立核对研究文件」「还缺研究文件……」「系统正在识别并交叉核对……」），圆角/背景色/字号未统一，宽屏下左右空白巨大",
+   "repro": "上传文件并在核对进行中观察 Step 3 的提示区域",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_26/report_C.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "单源 cosmetic，快照级描述含三块提示条原文，采信（低风险外观项）",
+   "fixHint": "第3步提示区组件化统一（圆角/背景/字号 token），次要系统状态折叠为单行可展开，保留一条主动作引导",
+   "status": "待修复"
+  },
+  {
+   "id": "R27-02",
+   "round": 27,
+   "title": "首页项目列表无限加载且新建项目长期禁用，零起点建项全链阻断",
+   "where": "5178 项目总看板首页（http://localhost:5178/）",
+   "what": "项目列表持续显示「正在读取项目列表」约20分钟不结束，「新建项目」按钮DOM disabled=true，子系统多选卡片不出现，零起点流程完全无法开始；界面无错误原因、失败状态或重试入口。",
+   "severity": "critical",
+   "category": "product_bug",
+   "evidence": "report_A.md:22,33——页面标题正确，项目选择框「正在加载项目」、主体「正在读取项目列表」、指标「—」；18:15首开，18:17:48/18:21:06两次刷新不变，18:36:25仍加载态且按钮disabled=true，约20分钟无进展。",
+   "repro": "访问 http://localhost:5178/ → 等待首页项目列表 → 点「新建项目」→ 每隔数分钟刷新观察（本次观测窗口内始终无法进入建项）",
+   "sources": [
+    "R27-A pi/openai-codex/gpt-6-sol（round_27/report_A.md 发现1）"
+   ],
+   "confirmed": false,
+   "confirmNote": "单一来源critical，按纪律confirmed=false。B/C/D在20:15后首页均正常加载，提示为间歇性后端停摆而非确定性故障——与未决R25-05「全局读取间歇性超时与后端长停摆」模式一致，建议修复侧并案定位；A位提前收卷（20分钟<45分钟纪律线）已诚实披露，但有DOM disabled=true硬证据，不影响本条观察效力。；独立复核：复现不了，按实测判 confirmed=false。本轮（2026-10-08 深夜）独立复核证据：①浏览器实测 http://localhost:5178/ ——首次打开确有瞬时加载态（标题「正在加载项目」、主体「正在读取项目列表」、指标「—」、下拉与「新建项目」均 disabled），但同一页面实例未做任何刷新即自行转为完全加载态：下拉列出 3 个项目（MX循R27C-MY008/MX循R27B-RUX/MX循开考-CSU）、头部与主区两处「新建项目」均启用、三张子系统多选卡片（医学写作/医学监查/入排审核）正常渲染；再做一次全新加载，8 秒内完全就绪。零起点建项入口当前无任何阻断。②只读 GET 探测：`curl -sS -m 30 http://localhost:5178/api/projects` → `HTTP 200 time=2.174038s size=2811`，返回真实项目 JSON，后端现在完全健康。③代码与「无错误态/无重试」的表述矛盾：App.jsx:13555-13578 对 /api/projects 设 20 秒 AbortController 超时，失败置 projectsLoadError=「项目列表加载失败或超时（超过20秒未返回）…」；失败态渲染「重新读取」重试按钮（App.jsx:1286-1290）与错误文案（App.jsx:1340-1344），下拉显示「读取失败」（App.jsx:1452）；空列表自动重拉≤3次后渲染「暂无项目」且建项按钮启用。头部按钮 `disabled={!projectsLoaded || Boolean(projectsLoadError)}`（App.jsx:1497）——A 拿到的 disabled=true 硬证据只证明当时处于加载中，属设计内加载态属性，不构成永久禁用证据。④时间线解释 A 的观测窗口：git log 显示首页在 A 窗口中途被彻底重构——a05a62ef 18:20「首页彻底重构：子系统优先建项」、5a009dc6 18:31，A（18:15-18:36）测的是正在 HMR 热更的移动靶；而 B 位同一新流程 ~18:24（report_B.md:37 核对作业入队 18:24:10）与 C 位 20:15-20:17（report_C.md:21,141）均建项 PASS。且 `git show ab6a63c7:frontend/src/App.jsx`（A 测前 16:30 版本）在 13573/13634 行已含同一 20 秒超时+错误文案，`git diff ab6a63c7 HEAD -- frontend/src/App.jsx` 仅 21 行（R26-04 选中漂移修复），加载逻辑前后一致——按该代码即使后端挂起也应在 ~20 秒内转错误态+重试，而非 20 分钟纯加载。未验证项：logs/ 下未找到覆盖 18:15-18:36 的后端请求日志（rg 无匹配），无法直接证实/证伪当时是否发生 R25-05 式后端停摆；A 位 20 分钟观测的最可能解释是首页重构期间 HMR 致旧页面状态卡死/移动靶测试伪影，间歇性停摆不能完全排除但与当时在役代码的表现形态不符。结论：作为确定性 critical 产品缺陷不成立；A 的瞬时观察真实但可自愈，confirmNote 的「间歇性」猜想方向合理，建议修复侧仅作线索并案（后端分钟级停摆排查），不应按「首页全链阻断」缺陷立项。",
+   "fixHint": "前端 frontend/src/App.jsx（「正在读取项目列表/正在加载项目」文案所在文件）：列表加载需超时判定+失败态+重试按钮，列表加载失败不应永久禁用「新建项目」；后端排查项目列表接口分钟级长停摆，疑似与R25-05同根因。",
+   "status": "待复测"
+  },
+  {
+   "id": "R27-04",
+   "round": 27,
+   "title": "方案监查准备状态三处互斥：对话框0/8且「独立AI当前不可运行」 vs 总看板「独立AI：可运行」 vs 运行系统引用「已确认规则第1版」",
+   "where": "医学监查·方案监查准备对话框（方案事实与规则发布）／项目总看板／运行进展页",
+   "what": "对话框头部称「方案原文已就绪，可一键准备」，但进度条0/8、八个主题全部「可开始」、「一键准备全部主题」按钮禁用、主题备注「独立AI当前不可运行，配置后再生成语义候选」；同一时刻项目总看板显示「独立 AI：可运行 zhipu-coding-plan · glm-5.3-flash」；而监查运行系统自身引用「已确认规则第1版」并正常出结果。准备到底做没做、AI到底可不可用，三处说法互斥。另对话框「正在核对方案原文和准备状态」持续约90秒。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "report_D.md:72-74（F4，含三处界面原文与90秒核对等待）",
+   "repro": "医学监查→方案事实与规则发布→观察对话框；切到项目总看板对比「独立 AI」状态",
+   "sources": [
+    "R27-D 内部测试者（round_27/report_D.md F4）"
+   ],
+   "confirmed": true,
+   "confirmNote": "同轮内三处界面文案可直接对照，证据完整自洽。",
+   "fixHint": "准备对话框与总看板的「独立AI可用性」判定未共享同一状态源（各自本地判定）；准备进度状态机（0/8可开始 vs 按钮禁用）自相矛盾。建议统一由后端准备状态接口出数，前端只渲染；定位医学监查准备对话框组件与总看板AI状态卡两处取数逻辑。",
+   "status": "待修复"
+  },
+  {
+   "id": "R27-05",
+   "round": 27,
+   "title": "结果视图无发现总数/风险分布汇总：低风险422不可见，收件箱77与55卡差额22无法对账",
+   "where": "医学监查·结果概览（view=results）",
+   "what": "结果视图全文仅4983字符，只有「高、中风险定位」55张卡片流，无总数、无按风险/类型分布统计；总看板「低422开放风险」在结果视图无任何对应入口或列表；收件箱77项待决策与55张卡之间差额22项无任何界面能解释——概览与详情无法完成对账闭环，监查员无法核实产出完整性。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "report_D.md:80-82（F6）；数字自洽性核对见report_D.md:38-50（55卡=高14+中41内部自洽；跨界面低422/收件77/55卡三方不可对账）",
+   "repro": "医学监查→查看本次结果→通读全部区块（无汇总区）；对照项目总看板风险摘要与收件箱计数",
+   "sources": [
+    "R27-D 内部测试者（round_27/report_D.md F6）"
+   ],
+   "confirmed": true,
+   "confirmNote": "汇总区缺失为直接观察；77/55/422三个数字均在本轮报告实际截获。",
+   "fixHint": "结果视图增加发现总数与风险×类型分布汇总区，并提供低风险清单入口；收件箱（77）与结果卡（55）的口径差需给出解释或过滤视图。计数口径治理与R24-05（结果是否汇总会到总看板）、R25-09（跨页计数矛盾）合并处理。",
+   "status": "待修复"
+  },
+  {
+   "id": "R27-06",
+   "round": 27,
+   "title": "首页加载等待零反馈：无耗时、无阶段、无失败说明，无法区分慢处理与故障",
+   "where": "5178 项目总看板首页",
+   "what": "项目列表加载期间主体仅一句「正在读取项目列表」，页首「最后更新」为「暂无数据」，无处理阶段、耗时或恢复提示，实施人员无法区分慢处理与故障。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "report_A.md:23——约20分钟观测中始终只有加载文字与「—」指标，「最后更新 暂无数据」，无可见处理阶段或恢复提示",
+   "repro": "访问首页并在项目列表持续加载时观察等待反馈与禁用按钮旁的提示",
+   "sources": [
+    "R27-A pi/openai-codex/gpt-6-sol（round_27/report_A.md 发现2）"
+   ],
+   "confirmed": true,
+   "confirmNote": "单一来源但为直接界面观察、与A1同场记录，证据完整可采信。",
+   "fixHint": "frontend/src/App.jsx 首页列表加载态组件；可复用数据导入已有的「已用时N秒」预期管理组件（report_B.md:106证实该模式已在向导内存在），加载态需含超时与失败分支。",
+   "status": "待修复"
+  },
+  {
+   "id": "R27-07",
+   "round": 27,
+   "title": "方案版本行文件名重复显示两次且日期为1970-01-01",
+   "where": "医学监查·方案监查准备对话框（方案事实与规则发布）版本行",
+   "what": "显示「MG-K10-CSU-001_临床研究方案_V1.3.docx · MG-K10-CSU-001_临床研究方案_V1.3.docx · 1970-01-01」——同一文件名连排两次，日期为epoch零值，占位符级缺陷漏到界面。",
+   "severity": "low",
+   "category": "cosmetic",
+   "evidence": "report_D.md:88-90（F8）",
+   "repro": "医学监查→方案事实与规则发布→查看方案版本行",
+   "sources": [
+    "R27-D 内部测试者（round_27/report_D.md F8）"
+   ],
+   "confirmed": true,
+   "confirmNote": "直接界面文案证据。",
+   "fixHint": "准备对话框版本行渲染：文件名拼接重复+未初始化时间戳（epoch 0）。时间处理与R25-10时区/口径缺陷同类，修复时对该对话框全部时间字段过一遍。",
+   "status": "待修复"
+  },
+  {
+   "id": "R27-08",
+   "round": 27,
+   "title": "「路径未齐16」标注语义不明：16人已全部到达治疗仍全部标注路径未齐",
+   "where": "医学监查·结果概览·受试者阶段流向图",
+   "what": "「范围受试者16人/路径未齐16」，16人当前阶段均为治疗，界面无任何解释（疑似指未达「研究状态」终点）；首次使用的监查员无法理解该标注含义。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "report_D.md:100-102（F11）",
+   "repro": "结果概览→受试者阶段流向→查看「范围受试者16人/路径未齐16」标注",
+   "sources": [
+    "R27-D 内部测试者（round_27/report_D.md F11）"
+   ],
+   "confirmed": true,
+   "confirmNote": "标注不可解为客观界面事实；tester对含义的推测已明确标注为推测。",
+   "fixHint": "阶段流向图「路径未齐」需悬停提示或自明命名（如「未达研究状态终点」），并说明判定口径。",
+   "status": "待修复"
+  },
+  {
+   "id": "R28-05",
+   "round": 28,
+   "title": "结果层页面加载极慢且不稳定：查询工作区 12 秒–3.5 分钟、风险证据页 15–90 秒首屏空白",
+   "where": "医学监查 → 结果视图 → 查询工作区 / 风险证据页",
+   "what": "查询工作区 4 次进入分别耗时约 12 秒/15 秒/3.5 分钟/90 秒以上（90 秒超时后再等约 2 分钟才出内容）；证据页『查看原始来源』首屏空白（4 秒时正文仅 161 字符），15–90 秒后才渲染原始记录行，逐卡取证每次再等 8–60 秒。取证流程被等待时间主导。",
+   "severity": "high",
+   "category": "product_bug",
+   "evidence": "report_D.md §6#2/#4、§8：查询工作区 12s/15s/3.5min/90s+ 四次计时；证据页 4 秒时正文 161 字符、60 秒后出现原始行。",
+   "repro": "医学监查→查看本次结果→进入查询工作区计时；任一请核实事项卡→『查看原始来源』→计时至原始行渲染。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_28/report_D.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "单源（D）但为 4 次进入+多卡取证的量化计时证据；按纪律不予确认，建议下轮在任一有已发布结果的项目复测加载耗时。；独立复核：复核结论：核心量化主张未复现，但“慢且不稳”的定性部分成立。复核环境：同一项目 MX循开考-CSU（proj_user_6ef58ac151e1）中 report_D.md §10 记录的同一已发布运行 run:9e6470da…545922ae，result-context:8b5ca1e2359e4ee3a63514791813132f，服务未动（node PID 26604 监听 5178），全程只读 GET + ego-browser 观测。\n\n【实测计时（ego-browser，space 177，页面内 performance.now() 计时）】(1) 医学监查→查看本次结果→结果就绪 5.6s。(2) 查询工作区：SPA 内 journey→返回查询工作区热进入 2.0s 出 96 张卡；URL 全量加载两次均 ~8.3s（resource 面板显示该次 /overview、/runs、/run-setup/options 三请求并发各阻塞 7.8–8.1s，串行 curl 时同接口仅 1.3–2.5s——后端延迟波动实锤，但幅度是秒级）。(3) 风险证据页逐卡取证 3 张：3.1s / 4.2s / 3.0s 渲染出 row-AE-000007 等原始行；加载期间 main 区仅 91 字符空壳（无骨架屏），“首屏空白空壳”形态复现、时长未复现。报告的 12s/15s/3.5min/90s+（查询工作区）与 15–90s 首屏、8–60s 逐卡等待均未复现，最差实测 8.3s / 4.2s。\n\n【未复现的环境条件】report_D.md §8 记录其测试时段（01:05–01:45）自身刚跑完一次监查运行（后端+LLM 约 2min40s）。后端存在每请求项目级维护闸门（packages/medical_monitoring/runtime/maintenance_gate.py:97-127，共享/排他文件锁、30s 上限等待）且每请求开关 MonitoringRunEntry（medical_monitoring_r7_product_router.py:8-13），并发/运行期排队可解释秒级尖峰；分钟级极端值是否仅在运行并发时出现，本次无法验证（禁止推进管道）。此为如实存疑，非证实。\n\n【附带证实】(a) fixHint 前提成立：overview 接口一次性下发 847KB（477 风险+41 发现+55 请核实事项），查询工作区为纯 ul 全量渲染无分页/虚拟化（MedicalMonitoringWorkspace.jsx:2255-2276）。(b) 报告复现路径“旅程页→返回查询工作区”当前按标签走不通：概览→旅程→返回查询工作区 2/2 次被 restoreReturnAnchor 弹回概览（MedicalMonitoringProductLoop.jsx:1355-1361 读到 view:'overview' 锚点即 navigate(anchor.view)），即查询工作区现只能经 URL 或 queries 起源的旅程进入——属 report_D #14 范畴，此处仅作为复现路径受阻说明。综上：按纪律不予确认（confirmed=false），建议在任一监查运行刚结束的窗口复测一次以甄别“运行并发导致分钟级极端耗时”的假设；骨架屏/分页类修复建议本身仍然成立。",
+   "fixHint": "查询工作区与证据页首屏接口疑同步等待完整结果集/原始行查询；建议分页/骨架屏+异步加载，并核查 96 张卡载荷是否一次性下发。",
+   "status": "待复测"
+  },
+  {
+   "id": "R28-06",
+   "round": 28,
+   "title": "项目监查重点方向零产出：96 条输出全部为「存在 AE/访视失约」复述，合成数据中植入的跨域矛盾（AE-化验趋势、CM-病史一致性）均未被提出",
+   "where": "医学监查 → 监查运行产出（查询工作区 41 发现+55 请核实事项）",
+   "what": "常驻项目 MX循开考-CSU（合成 CSU 数据）监查重点三方向中，『AE 与化验趋势矛盾』『合并用药与病史一致性』在数据中确有植入矛盾，96 条输出（41 发现+55 请核实事项）中零条涉及，无一条引用化验/合并用药数据；运行日志显示特殊关注阶段『已完成（已确认规则第1版）』但无对应产出。植入物经本分诊运行生成器核证：23003 血小板计数降低 3级（AESER=是）对应 W4/W8 化验仅 118/126（偏低，生成器第 229–231 行刻意制造『3级 vs 轻度下降』矛盾）；22006 合并用药『孟鲁司特钠片·哮喘病史长期用药』而其 MH 术语按确定性索引不含哮喘（生成器第 172–173 行）。属漏报。",
+   "severity": "high",
+   "category": "medical_accuracy",
+   "evidence": "report_D.md §6#5、§5（96 条全量通读三分类：真 26/存疑 25/误报 4，全部为 AE/SV 复述）；植入物核证：scripts/generate_test_listing.py:156-159（AE 血小板 3级）与 :229-231（同受试者 W4/W8 化验仅 118/126）、:163-173（CM 哮喘适应症）；本机运行该生成器复核 22006 的 MH 术语不含哮喘、23003 的 AE 行 AESER=是。",
+   "repro": "对含植入矛盾的合成 CSU 数据项目发起全量监查（勾选特殊关注）→通读全部发现/请核实事项，检索『化验/LB/合并用药/CM/UAS』引用。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_28/report_D.md",
+    "implementation/workbench/scripts/generate_test_listing.py"
+   ],
+   "confirmed": true,
+   "confirmNote": "单源运行（A/B/C 均未到达结果层），但证据为 96 条输出的穷举通读+运行日志，且本分诊已实际运行 scripts/generate_test_listing.py 核证植入矛盾确实在数据中（22006 的 CM-哮喘/MH 无哮喘、23003 化验 118/126 vs 3级），『系统未报告』的穷举式证据可直接采信。注意修正 D 报告的一处口径：三方向中『UAS7 量表完整性』在生成器中无缺失植入（16 受试者×4 周评分齐全），零产出属预期，不计入漏报。；R30后任务所有者解除搁置：监查引擎产出质量是上线标准硬杠杠，升级为专项主攻，不得以搁置绕过收敛判定",
+   "fixHint": "监查运行的特殊关注/重点规则执行链疑似只落地了 AE/SV 两类通用规则（运行日志显示特殊关注仅 1 个工作项）；对照已确认规则第1版的内容，核查『AE-化验趋势』『CM-MH 一致性』规则是否真正注册进运行工作项并产出。",
+   "status": "待修复"
+  },
+  {
+   "id": "R28-08",
+   "round": 28,
+   "title": "监查结果上下文刷新即丢、浏览器后退直接退出应用、「返回查询工作区」行为不稳定",
+   "where": "医学监查 → 结果视图导航（旅程页/证据页/结果页刷新与后退）",
+   "what": "旅程/结果页刷新后变『当前项目尚无已选择的监查记录』（URL 中 result_context_token 不被恢复）；从风险证据页按浏览器后退落到 chrome://new-tab-page（监查视图不入历史栈）；24004 旅程页『返回查询工作区』两次落到项目风险概览，21001 则正常进入——同按钮行为不一致。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "report_D.md §6#14。",
+   "repro": "进入任一旅程页/结果页→F5 刷新；证据页按浏览器后退；不同受试者旅程页点『返回查询工作区』对比落点。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_28/report_D.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "单源（D）；与 R19-11（旅程深链不恢复）及新立旅程死链单可能同根，复测旅程页时顺带验证。",
+   "fixHint": "result_context_token 未写入可恢复的存储或未被 URL 解析恢复；监查视图路由未 pushState 入历史栈。与旅程死链单同页修复时一并处理。",
+   "status": "待复测"
+  },
+  {
+   "id": "R28-09",
+   "round": 28,
+   "title": "发现卡文本缺陷三连：前缀重复渲染（依据：依据：）、内部术语与原始 ID 裸露（Finding DTO/subject-21001/facts.ae）、事件时间窗自相矛盾",
+   "where": "医学监查 → 查询工作区（41 张发现卡）",
+   "what": "41 张发现卡的 LI 元素文本本身含重复前缀『依据：依据：/发现：发现：/行动项：行动项：』（DOM 层重复，非样式叠显）；区块标题直接暴露『发现（41 条 · 载荷形态 Finding DTO）』、受试者显示 subject-21001、来源定位 facts.ae · event-AE-000000 等内部术语；同时卡面『未关联具体事件 · 时间窗待确认』与自身依据中具体事件+日期矛盾。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "report_D.md §6#9：41 张卡 LI 元素 innerHTML 本身含重复前缀；『发现（41 条 · 载荷形态 Finding DTO）』标题；『未关联具体事件 · 时间窗待确认』vs 依据段具体事件+日期。",
+   "repro": "查询工作区上半段逐卡查看文本，并对照『事件与时间窗』栏与依据段。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_28/report_D.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "单源（D），DOM 层证据（非样式叠显）；文案与呈现类问题，随结果层复测顺带确认。",
+   "fixHint": "发现 DTO→卡片文案的渲染层在源文本已含前缀时未去重；『载荷形态 Finding DTO』等疑为开发态调试文案漏移除；卡面时间窗字段与依据段取自不同字段未做一致性归并。",
+   "status": "待复测"
+  },
+  {
+   "id": "R28-10",
+   "round": 28,
+   "title": "「请核实事项」55 张卡为同一模板句：无事件名/日期/规则名，仅差受试者号，零决策信息",
+   "where": "医学监查 → 查询工作区（55 张请核实事项卡）",
+   "what": "全部 55 张请核实事项卡三段文本仅差受试者号（如『依据当前项目监查规则；发现22014存在“不良事件”相关记录；请核实原始记录与医学判断是否一致…』），卡面不显示事件名称与日期（只有『精确日期』标签），无规则名、无差异化核查指向。医学监查员无法据卡决策，必须逐卡点开原始行。与 R22-02（差异裁决题噪音化）为不同子系统；与 R24-10（卡片不显示事件术语，待修复）部分重叠但本条指向整体信息含量。",
+   "severity": "high",
+   "category": "medical_accuracy",
+   "evidence": "report_D.md §6#8、§5：55 张卡三段文本仅差受试者号；『卡上连事件名称与日期都不显示（只有精确日期标签）』。",
+   "repro": "通读查询工作区下半段 55 张请核实事项卡，对比文本差异度与卡面字段。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_28/report_D.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "单源（D），但 55 张卡的模板同一性为穷举通读事实（仅差受试者号），可直接采信；注意与 R22-02（字段差异裁决题噪音化，本轮未覆盖）分属不同子系统。",
+   "fixHint": "请核实事项卡模板需注入事件术语、日期、规则名与差异化核查指向（当前仅绑定 subject 维度）；数据侧 Finding 模型已有 event/日期字段（依据段可引用），是卡面渲染未取用。",
+   "status": "待复测"
+  },
+  {
+   "id": "R28-11",
+   "round": 28,
+   "title": "第3步核对等待计时刷新后重置为「0 分钟」，与同屏保留的入队时间戳自相矛盾",
+   "where": "数据接入向导第3步滞留诊断条（刷新/重开后）",
+   "what": "刷新后重入第3步，『本轮核对已进行约 0 分钟』与同屏『最早入队 2026-10-08 23:27:53（已过去 14 分钟）』并排出现，用户会误以为任务被重置清空。A、C 两个独立会话复现（A：23:09:17 入队作业刷新后显示 0 分钟）。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "report_A.md 发现3（入队 23:09:17 的同一作业刷新后耗时显示 0 分钟）；report_C.md 发现4（入队 23:27:53，刷新后『0 分钟』vs『已过去 14 分钟』同屏）。",
+   "repro": "第3步核对等待中 F5 刷新→再次进入第3步→对照『已进行约 N 分钟』与『最早入队』时间戳。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_28/report_A.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_28/report_C.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "多源确认：A、C 两个独立会话同一现象。",
+   "fixHint": "『本轮核对已进行约 N 分钟』疑似按页面加载时刻起算而非按作业入队时间；入队时间戳已在响应中，改用入队时间计算即可。",
+   "status": "待复测"
+  },
+  {
+   "id": "R28-12",
+   "round": 28,
+   "title": "顶栏元数据/状态显示失真：数据已核验仍恒显「数据批次：未登记批次」、方案版本恒「草案」、加载时先报「模型未配置」数秒后自愈",
+   "where": "全局顶栏（项目元数据卡与 AI 设置区）",
+   "what": "C 完成第2步导入（10 表 591 行、批次 token mmbatch_9f731803d698c2a186dfc003 已生成）后顶栏仍『数据批次：未登记批次』『方案版本：草案』；D 侧数据层 100% 往返校验（10表/591行/3038值）后同样恒显『未登记批次』；两次整页加载 AI 设置先显示『未配置·兼容接口·模型未配置』数秒后变『可运行 zhipu-coding-plan·glm-5.3-flash』。C、D 双源。",
+   "severity": "low",
+   "category": "cosmetic",
+   "evidence": "report_C.md 发现5（analysis_token mmbatch_9f731803d698c2a186dfc003 已生成，顶栏仍『未登记批次』）；report_D.md §6#15。",
+   "repro": "完成数据导入后观察顶栏元数据卡；整页刷新后观察头部 AI 设置 3–10 秒。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_28/report_C.md",
+    "implementation/workbench/scripts/tester_loop_0927/round_28/report_D.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "多源确认：C、D 两个独立会话均观察到『未登记批次』失真；『模型未配置』闪现为 D 单源附带观察。",
+   "fixHint": "顶栏元数据卡未订阅项目数据批次/方案版本状态变更（导入完成后未刷新顶栏 store）；AI 设置区在配置加载完成前渲染了默认『未配置』态，应加加载中态。",
+   "status": "待修复"
+  },
+  {
+   "id": "R28-13",
+   "round": 28,
+   "title": "窄视口（1280/1440）顶栏项目身份截断；第3步失败诊断直接暴露内部英文连接器/模型错误串",
+   "where": "全局顶栏 + 数据接入第3步失败诊断区",
+   "what": "1280 下顶栏只完整显示项目代号、适应症成『特应性…』；失败态橙色文字换行展示 openai-compatible-chat-conn...、provider_sse_error_event 等内部词，现场定位重点被技术细节挤占。三档宽度均无横向溢出。",
+   "severity": "low",
+   "category": "cosmetic",
+   "evidence": "report_A.md 发现4。",
+   "repro": "第三步失败态将浏览器宽度依次设 1280/1440/1920，查看顶栏与失败提示。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_28/report_A.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "单源（A）；错误串暴露部分与 R24-02（失败提示技术化，待修复）同象限，截断部分独立成单。",
+   "fixHint": "顶栏元数据区加 min-width/ellipsis 策略；失败诊断对 provider 错误串做用户语言映射，原始错误收进『技术详情』折叠。",
+   "status": "待修复"
+  },
+  {
+   "id": "R28-14",
+   "round": 28,
+   "title": "顶栏（项目切换器/新建/归档）static 定位随页面滚出视口，与固定的左侧模块导航行为不一致",
+   "where": "医学监查长页面顶栏",
+   "what": "getComputedStyle(topbar).position=static，scrollY=91.5 时 header rect.y=-91 整体不可见；向导/长表单场景中切换项目、新建、归档须先滚回顶部，而左侧模块导航固定，行为不一致。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "report_B.md F8。",
+   "repro": "在向导区域滚动一屏后寻找项目下拉。",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_28/report_B.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "单源（B），实测样式值证据；低严重度，随布局类修复顺带处理。",
+   "fixHint": "顶栏容器改 sticky/fixed 与左侧导航对齐，或明确设计取舍后统一两区行为。",
+   "status": "待修复"
+  },
+  {
+   "id": "R29-01",
+   "round": 29,
+   "title": "核对队列存在无超时/无自愈清理的滞留作业，可无限期占队",
+   "where": "系统级核对队列（数据接入向导第 3 步状态区）",
+   "what": "系统级核对队列存在一条非本轮会话产生的滞留作业（最早入队 2026-10-09 03:44:07），从 05:45:58 起持续显示在队列中至 09:25 仍在队（滞留≥5.7 小时），无超时标记、无自愈清理；与此同时后入队的作业可被正常调度执行，说明队列仍在前进但该作业永不退出。所有后续用户都会看到这条永久的『队列中』提示。",
+   "severity": "high",
+   "category": "product_bug",
+   "evidence": "report_B.md 发现#2：05:45:58 起核对状态多次显示「系统有 1 项核对作业在队列中（最早入队 2026-10-09 03:44:07）」，该条目在其整个观察期（至 09:25）从未离开队列；同时本人新入队作业可被调度执行（快速失败于 429），证明队列仍前进而此作业永不退出、无超时标记。report_A.md 独立旁证：「页面仍显示 1 项核对作业排队，最早入队时间为 03:47:46；刷新后状态未改变」。R29 背景预检硬断言『队列无滞留作业』实际未满足即开考。",
+   "repro": "在上游故障期触发研究文件核对并观察状态区→可见『最早入队』时间戳早于本次会话数小时的作业持续在队、刷新不变。",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_29/report_B.md",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_29/report_A.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "A 读到的最早入队为 03:47:46、B 为 03:44:07，两者略异（可能为不同作业或重排产物），但『早于会话数小时的条目全程滞留、刷新不变』为两源一致。",
+   "fixHint": "后端数据接入 admission 服务的研究文件核对作业状态机：为作业增加超时判定与僵尸作业清理（入队超阈值自动标记失败/移出队列并给出终态）；同时修正轮次预检『队列无滞留作业』断言与实际队列治理的一致性。",
+   "status": "待复测"
+  },
+  {
+   "id": "R29-02",
+   "round": 29,
+   "title": "第 3 步刷新恢复出现自相矛盾组合：核对中状态 + 「请先添加所需文件」主按钮 + 文档清单消失",
+   "where": "数据接入向导·第三步（页面刷新恢复）",
+   "what": "核对进行中刷新页面后，恢复状态自相矛盾：同时出现「正在核对研究文档…」状态、主按钮「请先添加所需文件」、四类文档清单整体消失，与界面『整理在后台进行时，可以离开页面，稍后再查看』的承诺不符；约 5 分钟后才自愈为一致状态。期间用户无法判断文件是否还在、该不该重传。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "report_B.md 发现#5：06:20:08 刷新→重新展开向导落第二步（导入数据未丢）→06:21:38 进入第三步同时看到核对中状态、『请先添加所需文件』按钮、研究方案/研究者手册/eCRF/统计分析计划清单整体消失→06:26:53 才恢复一致的核对中状态；报告『逻辑性』节亦总结「刷新后出现『正在核对』与『请先添加所需文件』并存的状态」。",
+   "repro": "上传研究文件并等待核对启动→F5 刷新→重新启用模块并展开向导进入第三步→观察矛盾组合。",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_29/report_B.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "单一来源，但含三个精确时间点与自愈过程的完整观察（矛盾态持续约 5 分钟），证据完整可直接采信。",
+   "fixHint": "前端 monitoring admission wizard 第 3 步组件的刷新恢复逻辑：状态接口返回后以服务端状态为准重建文档清单与主按钮态，禁止『核对中 + 请先添加所需文件 + 清单为空』混合态渲染。",
+   "status": "待修复"
+  },
+  {
+   "id": "R29-03",
+   "round": 29,
+   "title": "研究文件『可一次多选』承诺失效：两 docx 并发上传必现「网络中断或服务未响应」红框",
+   "where": "数据接入向导·第三步（研究文件上传）",
+   "what": "文案承诺研究文件支持一次多选，但同时选择方案与 eCRF 两个 docx 并发上传即红框报错「研究文件上传未能完成（网络中断或服务未响应）」，被迫退化为单文件顺序上传。",
+   "severity": "medium",
+   "category": "ux_issue",
+   "evidence": "report_C.md 发现#2：FileChooser 同时选择两个正常业务文件后立即红框「研究文件上传未能完成（网络中断或服务未响应）。请重新选择文件上传；若多次失败，可改为每次上传一份。」；指引文案原文「（支持 .docx / .pdf / .xlsx，可一次多选）」。对照：report_B.md 记录 05:44『研究方案+eCRF指南两份docx上传成功』（未说明是否同一次多选操作），且 C 处于上游 429 风暴窗口。",
+   "repro": "进入第 3 步→点『选择研究文件（可多选）』→同时勾选方案与 eCRF 两个 docx 并确认→观察红框报错。",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_29/report_C.md"
+   ],
+   "confirmed": false,
+   "confirmNote": "单一来源且观察窗口处于上游 429 风暴期，存在环境混杂；B 在 05:44 曾『研究方案+eCRF指南两份docx上传成功』，若 B 为一次多选操作则与本发现矛盾——无法排除限流窗口偶发或 B 为顺序上传，需健康窗口复测。",
+   "fixHint": "前端第 3 步研究文件多选上传的并发处理逻辑（上传队列/进度合并）；复测时在非限流窗口区分『并发上传不被支持』与『环境偶发』两种解释，并核实 B 的 05:44 上传是否为多选操作。",
+   "status": "待修复"
+  },
+  {
+   "id": "R29-04",
+   "round": 29,
+   "title": "卡点诊断横幅『停留约 N 分钟』读数冻结不增长（与 R28-11 刷新重置为 0 为同组件两种失真）",
+   "where": "数据接入向导·第三步（卡点诊断横幅）",
+   "what": "「停留约 N 分钟」滞留读数冻结不增长：间隔 8 分 17 秒的两次读取均显示『停留约 24 分钟』，持续滞留期间读数不随时间增长，误导用户对卡点时长的判断。与 R28-11（刷新后重置为『0 分钟』）是同一横幅的两种不同失真模式。",
+   "severity": "low",
+   "category": "product_bug",
+   "evidence": "report_B.md 发现#6：06:11:32 与 06:19:49 两次读取（间隔 8 分 17 秒）均显示「研究文件核对已在『系统仍在独立核对研究文件』停留约 24 分钟且无状态变化」——滞留仍在持续而读数不增长。",
+   "repro": "制造核对停滞→每隔数分钟读取诊断横幅→对比读数。",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_29/report_B.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "精确双时间点测量，证据完整。",
+   "fixHint": "与 R28-11 同组件（第 3 步卡点诊断横幅）：改为基于入队时间戳实时计算 elapsed（前端定时重算或后端返回），一并修复冻结与刷新重置两种失真。",
+   "status": "待修复"
+  },
+  {
+   "id": "R29-05",
+   "round": 29,
+   "title": "吸底操作栏拦截失败面板中「重新核对研究文件」按钮的点击",
+   "where": "数据接入向导·第三步（吸底操作栏 .monitoring-admission-actions）",
+   "what": "页面滚动到底部时，吸底操作栏（.monitoring-admission-actions，position:sticky; z-index:2）盖住失败面板中的「重新核对研究文件」按钮并拦截点击，必须先把按钮滚至视口中部才能点中——恰在最需要重试的失败态给主要补救动作制造交互障碍。",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "report_B.md 发现#7：08:44 点击该按钮时浏览器返回「matched 1 elements, but none can receive input; <footer> intercepts pointer events」，该 footer 即 .monitoring-admission-actions 吸底操作栏；滚动居中后同一按钮可正常点击。",
+   "repro": "核对失败态→页面滚动到底→直接点失败面板中『重新核对研究文件』→点不中→滚动居中后可点中。",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_29/report_B.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "浏览器可观测的 pointer-events 拦截错误 + 滚动绕行验证，证据完整。",
+   "fixHint": "前端 .monitoring-admission-actions 吸底操作栏的层叠/遮挡处理：调低 z-index、约束 pointer-events 作用范围，或为失败面板内按钮做滚动避让/层级提升。",
+   "status": "待修复"
+  },
+  {
+   "id": "R29-06",
+   "round": 29,
+   "title": "「事件明细」标签选中任一发现（URL 带风险锚点）后确定性崩溃，错误边界困住用户",
+   "where": "受试者医学旅程·事件明细标签（view=timeline + risk_anchor_ref）",
+   "what": "选中任一发现后切到「事件明细」100% 崩溃（错误边界『当前页面加载失败』）；『重新加载当前页面』仍落在同一崩溃 URL；崩溃态下左侧『医学监查』按钮被禁用，只能绕道项目总看板重进。监查核心的证据下钻视图（事件明细）对带锚点入口完全不可用。与未决 R22-07『事件明细假 tab』为同一 tab 的不同缺陷层（假 tab 语义 vs 确定性渲染崩溃）。",
+   "severity": "critical",
+   "category": "product_bug",
+   "evidence": "report_D.md 发现1：24008 带 SV 锚点首次触发崩溃；直访崩溃 URL（view=timeline+risk_anchor_ref=event-SV-000053）15 秒内复现；换 AE 锚点（event-AE-000039）12 秒内同样崩溃；对照组（无锚点 view=timeline、带锚点 view=journey）均正常渲染；崩溃态左侧『医学监查』按钮被禁用，只能绕道项目总看板重进。",
+   "repro": "医学旅程→点任一风险卡/风险定位项→点『事件明细』标签。",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_29/report_D.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "确定性 100% 复现：双锚点 + 直访 URL + 两组对照实验，证据完整到可直接采信。",
+   "fixHint": "受试者旅程页 view=timeline 的 risk_anchor_ref→事件明细映射渲染：锚点解析缺少空值/异常保护，抛错触发错误边界；建议与 R22-07（该 tab 为非真实标签实现）一并重构为真实路由/标签并补锚点解析单测。",
+   "status": "待复测"
+  },
+  {
+   "id": "R29-07",
+   "round": 29,
+   "title": "「合并用药与病史一致性」专项零实质产出：全部 CM 卡为空白依据模板旗标（合成植入的 CM-MH 矛盾未被检出）",
+   "where": "医学旅程·合并用药卡 / 全局发现层（CM-MH 一致性专项）",
+   "what": "系统宣称的『合并用药与病史一致性』特殊关注专项零实质产出：所有合并用药均为「低风险·系统推定·医学依据空白」模板旗标，无任何 CM-MH 交叉核对发现。22006 用左甲状腺素钠/苯磺酸氨氯地平/阿托伐他汀钙而病史仅录乙肝携带+偏头痛（甲减/高血压/高血脂均无 MH 记录）无任何发现；23003 既往奥马珠单抗（抗 IgE 药）距首剂约 25 天也仅低级别空依据；55 条高/中风险定位中无任何 CM-病史一致性发现。",
+   "severity": "high",
+   "category": "medical_accuracy",
+   "evidence": "report_D.md 发现3：左甲状腺素钠卡等级低、依据空白；22006 泳道 MH 仅 2 条（慢性乙型肝炎携带、偏头痛）；定位列表 55 条中无任何 CM-病史一致性发现。交叉验证：我运行 `python3 scripts/generate_test_listing.py --profile csu --out /tmp/r29_triage_check` 并解析生成文件，确认 22006 植入行 C032「孟鲁司特钠片·哮喘病史长期用药·空CMENDAT」（generate_test_listing.py:163-173），MH 词池含『哮喘』但 22006 随机病史为乙肝+偏头痛——该植入矛盾未见任何对应发现（临时文件已删除）。",
+   "repro": "打开 22006/23003 旅程→逐张合并用药卡与 MH 泳道比对；核对 55 条高/中风险定位清单中 CM-病史一致性域为空。",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_29/report_D.md",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/generate_test_listing.py"
+   ],
+   "confirmed": true,
+   "confirmNote": "多源互证：D 的域级核对 + 我实测生成的植入行（C032/哮喘适应症/MH 词池含哮喘）+ 未决 R25-13/R21-06 同向信号；D 深挖的受试者恰为植入载体。；R30后任务所有者解除搁置：监查引擎产出质量是上线标准硬杠杠，升级为专项主攻，不得以搁置绕过收敛判定",
+   "fixHint": "医学监查规则引擎的『合并用药与病史一致性』专项（facts/rules 层→finding 生成）：需实现 CM-MH 交叉判定（适应症-病史对应、既往用药时间窗 vs 入排/洗脱期）并填充依据，替代当前的空白模板旗标；与 R10-02（剂量/途径漏检）、R25-13（适应症召回）、R21-06（疑点缺证据）同属医学检查产出层缺口，建议同一批次处理。",
+   "status": "待修复"
+  },
+  {
+   "id": "R29-08",
+   "round": 29,
+   "title": "AE 风险分级是严重度的机械映射：已好转的可能无关 3 级 AE 仍列高风险（本轮唯一误报样本）",
+   "where": "医学旅程·AE 风险分级",
+   "what": "风险等级近似『严重度→等级』的机械映射：鼻咽炎 3 级+可能无关+已好转+非 SAE 仍列「高风险」，占据最高优先级注意力；分级依据仅写『源记录载明』，未做相关性/转归加权。作监查员不会为它发 high 优先级 Query。",
+   "severity": "medium",
+   "category": "medical_accuracy",
+   "evidence": "report_D.md 发现4（亦为其抽样中唯一『误报』例）：风险卡载「严重度：3级；与试验药关系：可能无关；转归：好转；严重不良事件报告：否」，分级依据仅『源记录载明』；D 判断『作为监查员我不会为它发 high 优先级的 Query』。",
+   "repro": "22006 旅程→点击鼻咽炎 AE 卡→读风险等级与分级依据。",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_29/report_D.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "具体字段引文完整，且为 D 抽样中唯一误报例，医学判断可直接采信。",
+   "fixHint": "AE 风险分级规则（风险等级计算层）：引入关系（肯定/可能无关降级）、转归（痊愈/好转降权）、SAE 与否等医学加权因子；与 R28-07（SAE 无升级标识）同属分级规则缺陷，建议同一批次处理。",
+   "status": "待修复"
+  },
+  {
+   "id": "R29-09",
+   "round": 29,
+   "title": "从证据页返回旅程后风险详情面板降级：标题泛化、日期丢失、关联记录误报「本轮未提供」",
+   "where": "受试者医学旅程·风险详情面板（证据页返回路径）",
+   "what": "从证据页返回旅程后，风险详情面板降级：标题由「访视失约·W12」泛化为「方案符合性」、日期只剩无值「精确日期」、关联记录由「关联原始记录 1 条」变为「本轮未提供关联记录」——最后一条与事实不符（语义不诚实）；重新点击定位项后恢复完整。3 次复现中 2 次出现。",
+   "severity": "medium",
+   "category": "product_bug",
+   "evidence": "report_D.md 发现5：返回后页面文本同时含『本轮未提供关联记录』与无值『精确日期』；再次点击定位项后出现『2026-06-20 · 第 5 次访视』与『关联原始记录 1 条』（即数据存在，返回后的降级态为错误展示）。",
+   "repro": "旅程→点风险卡→查看来源证据→返回受试者医学旅程→观察面板字段（多次往返提高复现率）。",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_29/report_D.md"
+   ],
+   "confirmed": true,
+   "confirmNote": "3 次复现中 2 次出现 + 恢复对照，证据完整。",
+   "fixHint": "旅程风险详情面板的返回导航状态恢复（锚点上下文未随 evidence→journey 返回重挂载/恢复）；与 R28-08 上下文丢失同族，检查返回路径的状态保持逻辑。",
+   "status": "待修复"
+  },
+  {
+   "id": "R29-10",
+   "round": 29,
+   "title": "症状/疗效泳道空态文案与同页 UAS7 记录自相矛盾（matrix 量表页取值后日期维度丢失）",
+   "where": "受试者医学旅程·症状/疗效泳道",
+   "what": "症状/疗效泳道写「当前范围无该域记录」，同页下方却单独列示该域 4 条 UAS7 记录（日期待确认），措辞自相矛盾；23003/22006/24008 三例均如此。",
+   "severity": "low",
+   "category": "cosmetic",
+   "evidence": "report_D.md 发现14：23003/22006/24008 三例均同时出现『症状/疗效：无记录』与 4 条 UAS7『日期待确认』记录。交叉验证：生成器 UAS 表为宽矩阵（列=UASW2/4/8/12 评分、无日期列，实测 dims A1:E18），系统取到值但无日期可锚定。",
+   "repro": "打开任一受试者旅程→对照症状/疗效泳道空态文案与『日期待确认记录』区。",
+   "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/tester_loop_0927/round_29/report_D.md",
+    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/scripts/generate_test_listing.py"
+   ],
+   "confirmed": true,
+   "confirmNote": "三例一致复现 + 生成器 matrix 形态佐证。",
+   "fixHint": "症状/疗效泳道空态判定口径：无日期记录是否计入『该域记录』需统一，空态文案改为『无已定位日期的记录（另有 N 条日期待确认）』。",
+   "status": "待修复"
+  },
+  {
+   "id": "R30-01",
+   "round": 30,
+   "title": "项目列表接口 /api/projects 常态性超时（>20s）：整页降级「项目服务暂不可用」，深链失效、全模块导航禁用",
+   "where": "全局顶栏项目选择器／项目总看板／任意依赖 /api/projects 的页面",
+   "what": "/api/projects 后端耗时常态升至70–120s（接入大数据集或后台长任务运行期间），前端20s硬超时触发后整页降级：红字「项目服务暂不可用」「项目列表读取失败」，顶部项目下拉「读取失败」，各模块导航按钮全部禁用；URL已带project_id的深链也强依赖该接口，刷新即失去整个工作区，需反复「重新读取」，D位出现连续约20分钟不可用窗口",
+   "severity": "critical",
+   "category": "product_bug",
+   "evidence": "四测试位独立复现。C（report_C.md 发现2）：performance.getEntriesByType('resource') 抓到多次持续20002ms且被AbortSignal终止的 /api/projects 调用，大表接入后接口常态72–119s（正常3–5s），各模块导航按钮全部disabled；D（report_D.md F2）：16:29/16:37/16:42/16:44/17:31共5+次，16:38–16:58连续约20分钟不可用窗口内16:47:58、16:54:09两次重试失败，16:58:34重试4秒即成功；B（report_B.md F2）：5次复现，两次经约3分钟重试才恢复；A（report_A.md 发现2）：4次，16:54末次重试仍失败",
+   "repro": "在含大数据集的项目或后台核对作业运行期间访问/刷新 http://localhost:5178/，等待20秒即现「项目服务暂不可用」；点「重新读取」反复重试直至恢复",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_30/report_A.md 发现2",
+    "report_B.md F2",
+    "report_C.md 发现2",
+    "report_D.md F2"
+   ],
+   "confirmed": true,
+   "confirmNote": "四个独立测试位、两种项目类型（合成CSU/真实RUX 54表）、不同阶段（建项/导入/运行/结果）同一症状、同一错误文案、同一20s阈值，互为独立证据，唯一四源同症发现",
+   "fixHint": "后端：services/api/app/main.py:4982（GET /api/projects）与 monitoring_project_registry.py——疑似同步遍历项目目录/统计大数据集，并与长任务队列（ai/queue、study-documents resolve）争锁（B位复核作业挂起期间全线超时、C位resolve 113–119s挂起同期出现）。建议列表接口改缓存/异步统计、长任务期间降级返回；前端深链（URL已带project_id）不强依赖全局列表。",
+   "status": "待复测"
+  },
+  {
+   "id": "R30-02",
+   "round": 30,
+   "title": "前端页面主线程整体冻结：运行完成/结果视图加载窗口两次复现，点击刷新全部无响应，仅地址栏goto可恢复",
+   "where": "医学监查进度视图（运行完成后）／结果视图加载中",
+   "what": "页面主线程被阻塞，reload/evaluate全部超时（Page is still unresponsive），仅能通过地址栏goto强行恢复；两次冻结均出现在运行完成/结果视图加载窗口，期间历史中运行状态已变「结果已整理完成」",
+   "severity": "high",
+   "category": "product_bug",
+   "evidence": "report_D.md F1：16:23运行进度显示11/11项完成；16:24–16:28 page.reload 15s/30s超时、evaluate报Page is still unresponsive，16:28:49 goto恢复；16:40结果视图goto 40s超时、16:41:03 evaluate再次unresponsive、16:42:05 goto恢复",
+   "repro": "发起监查运行→停在进度/结果视图等待1–2分钟→页面冻结，点击/刷新无响应，地址栏goto可恢复",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_30/report_D.md F1"
+   ],
+   "confirmed": false,
+   "confirmNote": "单一测试位，但两次完整复现含时间线与工具报错原文；D位channelNote指出与既往计时器组件簇症状一致，建议并案排查；独立复核：复现不了，且证据不支持该发现对前端结果视图渲染的因果归因；但「页面周期性无响应」现象本身跨轮次真实存在，建议并案 F2 改查后端发布链路。【已核实的部分】(1) 原始观察属实且非孤例：report_D.md F1 记录完整（round_30 第42-49行）；同一 D 位在 round_17/report_D.md:66（01:41:42-01:42:18）、round_24/report_D.md:37（17:59-18:01:42，运行启动按钮处）、round_26/report_D.md:33（16:40:12-16:42:11，旅程首入）报告了完全相同的 reload 超时/Page is still unresponsive/goto 恢复模式——4 轮 4 个不同页面，且 round_26（10月8日）与 round_30（10月9日）冻结都恰在 16:40-16:42，跨天同时刻。【复现尝试（均本次实跑）】后端 8911（uvicorn services.api.app.main:app，PID 20186）现存活，但 ps -o lstart 显示进程 17:25:39 才启动（在测试窗之后），其日志 /private/tmp/mm_api_8911.log 已被删除（lsof 仅见已 unlink 的 FD），16:23-16:42 服务端日志不可得。经 5178 实测：GET runs 列表最新 run:14a9fa8676e1dc44bfdd59ee 即测试员那次运行（progress 返回 11/11 100%，更新时间北京时间 10月10日 00:23 = 16:23 UTC，与报告 16:23 精确吻合，状态「结果已整理完成」）。用 Camofox 无头浏览器以真实用户路径进入：选中项目 MX循开考-CSU→点击「查看本次结果」（18:35:31Z）→结果视图 view=overview 6 秒内整页渲染完成（bodyText 4959 字符），此后 3 分钟每 15 秒探测 evaluate 延迟全部 0.0ms、渲染进程 CPU 峰值仅 9.7%（ps 采样）；另做直接 goto 结果视图 URL 的冷加载（18:45:25Z）：<5 秒加载完成，evaluate 0.0ms，60 秒后 CPU 0%。约 12 分钟观察窗口内未复现任何冻结。无法复现真实触发窗：需「发起监查运行」后等待完成，属被禁止的管道推进操作，故 F1①（发布进行中的冻结窗）未验证。【代码与数据反证 fixHint】(a) 进度/结果数据载荷极小：progress 4776B/1.2s、result-entry 338B/1.3s（curl -w 实测），不存在「大 JSON」；(b) 监查前端无阻塞机制：轮询为 setTimeout+退避+AbortController+页面隐藏暂停（MedicalMonitoringProductLoop.jsx:1058-1107、medicalMonitoringProgressPanelController.mjs），无同步 XHR、无 alert/confirm、无死循环（两处 while——Workspace.jsx:635 时间轴刻度、JourneyTimeline.mjs:235 泳道排布——均单调推进必终止）；(c) 跨轮冻结发生在 4 个不同界面，与「结果视图一次性大渲染」归因矛盾；(d) 冻结窗与后端重活强重合：F1① 16:24-16:28:49 恰为该运行结果整理/发布窗（16:28:49 goto 后状态才变「结果已整理完成」），F1② 16:40-16:42 落在同报告 F2 的后端不可用窗 16:38-16:58 内，而 packages/medical_monitoring/api/r7_product/publication_routes.py:123 起的 publish_result 在 async 处理器内联完成全部发布计算（建包/落库/摘要），会阻塞整个事件循环——这与 F2 反复不可用同源。值得注意的是 F1② 在 16:42:05 goto 恢复时后端仍处于不可用窗（至 16:58），说明渲染侧恢复独立于后端恢复，冻结更可能是发布计算期间整机资源争用使无头渲染进程饥饿，而非页面代码死锁。【结论】confirmed=false：冻结「事件」真实且有 4 轮记录，但（i）本次无法复现（触发窗需发起运行，被禁止；空闲后端下同视图秒开且主线程全程 0ms 响应），（ii）as-stated 的产品缺陷定位（结果视图前端同步大渲染→分片+骨架屏）被载荷实测、代码排查与跨轮证据否定。建议与 F2 并案，优先排查后端发布链路对事件循环的内联阻塞（publication_routes.py）及运行执行期的资源占用，把「页面无响应」作为其后端重负载窗口的伴生症状验证（如复现需在受控环境发起一次运行并同步采样后端 CPU/事件循环迟滞）。",
+   "fixHint": "冻结与运行完成/结果视图首屏加载强相关：排查 frontend/src/features/medical-monitoring/ 结果视图的一次性同步大渲染（全量卡片/大JSON）与定时器簇；渲染分片+骨架屏。",
+   "status": "待修复"
+  },
+  {
+   "id": "R30-03",
+   "round": 30,
+   "title": "已完整配置的项目在后端故障恢复后被误报「功能未配置」并引导重新激活，数十秒后自行翻回",
+   "where": "医学监查工作区（模块落地页）",
+   "what": "一次「项目服务暂不可用」恢复后，模块落地页显示「功能未配置 当前项目尚未配置该模块的真实来源与执行链路…」并给出「为当前项目启用该模块」激活引导——而该项目已接入数据、已发布38+次结果；数十秒后自行恢复。对真实用户构成状态谎报，可能诱导对已配置项目重复激活",
+   "severity": "high",
+   "category": "product_bug",
+   "evidence": "report_D.md F3：16:58:57与16:59:33两次观察到该状态（后者发生在项目列表加载成功之后），随后数十秒内自行恢复为正常工作区",
+   "repro": "等待一次「项目服务暂不可用」→服务恢复→进入医学监查模块观察落地状态",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_30/report_D.md F3"
+   ],
+   "confirmed": true,
+   "confirmNote": "单一测试位两次复现；与R24-12（同一「启用该模块」按钮重渲染竞态，待修复）同一界面区域，可能同根，建议并案；独立复核：确认真实存在，且本轮已在真实界面完整复现（只读手段）。【代码链路】① 医学监查落地页门槛：frontend/src/features/medical-monitoring/MedicalMonitoringRouteOutlet.jsx:24-40——`!monitoringProjectId` 且 `projectsLoaded` 为真时直接渲染 UnavailableComponent（功能未配置页），只有 `!projectsLoaded` 才走加载态；App.jsx:13976 传入 `projectsLoaded={projectsLoaded && !projectsLoadError}`。② monitoringProjectId 推导：App.jsx:13491-13497 取 `sourceManifests[activeProjectId]`（即 /api/projects/{id}/source-manifest 的结果）；其回退逻辑 medicalMonitoringRouteOutletState.mjs:11-19 只认 `implementation_status === \"synthetic_product_profile\"`，而后端 project_source_manifest.py:415-437 对用户项目 medical_monitoring 只会给 `real_source_slice`/`intake_pending`——回退对真实项目永远不生效，等于完全依赖 source-manifest 接口。③ manifest 拉取 effect（App.jsx:13791-13819）无超时无重试，接口返回前该条目为空；projects effect（App.jsx:13666-13752）成功即置 projectsLoaded=true。于是「项目列表已恢复、manifest 未返回」的窗口期里，已配置项目被渲染成「功能未配置」+「为当前项目启用该模块」（App.jsx:13360/13371，projectId 非空时按钮必现）。【数据核实】GET /api/projects 返回 proj_user_6ef58ac151e1（MX循开考-CSU，即报告项目）medical_monitoring=real_source_slice；GET /api/projects/proj_user_6ef58ac151e1/source-manifest 返回 route_bindings.medical_monitoring.route_project_id=proj_user_6ef58ac151e1、notes「事实物化完成：监查链已就绪」——项目确已完整配置，与报告「38+次结果」一致（report_D.md:29）。用 node 直接执行该纯函数验证：manifest=null + real_source_slice 项目 → 返回 \"\"（即落入未配置渲染），synthetic 项目才走回退。【活体复现】在 ego 无关的隔离浏览器只读重载 http://localhost:5178/monitoring?project_id=proj_user_6ef58ac151e1&scope=trial&view=checklist 并以100ms采样 DOM：ms 7478–11721（连续42个样本）主区渲染「功能未配置／当前项目尚未配置该模块的真实来源与执行链路。／如何激活：医学监查需先完成数据接入…」且「为当前项目启用该模块」按钮存在，同时项目选择器已选中该项目、下拉已有全部4个项目（即项目列表加载成功之后）；ms 16483 采样自动翻回正常工作区「项目风险概览」——无人操作自愈，与报告「随后数十秒内自行恢复」一致。Performance API 证实本次重载 /api/projects 在 8238ms 完成、source-manifest 12532ms 才返回，窗口即两者之间（测试者 16:58:34 重试成功后 16:58:57/16:59:33 两次观察正落在同一窗口，其会话在 16:42:05 已被 goto 整页重载、manifest 缓存为空，report_D.md:46/53）。【差异与并案】我的触发是整页重载（等价于故障恢复后的全新状态），无法也不被允许主动制造一次后端故障等待恢复；但两者状态机缺口完全相同（projectsLoaded=true + manifest 缺失 → 误报未配置）。与 R24-12（round_24/REPORT.md:52，同一「启用该模块」按钮的瞬态重渲染竞态，未修复）及 R29-C#1（建项跳转瞬态同款 UI，round_29/report_C.md:53-58）属同一 ModuleUnavailablePage 瞬态家族，并案合理但具体竞态路径不同。fixHint 方向成立：/api/projects 已返回 medical_monitoring 的 modules[].route_project_id（已验证），中间态应以持久配置标记或加载态兜底，不得落「未配置」结论。severity=high 恰当：对已配置项目谎报状态并诱导重复激活（该按钮点击会真实 POST /api/projects/{id}/modules，本轮未点击）。",
+   "fixHint": "模块落地页配置状态推导把 /api/projects 恢复期中间态当作未配置渲染：以项目持久配置标记为准，接口中间态不得落「未配置」结论；与R24-12（同按钮竞态）一并修。",
+   "status": "待复测"
+  },
+  {
+   "id": "R30-04",
+   "round": 30,
+   "title": "建项请求120秒超时后弹窗busy状态不复位：提交/取消/关闭全部禁用，用户被死锁在弹窗内",
+   "where": "「配置新研究项目」弹窗（医学监查新建项目）",
+   "what": "服务器超过120秒未返回时前端弹出超时提示「创建请求超过120秒未返回…请先核实再重试」，但busy状态未复位：提交按钮停留「创建中」disabled、左下「取消」与右上角关闭X均disabled，除刷新整页外无法退出弹窗",
+   "severity": "high",
+   "category": "product_bug",
+   "evidence": "report_C.md 发现1：DOM检查确证 {closeBtn:{disabled:true}, cancelBtn:{disabled:true}, submitBtn:{text:创建中, disabled:true}}；发生于后端/api/projects高负载时段（该接口常态72–119s）",
+   "repro": "打开新建项目弹窗→填写并点「创建项目」→后台忙碌超120秒→出现超时提示→点右上角X或「取消」均disabled，无法关闭",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_30/report_C.md 发现1"
+   ],
+   "confirmed": false,
+   "confirmNote": "单一测试位；触发前提（后端高负载超时）与本轮/api/projects超时问题同期，但前端超时分支不复位busy是独立缺陷；独立复核：复核结论：现象窗口真实存在，但发现的核心机制表述（busy不复位→永久死锁）不成立，按原文不予确认。依据：【代码】frontend/src/App.jsx submit()（L1188-1251）：120s硬超时AbortController（L1198）触发后，catch先立即setMessage超时文案（L1238-1240，与测试员所见文案逐字一致），随后await findExistingProject()（L1243）→ 内部为裸fetch(\"/api/projects\")（L1158），无signal无超时（readJsonOrThrow L586-601亦无超时）；finally{setBusy(false)}（L1246-1250）要等该fetch落定才执行。三个出口全部绑定busy：背景点击L1254、关闭X L1269、取消/提交L1323-1324；该弹窗无Escape关闭。因此超时提示出现后、findExistingProject返回前的窗口内，DOM确为「提示已显示+三键全禁用+提交钮文案『创建中』」——测试员的DOM证据与代码路径完全吻合；按report_C.md发现2记载该时段/api/projects服务端耗时72–119s，此锁死窗口约再持续1–2分钟，且该fetch无超时上限、极端挂起时理论上可无限锁死。【测试时代码=当前代码】git blame：finally setBusy(false)来自commit a05a62ef（2026-10-06），120s超时+catch内findExistingProject来自6e8412cea（2026-10-09 17:36:11，即R30测试18:20开始前44分钟）；HEAD=4bdc115b（18:14:32）；git status中App.jsx干净、mtime 16:31。即测试时运行的代码已含busy复位，「前端未在超时分支复位busy」不成立——真实缺陷是复位被无超时的findExistingProject()阻塞而延迟。【运行核实】curl http://localhost:5178/src/App.jsx 含该超时文案与setBusy(false)（dev server所服代码与源码一致）；只读GET /api/projects 现为HTTP 200/1.9s（高负载已消退）；Camoufox打开5178→新建项目→选医学监查→「在医学监查配置新研究项目」弹窗：空闲态closeBtn/取消/创建项目均disabled:false，确证禁用纯由busy驱动。【未能验证】无法在只读约束下实际复现锁死态：触发需让建项POST挂起>120s（提交即写操作，禁止），故超时分支行为未做实机复现，「除刷新整页外别无他法」的永久性主张无法证实——fetch落定后busy即复位、取消/关闭恢复（若查到同名项目还会出现「前往已有项目」出口L1310-1320）。【修复方向仍有效】把setBusy(false)提前到await findExistingProject()之前（或给该fetch加signal/超时），弹窗在超时提示出现时即可退出；修复后应连同R28-15待复测项一起回归。",
+   "fixHint": "frontend/src/features/medical-monitoring/ 新建项目弹窗组件：超时分支复位busy并放行取消/关闭（提示已说「项目可能已创建」，更应允许用户离开核实）；与R28-15（同弹窗200成功后不关闭，待复测）的busy绑定一并治理。",
+   "status": "待修复"
+  },
+  {
+   "id": "R30-05",
+   "round": 30,
+   "title": "矛盾类发现只锚定矛盾一方原始记录：失约vs给药证据页无给药行入口，旅程试验用药域无行级链接",
+   "where": "风险证据页（24008失约vs给药）／受试者医学旅程·试验用药域",
+   "what": "「访视记录载明失约，但当日存在试验药给药记录」这类双侧矛盾发现，证据页仅呈现SV!row54一条引文，给药记录无任何链接或并列展示；旅程试验用药域仅图形泳道/事件ID，点不开到原始行。监查员无法在界面内闭环验证矛盾另一半，只能采信系统推定",
+   "severity": "medium",
+   "category": "medical_accuracy",
+   "evidence": "report_D.md F8+证据链③：证据页全文只有SV引文 {SUBJID:24008, SVSTATE:失约, VISDAT:2026-06-20, VISIT:W12}；面板医学依据明示「失约访视与给药执行矛盾」但分级依据为「系统推定」，给药记录存在性只能采信面板文字",
+   "repro": "24008卡片→查看来源证据→寻找给药行链接（不存在）→回旅程翻试验用药域（仅图形泳道/事件ID，点不开到行）",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_30/report_D.md F8"
+   ],
+   "confirmed": false,
+   "confirmNote": "单一测试位深挖；注意R22-06复测已确认矛盾本身会被提出（见verifyUpgrades），本条只针对证据呈现侧",
+   "fixHint": "矛盾类发现的证据页双侧并列锚定（SV行+EX行各带引文与定位）；旅程试验用药泳道事件补行级原始记录入口。",
+   "status": "待修复"
+  },
+  {
+   "id": "R30-06",
+   "round": 30,
+   "title": "「方案事实与规则发布」按钮在字段映射未完成时未禁用，点击零反馈（闸门与按钮状态脱节）",
+   "where": "医学监查工作区（项目风险概览）",
+   "what": "字段映射未确认时闸门卡片解释「先完成字段映射确认」，但该按钮disabled=false，点击后无跳转、无提示、无状态变化——可点但死，用户无法判断按钮用途或被锁原因",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "report_B.md F6：20:08点击后URL不变、视图内容不变；闸门卡片文案只解释了「先完成字段映射确认」",
+   "repro": "在字段映射未完成的项目点击「方案事实与规则发布」",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_30/report_B.md F6"
+   ],
+   "confirmed": false,
+   "confirmNote": "单一测试位；与R11-04（「增加特殊关注」死按钮，待复测）同类但不同按钮",
+   "fixHint": "frontend/src/features/medical-monitoring/ 风险概览闸门区：未解锁时禁用按钮+提示解锁条件，或点击后跳转闸门说明；按钮disabled态与闸门状态统一数据源。",
+   "status": "待修复"
+  },
+  {
+   "id": "R30-07",
+   "round": 30,
+   "title": "同一文件重复选择：第1步预览计为2个文件且无重复提示（持久导入去重未测）",
+   "where": "数据接入向导第1步·选择数据文件",
+   "what": "通过多选控件把同一xlsx传入两次，预览显示「共2个文件」且不提示重复；测试在正式导入前改回单份，持久导入的去重行为本轮未验证",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "report_A.md 发现4：FileChooser同一xlsx两次传入显示「共2个文件」，重选单份后「共1个文件」，正式识别1文件/10表/591行",
+   "repro": "第1步多选控件传入[同一xlsx, 同一xlsx]→查看文件数→重选单份",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_30/report_A.md 发现4"
+   ],
+   "confirmed": false,
+   "confirmNote": "单一测试位且仅预览层；与R19-10（重复上传持久层静默重导，待复测）分层不同，不合并",
+   "fixHint": "数据接入第1步选择结果按路径/内容哈希去重或提示「同一文件已选」；持久导入去重行为与R19-10一并验证。",
+   "status": "待修复"
+  },
+  {
+   "id": "R30-08",
+   "round": 30,
+   "title": "项目下拉浮层未交互时常驻展开，遮挡左侧导航顶部logo区",
+   "where": "全局顶栏左上角项目选择器",
+   "what": "项目名下拉浮层（含「当前来源 医学监查」）在未点击时持续悬浮展开，遮挡左侧导航顶部logo区",
+   "severity": "low",
+   "category": "cosmetic",
+   "evidence": "report_B.md F7：截图01_file_selected.png与04_top_final.png左上角同一浮层",
+   "repro": "进入医学监查工作区截全页可见",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_30/report_B.md F7"
+   ],
+   "confirmed": false,
+   "confirmNote": "单一测试位，两张不同时点截图互证",
+   "fixHint": "顶栏项目选择器下拉的默认态样式（open class初始误置或CSS未收起）；与R28-14（顶栏定位问题，待修复）同区排查。",
+   "status": "待修复"
+  },
+  {
+   "id": "R30-09",
+   "round": 30,
+   "title": "数据接入向导同屏术语不统一：「接入/整理」「文件/文档」两两混用",
+   "where": "数据接入向导及其控制条",
+   "what": "同一功能区块：向导标题「数据接入」、控制条「资料整理控制/暂停整理」、状态文案「整理在后台进行时」；「研究文件已准备好」与「正在核对研究文档…」混用「文件/文档」。四组叫法同屏不一致，增加新用户认知负担",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "report_B.md F9同屏文本对照：「数据接入 向导」「资料整理控制」「整理在后台进行时，可以离开页面」「研究文件已准备好」「正在核对研究文档…」",
+   "repro": "展开数据接入向导即可同屏对照",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_30/report_B.md F9"
+   ],
+   "confirmed": false,
+   "confirmNote": "单一测试位；与R2-09（来源台账术语不一致，待复测）同类不同界面",
+   "fixHint": "frontend 文案层建术语表，统一「数据接入」「研究文件」两个主叫法，控制条与状态文案对齐。",
+   "status": "待修复"
+  },
+  {
+   "id": "R30-10",
+   "round": 30,
+   "title": "结果视图无运行标识：页面与URL均不显示运行号/时间，无法确认所看结果属哪次运行",
+   "where": "项目风险概览（结果视图）",
+   "what": "结果视图DOM与URL全文检索运行号均为空，result_context_token为不透明串；用户只能靠工作条状态+历史排序推断当前结果归属",
+   "severity": "low",
+   "category": "ux_issue",
+   "evidence": "report_D.md F10：结果视图DOM全文检索bfdd59ee/run:均为空",
+   "repro": "打开一次运行的结果视图，寻找运行标识（无）",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_30/report_D.md F10"
+   ],
+   "confirmed": false,
+   "confirmNote": "单一测试位；与R26-10（历史无时间戳，待修复）同属运行可追溯性缺口",
+   "fixHint": "结果视图页眉与URL补运行ID+发起时间；result_context_token旁以明文展示运行号。",
+   "status": "待修复"
+  },
+  {
+   "id": "R30-11",
+   "round": 30,
+   "title": "疑似漏报（存疑）：23003合并用药「奥马珠单抗」（与试验药MG-K10同机制抗IgE）未产生任何风险标记",
+   "where": "受试者医学旅程·合并用药域（23003）／运行向导特殊关注",
+   "what": "试验药MG-K10即抗IgE通路人源化单抗，23003合并用药列有「奥马珠单抗」（同机制），且特殊关注明确含「合并用药与病史一致性」——但该药仅作事件展示、无任何风险发现。是否该抓取决于方案与规则范围，界面无依据可查，按存疑漏报方向以low立单",
+   "severity": "low",
+   "category": "medical_accuracy",
+   "evidence": "report_D.md F13：23003旅程合并用药域仅1条（奥马珠单抗）无风险标记；运行向导特殊关注三项仅产出1个工作项",
+   "repro": "打开23003旅程查看合并用药域；对照运行向导特殊关注预置项与该运行产出",
+   "sources": [
+    "implementation/workbench/scripts/tester_loop_0927/round_30/report_D.md F13"
+   ],
+   "confirmed": false,
+   "confirmNote": "测试者本人标注「存疑观察，非定论」，是否该抓取决于方案与规则范围、界面无依据可查；UAS7半边已并入R29-09相关的R29-10",
+   "fixHint": "核对规则层是否配置「合并用药与试验药同机制/方案受限用药」一致性检查；若有，排查为何特殊关注挂接后近零产出（与matrix量表访视归属失败同批排查，见R29-10）。",
+   "status": "待修复"
+  }
+ ],
+ "baselineFailures": [],
+ "channelOk": {
+  "gpt-6-sol": true,
+  "cursor-grok-4.6": false,
+  "gemini-3.8-flash": true
+ },
+ "campaignDone": false
+}
