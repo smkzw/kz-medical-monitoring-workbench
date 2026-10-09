@@ -9,6 +9,8 @@ import {
   parseMedicalMonitoringBrowserLocation,
 } from "./medicalMonitoringBrowserRoute.mjs";
 
+const MONITORING_PATH = "/monitoring";
+
 export function useMedicalMonitoringBrowserState(defaultSubjectId = "") {
   const initialProductRouteRef = useRef(initialMedicalMonitoringProductBrowserState());
   const initialRouteRef = useRef(initialMedicalMonitoringBrowserState());
@@ -42,6 +44,41 @@ export function useMedicalMonitoringBrowserState(defaultSubjectId = "") {
     subjectViewFocusRiskId,
     setSubjectViewFocusRiskId,
   };
+}
+
+// R28-08：导航身份——只有视图/项目/结果身份层面的变化才算一次「导航」，
+// 入浏览器历史；同身份内的参数微调（滚动位置、流选择、筛选等）仍用
+// replaceState，避免历史栈被高频参数刷屏。
+function navigationIdentityOf(target, activePage) {
+  if (target.kind === "product") {
+    const c = target.canonical || {};
+    return [
+      "product",
+      c.view || "",
+      c.project_ref || "",
+      c.public_run_token || "",
+      c.result_context_token || "",
+      c.site_ref || "",
+      c.subject_ref || "",
+      c.risk_instance_ref || "",
+      c.source_locator_ref || "",
+      c.event_ref || "",
+    ].join("|");
+  }
+  if (target.kind === "legacy") {
+    const r = target.routeState || {};
+    return [
+      "legacy",
+      activePage,
+      r.project_id || "",
+      r.scope || "",
+      r.subject_id || "",
+      r.view || "",
+      r.risk_instance_id || "",
+      r.risk_key || "",
+    ].join("|");
+  }
+  return `${target.kind}:${activePage}`;
 }
 
 export function useMedicalMonitoringBrowserSync({
@@ -110,6 +147,7 @@ export function useMedicalMonitoringBrowserSync({
     writingNavigationDirty,
   ]);
 
+  const lastNavigationSyncRef = useRef({ url: "", identity: "" });
   useEffect(() => {
     if (typeof window === "undefined") return;
     const target = medicalMonitoringBrowserTarget({
@@ -123,9 +161,23 @@ export function useMedicalMonitoringBrowserSync({
       currentHash: window.location.hash,
     });
     const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const identity = navigationIdentityOf(target, activePage);
     if (target.url && target.url !== currentUrl) {
-      window.history.replaceState(window.history.state, "", target.url);
+      // R28-08：监查视图此前一律replaceState——历史栈不入监查视图，
+      // 结果层按浏览器后退直接落出应用（实测退到chrome://新标签页）。
+      // 现按导航身份区分：身份变化（换视图/换项目/换结果/进入监查）
+      // pushState入栈（popstate已有处理器可复原），同身份参数微调仍
+      // replace。URL未变时只记身份，不产生历史项。
+      const enteringMonitoring = !currentUrl.startsWith(MONITORING_PATH)
+        && target.url.startsWith(MONITORING_PATH);
+      const meaningfulMove = identity !== lastNavigationSyncRef.current.identity || enteringMonitoring;
+      if (meaningfulMove && lastNavigationSyncRef.current.url !== target.url) {
+        window.history.pushState(window.history.state, "", target.url);
+      } else {
+        window.history.replaceState(window.history.state, "", target.url);
+      }
     }
+    lastNavigationSyncRef.current = { url: target.url || currentUrl, identity };
     if (target.kind !== "legacy") return;
     setRouteState((current) => {
       const currentSerialized = serializeMedicalMonitoringRouteState(current);

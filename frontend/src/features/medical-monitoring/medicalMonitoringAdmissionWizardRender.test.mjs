@@ -187,6 +187,17 @@ check(
   !renders.documentsProcessingProgress.includes("无状态变化"),
   "pre-threshold processing does not show the stall alert",
 );
+// R28-11回归：刷新后重入（页面内阶段计时为0），已用时按响应携带的
+// 最早入队时间计算——「本轮核对已进行约 14 分钟」，与同屏最早入队
+// 时间一致，不得自相矛盾地显示 0 分钟。
+check(
+  renders.documentsProcessingRefreshed.includes("本轮核对已进行约 14 分钟"),
+  "refreshed stage elapsed is computed from the enqueued timestamp",
+);
+check(
+  !renders.documentsProcessingRefreshed.includes("已进行约 0 分钟"),
+  "refreshed stage elapsed must not reset to zero",
+);
 check(
   renders.documentsCrossChecking.includes("eCRF 修订说明.pdf")
     && renders.documentsCrossChecking.includes('disabled=""'),

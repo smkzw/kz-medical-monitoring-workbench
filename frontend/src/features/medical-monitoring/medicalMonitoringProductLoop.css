@@ -220,6 +220,27 @@
   border-left: 3px solid var(--monitoring-red, #b83b3b);
 }
 
+/* R28-05：结果层读取中的诚实骨架——沿用行内既有的灰条骨架语言
+   （.risk-checklist-row.skeleton），不引入新材质与彩色装饰。 */
+.monitoring-product-state-panel.is-loading strong {
+  color: var(--monitoring-product-muted, #43505c);
+}
+
+.monitoring-product-loading-bars {
+  display: grid;
+  gap: 8px;
+  justify-self: center;
+  width: min(360px, 100%);
+  margin-top: 8px;
+}
+
+.monitoring-product-loading-bars i {
+  display: block;
+  height: 10px;
+  border-radius: 3px;
+  background: #edf0f3;
+}
+
 .monitoring-product-state-panel button {
   justify-self: center;
   margin-top: 5px;

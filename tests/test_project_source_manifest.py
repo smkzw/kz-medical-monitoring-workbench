@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import time
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -245,6 +246,160 @@ class ProjectSourceManifestTests(unittest.TestCase):
             self.assertEqual(
                 [record.project_id],
                 [project["project_id"] for project in projects],
+            )
+
+    def test_monitoring_user_project_manifest_computes_materialization_once(self) -> None:
+        """R30-01回归：清单构建对同一项目只做一次运行库物化检查。"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            user_store = UserProjectStore(Path(tmpdir) / "user_projects.sqlite3")
+            record = user_store.create(
+                UserProjectCreateRequest(
+                    project_code="MM-LIST-001",
+                    project_name="Monitoring list project",
+                    indication="季节性过敏性鼻炎",
+                    product_name="TEST-MM-001",
+                    study_phase="II期",
+                    protocol_id="MM-LIST-001",
+                    protocol_version="V0.1",
+                    protocol_date="2026-10-09",
+                    entry_mode="from_zero",
+                    actor="mm_list_test",
+                    idempotency_key="mm-list-user-project",
+                    modules=["medical_monitoring"],
+                )
+            )
+            service = ProjectSourceManifestService(
+                user_project_store=user_store,
+                include_reference_projects=False,
+            )
+
+            with patch(
+                "services.api.app.project_source_manifest._monitoring_facts_materialized",
+                return_value=True,
+            ) as probe:
+                projects = service.list_public_projects()
+
+            self.assertEqual(1, probe.call_count)
+            monitoring_modules = [
+                module
+                for module in projects[0]["modules"]
+                if module["module"] == "medical_monitoring"
+            ]
+            self.assertEqual(1, len(monitoring_modules))
+            self.assertEqual(
+                "real_source_slice",
+                monitoring_modules[0]["implementation_status"],
+            )
+            # 备注/绑定细节走完整清单载荷（精确路径再算一次不受列表缓存影响）。
+            with patch(
+                "services.api.app.project_source_manifest._monitoring_facts_materialized",
+                return_value=True,
+            ):
+                binding = service.public_manifest(
+                    record.project_id
+                )["route_bindings"]["medical_monitoring"]
+            self.assertEqual("real_source_slice", binding["implementation_status"])
+            self.assertEqual(["事实物化完成：监查链已就绪。"], binding["notes"])
+            self.assertEqual(record.project_id, projects[0]["project_id"])
+
+    def test_list_project_ids_matches_list_public_projects_scope(self) -> None:
+        """R30-01回归：身份中间件的免清单id作用域与完整列表口径一致。"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            user_store = UserProjectStore(Path(tmpdir) / "user_projects.sqlite3")
+            record = user_store.create(
+                UserProjectCreateRequest(
+                    project_code="SCOPE-001",
+                    project_name="Scope project",
+                    indication="慢性鼻窦炎",
+                    product_name="TEST-SC-001",
+                    study_phase="III期",
+                    protocol_id="SCOPE-001",
+                    protocol_version="V0.1",
+                    protocol_date="2026-10-09",
+                    entry_mode="from_zero",
+                    actor="scope_test",
+                    idempotency_key="scope-user-project",
+                )
+            )
+            service = ProjectSourceManifestService(user_project_store=user_store)
+
+            listed = {
+                project["project_id"]
+                for project in service.list_public_projects()
+            }
+
+            self.assertEqual(listed, set(service.list_project_ids()))
+            self.assertIn(record.project_id, service.list_project_ids())
+
+    def test_list_reuses_stale_materialized_status_once_budget_exhausted(self) -> None:
+        """R30-01回归：预算耗尽后列表复用上一轮物化状态，不在长任务
+        写锁上反复阻塞；单项目门禁路径仍走精确检查。"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            user_store = UserProjectStore(Path(tmpdir) / "user_projects.sqlite3")
+            user_store.create(
+                UserProjectCreateRequest(
+                    project_code="STALE-001",
+                    project_name="Stale reuse project",
+                    indication="特应性皮炎",
+                    product_name="TEST-ST-001",
+                    study_phase="III期",
+                    protocol_id="STALE-001",
+                    protocol_version="V0.1",
+                    protocol_date="2026-10-09",
+                    entry_mode="from_zero",
+                    actor="stale_test",
+                    idempotency_key="stale-user-project",
+                    modules=["medical_monitoring"],
+                )
+            )
+            service = ProjectSourceManifestService(
+                user_project_store=user_store,
+                include_reference_projects=False,
+            )
+            project_id = user_store.records()[0].project_id
+
+            with patch(
+                "services.api.app.project_source_manifest._monitoring_facts_materialized",
+                return_value=True,
+            ) as probe:
+                service.list_public_projects()
+            self.assertEqual(1, probe.call_count)
+
+            # 预算法（deadline=过去）耗尽 + 缓存超TTL：列表面复用上一轮
+            # 结果，不再触发新的运行库检查。
+            stale_key = next(iter(service._materialized_cache))
+            service._materialized_cache[stale_key] = (
+                service._materialized_cache[stale_key][0] - 10_000.0,
+                True,
+            )
+            with patch(
+                "services.api.app.project_source_manifest._monitoring_facts_materialized",
+                return_value=False,
+            ) as probe_over_budget:
+                projects = service.list_public_projects(
+                    _deadline=time.monotonic() - 1.0
+                )
+            self.assertEqual(0, probe_over_budget.call_count)
+            monitoring_modules = [
+                module
+                for module in projects[0]["modules"]
+                if module["module"] == "medical_monitoring"
+            ]
+            self.assertEqual(
+                "real_source_slice",
+                monitoring_modules[0]["implementation_status"],
+            )
+
+            # 单项目门禁路径（build_manifest）不走列表缓存：精确反映当前
+            # 物化状态（False→intake_pending），R18-03判据统一不被缓存稀释。
+            with patch(
+                "services.api.app.project_source_manifest._monitoring_facts_materialized",
+                return_value=False,
+            ):
+                manifest = service.build_manifest(project_id)
+            self.assertEqual(
+                "intake_pending",
+                manifest.module_binding("medical_monitoring").implementation_status,
             )
 
     @unittest.skipUnless(TestClient is not None, "FastAPI test client is unavailable")

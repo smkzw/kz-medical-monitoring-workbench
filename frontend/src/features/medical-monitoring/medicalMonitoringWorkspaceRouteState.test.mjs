@@ -255,7 +255,31 @@ const sameSubjectRisk = {
   spineRef: "spine-21001",
 };
 const samePatch = monitoringSourceEvidenceRoutePatch(sameSubjectRisk, journeyContext.canonical);
+
+function journeyQueryFor(view) {
+  return `?project_id=project-a&result_context_token=${encodeURIComponent("result-context:1")}&view=${view}`
+    + "&site_ref=site-01&subject_ref=subject-21001&spine_ref=spine-21001"
+    + "&window_start=2025-06-24&window_end=2026-08-07";
+}
 check(samePatch.window_start === "2025-06-24" && samePatch.window_end === "2026-08-07", "same-subject source jump keeps the journey window so evidence back-to-journey still works");
 check(samePatch.subject_ref === "subject-21001", "same-subject patch keeps the journey subject");
+
+// R28-08回归：旅程页「返回查询工作区」不得携带上一个受试者的旅程焦点
+// 参数——查询工作区是项目级清单，携带site/subject/时间窗会把列表静默
+// 限缩到该受试者所在中心，不同受试者旅程进入同一按钮落点不一致。
+const journeyWithRiskFocus = parseMedicalMonitoringWorkspaceRouteState(
+  journeyQueryFor("journey")
+  + "&event_ref=event-AE-000001&visit_ref=visit-V2&risk_anchor_ref=anchor-1&risk_instance_ref=riski-AE-000001",
+);
+check(journeyWithRiskFocus.valid, "journey route with event focus parses");
+const queriesFromJourney = routeStateForMedicalMonitoringWorkspaceView(journeyWithRiskFocus.canonical, "queries");
+check(queriesFromJourney.view === "queries" && queriesFromJourney.result_context_token === "result-context:1", "queries route keeps the result token");
+check(!queriesFromJourney.site_ref && !queriesFromJourney.subject_ref && !queriesFromJourney.spine_ref, "queries route drops the journey subject/site scope");
+check(!queriesFromJourney.window_start && !queriesFromJourney.window_end, "queries route drops the journey window");
+check(!queriesFromJourney.event_ref && !queriesFromJourney.visit_ref && !queriesFromJourney.risk_anchor_ref && !queriesFromJourney.risk_instance_ref, "queries route drops the journey event/risk focus");
+const queriesBackValid = parseMedicalMonitoringWorkspaceRouteState(
+  `?project_id=project-a&result_context_token=${encodeURIComponent("result-context:1")}&view=queries`,
+);
+check(queriesBackValid.valid, "clean queries route stays a valid public result route");
 
 console.log(`medicalMonitoringWorkspaceRouteState: ${passed} checks passed`);

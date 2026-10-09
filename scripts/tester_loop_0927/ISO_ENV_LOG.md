@@ -545,3 +545,9 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 附带实测（R27-02/R23-01 相关）：冷启动 /api/projects 本轮三次重启实测 1.82-1.85s（非 R29 复盘所述 50.4s 量级；R23-01 <1s 仍未达，但 20s 前端超时预算内充分）；manifest 构建器本地实测 0.00s/域，50.4s 根因未在本环境复现，留待预检断言按复盘口径覆盖。
 - 测试：backend pytest——test_monitoring_ai_queue_dwell_timeout 5/5、test_risk_evidence_template_r2810 5/5、test_monitoring_ai_repository 84/84、test_monitoring_ai_worker+test_monitoring_document_authority_jobs 34/34、test_monitoring_ai_contracts+contract_hash_shape+dwell+doc_authority_jobs 64/64、test_medical_monitoring_r5_product_adapter+r5_product_router 20/20、test_public_result_journey_digest_r28+test_facts_mode_outputs_n1 20/20、r7 router 96/97（1 失败 test_late_project_dispatchers… 经 git stash 对照为 HEAD 既有失败，与本轮无关）；frontend node --test anchor回归+timelineSemantics+journeyDrawer+subjectFlow+findingCard 5/5 套全过、vite build 成功（web-339d936c48a63787）。
 - 纪律：零业务管道推进；runs/ 零直写（sqlite 诊断只读 mode=ro；active_profile 改绑经 PUT/POST /api/ai-gateway 设计端点）；8910/5177 全程未触碰。
+
+## 2026-10-09 21:33–21:35（R30修复轮重启留痕）
+- 操作者：修复员（R30分诊清单 R30-01/R30-03/R28-05/R28-08/R28-09/R28-11）。动作：API 8911 与 vite 5178 均按 ask 给定命令重启（API 重启两次：①按 ask 原命令重启后 readiness ready:false——与R29留痕同根因，ai-runtime.env裸赋值无export致DEEPSEEK_API_KEY未达uvicorn子进程；②`set -a; source ai-runtime.env; set +a` 后重启收敛 ready:true）；8910/5177 未触碰。
+- 自检：http://127.0.0.1:8911/api/runtime-readiness → ready:true（21:34:12重启后）；http://localhost:5178/monitoring → 200；指纹配对 backend_build_id=api-e1c432cb92f53fd9 与 5178/runtime-build.json expectedBackendBuildId 一致（本轮含R30修复代码的新build）。
+- 修复后基线：/api/projects 空载 0.79s→0.013-0.017s（R30-01缓存生效；重启前同机实测2.09s）。
+- 再次建议：后续重启命令统一加 `set -a` / `set +a`（连续两轮同坑）。

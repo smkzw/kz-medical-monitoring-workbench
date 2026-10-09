@@ -9,6 +9,11 @@ from typing import Any, Optional
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+# R28-05：公开结果读端点此前在async处理函数内同步执行全部上下文重建
+# （运行库/注册表打开、冻结read model加载+摘要校验、4个制品完整性验
+# 证）与投影计算——查询工作区/证据页单次读取即阻塞整个事件循环，并
+# 发请求全部排队（实测12s–3.5min首屏）。统一移入线程池执行，语义不变。
+from starlette.concurrency import run_in_threadpool
 
 from ...graph.store import Store
 from ...projections.product_adapter import R5ProductAdapter
@@ -766,60 +771,53 @@ def register_public_result_routes(router: APIRouter, context: PublicationRouteCo
         )
         if isinstance(query, JSONResponse):
             return query
-        context: Optional[
-            tuple[
-                lr.LaunchRegistry,
-                MonitoringRunEntry,
-                lr.LaunchRecord,
-                lr.ResultPublication,
-                R5ProductAdapter,
-            ]
-        ] = None
-        try:
-            context = _load_public_result_context(
+        def _compute_overview_envelope() -> Any:
+            resolved = _load_public_result_context(
                 canonical,
                 token,
                 site_ref=query.get("site_ref"),
             )
-            _registry, _entry, launch, publication, adapter = context
-            result = adapter.overview(
-                project_ref=canonical,
-                run_ref=launch.run_id,
-                snapshot_ref=publication.snapshot_ref
-                or publication.snapshot_token,
-                cutoff_ref=publication.data_cutoff,
-                site_ref=query.get("site_ref"),
-            )
-            # Facts lane: surface the dual-cohort AE/MH findings on the
-            # public overview. R24V2-B01：发布结果只读**冻结**bundle——
-            # 活binding随active工件变化，会令旧result token显示"旧事实+
-            # 最新发现"，破坏结果不可变合同。冻结bundle读取失败或零发现
-            # 如实呈现（meta带state），不借live顶替。
-            findings_bundle = context.public_findings_envelope()
-            projection = result.get("projection")
-            if isinstance(projection, dict):
-                # W01-R26 A13：零发现也显式写query_findings空数组（去truthy
-                # 省略）；legacy形态的drafts以自身身份随meta如实携带。
-                projection["query_findings"] = list(
-                    findings_bundle.get("findings") or []
+            try:
+                _registry, _entry, launch, publication, adapter = resolved
+                result = adapter.overview(
+                    project_ref=canonical,
+                    run_ref=launch.run_id,
+                    snapshot_ref=publication.snapshot_ref
+                    or publication.snapshot_token,
+                    cutoff_ref=publication.data_cutoff,
+                    site_ref=query.get("site_ref"),
                 )
-                findings_meta = dict(findings_bundle.get("meta") or {})
-                findings_meta["query_drafts"] = list(
-                    findings_bundle.get("query_drafts") or []
+                # Facts lane: surface the dual-cohort AE/MH findings on the
+                # public overview. R24V2-B01：发布结果只读**冻结**bundle——
+                # 活binding随active工件变化，会令旧result token显示"旧事实+
+                # 最新发现"，破坏结果不可变合同。冻结bundle读取失败或零发现
+                # 如实呈现（meta带state），不借live顶替。
+                findings_bundle = resolved.public_findings_envelope()
+                projection = result.get("projection")
+                if isinstance(projection, dict):
+                    # W01-R26 A13：零发现也显式写query_findings空数组（去truthy
+                    # 省略）；legacy形态的drafts以自身身份随meta如实携带。
+                    projection["query_findings"] = list(
+                        findings_bundle.get("findings") or []
+                    )
+                    findings_meta = dict(findings_bundle.get("meta") or {})
+                    findings_meta["query_drafts"] = list(
+                        findings_bundle.get("query_drafts") or []
+                    )
+                    projection["query_findings_meta"] = findings_meta
+                return _public_result_envelope(
+                    result,
+                    launch=launch,
+                    publication=publication,
+                    result_context_token=token,
                 )
-                projection["query_findings_meta"] = findings_meta
-            return _public_result_envelope(
-                result,
-                launch=launch,
-                publication=publication,
-                result_context_token=token,
-            )
+            finally:
+                resolved.close()
+
+        try:
+            return await run_in_threadpool(_compute_overview_envelope)
         except Exception as exc:
             return _public_result_error(exc)
-        finally:
-            if context is not None:
-                context[1].close()
-                context[0].close()
 
     @router.get("/results/{result_context_token}/subjects/{subject_ref}")
     async def get_public_result_subject(
@@ -877,50 +875,43 @@ def register_public_result_routes(router: APIRouter, context: PublicationRouteCo
             return window_start
         if isinstance(window_end, JSONResponse):
             return window_end
-        context: Optional[
-            tuple[
-                lr.LaunchRegistry,
-                MonitoringRunEntry,
-                lr.LaunchRecord,
-                lr.ResultPublication,
-                R5ProductAdapter,
-            ]
-        ] = None
-        try:
-            context = _load_public_result_context(
+        def _compute_subject_envelope() -> Any:
+            resolved = _load_public_result_context(
                 canonical,
                 token,
                 site_ref=query["site_ref"],
             )
-            _registry, _entry, launch, publication, adapter = context
-            result = adapter.subject_workspace(
-                project_ref=canonical,
-                subject_ref=subject,
-                run_ref=launch.run_id,
-                snapshot_ref=publication.snapshot_ref
-                or publication.snapshot_token,
-                cutoff_ref=publication.data_cutoff,
-                site_ref=query["site_ref"],
-                spine_ref=query["spine_ref"],
-                window_start=window_start,
-                window_end=window_end,
-                risk_instance_ref=query.get("risk_instance_ref"),
-                risk_anchor_ref=query.get("risk_anchor_ref"),
-                visit_ref=query.get("visit_ref"),
-                event_ref=query.get("event_ref"),
-            )
-            return _public_result_envelope(
-                result,
-                launch=launch,
-                publication=publication,
-                result_context_token=token,
-            )
+            try:
+                _registry, _entry, launch, publication, adapter = resolved
+                result = adapter.subject_workspace(
+                    project_ref=canonical,
+                    subject_ref=subject,
+                    run_ref=launch.run_id,
+                    snapshot_ref=publication.snapshot_ref
+                    or publication.snapshot_token,
+                    cutoff_ref=publication.data_cutoff,
+                    site_ref=query["site_ref"],
+                    spine_ref=query["spine_ref"],
+                    window_start=window_start,
+                    window_end=window_end,
+                    risk_instance_ref=query.get("risk_instance_ref"),
+                    risk_anchor_ref=query.get("risk_anchor_ref"),
+                    visit_ref=query.get("visit_ref"),
+                    event_ref=query.get("event_ref"),
+                )
+                return _public_result_envelope(
+                    result,
+                    launch=launch,
+                    publication=publication,
+                    result_context_token=token,
+                )
+            finally:
+                resolved.close()
+
+        try:
+            return await run_in_threadpool(_compute_subject_envelope)
         except Exception as exc:
             return _public_result_error(exc)
-        finally:
-            if context is not None:
-                context[1].close()
-                context[0].close()
 
     @router.get("/results/{result_context_token}/source-evidence")
     async def get_public_result_source_evidence(
@@ -953,39 +944,32 @@ def register_public_result_routes(router: APIRouter, context: PublicationRouteCo
         )
         if isinstance(query, JSONResponse):
             return query
-        context: Optional[
-            tuple[
-                lr.LaunchRegistry,
-                MonitoringRunEntry,
-                lr.LaunchRecord,
-                lr.ResultPublication,
-                R5ProductAdapter,
-            ]
-        ] = None
+        def _compute_source_evidence_envelope() -> Any:
+            resolved = _load_public_result_context(canonical, token)
+            try:
+                _registry, _entry, launch, publication, adapter = resolved
+                result = adapter.source_evidence(
+                    project_ref=canonical,
+                    run_ref=launch.run_id,
+                    snapshot_ref=publication.snapshot_ref
+                    or publication.snapshot_token,
+                    cutoff_ref=publication.data_cutoff,
+                    risk_instance_ref=query["risk_instance_ref"],
+                    source_locator_ref=query["source_locator_ref"],
+                )
+                return _public_result_envelope(
+                    result,
+                    launch=launch,
+                    publication=publication,
+                    result_context_token=token,
+                )
+            finally:
+                resolved.close()
+
         try:
-            context = _load_public_result_context(canonical, token)
-            _registry, _entry, launch, publication, adapter = context
-            result = adapter.source_evidence(
-                project_ref=canonical,
-                run_ref=launch.run_id,
-                snapshot_ref=publication.snapshot_ref
-                or publication.snapshot_token,
-                cutoff_ref=publication.data_cutoff,
-                risk_instance_ref=query["risk_instance_ref"],
-                source_locator_ref=query["source_locator_ref"],
-            )
-            return _public_result_envelope(
-                result,
-                launch=launch,
-                publication=publication,
-                result_context_token=token,
-            )
+            return await run_in_threadpool(_compute_source_evidence_envelope)
         except Exception as exc:
             return _public_result_error(exc)
-        finally:
-            if context is not None:
-                context[1].close()
-                context[0].close()
 
 
     @router.get("/results/{result_context_token}/continuity")
@@ -1019,39 +1003,32 @@ def register_public_result_routes(router: APIRouter, context: PublicationRouteCo
         )
         if isinstance(query, JSONResponse):
             return query
-        context: Optional[
-            tuple[
-                lr.LaunchRegistry,
-                MonitoringRunEntry,
-                lr.LaunchRecord,
-                lr.ResultPublication,
-                Optional[R5ProductAdapter],
-            ]
-        ] = None
-        try:
-            context = _load_public_result_context(
+        def _compute_continuity_envelope() -> Any:
+            resolved = _load_public_result_context(
                 canonical,
                 token,
                 site_ref=query.get("site_ref"),
                 continuity_context=True,
             )
-            registry, _entry, launch, publication, adapter = context
-            if adapter is None:
-                raise ProductPublicationError("continuity_unavailable")
-            return _build_public_continuity_envelope(
-                registry=registry,
-                launch=launch,
-                publication=publication,
-                adapter=adapter,
-                result_context_token=token,
-                site_ref=query.get("site_ref"),
-            )
+            try:
+                registry, _entry, launch, publication, adapter = resolved
+                if adapter is None:
+                    raise ProductPublicationError("continuity_unavailable")
+                return _build_public_continuity_envelope(
+                    registry=registry,
+                    launch=launch,
+                    publication=publication,
+                    adapter=adapter,
+                    result_context_token=token,
+                    site_ref=query.get("site_ref"),
+                )
+            finally:
+                resolved.close()
+
+        try:
+            return await run_in_threadpool(_compute_continuity_envelope)
         except Exception as exc:
             return _public_result_error(exc)
-        finally:
-            if context is not None:
-                context[1].close()
-                context[0].close()
 
     @router.get("/runs/{public_run_token}/result-entry")
     async def get_result_entry(

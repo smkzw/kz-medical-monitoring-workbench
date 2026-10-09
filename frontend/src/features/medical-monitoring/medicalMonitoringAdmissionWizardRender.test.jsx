@@ -317,6 +317,31 @@ export const renders = {
       },
     },
   ),
+  // R28-11回归：刷新后重入（页面内阶段计时从零起算），「已进行约」
+  // 必须按响应携带的最早入队时间（14分钟前）计算，与同屏「最早入队」
+  // 一致，不得显示 0 分钟。
+  documentsProcessingRefreshed: render(
+    readyWizardState(),
+    createAdmissionMappingConfirmState(),
+    null,
+    {
+      phase: "analyzing",
+      error: null,
+      payload: {
+        ready: false,
+        state: "analyzing",
+        analysis_token: "mmbatch_progress",
+        headline: "系统仍在独立核对研究文件",
+        guidance: "当前无需逐项确认，请稍后查看结果。",
+        pending_job_count: 1,
+        pending_since: new Date(Date.now() - 14 * 60 * 1000).toISOString(),
+        roles: [
+          { role: "protocol", label: "当前研究方案", required_now: true, status: "missing", status_text: "已上传，核对中" },
+          { role: "ecrf", label: "当前 eCRF", required_now: true, status: "missing", status_text: "已上传，核对中" },
+        ],
+      },
+    },
+  ),
   documentsContentDifference: render(
     readyWizardState(),
     createAdmissionMappingConfirmState(),

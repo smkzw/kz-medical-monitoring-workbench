@@ -40,7 +40,7 @@ try {
   fs.rmSync(bundlePath, { force: true });
 }
 
-const { findingCard, empty, legacy } = renders;
+const { findingCard, empty, legacy, r28FindingCard } = renders;
 
 // --- Finding卡：身份/subject/site/状态/时间窗逐字段呈现 ---
 check(findingCard.includes('data-query-finding="finding-001"'), "finding card carries the stable finding id anchor");
@@ -78,5 +78,35 @@ check(legacy.includes('data-query-draft="qd-legacy-001"'), "legacy drafts keep t
 check(legacy.includes("finding-legacy"), "legacy draft shows its finding reference");
 check(!legacy.includes('data-query-finding='), "legacy payload never fabricates finding cards");
 passed += 5;
+
+// --- R28-09：前缀去重 / 内部术语 / 事件时间窗矛盾 ---
+check(
+  r28FindingCard.includes("依据：2026-06-12「发热」事件")
+    && !r28FindingCard.includes("依据：依据：")
+    && !r28FindingCard.includes("发现：发现：")
+    && !r28FindingCard.includes("行动项：行动项："),
+  "claim kind label renders exactly once (prefix deduped)",
+);
+check(
+  !r28FindingCard.includes("载荷形态") && !r28FindingCard.includes("Finding DTO"),
+  "section heading no longer leaks payload-shape jargon",
+);
+check(
+  r28FindingCard.includes("发现（1 条）"),
+  "section heading keeps the honest finding count",
+);
+check(
+  !r28FindingCard.includes("facts.ae") && r28FindingCard.includes("不良事件"),
+  "facts.<domain> source path renders a medical-facing domain label",
+);
+check(
+  !r28FindingCard.includes("未关联具体事件") && r28FindingCard.includes("事件绑定待确认"),
+  "unbound event is stated as pending confirmation, not asserted absent",
+);
+check(
+  r28FindingCard.includes("021号受试者"),
+  "subject label is preferred over the raw subject ref",
+);
+passed += 6;
 
 console.log(`medicalMonitoringFindingCardRender: ${passed} passed`);
