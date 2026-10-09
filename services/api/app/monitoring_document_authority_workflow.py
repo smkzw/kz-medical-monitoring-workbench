@@ -211,6 +211,11 @@ class MonitoringDocumentAuthorityWorkflow:
         actor: str = "medical_manager",
         expected_decision_version: int | None = None,
         identity_confirmation: Mapping[str, Any] | None = None,
+        # R28轮（R28-03/R28-04）：「重新核对研究文件」按钮是用户显式
+        # 重试。该标记只由按钮路径传入；轮询路径不传——自动恢复预算
+        # （R27-01）继续约束无感重试，显式动作与重新上传同权（不受
+        # 预算约束），否则预算耗尽后按钮永远同因再败、无任何出路。
+        explicit_retry: bool = False,
     ) -> dict[str, Any]:
         candidate_root = self._candidate_root(workspace_dir)
         batch = self._load_batch(candidate_root, batch_id)
@@ -224,7 +229,14 @@ class MonitoringDocumentAuthorityWorkflow:
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
             f"document-authority-analysis:verifier:{_ANALYSIS_GENERATION}:{batch_id}",
         )
-        if self._recover_failed_once((primary_job, verifier_job)):
+        recovered = (
+            self._recover_failed_once(
+                (primary_job, verifier_job), explicit=True
+            )
+            if explicit_retry
+            else self._recover_failed_once((primary_job, verifier_job))
+        )
+        if recovered:
             return {
                 "state": "analyzing",
                 "authority_status": "not_promoted",
@@ -1155,7 +1167,7 @@ class MonitoringDocumentAuthorityWorkflow:
     def _is_infra_failure(cls, job: Any) -> bool:
         return str(getattr(job, "failure_code", "") or "") in cls._INFRA_FAILURE_CODES
 
-    def _recover_failed_once(self, jobs: tuple[Any, Any]) -> bool:
+    def _recover_failed_once(self, jobs: tuple[Any, Any], *, explicit: bool = False) -> bool:
         retryable = []
         for job in jobs:
             if job.status not in {
@@ -1180,7 +1192,12 @@ class MonitoringDocumentAuthorityWorkflow:
                     current_input_revision_sha256=job.input_revision_sha256,
                     # R27轮（R27-01）：自动恢复限预算；耗尽后retry_terminal
                     # 原样返回终态作业，不再重排。
-                    automatic_recovery_limit=self._AUTOMATIC_RECOVERY_LIMIT,
+                    # R28轮（R28-03）：explicit=True（「重新核对研究文件」
+                    # 按钮）与重新上传同权——不传预算即不受其约束，作业
+                    # 真实重排。这是上游恢复后按钮唯一可用出口。
+                    automatic_recovery_limit=(
+                        None if explicit else self._AUTOMATIC_RECOVERY_LIMIT
+                    ),
                 )
             except MonitoringAiStateConflictError:
                 # 输入版本并发变化等竞态：留给下一次advance判定，不阻断。

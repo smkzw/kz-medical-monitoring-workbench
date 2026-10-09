@@ -582,6 +582,13 @@ function ZoomControls({
 }
 
 // R24V2-B02：风险徽章按severity_source诚实呈现——recorded才有
+// R28轮（R28-07）：风险优先级比较器——严重不良事件（SAE，AESER=是）
+// 置顶，先于「3级→高风险」的severity等级排序；同优先级内按等级。
+const MONITORING_RISK_PRIORITY_COMPARATOR = (left, right) => {
+  if (Boolean(left?.serious) !== Boolean(right?.serious)) return left?.serious ? -1 : 1;
+  return ["critical", "high", "medium"].indexOf(left?.severity) - ["critical", "high", "medium"].indexOf(right?.severity);
+};
+
 // 高/中/低风险着色；unknown显示"严重度未知"（severity字段只是占位，
 // 不得当医学分级）；inferred（非AE推定锚点）不作为医学风险徽章呈现。
 function riskSeverityInfo(risk) {
@@ -1094,11 +1101,14 @@ function IdentityStrip({ identity = {}, project = {} }) {
 function RiskBadge({ risk }) {
   const encoding = risk?.domainEncoding;
   return (
-    <span className="monitoring-risk-badge" data-severity={risk?.severity || "unknown"}>
+    <span className="monitoring-risk-badge" data-severity={risk?.severity || "unknown"} data-serious={risk?.serious ? "true" : undefined}>
       {encoding ? (
         <DomainIcon domain={encoding.domain} encoding={encoding} size="badge" title={DOMAIN_LABELS[encoding.domain] || encoding.shortLabel} />
       ) : <span className="monitoring-risk-unresolved">域待确认</span>}
       <span className="monitoring-risk-overlay">{text(DOMAIN_LABELS[encoding?.domain] || encoding?.shortLabel, "域待确认")}·{text(risk?.severityLabel, "等级待确认")}风险</span>
+      {/* R28轮（R28-07）：AESER=是的严重不良事件强制标识——SAE是监查
+          最高优先级信号，不得与普通「高风险」同形淹没。 */}
+      {risk?.serious ? <span className="monitoring-risk-serious-chip">严重不良事件（SAE）</span> : null}
     </span>
   );
 }
@@ -1658,7 +1668,9 @@ export function OverviewView({
         <section className="monitoring-panel monitoring-panel-wide">
           <div className="monitoring-section-heading"><span className="monitoring-eyebrow">当前风险</span><h2>高、中风险定位</h2></div>
               <RiskList
-                risks={risks.filter((risk) => !risk.aggregate && ["critical", "high", "medium"].includes(risk.severity))}
+                risks={risks
+                  .filter((risk) => !risk.aggregate && ["critical", "high", "medium"].includes(risk.severity))
+                  .sort(MONITORING_RISK_PRIORITY_COMPARATOR)}
             onSelect={onRiskSelect}
             selectedRiskInstanceRef={selectedRiskInstanceRef}
             omitChangeClaims={suppressVersionClaim}
@@ -2085,7 +2097,7 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
   const subjectsByRef = new Map((projection.subjects || []).map((subject) => [subject.subject_ref || subject.subject_id, subject]));
   const risks = (projection.currentRisks || [])
     .filter((risk) => !risk.aggregate && ["critical", "high", "medium"].includes(risk.severity))
-    .sort((left, right) => ["critical", "high", "medium"].indexOf(left.severity) - ["critical", "high", "medium"].indexOf(right.severity));
+    .sort(MONITORING_RISK_PRIORITY_COMPARATOR);
   const totalCount = projection.aggregation?.risk_count ?? risks.length;
   const aiFindings = Array.isArray(projection.aiQueryFindings) ? projection.aiQueryFindings : [];
   // W01-R26 A12：真实Finding卡——query_findings是Finding冻结DTO
@@ -2206,7 +2218,18 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
                                   实例引用（item.riskId来自risk_instance_id，
                                   已是riski-格式）；此前误用risk-引用格式致
                                   来源定位永久死链。 */}
-                              <button type="button" className="monitoring-subject-link" onClick={() => onSource?.({ risk_instance_ref: item.riskId, source_locator_ref: ref.evidenceId })}>来源定位</button>
+                              {/* R28轮（R28-02）：跳转携带Finding卡自身的
+                                  受试者/时间窗身份——不再静默继承页面级
+                                  （上一个受试者的）旅程上下文。 */}
+                              <button type="button" className="monitoring-subject-link" onClick={() => onSource?.({
+                                risk_instance_ref: item.riskId,
+                                source_locator_ref: ref.evidenceId,
+                                subjectRef: item.subjectRef,
+                                siteRef: item.siteRef,
+                                eventRef: item.eventRef,
+                                windowStart: item.windowStart,
+                                windowEnd: item.windowEnd,
+                              })}>来源定位</button>
                             </li>
                           ))}
                         </ul>

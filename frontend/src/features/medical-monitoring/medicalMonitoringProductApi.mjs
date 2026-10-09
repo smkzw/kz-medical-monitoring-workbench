@@ -479,6 +479,7 @@ export function createMedicalMonitoringProductApi({
       userRoleSelections,
       expectedDecisionVersion,
       identityConfirmation,
+      explicitRetry,
     } = {}) {
       const body = { batch_id: requireId(analysisToken, "analysisToken") };
       if (Array.isArray(userRoleSelections) && userRoleSelections.length) {
@@ -489,6 +490,12 @@ export function createMedicalMonitoringProductApi({
       }
       if (identityConfirmation && typeof identityConfirmation === "object") {
         body.identity_confirmation = identityConfirmation;
+      }
+      // R28轮（R28-03/R28-04）：仅「重新核对研究文件」按钮路径置true——
+      // 后端据此把该请求视为用户显式重试（不受自动恢复预算约束，真实
+      // 重排作业）；轮询路径不带此标记，保持预算约束。
+      if (explicitRetry === true) {
+        body.explicit_retry = true;
       }
       return post(
         MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStudyDocumentsResolve(

@@ -22,6 +22,23 @@ from .admission_routes import _validated_attempt_id
 MAPPING_CANDIDATE_SCHEMA_VERSION = "mm-c3-mapping-candidate-v1"
 MAPPING_CONFIRMATION_SCHEMA_VERSION = "mm-c3-mapping-confirmation-v1"
 
+# R28轮（R28-03）：研究文件核对的上游/基础设施类失败码——与
+# services侧MonitoringDocumentAuthorityWorkflow._INFRA_FAILURE_CODES
+# 同源（提供方限流/SSE中断/超时等瞬时故障，非文件内容判定）。
+# 该类失败在失败分支不得引导「裁决」或「重新上传」充当唯一出路。
+_DOCUMENT_AUTHORITY_INFRA_FAILURE_CODES = frozenset({
+    "provider_runtime_error",
+    "provider_sse_error_event",
+    "provider_unavailable",
+    "provider_timeout",
+    "provider_rate_limited",
+    "provider_auth_error",
+    "provider_overloaded",
+    "ai_not_configured",
+    "network_error",
+    "proxy_error",
+})
+
 # R7-01：resolve是同步长请求（推进双盲核对链可达20-30秒）。前端1.5秒
 # 轮询曾无并发去重，堆积的resolve占满FastAPI同步线程池，期间
 # /api/projects等全部请求排队超时——整站假死。按项目做在途防重入：
@@ -369,6 +386,11 @@ class DocumentAuthorityPromotionRequest(BaseModel):
     expected_decision_version: Optional[StrictInt] = Field(default=None, ge=0)
     # 身份门人工裁决：confirmed=true时落盘审计并放行该批次的角色核对。
     identity_confirmation: Optional[DocumentAuthorityIdentityConfirmation] = None
+    # R28轮（R28-03/R28-04）：「重新核对研究文件」是用户显式重试——
+    # 轮询路径也调用同一resolve端点，必须区分：显式重试对上游限流类
+    # （infra）终态失败作业不受自动恢复预算约束，真实重排作业；轮询
+    # 路径保持R27-01预算，避免无界attempt增长。
+    explicit_retry: bool = False
 
 
 @dataclass(frozen=True)
@@ -901,26 +923,54 @@ def register_mapping_candidate_routes(
             actor = getattr(auth, "principal_id", None) or "medical_manager"
             request_fields = payload.model_dump()
             confirmation_payload = request_fields.pop("identity_confirmation", None)
+            explicit_retry = bool(request_fields.pop("explicit_retry", False))
             result = context.monitoring_document_authority_promoter(
                 project_id=canonical,
                 workspace_dir=context.workspace_dir(context.root, canonical),
                 actor=str(actor),
                 identity_confirmation=confirmation_payload,
+                explicit_retry=explicit_retry,
                 **request_fields,
             )
             if result.get("state") == "failed":
                 # V5会商L2-1：失败必须可诊断。作业级failure_code/message
                 # 透传给前端与台账，不再用同一句通用文案掩盖差异。
+                # R28轮（R28-03）：失败文案按失败类别如实区分——上游
+                # 限流/中断（infra类）不是文件内容问题，也无处可「裁决」，
+                # 旧文案「可对文件角色作出裁决后重试」在该分支承诺了
+                # 不存在的控件（三名测试者分别滞留40/93/32分钟无出路）。
+                # infra类如实告知上游状态与等待重试路径；内容类才引导
+                # 重新上传。
+                failure_code = str(result.get("failure_code") or "")
+                if failure_code in _DOCUMENT_AUTHORITY_INFRA_FAILURE_CODES:
+                    failure_headline = (
+                        "上游AI服务暂时不可用（限流或中断），研究文件核对未完成——"
+                        "这不是文件内容问题。"
+                    )
+                    failure_guidance = (
+                        "已上传的文件与您的确认均已保留；请稍候几分钟后再点"
+                        "「重新核对研究文件」（该按钮会真实重排核对作业），"
+                        "上游服务恢复后即可通过；也可稍后返回本页查看自动恢复结果。"
+                    )
+                else:
+                    failure_headline = "研究文件自动核对未完成（见失败原因）。"
+                    failure_guidance = (
+                        "请重新上传研究文件（相同或新版本均可）后重试；"
+                        "已上传的文件与您的确认不会丢失。"
+                    )
                 return JSONResponse(
                     status_code=409,
                     content={
                         "code": "mapping_document_authority_failed",
-                        "message": (
-                            "研究文件自动核对未完成（见诊断信息）；"
-                            "可对文件角色作出裁决后重试，或重新上传文件。"
-                        ),
+                        "message": f"{failure_headline}{failure_guidance}",
                         "detail": {
-                            "failure_code": str(result.get("failure_code") or ""),
+                            "failure_code": failure_code,
+                            "failure_class": (
+                                "upstream_unavailable"
+                                if failure_code
+                                in _DOCUMENT_AUTHORITY_INFRA_FAILURE_CODES
+                                else "content_check_failed"
+                            ),
                             "failure_message": str(
                                 result.get("failure_message") or ""
                             )[:400],

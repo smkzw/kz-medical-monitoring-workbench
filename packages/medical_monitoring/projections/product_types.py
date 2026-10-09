@@ -350,6 +350,25 @@ class R5RiskRecord:
                 object.__setattr__(self, name, _required(value, name))
         object.__setattr__(self, "source_locator_refs", _unique(self.source_locator_refs, "source_locator_refs"))
 
+    # R28轮（R28-07）：SAE（严重不良事件）派生位。AESER=是的源记录事实
+    # 已由R22-03合同写入medical_note（「严重不良事件报告：<源值>」），
+    # 该字段参与冻结包authority hash——新增哈希字段会让旧冻结包在还原
+    # 时AUTHORITY_DIGEST_MISMATCH全部不可读（隔离环境复现过）。因此
+    # serious按同一合同从note派生：新旧冻结数据一律可读，新事实随
+    # note自身进入冻结身份。
+    _SERIOUS_RECORDED_VALUES = frozenset({"是", "Y", "YES", "TRUE", "1"})
+
+    @property
+    def serious(self) -> bool:
+        import re as _re
+
+        if not self.medical_note:
+            return False
+        matched = _re.search(r"严重不良事件报告：([^\s；。]{1,8})", self.medical_note)
+        if not matched:
+            return False
+        return matched.group(1).strip().upper() in self._SERIOUS_RECORDED_VALUES
+
 
 @dataclass(frozen=True)
 class R5SiteRecord:

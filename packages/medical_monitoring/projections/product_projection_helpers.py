@@ -41,6 +41,33 @@ def _public_source(source: R5SourceRecord, *, include_excerpt: bool = False) -> 
     return result
 
 
+def public_json_number(value: Any) -> Any:
+    """R28-01：整值浮点规范为int，保证响应摘要在JS侧可逐字节复算。
+
+    前端对结果响应做 JSON.parse→JSON.stringify 规范化后重算 SHA-256
+    （response_digest 验签）。Python json.dumps(12.0) 输出 "12.0"，而
+    JS JSON.stringify 对同一个数输出 "12"——量表周分值经 float() 解析
+    成 12.0 进入 payload 后，两侧摘要字节必然不一致，前端验签
+    public_response_digest_mismatch 把受试者旅程/概览/证据页全部拒绝
+    （「本次结果暂不可查看」）。整值浮点在此统一为 int，两侧序列化
+    逐字节一致；非整值浮点保持原样（Python/JS 对常规量级的最短往返
+    表示一致）。
+    """
+    if isinstance(value, float) and value.is_integer() and abs(value) <= 2 ** 53:
+        return int(value)
+    return value
+
+
+def with_public_json_numbers(value: Any) -> Any:
+    """递归对整棵payload应用 public_json_number（信封级兜底）。"""
+
+    if isinstance(value, Mapping):
+        return {str(key): with_public_json_numbers(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [with_public_json_numbers(item) for item in value]
+    return public_json_number(value)
+
+
 def _with_content_hash(payload: Mapping[str, Any], field_name: str = "content_hash") -> dict[str, Any]:
     result = dict(payload)
     result[field_name] = ""
@@ -114,6 +141,9 @@ def _risk_payload(
         "risk_instance_ref": risk.risk_instance_ref,
         "risk_key": risk.risk_key,
         "risk_anchor_ref": risk.risk_anchor_ref,
+        # R28轮（R28-07）：SAE结构化标识——AESER=是的AE风险必须可被
+        # 呈现层强制标识与置顶，不再淹没在等级映射里。
+        "serious": bool(getattr(risk, "serious", False)),
         "site_ref": risk.site_ref,
         "subject_ref": risk.subject_ref,
         "spine_ref": risk.spine_ref,
@@ -225,7 +255,8 @@ def _value_indicator(
             "point_ref": f"{indicator_ref}:point:{index:03d}",
             "date": _iso(item.start_date),
             "date_state": item.date_state,
-            "value": item.measure_value,
+            # R28-01：同 _event_payload——整值浮点规范为int保两侧摘要一致。
+            "value": public_json_number(item.measure_value),
             "record_refs": [item.event_ref],
             "source_locator_refs": sorted(item.source_locator_refs),
             "authority_receipt_ref": receipt_ref,
@@ -640,8 +671,9 @@ def _event_payload(event: R5EventRecord) -> dict[str, Any]:
         "encoding": dict(DOMAIN_ENCODING[event.domain]),
         "risk_overlay_shape": "double_chevron_badge",
         # R24轮（R24-06）：量表数值事件的测量值随事件透传（时间轴/详情
-        # 可直接读数，不必解析label）。
-        "measure_value": event.measure_value,
+        # 可直接读数，不必解析label）。R28-01：整值浮点规范为int，否则
+        # 前端JS侧摘要复算失败，旅程页全量死链。
+        "measure_value": public_json_number(event.measure_value),
         "measure_label": event.measure_label,
     }
 

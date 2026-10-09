@@ -765,6 +765,10 @@ class FactsPublicationAuthorityProvider:
                 rel_raw = _clean(ae_row.get("AEREL"))
                 out_raw = _clean(ae_row.get("AEOUT"))
                 ser_raw = _clean(ae_row.get("AESER"))
+                # R28轮（R28-07）：AESER事实经medical_note的
+                # 「严重不良事件报告：<源值>」进入冻结身份；SAE派生位
+                # （R5RiskRecord.serious属性）按同一合同从note读取——
+                # 不新增哈希字段，旧冻结包保持可读。
                 severity = _AE_SEV_ZH.get(sev_raw)
                 severity_source = "recorded"
                 if severity is None:
@@ -906,9 +910,13 @@ class FactsPublicationAuthorityProvider:
                         if not raw_value:
                             continue
                         try:
-                            value = float(raw_value)
+                            parsed = float(raw_value)
                         except ValueError:
                             continue
+                        # R28-01：整值保持int。float()会把「12」变成12.0，
+                        # 冻结进packet后读取链在Python侧摘要输出"12.0"、
+                        # 前端JS侧输出"12"，验签必失败（旅程页死链根因）。
+                        value = int(parsed) if parsed.is_integer() else parsed
                         _add_event(
                             table=table,
                             index=index,

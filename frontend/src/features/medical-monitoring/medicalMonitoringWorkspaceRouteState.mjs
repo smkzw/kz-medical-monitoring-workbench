@@ -365,9 +365,41 @@ export function serializeMedicalMonitoringWorkspaceRouteState(state = {}) {
   return params.toString() ? `?${params.toString()}` : "";
 }
 
+// R28轮（R28-02）：「查看原始来源」跳证据页的URL组装。routeStateFor...
+// 的patch语义是「未指定的字段继承当前route」——从受试者A的旅程上下文
+// 进入查询工作区后点受试者B的风险卡，subject_ref/时间窗会静默继承A的
+// 上下文（实测subject-21001的窗套在24004的风险实例上，同页自相矛盾）。
+// 此处以被点风险卡自身的身份为准：subject/site/spine取卡片字段，时间窗
+// 仅在卡片受试者与当前旅程受试者一致时保留（风险行本身不携带时间窗，
+// 不一致时如实清空，证据页显示「与当前风险/事件时间窗一致」）。
+export function monitoringSourceEvidenceRoutePatch(risk, route = {}) {
+  const subjectRef = clean(risk?.subjectRef) || clean(risk?.subject_ref);
+  const sameJourneySubject = Boolean(subjectRef) && subjectRef === clean(route.subject_ref);
+  // 时间窗优先级：卡片自带窗口（Finding DTO有自身时间窗）> 同受试者
+  // 旅程窗 > 清空（如实显示「与当前风险/事件时间窗一致」）。
+  const windowStart = clean(risk?.windowStart) || clean(risk?.window_start)
+    || (sameJourneySubject ? clean(route.window_start) : "");
+  const windowEnd = clean(risk?.windowEnd) || clean(risk?.window_end)
+    || (sameJourneySubject ? clean(route.window_end) : "");
+  return {
+    risk_instance_ref: clean(risk?.riskInstanceRef) || clean(risk?.risk_instance_ref),
+    source_locator_ref: clean(risk?.sourceLocatorRef)
+      || clean(risk?.source_locator_ref)
+      || clean(risk?.sourceLocatorRefs?.[0])
+      || clean(risk?.source_locator_refs?.[0]),
+    subject_ref: subjectRef,
+    site_ref: clean(risk?.siteRef) || clean(risk?.site_ref),
+    spine_ref: clean(risk?.spineRef) || clean(risk?.spine_ref),
+    window_start: windowStart,
+    window_end: windowEnd,
+    risk_anchor_ref: clean(risk?.riskAnchorRef) || clean(risk?.risk_anchor_ref),
+    visit_ref: clean(risk?.visitRef) || clean(risk?.visit_ref),
+    event_ref: clean(risk?.eventRef) || clean(risk?.event_ref),
+  };
+}
+
 export function routeStateForMedicalMonitoringWorkspaceView(state, view, patch = {}) {
-  const next = normalizeMedicalMonitoringWorkspaceRouteState({ ...state, ...patch, view });
-  if (["overview", "site_overview"].includes(view)) {
+  const next = normalizeMedicalMonitoringWorkspaceRouteState({ ...state, ...patch, view });  if (["overview", "site_overview"].includes(view)) {
     if (view === "overview") delete next.site_ref;
     delete next.subject_ref;
     delete next.spine_ref;

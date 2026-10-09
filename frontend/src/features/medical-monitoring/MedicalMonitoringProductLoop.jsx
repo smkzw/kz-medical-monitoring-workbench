@@ -39,7 +39,10 @@ import {
 } from "./medicalMonitoringProductState.mjs";
 import { monitoringRefreshBackoffMs } from "./medicalMonitoringProgressProjection.mjs";
 import { MonitoringProgressPanelView } from "./MedicalMonitoringProgressPanel.jsx";
-import { routeStateForMedicalMonitoringWorkspaceView } from "./medicalMonitoringWorkspaceRouteState.mjs";
+import {
+  monitoringSourceEvidenceRoutePatch,
+  routeStateForMedicalMonitoringWorkspaceView,
+} from "./medicalMonitoringWorkspaceRouteState.mjs";
 import "./medicalMonitoringProductLoop.css";
 
 const PRODUCT_RESULT_SUBJECT_VIEWS = new Set(["journey", "profile", "timeline"]);
@@ -1455,10 +1458,13 @@ export function MedicalMonitoringProductLoop({
     const canReturnToJourney = route.site_ref && route.subject_ref && route.spine_ref && route.window_start && route.window_end;
     navigate(canReturnToJourney ? "journey" : "overview");
   }, [navigate, route.site_ref, route.spine_ref, route.subject_ref, route.window_end, route.window_start]);
-  const openResultSource = useCallback((risk) => navigate("evidence", {
-    risk_instance_ref: risk.riskInstanceRef || risk.risk_instance_ref,
-    source_locator_ref: risk.sourceLocatorRef || risk.source_locator_ref || risk.sourceLocatorRefs?.[0],
-  }), [navigate]);
+  // R28轮（R28-02）：跳转参数以被点风险卡自身的受试者身份为准，不再
+  // 静默继承页面级（上一个受试者的）旅程上下文——此前24004的风险实例
+  // 带着21001的subject_ref与时间窗进证据页，同页自相矛盾。
+  const openResultSource = useCallback((risk) => navigate(
+    "evidence",
+    monitoringSourceEvidenceRoutePatch(risk, route),
+  ), [navigate, route]);
   // Slice-08C-2 same-identity routing: continuity rows reuse the public
   // journey/evidence routes; the gates live in the pure filter helpers.
   const selectContinuityJourney = useCallback((row) => {
