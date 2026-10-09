@@ -1032,6 +1032,10 @@ export function DomainTracks({
         ) : null}
         {layout.pendingEvents.map((event) => {
           const marker = journeyMarkerFor(event.eventRef);
+          // R29-06同类隐患：此处riskSeverityLabel悬空引用与EventRow同源
+          // （R24V2-B02重命名漏改），一旦pending事件带risk即崩溃；统一改
+          // 用riskSeverityInfo按severity_source诚实呈现。
+          const pendingRiskInfo = riskSeverityInfo(event.risk);
           return (
           <button
             type="button"
@@ -1048,7 +1052,7 @@ export function DomainTracks({
             {timelineDatePrecision(event.start || event.start_date) === "month" ? (
               <small className="monitoring-pending-precision" data-date-precision="month">月精度：{event.start}（YYYY-MM，不以01日为实际日）</small>
             ) : null}
-            {event.risk ? <span className={`monitoring-track-risk monitoring-track-risk-${event.risk.severity}`}>{riskSeverityLabel(event.risk.severity)}</span> : null}
+            {pendingRiskInfo ? <span className={`monitoring-track-risk monitoring-track-risk-${pendingRiskInfo.css}`}>{pendingRiskInfo.label}</span> : null}
             {marker ? <MonitoringJourneyChangeMarker marker={marker} /> : null}
             {marker ? <span className="monitoring-journey-sr-only">，本轮变化：{marker.changeText}{marker.countSuffix}</span> : null}
           </button>
@@ -1776,11 +1780,16 @@ const EventRow = memo(function EventRow({ event, onSelect, marker = null }) {
     pointerEvent.currentTarget.classList.add("is-selected");
     onSelect?.(event);
   };
+  // R29-06根因修复：R24V2-B02将riskSeverityLabel重命名为riskSeverityInfo
+  // 时漏改本调用点，带风险锚点进入「事件明细」即抛ReferenceError落错误
+  // 边界。等级徽章与全站一致按severity_source诚实呈现（unknown=严重度
+  // 未知、inferred不显示）。
+  const riskInfo = riskSeverityInfo(event.risk);
   return (
     <button type="button" className="monitoring-event-row" data-event-ref={event.eventRef} onClick={select}>
       <DomainIcon domain={event.domain} encoding={event.domainEncoding} size="row" title={DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel} />
       <span className="monitoring-event-main"><strong><span className={`monitoring-date-chip monitoring-date-${event.dateState}`}>{DATE_STATE_CHIPS[event.dateState] || "日期待核实"}</span>{event.eventLabel}</strong><small>{event.dateLabel} · {text(event.start, "日期待确认")}{event.end ? ` — ${event.end}` : ""}</small></span>
-      {event.risk && <span className={`monitoring-event-risk-count monitoring-track-risk-${event.risk.severity}`}>{DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel}·{riskSeverityLabel(event.risk.severity)}</span>}
+      {riskInfo && <span className={`monitoring-event-risk-count monitoring-track-risk-${riskInfo.css}`}>{DOMAIN_LABELS[event.domain] || event.domainEncoding.shortLabel}·{riskInfo.label}</span>}
       {marker ? <MonitoringJourneyChangeMarker marker={marker} /> : null}
       {marker ? <span className="monitoring-journey-sr-only">，本轮变化：{marker.changeText}{marker.countSuffix}</span> : null}
     </button>

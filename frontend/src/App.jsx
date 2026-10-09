@@ -1122,13 +1122,17 @@ function medicalDecisionItems(workbenchInbox) {
 
 // 子系统页上的新项目配置面板：首页选完子系统后在此收集项目信息并创建。
 // 写作被选中时提供写作专属入口（从零开始 / 导入方案摘要）。
-function NewProjectConfigPanel({ handoff, onCompleted, onDismiss }) {
+function NewProjectConfigPanel({ handoff, onCompleted, onResolveExisting, onDismiss }) {
   const modules = handoff?.modules || [];
   const firstPageModule = SUBSYSTEM_OPTIONS.find((item) => modules.includes(item.module));
   const [draft, setDraft] = useState({ ...EMPTY_NEW_PROJECT });
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  // R28-15：409同名冲突/响应超时后给出「前往已有项目」出口——项目可能
+  // 已在服务器创建（响应丢失或撞名），不得让用户误判为系统故障后盲目
+  // 重试。匹配口径与后端查重一致（不区分大小写的完整项目名/项目编号）。
+  const [existingProject, setExistingProject] = useState(null);
   const updateField = (field, value) => {
     setDraft((current) => ({ ...current, [field]: value }));
     setErrors((current) => {
@@ -1138,8 +1142,28 @@ function NewProjectConfigPanel({ handoff, onCompleted, onDismiss }) {
       return next;
     });
     setMessage("");
+    setExistingProject(null);
   };
   const writingSelected = modules.includes("medical_writing");
+  // 与后端 UserProjectCreateRequest 的合成规则保持一致（项目名留空时）。
+  const synthesizedProjectName = (source) => {
+    const product = String(source.product_name || "").trim();
+    const indication = String(source.indication || "").trim();
+    const phaseLabel = String(source.study_phase || "").trim() || "分期待确认";
+    return `${product}用于治疗${indication}的${phaseLabel}临床研究`;
+  };
+  const findExistingProject = async () => {
+    const finalName = (String(draft.project_name || "").trim() || synthesizedProjectName(draft)).toLowerCase();
+    const finalCode = String(draft.project_code || "").trim().toLowerCase();
+    const response = await fetch("/api/projects");
+    const payload = await readJsonOrThrow(response);
+    const list = Array.isArray(payload) ? payload : [];
+    return list.find((item) => {
+      const name = String(item?.project_name || "").trim().toLowerCase();
+      const code = String(item?.project_code || "").trim().toLowerCase();
+      return (finalName && name === finalName) || (finalCode && code === finalCode);
+    }) || null;
+  };
   const submit = async (event) => {
     event.preventDefault();
     if (writingSelected && draft.entry_mode === "synopsis_import") return;
@@ -1163,9 +1187,15 @@ function NewProjectConfigPanel({ handoff, onCompleted, onDismiss }) {
     }
     setBusy(true);
     setMessage("");
+    setExistingProject(null);
+    // R28-15：慢创建提示之外增加硬超时——响应若丢失（代理/冷启动窗口），
+    // 按钮不得永久禁用、弹窗不得变成死局；超时后恢复可操作并提示核实
+    // 项目是否已创建。120秒：实测冷启动建项可达数十秒，不误伤慢成功。
+    const controller = new AbortController();
     const slowTimer = setTimeout(() => {
       setMessage("创建请求仍在处理中（服务器初始化项目可能需要一些时间），请稍候。");
     }, 10000);
+    const hardTimer = setTimeout(() => controller.abort(), 120000);
     try {
       const response = await fetch("/api/projects", {
         method: "POST",
@@ -1178,13 +1208,44 @@ function NewProjectConfigPanel({ handoff, onCompleted, onDismiss }) {
           actor: "medical_manager",
           idempotency_key: `create-project-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         }),
+        signal: controller.signal,
       });
-      const payload = await readJsonOrThrow(response);
-      onCompleted?.(payload.project, payload.entry_mode);
+      // 响应一旦到达即停掉慢提示计时器：成功/失败分支都不再被
+      // 「仍在处理中」文案顶掉（R28-15的假故障观感来源）。
+      clearTimeout(slowTimer);
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        const conflictText = apiDetailText(errorPayload, `HTTP ${response.status}`);
+        setMessage(`创建失败：${conflictText}`);
+        if (response.status === 409) {
+          try {
+            setExistingProject(await findExistingProject());
+          } catch { /* 列表读取失败时仅保留错误文案 */ }
+        }
+        return;
+      }
+      const payload = await response.json().catch(() => null);
+      if (payload?.project?.project_id) {
+        // 成功：关闭弹窗并交接导航；此后不再有困住用户的分支。
+        onCompleted?.(payload.project, payload.entry_mode);
+        return;
+      }
+      // 2xx但缺项目身份（异常响应）：也必须退出弹窗，不能留死局。
+      setMessage("创建响应异常：服务器未返回项目身份。请从项目列表确认是否已创建。");
+      onDismiss?.();
     } catch (error) {
-      setMessage(`创建失败：${error?.message || error}`);
+      const aborted = error?.name === "AbortError";
+      setMessage(aborted
+        ? "创建请求超过120秒未返回，已停止等待。项目可能已在服务器创建，请先核实再重试。"
+        : `创建失败：${error?.message || error}`);
+      if (aborted) {
+        try {
+          setExistingProject(await findExistingProject());
+        } catch { /* 列表读取失败时仅保留错误文案 */ }
+      }
     } finally {
       clearTimeout(slowTimer);
+      clearTimeout(hardTimer);
       setBusy(false);
     }
   };
@@ -1246,6 +1307,18 @@ function NewProjectConfigPanel({ handoff, onCompleted, onDismiss }) {
               <label><span className="new-project-required">研究分期<i aria-hidden="true">*</i></span><select required aria-required="true" aria-invalid={Boolean(errors.study_phase)} value={draft.study_phase} onChange={(event) => updateField("study_phase", event.target.value)}><option value="">请选择</option><option value="I期">I期</option><option value="I/II期">I/II期</option><option value="II期">II期</option><option value="II/III期">II/III期</option><option value="III期">III期</option><option value="待核实">分期未知（待核实，不作为已核实事实）</option></select>{errors.study_phase && <small className="new-project-field-error">{errors.study_phase}</small>}</label>
             </div>
             {message && <p className="new-project-message">{message}</p>}
+            {existingProject?.project_id && (
+              <div className="new-project-conflict-actions" role="group" aria-label="同名项目出口">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => onResolveExisting?.(existingProject)}
+                  title="打开与本次输入同名的已有项目"
+                >
+                  前往已有项目「{existingProject.project_name || existingProject.project_code}」
+                </button>
+              </div>
+            )}
             <footer>
               <button type="button" onClick={() => { if (!busy) onDismiss?.(); }} disabled={busy} title={busy ? "项目正在创建，请稍候" : "取消创建"}>取消</button>
               <button type="submit" className="primary-button" disabled={busy} title={busy ? "项目正在创建，请稍候" : "创建项目"}>{busy ? "创建中" : "创建项目"}</button>
@@ -1293,7 +1366,10 @@ function EmptyProjectOverview({
                 <ArrowLeft size={16} /> 返回项目列表
               </button>
             )}
-            {!loading && !unavailable && (
+            {/* R27-02：列表读取失败也保留「新建项目」入口——建项不依赖
+                列表读取（创建成功即本地插入+跳转），零起点建项不得被
+                列表故障连带阻断。仅真实读取中（loading）隐藏。 */}
+            {!loading && (
               <button type="button" className="primary-button empty-project-create" onClick={onCreateProject}>
                 <Plus size={17} /> 新建项目
               </button>
@@ -1486,14 +1562,14 @@ function AppShell({
             <button
               type="button"
               className={`new-project-trigger ${!hasActiveProject ? "primary-button" : ""}`}
-              disabled={!projectsLoaded || Boolean(projectsLoadError)}
+              disabled={!projectsLoaded}
               onClick={() => {
                 setNewProjectMessage("");
                 // 子系统优先建项：每次打开重置选择，不跨会话残留。
                 setNewProjectSubsystems([]);
                 setNewProjectOpen(true);
               }}
-              title={!projectsLoaded || projectsLoadError ? "项目列表尚未就绪，暂不能新建项目" : "新建研究项目：选择子系统"}
+              title={!projectsLoaded ? "项目列表读取中，请稍候" : "新建研究项目：选择子系统"}
             >
               <Plus size={16} /> 新建项目
             </button>
@@ -14024,6 +14100,13 @@ export function App() {
             const selected = pendingNewProject.modules;
             const label = selected.map(subsystemLabelOf).join("、") || "未知模块";
             setProjectCreatedNotice(`已创建项目「${project?.project_name || project?.project_code || ""}」，已启用子系统：${label}${selected.length > 1 ? "。完成本子系统配置后，可回到项目总看板进入其余子系统。" : ""}`);
+            handleProjectCreated(project, selected);
+          }}
+          onResolveExisting={(project) => {
+            // R28-15：409同名冲突的出口——打开已有项目而非让用户撞墙重试。
+            if (!project?.project_id) return;
+            const selected = pendingNewProject.modules;
+            setProjectCreatedNotice(`已存在同名项目，已为你打开「${project.project_name || project.project_code}」。如需另建，请更换项目名称。`);
             handleProjectCreated(project, selected);
           }}
           onDismiss={() => {

@@ -11826,6 +11826,20 @@ textarea {
   font-size: 13px;
 }
 
+/* R28-15：409同名冲突/超时后的「前往已有项目」出口按钮组。 */
+.new-project-conflict-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.new-project-conflict-actions .primary-button {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .file-first-synopsis-intake,
 .file-first-synopsis-review {
   display: grid;

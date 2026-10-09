@@ -147,6 +147,9 @@ class R5ProductAdapter:
         selected_risks = tuple(item for item in packet.risks if item.site_ref in selected_site_refs)
         receipt_ref = packet.receipt_id
         subject_labels = {item.subject_ref: item.subject_label for item in packet.subjects}
+        # R28-10：请核实事项卡差异化信息的事件术语/日期来源（仅绑定已选
+        # 范围内事件，绑定不到时回落域级诚实表述）。
+        event_by_ref = {item.event_ref: item for item in selected_events}
         high = tuple(item for item in selected_risks if item.severity in {"critical", "high"})
         medium = tuple(item for item in selected_risks if item.severity == "medium")
         low = tuple(item for item in selected_risks if item.severity == "low")
@@ -177,7 +180,7 @@ class R5ProductAdapter:
                 for (risk_type, severity), count in sorted(type_severity_counts.items())
             ]
             current_risks.extend(
-                _risk_payload(item, receipt_ref, subject_label=subject_labels.get(item.subject_ref))
+                _risk_payload(item, receipt_ref, subject_label=subject_labels.get(item.subject_ref), event_by_ref=event_by_ref)
                 for item in exemplar_pool[:_OVERVIEW_EXEMPLAR_LIMIT]
             )
             current_risk_set = _with_content_hash({
@@ -191,7 +194,7 @@ class R5ProductAdapter:
             })
         else:
             current_risks = [
-                _risk_payload(item, receipt_ref, subject_label=subject_labels.get(item.subject_ref))
+                _risk_payload(item, receipt_ref, subject_label=subject_labels.get(item.subject_ref), event_by_ref=event_by_ref)
                 for item in selected_risks
             ]
             current_risk_set = _with_content_hash({
@@ -404,8 +407,10 @@ class R5ProductAdapter:
         receipt_ref = packet.receipt_id
         subject_labels = {item.subject_ref: item.subject_label for item in packet.subjects}
         event_payloads = [_event_payload(item) for item in events]
+        # R28-10：受试者工作区的风险卡同样注入事件术语/日期。
+        subject_event_by_ref = {item.event_ref: item for item in events}
         risk_payloads = [
-            _risk_payload(item, receipt_ref, subject_label=subject_labels.get(item.subject_ref))
+            _risk_payload(item, receipt_ref, subject_label=subject_labels.get(item.subject_ref), event_by_ref=subject_event_by_ref)
             for item in risks
         ]
         visit_payloads = [
