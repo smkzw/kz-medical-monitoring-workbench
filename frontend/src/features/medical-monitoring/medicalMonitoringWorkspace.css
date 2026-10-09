@@ -549,6 +549,21 @@
   opacity: 0;
 }
 
+/* R28轮（R28-07）：严重不良事件（SAE）强制标识——深红实底，与普通
+   「域·等级」描边徽章形成明确视觉优先级差；置于徽章行尾。 */
+.monitoring-risk-serious-chip {
+  flex-shrink: 0;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 4px 9px 4px 9px;
+  background: var(--monitoring-red, #b3261e);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
 .monitoring-risk-badge .monitoring-risk-overlay {
   opacity: 1;
   position: static;

@@ -4371,6 +4371,7 @@ def _promote_r7_monitoring_document_authority(
     actor: str = "medical_manager",
     expected_decision_version: int | None = None,
     identity_confirmation: Any = None,
+    explicit_retry: bool = False,
 ) -> dict[str, object]:
     return monitoring_document_authority_workflow.advance(
         project_id=project_id,
@@ -4380,6 +4381,7 @@ def _promote_r7_monitoring_document_authority(
         actor=actor,
         expected_decision_version=expected_decision_version,
         identity_confirmation=identity_confirmation,
+        explicit_retry=explicit_retry,
     )
 
 

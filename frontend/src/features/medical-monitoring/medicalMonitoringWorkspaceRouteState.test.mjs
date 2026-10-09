@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   MEDICAL_MONITORING_WORKSPACE_CANONICAL_KEYS,
   MEDICAL_MONITORING_WORKSPACE_EPHEMERAL_KEYS,
+  monitoringSourceEvidenceRoutePatch,
   normalizeMedicalMonitoringWorkspaceRouteState,
   parseMedicalMonitoringWorkspaceRouteState,
   routeStateForMedicalMonitoringWorkspaceView,
@@ -210,4 +211,51 @@ const publicProgress = parseMedicalMonitoringWorkspaceRouteState(
   "?project_id=project-a&public_run_token=run%3A1&view=overview",
 );
 check(publicProgress.valid, "accepts a public progress route");
+
+// R28轮（R28-02）：「查看原始来源」跳证据页的参数必须以被点风险卡自身
+// 的受试者身份为准。实测从21001旅程上下文进入查询工作区后点24004风险
+// 卡，URL携带subject_ref=subject-21001与21001的时间窗（继承页面级
+// state），证据页时间窗与所展示记录（SUBJID 24004）同页自相矛盾。
+const journeyContext = parseMedicalMonitoringWorkspaceRouteState(
+  "?project_id=project-a&result_context_token=result-context%3A1&view=journey"
+  + "&site_ref=site-01&subject_ref=subject-21001&spine_ref=spine-21001"
+  + "&window_start=2025-06-24&window_end=2026-08-07",
+);
+check(journeyContext.valid, "journey context route parses");
+const otherSubjectRisk = {
+  riskInstanceRef: "riski-AE-000007",
+  sourceLocatorRef: "loc-AE-000007",
+  subjectRef: "subject-24004",
+  siteRef: "site-01",
+  spineRef: "spine-24004",
+};
+const crossPatch = monitoringSourceEvidenceRoutePatch(otherSubjectRisk, journeyContext.canonical);
+check(crossPatch.subject_ref === "subject-24004" && crossPatch.spine_ref === "spine-24004", "patch carries the clicked risk card's own subject identity");
+check(crossPatch.window_start === "" && crossPatch.window_end === "", "patch clears the inherited journey window for a different subject (risk rows carry no window)");
+const otherSubjectFinding = {
+  riskInstanceRef: "riski-AE-000007",
+  sourceLocatorRef: "loc-AE-000007",
+  subjectRef: "subject-24004",
+  siteRef: "site-01",
+  windowStart: "2026-06-01",
+  windowEnd: "2026-08-07",
+};
+const findingPatch = monitoringSourceEvidenceRoutePatch(otherSubjectFinding, journeyContext.canonical);
+check(findingPatch.window_start === "2026-06-01" && findingPatch.window_end === "2026-08-07", "Finding DTO carrying its own window keeps that truthful window even for a different subject");
+check(findingPatch.subject_ref === "subject-24004", "finding patch carries the card subject");
+const crossEvidence = routeStateForMedicalMonitoringWorkspaceView(journeyContext.canonical, "evidence", crossPatch);
+check(crossEvidence.subject_ref === "subject-24004", "evidence route subject_ref follows the clicked card, not the previous journey context");
+check(!crossEvidence.window_start && !crossEvidence.window_end, "evidence route does not keep another subject's window");
+check(crossEvidence.risk_instance_ref === "riski-AE-000007", "evidence route keeps the clicked risk instance");
+const sameSubjectRisk = {
+  riskInstanceRef: "riski-AE-000009",
+  sourceLocatorRef: "loc-AE-000009",
+  subjectRef: "subject-21001",
+  siteRef: "site-01",
+  spineRef: "spine-21001",
+};
+const samePatch = monitoringSourceEvidenceRoutePatch(sameSubjectRisk, journeyContext.canonical);
+check(samePatch.window_start === "2025-06-24" && samePatch.window_end === "2026-08-07", "same-subject source jump keeps the journey window so evidence back-to-journey still works");
+check(samePatch.subject_ref === "subject-21001", "same-subject patch keeps the journey subject");
+
 console.log(`medicalMonitoringWorkspaceRouteState: ${passed} checks passed`);

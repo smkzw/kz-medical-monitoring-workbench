@@ -512,3 +512,23 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 三条件自检（23:26-23:29 实测）全过：① 8911 /api/runtime-readiness ready:true（backend_build_id=api-75f010c43fde3f82）；② http://localhost:5178/monitoring HTTP 200；③ 5178 runtime-build.json expectedBackendBuildId=api-75f010c43fde3f82 与 8911 配对一致。
 - 修复后行为实证（UI 走查）：CSU 总览收件箱卡片点击→立即跳 /monitoring（无 3-5s 空窗），后台记账完成计数 -1/-1 一致；「处理最高优先级」tooltip 具体到事项标题、点击即跳、计数随后台更新；R27B 向导第3步显示新进度行「本轮核对已进行约 0 分钟；系统有 1 项核对作业在队列中…」，且 20:16 起滞留的 primary 失败作业被自动恢复重新入队（failed→running，attempt 33/34 租约心跳中）——原「入队后永久滞留」链路已被预算化自愈取代。
 - 纪律：零业务管道推进；runs/ 与 sqlite 诊断均只读 mode=ro；8910/5177 全程未触碰。
+
+## 2026-10-08T22:44-22:50Z（R28D 开考位预置·守护员第10次复验：R27待修清单修复员重启（api-75f010c4）后三条件仍全过，零重复预置）
+
+- 操作者：开考预置守护员-R28（D位）。动作：查存量 → 三条件现场实测全过 → 直接复用。**零新建、零 AI 作业、零代码修复、零重启、零启动运行**。
+- 环境漂移（本轮之前他位动作，非本轮）：R27待修清单修复员（R27-01/03+R25-04/05/07/08）23:2x+0200 双重启 8911+5178 加载修复 → build api-75f010c43fde3f82、API pid 26563（本员 lsof 实测同值）；5178 本员 lsof 实测 node pid 26604 监听 [::1]:5178。
+- 存量检查现场实测（ask 步骤0）：`GET /api/projects` → 仅 1 项目 proj_user_6ef58ac151e1 / MX循开考-CSU / active（modules 含 medical_monitoring，real_source_slice）；mapping-candidates → confirmation_status=confirmed / draft monmapdraft_73abe5c6c9561a9e95eec2056991 v80 status=confirmed / draft.user_questions=0 项 / 60候选（与 R19D-R27D 零漂移）；facts → state=ready（10表/591行/values=source_values_verified=3038，message「可用于监查的数据已生成，可以开始监查。」，facts-manifest.json 在盘 mtime Oct 5 22:44 零漂移，10表 AE/CM/DM/EX/ICF_TRACK/LB_HEM/MH/SV/UAS/VS）；project/open → current/complete/openMode=edit/canView/canEdit「项目格式正常，可以继续使用。」；study-documents HTTP 200 ready=true；run-setup/options 200（recommended_mode=daily）。
+- 只读探障：main.py:5120+5130 marker 修复在位（行号自 R27D 的 5111/5121 平移，修复本身未动）；contracts.py:53-54=V5；本项目 workspace launch_registry Python sqlite3 只读直查（uri mode=ro）=mm-r7-w01r26-launch-registry-v5（文件 mtime Oct 8 20:22 较 R27D 观察的 16:37 又被现行进程触碰，marker 复测仍 v5，非缺陷）；8911 readiness ready:true（backend_build_id=api-75f010c43fde3f82，runtime_schema_version=16）与 5178 /monitoring=200、runtime-build.json expectedBackendBuildId 配对一致（frontendBuildId=web-1f04fb05696a5e24）；ai-gateway/status 只读探看 configured=true（zhipu-coding-plan/glm-5.3-flash）无 route_validation_errors/missing_env、deployment_profile_approved=true，未做付费 probe；runs 29 条全部 completed 且 result_available=true（R27D 后 +3 为 R27 开考/攻坚角色所启动，非本轮）；8910/5177 lsof 均 0 监听（沿 R11 起，未触碰）。
+- 观察：candidates 投影怪癖沿 R21D-R27D 持续（顶层 facts_generated=False / summary pending_confirmation_count=60、user_question_count=1，与权威 confirmed/facts ready 终态不一致），提请修复员核投影字段语义；本轮 API 全程响应正常（0.95-2.0s），无 R25/R26 记录的启动期挂起波动复发。
+- 留痕：`R5_SEEDED_PROJECT.md` R28D 节。本轮无新驱动脚本/状态文件（复用即结论）。
+- 纪律：零业务管道推进、零项目数据触碰、零代码修改；8910/5177 全程仅只读 lsof（本轮均无监听），未 kill 未重启未触碰。
+
+## 2026-10-09T02:59+0200（R28分诊清单修复员：R28-01/02/03/04/07 修复后 8911+5178 双重启）
+
+- 操作者：修复员（R28分诊清单 R28-01/R28-02/R28-03/R28-04/R28-07；R28-06 skip 另报）。动作：API 8911 与 vite 5178 均按 ask 给定命令重启（本轮 API 重启两次：第一次加载全部修复后现 R28-07 初版实现令旧冻结包 AUTHORITY_DIGEST_MISMATCH 全不可读，当场复现→改 property 派生方案后第二次重启收敛）；8910/5177 未触碰。
+- 修复内容：R28-01 旅程死链根因=量表周分值 float(12.0) 进入冻结包后 Python json.dumps("12.0") 与前端 JSON.stringify("12") 序列化分叉，response_digest 前端验签必败→读取链 payload 构建整值浮点规范为 int（_event_payload/_value_indicator/public_result_envelope 信封兜底）+facts 解析整值保 int，旧发布读时即愈；R28-02 查询工作区跳证据页 URL 以被点卡片自身身份为准（monitoringSourceEvidenceRoutePatch，Finding 卡带自身窗）；R28-03/R28-04 「重新核对研究文件」explicit_retry 突破自动恢复预算真实重排+失败文案按 infra/内容类区分+failure_class 透出+下一步按钮失败态不再误报「请先添加所需文件」；R28-07 AESER=是→R5RiskRecord.serious 派生属性（从 medical_note 合同字段解析，不新增哈希字段）+payload serious 位+前端 SAE 徽章/查询工作区与概览置顶。
+- 重启命令：按 ask 给定（WORKBENCH_RUNTIME_DIR=runs/tester_loop_iso_20260928/runtime、WORKBENCH_LOCAL_SINGLE_USER=1、WORKBENCH_AI_RUNTIME=api、WORKBENCH_MONITORING_AI_PARALLELISM=2；vite VITE_API_PROXY_TARGET=http://127.0.0.1:8911）。
+- 三条件自检（第二次重启后实测）全过：① 8911 /api/runtime-readiness ready:true（backend_build_id=api-3cc7a71cf1e003d7）；② http://localhost:5178/monitoring HTTP 200；③ 5178 runtime-build.json expectedBackendBuildId=api-3cc7a71cf1e003d7 与 8911 配对一致。
+- 修复后行为实证（只读 API 复核，未推进任何管道）：常驻项目 MX循开考-CSU 既有发布 result-context:8b5ca1e2… ① subjects/subject-21001 旅程载荷 200/173,850B、JS 序列化语义 SHA-256 复算==response_digest（修复前 false）；② subjects/subject-23003 200，current_risks 31 条中 riski-AE-000039 serious=true（AESER=是，与生成器植入行一致）；③ overview 200、JS digest 复算一致、477 风险恰 1 条 serious、41 发现不变；④ source-evidence 200。
+- 测试：tests/test_public_result_journey_digest_r28.py 4/4（含种子→运行→发布→结果→旅程整链、旧冻结浮点读时修复、AESER 派生位；修复回退变异验证 3/3 必败）；相关套件 111 passed（freeze/facts×2/doc-authority/data-admission/batch-rule-runner）+ r7 router 96/97（1 失败 test_late_project_dispatchers… 为改动前 HEAD 已然失败的既有并发用例，与本轮修复无关，已留证）；frontend node --test $(find src -name '*.test.mjs') 84/84。
+- 纪律：零业务管道推进、零 runs/ 写入（sqlite 诊断只读 mode=ro）；8910/5177 全程未触碰。

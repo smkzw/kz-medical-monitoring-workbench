@@ -1451,3 +1451,74 @@ def test_latest_unpromoted_batch_brief_recovers_inflight_check_after_reload(
 
     os.utime(batches / "mmbatch_done.json", (2_000_000_000, 2_000_000_000))
     assert brief(workspace) is None
+
+
+def test_document_authority_failure_message_is_honest_by_failure_class(
+    tmp_path: Path,
+) -> None:
+    """R28轮（R28-03）：核对失败文案按失败类别如实区分。
+
+    上游限流（infra类）不是文件内容问题，失败分支不得再承诺
+    「可对文件角色作出裁决」（该分支从无裁决控件，三名测试者被
+    误导滞留40-93分钟）；同时透出failure_class供前端区分禁用原因。
+    """
+
+    def promote(**_kwargs: Any) -> Mapping[str, Any]:
+        return {
+            "state": "failed",
+            "authority_status": "not_promoted",
+            "failure_code": "provider_sse_error_event",
+            "failure_message": "上游模型SSE中断",
+            "failed_jobs": ({"job_id": "job-1"},),
+        }
+
+    client = _client(
+        tmp_path / "runtime",
+        mapping_pipeline=FakeMappingPipeline(),
+        document_authority_promoter=promote,
+    )
+    response = client.post(
+        f"{_base()}/data-admissions/attempt-0001/study-documents/resolve",
+        json={"batch_id": f"mmbatch_{'a' * 24}"},
+    )
+    assert response.status_code == 409
+    payload = response.json()
+    assert payload["code"] == "mapping_document_authority_failed"
+    assert payload["detail"]["failure_class"] == "upstream_unavailable"
+    message = payload["message"]
+    assert "上游AI服务暂时不可用" in message
+    assert "重新核对研究文件" in message
+    # 失败分支不存在裁决控件：不得承诺「作出裁决」。
+    assert "作出裁决" not in message
+
+
+def test_document_authority_explicit_retry_is_threaded_to_promoter(
+    tmp_path: Path,
+) -> None:
+    """R28轮（R28-03/R28-04）：「重新核对研究文件」的显式重试标记必须
+    传达到workflow——预算耗尽后该按钮是上游恢复后的唯一可用出口，
+    轮询路径不带此标记（保持R27-01预算约束）。"""
+
+    calls: list[dict[str, Any]] = []
+
+    def promote(**kwargs: Any) -> Mapping[str, Any]:
+        calls.append(kwargs)
+        return {"state": "analyzing", "authority_status": "not_promoted"}
+
+    client = _client(
+        tmp_path / "runtime",
+        mapping_pipeline=FakeMappingPipeline(),
+        document_authority_promoter=promote,
+    )
+
+    def resolve(body: dict[str, Any]) -> Any:
+        return client.post(
+            f"{_base()}/data-admissions/attempt-0001/study-documents/resolve",
+            json={"batch_id": f"mmbatch_{'a' * 24}", **body},
+        )
+
+    assert resolve({"explicit_retry": True}).status_code == 200
+    assert calls[-1]["explicit_retry"] is True
+
+    assert resolve({}).status_code == 200
+    assert calls[-1]["explicit_retry"] is False

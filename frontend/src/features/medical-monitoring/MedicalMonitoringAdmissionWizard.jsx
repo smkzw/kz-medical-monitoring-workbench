@@ -747,6 +747,16 @@ export function MedicalMonitoringAdmissionWizardView({
         if (identityBlocked) {
           return { key: "documents-required", label: "请先确认资料归属", disabled: true };
         }
+        // R28轮（R28-03）：核对已落失败终态（如上游AI限流/中断）时不得
+        // 把原因误述为「请先添加所需文件」——三名测试者被该文案指向
+        // 重新上传，而文件早已上传。如实指向失败原因与处理路径。
+        if (documentPhase === "failed" || documentState?.payload?.state === "failed") {
+          return {
+            key: "documents-check-failed",
+            label: "研究文件核对未通过——请按上方原因处理后重试",
+            disabled: true,
+          };
+        }
         return { key: "documents-required", label: "请先添加所需文件", disabled: true };
       })()
       : stepIndex === 2 && phase !== "done"
@@ -1300,6 +1310,11 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   // R2循环：「重新核对研究文件」必须真正重发核对（有analysis_token时
   // 重新resolve推进链路），而不是只重读readiness快照——否则失败态下
   // 点击后仍报同一错误，按钮语义与行为不符（报告C F1）。
+  // R2循环：「重新核对研究文件」必须真正重发核对（有analysis_token时
+  // 走resolve）。R28轮（R28-03/R28-04）：点击即给出持久可见反馈——
+  // ①立即切analyzing（按钮/面板随之变化）；②显式重试标记explicitRetry
+  // 让后端真实重排作业（预算耗尽后不再同因秒败）；③显式重试失败时
+  // 错误文案带上「刚刚重试」事实，杜绝5次点击逐字节零反馈。
   const retryDocumentCheck = useCallback(async () => {
     if (documentState.payload?.analysis_token) {
       const generation = documentRequestGeneration.current + 1;
@@ -1310,6 +1325,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           state.projectId,
           state.attemptId,
           documentState.payload.analysis_token,
+          { explicitRetry: true },
         );
         if (documentRequestGeneration.current === generation) {
           setDocumentState({
@@ -1324,7 +1340,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           setDocumentState((current) => ({
             ...current,
             phase: "failed",
-            error: documentAuthorityErrorText(error, "研究文件核对失败。"),
+            error: `刚刚点击「重新核对研究文件」仍失败：${documentAuthorityErrorText(error, "研究文件核对失败。")}`,
           }));
         }
         return;

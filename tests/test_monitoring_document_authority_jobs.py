@@ -1017,6 +1017,26 @@ def test_product_workflow_retries_one_terminal_failure_once() -> None:
     assert workflow._recover_failed_once((failed, complete)) is False
     assert wakes == [True]
 
+    # R28轮（R28-03/R28-04）：explicit=True（「重新核对研究文件」按钮）
+    # 与重新上传同权——不传自动预算，终态失败作业必须真实重排。此前
+    # 预算耗尽后按钮永远同因秒败（作业原样停留failed），上游429冷却
+    # 结束后也没有任何可用出口。
+    explicit_retries = []
+
+    def explicit_fake_retry_terminal(
+        project_id, job_id, *, current_input_revision_sha256,
+        automatic_recovery_limit=None,
+    ):
+        explicit_retries.append(automatic_recovery_limit)
+        return SimpleNamespace(status=MonitoringAiJobStatus.QUEUED)
+
+    workflow.repository = SimpleNamespace(
+        retry_terminal=explicit_fake_retry_terminal
+    )
+    assert workflow._recover_failed_once((failed, complete), explicit=True) is True
+    assert explicit_retries == [None]
+    assert wakes == [True, True]
+
 
 def test_recover_failed_once_requeues_only_within_automatic_budget(
     tmp_path,

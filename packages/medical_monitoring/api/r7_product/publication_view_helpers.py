@@ -13,6 +13,7 @@ from ...runtime import run_setup as rs
 from .contracts import ProductPrepareAndStartRequest, ProductPublicationError
 from .errors import _error_response
 from .public_text import _SECRET_VALUE
+from ...projections.product_projection_helpers import with_public_json_numbers
 from .result_projections import (
     _PUBLICATION_MESSAGES,
     _PUBLIC_RESULT_LOCATOR_KEYS,
@@ -225,8 +226,15 @@ def public_result_envelope(
             identity[key] = value
     if identity["view"] not in {"overview", "journey", "evidence"}:
         raise ProductPublicationError("result_context_unavailable")
+    # R28-01：信封级整值浮点→int兜底。前端以JS序列化语义逐字节复算
+    # response_digest；任何生产者漏网的整值float都会让两侧字节不一致、
+    # 验签必失败。此处对identity+projection统一规范后再扫描/计算摘要，
+    # 保证契约：response_digest可用JSON.parse→JSON.stringify复算。
+    envelope_identity = with_public_json_numbers(identity)
+    envelope_projection = with_public_json_numbers(projection)
     public_blob = json.dumps(
-        {"identity": identity, "projection": projection}, ensure_ascii=False
+        {"identity": envelope_identity, "projection": envelope_projection},
+        ensure_ascii=False,
     ).casefold()
     if _SECRET_VALUE.search(public_blob) or any(
         marker in public_blob
@@ -245,11 +253,11 @@ def public_result_envelope(
     ):
         raise ProductPublicationError("result_context_unavailable")
     response_digest = lr.content_digest(
-        {"identity": identity, "projection": projection}
+        {"identity": envelope_identity, "projection": envelope_projection}
     )
     return {
-        "identity": identity,
-        "projection": dict(projection),
+        "identity": envelope_identity,
+        "projection": dict(envelope_projection),
         "result_context_token": result_context_token,
         "response_digest": response_digest,
     }
