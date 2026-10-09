@@ -4,6 +4,130 @@
 
 ---
 
+## R31 攻坚·第 1 次（2026-10-09，攻坚工程师-R31-第1次）
+
+### 0. 结论先行
+
+**墙未复发：R30 攻坚之后的新 build（api-e1c432cb92f53fd9）下，本轮独立
+复现两遍全新幂等键全链全绿，零阻断、零代码改动、零重启。** R30 轮次修复
+（ac98a4ee：R30-01 身份中间件免清单+移出事件循环+清单物化单次化+60s TTL/
+R30-03 来源清单中间态诚实化/R28-05 公开结果四端点移入线程池/R28-08/09/11
+前端）+ R30 轮次归档（606fd958）+ 任务所有者解除搁置（4f235507，仅新增
+scripts/tester_loop_0927/STATE_V2.json 台账文件，零源码改动，HEAD）重建
+重启后，backend_build_id 变为 **api-e1c432cb92f53fd9**（R30 攻坚收尾时
+api-0feb76ce663ae085），前端 runtime-build.json expectedBackendBuildId
+配对一致（frontendBuildId=web-f829378ee806b096）。常驻项目
+「MX循开考-CSU」（proj_user_6ef58ac151e1）以两个全新幂等键各走完
+run-setup/options → workspace/bootstrap（留证）→ prepare-and-start →
+progress completed → publication available → result-entry →
+results/{rct}/overview 可读（两遍投影均 **1,392,406 字节/41 发现/16 受试者
+/477 现行风险**，逐字节一致，与 R30 读数完全相同——R30 轮次修复改执行
+模型不改投影文本）。终态磁盘 40 条全部 completed+result_available=1、
+**waiting_start=0**，admission_events 本轮时间窗（19:58–19:59Z）零新增
+（基线 6 行=终态 6 行，末条仍为 2026-10-07T22:36:55Z 历史拒绝）。
+
+### 1. 环境前置（复现前，未重启任何服务）
+
+- 8911（Python pid 64610，今日 21:34 由 R30 修复轮重启，ISO_ENV_LOG
+  21:33–21:35 留痕）`/api/health` 200（runtime_store integrity ok,
+  schema v16）；`/api/runtime-readiness` ready:true、backend_build_id=
+  **api-e1c432cb92f53fd9**。5178（vite node pid 64327，今日 21:33 起）
+  `/runtime-build.json` expectedBackendBuildId 配对一致；
+  `/monitoring` 200。本轮全程未重启。
+- 既有修复在新 build 在位（本轮亲读源码）：R19
+  `packages/medical_monitoring/runtime/run_entry.py:377`
+  `ensure_builtin_global_default()`，调用点
+  `packages/medical_monitoring/api/r7_product/run_routes.py:199`；R27
+  `services/api/app/main.py:1205` 与
+  `services/api/app/medical_monitoring_router.py:1087`
+  `applicability_status="project_effective_confirmed"`。
+- 复现前磁盘基线：launch_registry **38 条全部 completed+result_available=1**
+  （seq 38=R30 轮次界面键 monitoring_258ac9de…，manifest e49f95084811）、
+  **waiting_start=0**；execution_profiles `global_default|*|1` 在位；
+  admission_events.jsonl 6 行（末条 2026-10-07T22:36:55Z in_flight_conflict
+  历史拒绝）。
+
+### 2. 复现（任务①）——两遍全链（驱动 `r31s_siege_repro.py`，证据
+`r31s_siege_evidence.jsonl` 50 行、全 ok、0 阻断）
+
+忠实界面路径（不先 workspace/bootstrap；bootstrap 仅按任务书列名留证实测，
+两遍均 200 replayed=true revision=1 幂等零改动）。
+
+**第一遍（19:58:23Z 起，key=r31s-fresh-de1482ab78e7，链路壁钟 ~17s）**：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线同刻双侧 | mapping-candidates 200（171ms，**state=candidates_ready**）、facts 200（60ms，**state=ready**，summary source_values_verified=3038）、project/open 200（71ms，**state=current**）、protocol-versions 200（35ms，1 条 status=confirmed）——预置台与运行门无口径差 |
+| run-setup/options | 200，157ms，snapshot:ef8692acfbab4d2a9846916f（与历史 registry 指纹同源） |
+| workspace/bootstrap（留证） | 200，73ms，replayed=true revision=1 |
+| prepare-and-start | **200，303ms**，run:c005550a8410c4ba5d41c747…（registry sequence 39，manifest_digest f58ccf16c4f3 同源） |
+| progress | 首询 running/30%（206ms），二询 **completed**（percent=100.0，polls=2；result_available 首询 false，发布后终态 1，R20 §4/R29 §2/R30 §2 同型投影时序） |
+| publication | POST 200→**available**（598ms） |
+| result-entry | 200，269ms，rct=result-context:77e85171c0214af3a3b427e1d04e4f29 |
+| results/{rct}/overview | 200，327ms，**1,392,406 字节、41 发现/16 受试者/477 现行风险**，identity.project_ref=proj_user_6ef58ac151e1 |
+
+**第二遍=重验（任务③，19:58:41Z 起，key=r31s-fresh-dd1ccea2ccfc，壁钟
+~17s）**：同链全绿：options 200（161ms，snapshot 同源）→ bootstrap 200
+replayed → prepare-and-start **200**（297ms，run:7b13204bc9d4a2bd16e0bf35…，
+sequence 40，manifest f58ccf16c4f3）→ progress completed（polls=2）→
+publication **available**（576ms）→ entry 200（308ms，
+rct=result-context:bfb286d84a1748698986cf8a96b1584a）→ overview 200
+（325ms，**1,392,406 字节、41/16/477**）。两遍序列化字节数逐字节一致，
+总耗时 35s。
+
+### 3. 修复（任务②）与口径差对照
+
+**无需新修复，本轮零代码改动、零重启。** 两侧口径在本轮无分叉：预置台
+（mapping candidates_ready / facts ready / project current / 方案版本
+confirmed 在位）与运行启动门（run-setup/options 200 + prepare-and-start
+200）读数一致，R19/R27 修复在役（§1 代码行亲读 + 定向测试）。backend_truth()
+对照（同刻快照）两遍装备均未触发；admission_events.jsonl 在本轮时间窗
+（19:58–19:59Z）**零新增**（基线 6 行=终态 6 行）。
+
+本 build 相对 R30 攻坚收尾的改动面（ac98a4ee）恰好被本轮实测覆盖：
+publication/result-entry/overview 三请求（200×3）走的正是该提交线程池化后的
+`packages/medical_monitoring/api/r7_product/publication_routes.py` 路径；
+prepare-and-start 走过 `services/api/app/main.py` 身份中间件免清单+TTL 路径
+（options/prepare 单请求 157–303ms，无 70–120s 阻塞复现）。
+
+既有修复在役证明（本轮全部亲测）：
+
+- R19/R27：`pytest tests/test_medical_monitoring_r7_product_router.py
+  tests/test_medical_monitoring_r27_protocol_gate_selfheal.py -k "r19_siege
+  or protocol or selfheal" -q` → **6 passed**（2.68s）。
+- 全量：`pytest tests/test_medical_monitoring_r7_product_router.py
+  tests/test_medical_monitoring_r27_protocol_gate_selfheal.py -q` →
+  **99 passed**（46.92s；97 路由 + 2 门自愈）。
+- R30 轮改动面新增/改动 + R28 读取链集成 + R29 轮次新增：
+  `pytest tests/test_project_source_manifest.py
+  tests/test_public_result_journey_digest_r28.py
+  tests/test_risk_evidence_template_r2810.py
+  tests/test_monitoring_ai_queue_dwell_timeout.py -q` → **31 passed**
+  （2.39s）。
+
+### 4. 观察与边界（不拦链路，转台账观察）
+
+- overview 字节数与 R30 完全一致（1,392,406），发现/受试者/现行风险计数
+  不变（41/16/477）——ac98a4ee 改的是公开结果端点执行模型（async 内同步
+  校验+投影移入线程池）、身份/清单路径与前端渲染，未触及投影文本，与读数
+  恒定自洽，非回归信号。
+- progress 本轮两遍均 polls=2（首询 running/30%，15s 轮询间隔后二询
+  completed），与 R30 的 polls=1 差异为轮询时序抖动（run 内部秒级完成 vs
+  15s 间隔），非缺陷；result_available 首询 false→发布后 registry 终态 1，
+  R20 §4 同型投影时序沿台账。
+- seq 38（R30 轮次界面键）manifest e49f95084811 与空规则令牌键
+  f58ccf16c4f3 分叉=R28 §4 既有观察（界面规则令牌有效输入不同），本轮未
+  触碰，沿台账。
+- 证据 JSONL 响应体截断 2500 字符（终态 progress/overview 大响应仅留
+  头部；驱动内存中完整解析，终态判定不受影响）。
+- 浏览器像素级全链回归未执行（工程验证身份以 API 驱动+状态机代码核验为
+  口径；界面回归归墙破后的测试轮）。
+
+留痕文件：`r31s_siege_repro.py`、`r31s_siege_evidence.jsonl`（两遍全链）、
+本日志节。
+
+---
+
 ## R30 攻坚·第 1 次（2026-10-09，攻坚工程师-R30-第1次）
 
 ### 0. 结论先行
