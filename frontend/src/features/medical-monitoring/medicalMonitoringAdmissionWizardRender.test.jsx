@@ -295,6 +295,7 @@ export const renders = {
   ),
   // R25轮（R25-04）：核对处理中即给出事实性进度反馈（已用时+在途作业），
   // 用户可区分正常慢与挂死——停滞阈值前的 processing 态。
+  // R31轮（R31-06）：在途作业区分执行中/排队中，不再笼统「在队列中」。
   documentsProcessingProgress: render(
     readyWizardState(),
     createAdmissionMappingConfirmState(),
@@ -308,7 +309,9 @@ export const renders = {
         analysis_token: "mmbatch_progress",
         headline: "系统仍在独立核对研究文件",
         guidance: "当前无需逐项确认，请稍后查看结果。",
-        pending_job_count: 1,
+        pending_job_count: 2,
+        pending_running_count: 1,
+        pending_queued_count: 1,
         pending_since: "2026-10-08T18:24:10+00:00",
         roles: [
           { role: "protocol", label: "当前研究方案", required_now: true, status: "missing", status_text: "已上传，核对中" },

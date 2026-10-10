@@ -108,6 +108,21 @@ function documentRoleLabel(role) {
 // 避免把慢作业误报为停滞。提示只陈述事实（无状态变化）并给重试入口。
 const DOCUMENT_STAGE_STALL_MS = 20 * 60 * 1000;
 
+// R31轮（R31-06）：排队（queued，尚未被worker认领）与执行中（running）
+// 分开陈述——共享队列被大识别批次占用时，用户此前只能看到笼统的
+// 「N项核对作业在队列中」，把排队误读为系统卡死（R31A实测7+分钟
+// 无区分表述）。缺字段时回退旧口径，旧响应兼容。
+function pendingJobsText(payload) {
+  const total = Number(payload?.pending_job_count);
+  if (!Number.isFinite(total) || total <= 0) return "";
+  const running = Number(payload?.pending_running_count);
+  const queued = Number(payload?.pending_queued_count);
+  const breakdown = Number.isFinite(running) && Number.isFinite(queued)
+    ? `（执行中 ${running} 项、排队中 ${queued} 项）`
+    : "";
+  return `系统有 ${total} 项核对作业在途${breakdown}`;
+}
+
 function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onContentConfirm, onIdentityConfirm, confirmingEntries = {}, confirmedEntries = {}, stageElapsedMs = 0 }) {
   const [choices, setChoices] = useState({});
   const [identityNote, setIdentityNote] = useState("");
@@ -180,7 +195,7 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
           </strong>
           <span>
             {pendingJobCount > 0
-              ? `系统有 ${pendingJobCount} 项核对作业在队列中（最早入队 ${String(payload.pending_since || "").replace("T", " ").slice(0, 19) || "时间未知"}）。`
+              ? `${pendingJobsText(payload)}（最早入队 ${String(payload.pending_since || "").replace("T", " ").slice(0, 19) || "时间未知"}）。`
               : "核对作业可能仍在排队等待系统资源。"}
             长时间无进展时，可点击「重新核对研究文件」重试；若持续无进展，重新上传研究文件（相同或新版本均可）会重新发起完整核对。已上传的文件与您的确认不会被丢失。
           </span>
@@ -194,7 +209,7 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
         <p className="monitoring-admission-stage-progress" role="status" style={{ margin: 0, fontSize: 13, color: "var(--monitoring-muted, #6b7785)" }}>
           本轮核对已进行约 {roundElapsedMinutes} 分钟
           {pendingJobCount > 0
-            ? `；系统有 ${pendingJobCount} 项核对作业在队列中（最早入队 ${String(payload.pending_since || "").replace("T", " ").slice(0, 19) || "时间未知"}）`
+            ? `；${pendingJobsText(payload)}（最早入队 ${String(payload.pending_since || "").replace("T", " ").slice(0, 19) || "时间未知"}）`
             : ""}
           。完成前无需任何操作，页面会自动更新核对结果。
         </p>

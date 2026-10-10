@@ -177,9 +177,12 @@ check(
 );
 // R25轮（R25-04）：核对处理中（未达停滞阈值）即显示已用时与在途作业
 // 事实，用户可区分正常慢与挂死；不渲染失败、不渲染警示。
+// R31轮（R31-06）：在途作业区分执行中/排队中——共享队列被大识别批次
+// 占用时用户此前把笼统的「在队列中」误读为系统卡死。
 check(
   renders.documentsProcessingProgress.includes("本轮核对已进行约")
-    && renders.documentsProcessingProgress.includes("1 项核对作业在队列中")
+    && renders.documentsProcessingProgress.includes("2 项核对作业在途")
+    && renders.documentsProcessingProgress.includes("执行中 1 项、排队中 1 项")
     && renders.documentsProcessingProgress.includes("完成前无需任何操作"),
   "processing state shows factual elapsed and pending-job progress",
 );

@@ -1121,6 +1121,10 @@ class MonitoringMappingDraftRepository:
         decision_actor: str = "",
         decision_reason: str = "",
         allowed_missing_domains: tuple[str, ...] = (),
+        # R31轮（R31-02）：部分覆盖域中终态失败分片的槽位豁免——混合域
+        # （同域既有completed又有failed分片）的部分采纳此前被槽位完整
+        # 性门422硬拒。只接受确认层显式计算出的槽位，不放宽其余校验。
+        allowed_missing_slots: frozenset[tuple[str, int]] = frozenset(),
     ) -> MonitoringMappingDraft:
         project_id = _require_safe_identifier(project_id, "project_id")
         batch_id = _require_safe_identifier(batch_id, "batch_id")
@@ -1148,6 +1152,7 @@ class MonitoringMappingDraftRepository:
                 prompt_version=prompt_version,
                 expected_job_ids=expected_job_ids,
                 allowed_missing_domains=frozenset(allowed_missing_domains),
+                allowed_missing_slots=frozenset(allowed_missing_slots),
             )
             existing = connection.execute(
                 """
@@ -1724,6 +1729,7 @@ class MonitoringMappingDraftRepository:
                 batch_id=row["batch_id"],
                 full_profile_sha256=row["full_profile_sha256"],
                 expected_job_ids=tuple(json.loads(row["expected_job_ids_json"])),
+                revalidating_persisted_draft=True,
             )
             if (
                 current_source["source_set_sha256"] != row["source_set_sha256"]
@@ -1873,6 +1879,7 @@ class MonitoringMappingDraftRepository:
                 expected_job_ids=tuple(
                     json.loads(row["expected_job_ids_json"])
                 ),
+                revalidating_persisted_draft=True,
             )
             if (
                 current_source["source_set_sha256"] != row["source_set_sha256"]
@@ -2456,6 +2463,14 @@ class MonitoringMappingDraftRepository:
         prompt_version: str = "",
         expected_job_ids: tuple[str, ...] = (),
         allowed_missing_domains: frozenset[str] = frozenset(),
+        # R31轮（R31-02）：部分覆盖域中终态失败分片的合法缺席槽位。
+        allowed_missing_slots: frozenset[tuple[str, int]] = frozenset(),
+        # 存量草稿再校验（edit/confirm CAS路径）开关：已持久化草稿的
+        # 接受分片集由source_set_sha256内容钉死，缺席槽位是装配时已
+        # 合法化的部分采纳形态——再校验不再逐槽重判（作业状态在装配
+        # 后可能变化——重试收割行复活——不能拿新状态推翻已持久身份）。
+        # 装配路径（assemble）不用此开关，必须显式传槽位豁免集。
+        revalidating_persisted_draft: bool = False,
     ) -> dict[str, Any]:
         source_tables = {
             row["name"]
@@ -2800,14 +2815,35 @@ class MonitoringMappingDraftRepository:
         # R10预检第2次：允许的缺席域（其全部主分片终态失败）在场域计数
         # 之替代全量full_field_count做覆盖核对——否则部分采纳的55/60
         # 永远过不了「assembled fields do not match」校验。
+        # R31轮（R31-02）：部分覆盖域（同域既有completed又有终态失败
+        # 分片，如queue_dwell_timeout收割后）在allowed_missing_slots内
+        # 的缺席槽位同样合法——按在场分片的声明字段数核对覆盖，缺失
+        # 分片字段如实践缺席（确认层已物化domain_gaps）。不在豁免集的
+        # 缺席槽位仍一律硬拒，绝不凭空放宽。
         present_expected_total = 0
+        has_any_gap = bool(set(expected_domains).difference(domain_totals))
         for domain, total in domain_totals.items():
             present = {index for seen_domain, index in slots if seen_domain == domain}
             expected = set(range(1, total + 1))
-            if present != expected:
+            missing_slots = expected - present
+            extra_slots = present - expected
+            domain_allowed = {
+                index for seen_domain, index in allowed_missing_slots
+                if seen_domain == domain
+            }
+            if extra_slots:
                 raise MonitoringMappingSourceStateError(
                     f"domain {domain} has missing or extra chunk slots"
                 )
+            if missing_slots and not (
+                missing_slots.issubset(domain_allowed)
+                or revalidating_persisted_draft
+            ):
+                raise MonitoringMappingSourceStateError(
+                    f"domain {domain} has missing or extra chunk slots"
+                )
+            if missing_slots:
+                has_any_gap = True
             domain_count_values = {
                 int(profile["domain_field_count"])
                 for (seen_domain, _), (_, profile) in slots.items()
@@ -2817,20 +2853,30 @@ class MonitoringMappingDraftRepository:
                 raise MonitoringMappingSourceStateError(
                     f"domain {domain} has inconsistent field counts"
                 )
-            present_expected_total += next(iter(domain_count_values))
-            actual_domain_count = sum(
+            # 缺席槽位合法时，在场覆盖按在场分片自身声明的字段数合计
+            # （每分片的candidate==profile精确覆盖已在上文逐槽强校验，
+            # 跨槽字段重复由field_pairs拒收）；整域在场时维持既有强校验
+            # 「合计=域声明字段数」。
+            present_declared_total = sum(
                 len(profile["fields"])
                 for (seen_domain, _), (_, profile) in slots.items()
                 if seen_domain == domain
             )
-            if actual_domain_count != next(iter(domain_count_values)):
+            present_expected_total += (
+                present_declared_total
+                if missing_slots
+                else next(iter(domain_count_values))
+            )
+            if not missing_slots and present_declared_total != next(
+                iter(domain_count_values)
+            ):
                 raise MonitoringMappingSourceStateError(
                     f"domain {domain} field coverage is incomplete"
                 )
         full_field_count = next(iter(full_field_counts))
         expected_total = (
             present_expected_total
-            if set(expected_domains).difference(domain_totals)
+            if has_any_gap
             else full_field_count
         )
         if len(fields) != expected_total or len(field_pairs) != expected_total:

@@ -593,10 +593,19 @@ class AdmissionMappingConfirmationService:
         # 主命名空间分片都终态失败且无任何completed覆盖，把这些域豁免
         # 出域完整性门并作为domain_gaps物化到draft——字段覆盖55/60、
         # 缺席域如实可见，链路继续（盲核侧若有该域结果仍参与复核）。
+        # R31轮（R31-02）：域级豁免只覆盖「整域全失败」；收割视界内的
+        # 滞留分片被queue_dwell_timeout收割后，大量域呈「部分分片完成+
+        # 部分分片失败」混合态——库层`domain {d} has missing or extra
+        # chunk slots`对其仍然422硬拒（错误还被归因为「用户修订内容
+        # 无效」，见_repo_error_code）。现把混合域中终态失败分片的
+        # (domain, chunk_index)槽位一并豁免出槽位完整性门，缺失字段
+        # 作为domain_gaps如实物化——未修改候选的知情采纳不再被系统性
+        # 拒绝，链路解锁。
         allowed_missing_domains: tuple[str, ...] = ()
         domain_gaps: list[dict[str, str]] = []
+        allowed_missing_slots: frozenset[tuple[str, int]] = frozenset()
         if partial_adoption:
-            allowed_missing_domains, domain_gaps = (
+            allowed_missing_domains, domain_gaps, allowed_missing_slots = (
                 self._terminal_failure_domain_gaps(
                     project_id=project_id,
                     jobs=jobs,
@@ -617,6 +626,7 @@ class AdmissionMappingConfirmationService:
             decision_actor=actor,
             decision_reason=reason,
             allowed_missing_domains=allowed_missing_domains,
+            allowed_missing_slots=allowed_missing_slots,
         )
         payload = self._draft_payload(draft)
         if domain_gaps:
@@ -1621,10 +1631,14 @@ class AdmissionMappingConfirmationService:
                 for job in primary_jobs
                 if str(_value(job.status)) == "completed"
             }
-            gap_domains, _gap_reasons = self._terminal_failure_domain_gaps(
-                project_id=project_id,
-                jobs=primary_jobs,
-                accepted_job_ids=accepted_ids,
+            # R31轮（R31-02）：返回值扩为三元组（全失败域、缺口原因、
+            # 部分覆盖域的终态失败槽位豁免集）；复核豁免只消费域列表。
+            gap_domains, _gap_reasons, _gap_slots = (
+                self._terminal_failure_domain_gaps(
+                    project_id=project_id,
+                    jobs=primary_jobs,
+                    accepted_job_ids=accepted_ids,
+                )
             )
         report = reconcile_mapping_cohorts(
             profile_fields=profile_fields,
@@ -1653,20 +1667,28 @@ class AdmissionMappingConfirmationService:
         project_id: str,
         jobs: Iterable[Any],
         accepted_job_ids: set[str],
-    ) -> tuple[tuple[str, ...], list[dict[str, str]]]:
+    ) -> tuple[tuple[str, ...], list[dict[str, str]], frozenset[tuple[str, int]]]:
         """Domains whose every shard is terminally failed and uncovered.
 
         R10预检第2次：仅当某域在cohort中没有任何completed分片、且其
         失败分片全部终态（failed/blocked/cancelled/stale_input）时，
         该域才算合法缺席——绝不凭空豁免域完整性门。缺口域与原因返回
         供assemble豁免与draft物化。
+
+        R31轮（R31-02）：同时返回「部分覆盖域中终态失败分片」的
+        (domain, chunk_index)槽位集合——收割（queue_dwell_timeout/租约
+        耗尽）后的混合域（同域既有completed又有终态失败分片）在库层
+        槽位完整性门处同样需要合法缺席通道，否则部分采纳100%被422
+        硬拒（R31C-MY008实测556字段全量识别后采纳3连拒）。
         """
 
         covered: set[str] = set()
         failed_only: dict[str, list[str]] = {}
+        covered_slots: set[tuple[str, int]] = set()
+        failed_slots: set[tuple[str, int]] = set()
         for job in jobs:
             job_id = str(getattr(job, "job_id", "") or "")
-            domain = self._job_profile_domain(project_id, job)
+            domain, chunk_index = self._job_profile_slot(project_id, job)
             if not domain:
                 continue
             if job_id in accepted_job_ids or str(
@@ -1674,11 +1696,15 @@ class AdmissionMappingConfirmationService:
             ) == "completed":
                 covered.add(domain)
                 failed_only.pop(domain, None)
+                if chunk_index is not None:
+                    covered_slots.add((domain, int(chunk_index)))
                 continue
             if str(_value(getattr(job, "status", ""))) in {
                 "failed", "blocked", "cancelled", "stale_input",
             }:
                 failed_only.setdefault(domain, []).append(job_id)
+                if chunk_index is not None:
+                    failed_slots.add((domain, int(chunk_index)))
         gaps = sorted(set(failed_only).difference(covered))
         reasons = []
         for domain in gaps:
@@ -1691,19 +1717,53 @@ class AdmissionMappingConfirmationService:
                 ),
                 "source_job_id": first_job_id,
             })
-        return tuple(gaps), reasons
+        # R31轮（R31-02）：部分覆盖域——同域既有completed分片又有终态
+        # 失败分片。失败槽位豁免出库层槽位门，并给每域一条如实的缺口
+        # 记录（缺失分片数可见）。
+        partial_missing_slots = frozenset(
+            slot for slot in failed_slots - covered_slots
+            if slot[0] not in gaps
+        )
+        missing_by_domain: dict[str, int] = {}
+        for domain, _index in sorted(partial_missing_slots):
+            missing_by_domain[domain] = missing_by_domain.get(domain, 0) + 1
+        for domain in sorted(missing_by_domain):
+            reasons.append({
+                "domain": domain,
+                "reason": (
+                    f"该数据域有 {missing_by_domain[domain]} 个识别分片终态失败"
+                    "（队列滞留收割或重排预算耗尽），这些分片覆盖的字段不在"
+                    "本批结果中；如需补全请重新发起字段识别。"
+                ),
+                "source_job_id": failed_only.get(domain, [""])[0],
+            })
+        return tuple(gaps), reasons, partial_missing_slots
 
-    def _job_profile_domain(self, project_id: str, job: Any) -> str:
+    def _job_profile_slot(
+        self,
+        project_id: str,
+        job: Any,
+    ) -> tuple[str, int | None]:
         if self.ai_repository is None:
-            return ""
+            return "", None
         try:
             payload = self.ai_repository.input_payload(
                 project_id, str(getattr(job, "job_id", "") or "")
             )
         except Exception:
-            return ""
+            return "", None
         profile = payload.get("field_profile") or {}
-        return str(profile.get("domain") or "").strip()
+        domain = str(profile.get("domain") or "").strip()
+        try:
+            chunk_index = int(profile.get("chunk_index"))
+        except (TypeError, ValueError):
+            return domain, None
+        return domain, chunk_index
+
+    def _job_profile_domain(self, project_id: str, job: Any) -> str:
+        # R31轮（R31-02）：保留旧签名兼容，统一委托给槽位读取（避免
+        # 两份profile解析路径漂移）。
+        return self._job_profile_slot(project_id, job)[0]
 
     def _retry_failed_mapping_jobs(
         self,

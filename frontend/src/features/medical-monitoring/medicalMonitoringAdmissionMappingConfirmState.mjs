@@ -343,6 +343,14 @@ export function mappingConfirmationFailureAction(error, draft) {
 export function admissionMappingConfirmReducer(state, action) {
   switch (action?.type) {
     case "load-start":
+      // R31轮（R31-03）：后台自动刷新（2.5s轮询）不得把已就绪面板打回
+      // 「正在读取系统识别结果…」灰置态——此前每次轮询都load-start翻转
+      // phase，服务端慢时按钮长期停在灰置文案，停滞承诺的「重新读取
+      // 识别进度」入口被遮蔽（R31B实测70+分钟用户看不到任何可点入口）。
+      // 已有payload时保持phase只清错误；无payload或失败重载才进loading。
+      if (state.payload && state.phase !== "failed") {
+        return { ...state, error: null };
+      }
       return { ...state, phase: "loading", error: null, message: "正在读取系统识别结果…" };
     case "load-ready":
       {
@@ -368,7 +376,7 @@ export function admissionMappingConfirmReducer(state, action) {
         message: action.payload?.state === "generating"
           ? "字段识别仍在生成中，请稍后刷新进度。"
           : action.payload?.state === "needs_attention"
-            ? "部分字段识别尚未完成，请先刷新等待生成结束。"
+            ? "部分字段识别任务已终态失败；已完成的识别结果可采纳继续，缺失字段如实列示。"
             : "",
         error: null,
         };
