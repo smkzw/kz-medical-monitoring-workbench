@@ -99,6 +99,9 @@ _MAPPING_STATUS_CODES = {
     "mapping_candidate_not_adoptable": 409,
     "mapping_draft_conflict": 409,
     "mapping_quality_blocked": 409,
+    # R31轮（R31-02）：识别源状态问题（分片缺失/载荷不一致）与用户输入
+    # 非法分开归因——不再把系统性状态问题伪装成「字段修订内容无效」。
+    "mapping_draft_source_unavailable": 409,
     "mapping_draft_invalid": 422,
     "mapping_questions_unresolved": 422,
 }
@@ -190,6 +193,10 @@ _MAPPING_MESSAGES = {    "mapping_admission_not_found": "未找到对应的数�
     "mapping_quality_blocked": (
         "系统核对发现部分字段对应关系仍存在问题，暂时不能整体确认。"
         "请按系统提示修订对应字段后再确认。"
+    ),
+    "mapping_draft_source_unavailable": (
+        "部分字段识别分片缺失或校验不一致，本次结果未保存。"
+        "这不是填写内容的问题；请稍后重试，或重新发起字段识别。"
     ),
     "mapping_draft_invalid": "字段修订内容无效。请检查填写内容后重试。",
     "mapping_questions_unresolved": (
@@ -602,6 +609,13 @@ def _repo_error_code(exc: Exception) -> Optional[str]:
         return "mapping_quality_blocked"
     if "Conflict" in name or "StateConflict" in name:
         return "mapping_draft_conflict"
+    # R31轮（R31-02）：源状态校验失败（分片缺失/载荷不一致等系统性
+    # 状态问题）不得落入「用户修订内容无效」的422归因——此前一切
+    # ValueError/DraftError都被归为mapping_draft_invalid，用户无任何
+    # 修改点击采纳也被告知「请检查填写内容」，形成报错→重载→再报
+    # 死循环。源状态问题对用户如实给409+系统侧指引。
+    if "SourceStateError" in name:
+        return "mapping_draft_source_unavailable"
     if "DraftError" in name or isinstance(exc, ValueError):
         return "mapping_draft_invalid"
     return None
@@ -1050,9 +1064,19 @@ def register_mapping_candidate_routes(
                 }
                 # R25轮（R25-03）：透传pending作业数与最早入队时间，前端
                 # 显示阶段耗时并在长时间无进展时给出重试指引。
+                # R31轮（R31-06）：排队/执行中分开透传，用户可区分
+                # 「等待队列」与「正在核对」。
                 if result.get("pending_job_count") is not None:
                     response_payload["pending_job_count"] = int(
                         result["pending_job_count"]
+                    )
+                if result.get("pending_running_count") is not None:
+                    response_payload["pending_running_count"] = int(
+                        result["pending_running_count"]
+                    )
+                if result.get("pending_queued_count") is not None:
+                    response_payload["pending_queued_count"] = int(
+                        result["pending_queued_count"]
                     )
                 if result.get("pending_since"):
                     response_payload["pending_since"] = str(result["pending_since"])

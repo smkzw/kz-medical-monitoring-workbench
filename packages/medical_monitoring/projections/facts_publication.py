@@ -13,7 +13,7 @@ import os
 import re
 import tempfile
 from dataclasses import fields
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
@@ -792,9 +792,13 @@ class FactsPublicationAuthorityProvider:
                     facts.append(f"严重不良事件报告：{ser_raw}")
                 if facts:
                     ae_medical_note = "源记录依据——" + "；".join(facts) + "。"
+                # R31轮（R31-05）：关系判定必须显式等于「肯定有关」——
+                # 此前子串匹配"肯定"会把「肯定无关」也命中，在明确无关的
+                # 事件上误触发SAE漏报审查（对研究中心的严肃错误指控）。
                 if (
                     _grade_match(sev_raw) in {"3级", "4级", "5级"}
-                    and "肯定" in rel_raw
+                    and "肯定有关" in rel_raw
+                    and "肯定无关" not in rel_raw
                     and ("持续" in out_raw or "未愈" in out_raw)
                     and ser_raw in {"否", "N", "NO", "no"}
                 ):
@@ -878,6 +882,41 @@ class FactsPublicationAuthorityProvider:
                 ex_day = _clean(ex_row.get("EXDAT"))
                 if ex_subj and ex_day:
                     ex_dosing_days.add((ex_subj, ex_day))
+        # R31轮（R31-04）：量表周分值列（UASW2/UASW4/…）的日期锚定依据
+        # ——①SV同周访视的实际日期（记录值，优先）；②EX首次给药日期
+        # +周数×7天推定（第N周访视=首剂后第7N+1天，与方案访视窗一致）。
+        # 此前周分值事件start恒为None，全部UAS7记录落「日期待确认」：
+        # 无法推算周归属、指标趋势退化为单柱、预设监查重点不可操作。
+        first_dose_by_subj: dict[str, str] = {}
+        for ex_table, ex_rows in domains.items():
+            if not ex_table.upper().startswith("EX"):
+                continue
+            for ex_row in ex_rows:
+                ex_subj = _clean(ex_row.get("SUBJID"))
+                if not ex_subj or ex_subj in _UK_TOKENS:
+                    continue
+                if _date_state(ex_row.get("EXDAT")) != "exact":
+                    continue
+                existing = first_dose_by_subj.get(ex_subj)
+                if existing is None or str(ex_row.get("EXDAT")) < existing:
+                    first_dose_by_subj[ex_subj] = _clean(ex_row.get("EXDAT"))
+        _WEEK_VISIT_RE = re.compile(r"^W\s*(\d{1,2})$", re.IGNORECASE)
+        visit_week_dates: dict[tuple[str, int], str] = {}
+        for sv_table in ("SV",):
+            for sv_row in domains.get(sv_table, []):
+                sv_subj = _clean(sv_row.get("SUBJID"))
+                sv_visit = _clean(sv_row.get("VISIT"))
+                if not sv_subj or sv_subj in _UK_TOKENS or not sv_visit:
+                    continue
+                week_match = _WEEK_VISIT_RE.fullmatch(sv_visit)
+                if not week_match:
+                    continue
+                if _date_state(sv_row.get("VISDAT")) != "exact":
+                    continue
+                key = (sv_subj, int(week_match.group(1)))
+                visit_week_dates.setdefault(
+                    key, _clean(sv_row.get("VISDAT"))
+                )
         for table, rows in domains.items():
             if table in _EXCLUDED_TABLES or _is_roster_form_table(rows):
                 continue
@@ -917,14 +956,38 @@ class FactsPublicationAuthorityProvider:
                         # 冻结进packet后读取链在Python侧摘要输出"12.0"、
                         # 前端JS侧输出"12"，验签必失败（旅程页死链根因）。
                         value = int(parsed) if parsed.is_integer() else parsed
+                        # R31轮（R31-04）：周分值事件的日期锚定——优先SV
+                        # 同周访视记录日期（记录值）；缺席时以EX首次给药
+                        # 日期+周数×7天推定（第N周评估=首剂后第7N+1天，
+                        # 与W2=Day15/W4=Day29访视窗一致）。锚定依据写入
+                        # 事件标签，出处可核；两者皆缺时保持missing（日期
+                        # 待确认），绝不凭空补造。
+                        anchor_raw = visit_week_dates.get((subj, week))
+                        anchor_note = ""
+                        if anchor_raw:
+                            anchor_note = f"锚定自W{week}访视记录日期"
+                        else:
+                            first_dose = first_dose_by_subj.get(subj)
+                            first_dose_date = _parse_date(first_dose)
+                            if first_dose_date is not None:
+                                anchor_raw = (
+                                    first_dose_date + timedelta(days=7 * week)
+                                ).isoformat()
+                                anchor_note = (
+                                    f"按首次给药日期{first_dose}"
+                                    f"+第{week}周推定"
+                                )
                         _add_event(
                             table=table,
                             index=index,
                             subj=subj,
                             subtype=subtype,
                             domain=domain,
-                            start_raw=None,
-                            label=f"{scale_name}·第{week}周={value:g}",
+                            start_raw=anchor_raw,
+                            label=(
+                                f"{scale_name}·第{week}周={value:g}"
+                                + (f"（{anchor_note}）" if anchor_note else "")
+                            ),
                             event_suffix=f"-{column}",
                             measure_value=value,
                             measure_label=f"{scale_name}（第{week}周）",

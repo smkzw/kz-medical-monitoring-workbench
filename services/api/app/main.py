@@ -1115,6 +1115,15 @@ monitoring_ai_repository = MonitoringAiRepository(
     lease_seconds=int(
         os.environ.get("WORKBENCH_MONITORING_AI_LEASE_SECONDS", "1800")
     ),
+    # R31轮（R31-01）：queued滞留收割视界默认45分钟（纪律对齐），运营可
+    # 经环境变量调高（如超大清单长跑场景）。作业超时落可重试终态后，
+    # 第3步「采用已识别字段继续」旁路真实可达。
+    queue_dwell_timeout_seconds=int(
+        os.environ.get(
+            "WORKBENCH_MONITORING_QUEUE_DWELL_TIMEOUT_SECONDS",
+            "2700",
+        )
+    ),
 )
 source_registry.monitoring_authority_receipt_verifier = (
     lambda project_id, receipt: verify_document_authority_promotion_receipt(

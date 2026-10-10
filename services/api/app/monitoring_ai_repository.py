@@ -299,7 +299,14 @@ class MonitoringAiRepository:
         path: Path,
         *,
         lease_seconds: int = 300,
-        queue_dwell_timeout_seconds: int = 7200,
+        # R31轮（R31-01）：queued侧总滞留收割视界从7200s（2h）对齐到2700s
+        # （45分钟）。证据：R31实测双项目共612个识别分片在2worker下仅消化
+        # ~85次调用，作业滞留队列2小时不被认领也不失败，界面停在
+        # 「识别仍在生成中」且承诺的失败旁路永不出现（45分钟纪律内用户
+        # 零出路）。45分钟仍显著大于健康单作业排队时延（租约300s+重试
+        # 预算），不误收健康积压；超时即落可重试终态，批次推进到
+        # needs_attention，前端「采用已识别字段继续」旁路可用。
+        queue_dwell_timeout_seconds: int = 2700,
         clock=_utc_now,
     ):
         if lease_seconds <= 0:

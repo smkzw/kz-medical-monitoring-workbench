@@ -1094,6 +1094,19 @@ class MonitoringDocumentAuthorityWorkflow:
                 for job in active
                 if str(getattr(job, "created_at", "") or "")
             ]
+            # R31轮（R31-06）：排队（queued，尚未被worker认领）与执行中
+            # （running，已认领在跑）分开计数——此前混在「N项在队列中」
+            # 一个词里，共享队列被大识别批次占用时用户把排队误读为系统
+            # 卡死（R31A实测确认归属后7+分钟只见「1项核对作业排队」无
+            # 区分）。
+            running = [
+                job for job in active
+                if job.status == MonitoringAiJobStatus.RUNNING
+            ]
+            queued = [
+                job for job in active
+                if job.status == MonitoringAiJobStatus.QUEUED
+            ]
             return {
                 "state": active_state,
                 "authority_status": "not_promoted",
@@ -1103,6 +1116,8 @@ class MonitoringDocumentAuthorityWorkflow:
                 # 已耗时并在长时间无进展时给出重试指引。队列本身有租约
                 # 超时与attempt上限，worker侧收割（R25-01）保证最终落终态。
                 "pending_job_count": len(active),
+                "pending_running_count": len(running),
+                "pending_queued_count": len(queued),
                 "pending_since": min(created) if created else "",
             }
         if any(job.status != MonitoringAiJobStatus.COMPLETED for job in jobs):

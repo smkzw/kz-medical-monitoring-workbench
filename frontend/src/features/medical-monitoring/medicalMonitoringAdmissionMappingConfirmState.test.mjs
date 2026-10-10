@@ -462,3 +462,50 @@ test("generating mapping exposes stall after threshold and enables reload", () =
   assert.equal(mappingStalledMs(state, stalledAt), 0);
   assert.equal(state.progress.fieldCount, null);
 });
+
+// R31轮（R31-03）：后台2.5s轮询的load-start不得把已就绪面板打回
+// 「正在读取系统识别结果…」灰置态——此前每次轮询都翻转phase，服务端
+// 慢时按钮长期停在灰置文案，停滞承诺的「重新读取识别进度」入口被
+// 遮蔽（R31B实测70+分钟用户看不到任何可点入口）。
+test("background refresh keeps ready phase so the stalled recovery entry stays visible", () => {
+  const generatingPayload = {
+    state: "generating",
+    confirmation_status: "generating",
+    summary: { field_count: 25, user_question_count: 0 },
+    candidates: [],
+  };
+  let state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "load-ready",
+    payload: generatingPayload,
+  });
+  assert.equal(state.phase, "ready");
+  // 停滞超过阈值：主按钮是可点击的重读入口（承诺的恢复路径）。
+  const stalledState = {
+    ...state,
+    progress: { fieldCount: 25, since: Date.now() - MAPPING_STALL_THRESHOLD_MS - 60_000 },
+  };
+  const stalled = admissionMappingPrimaryAction(stalledState);
+  assert.equal(stalled.key, "reload");
+  assert.equal(stalled.disabled, false);
+
+  // 后台轮询发出load-start：phase保持ready，重读入口仍在且可点。
+  const duringRefresh = admissionMappingConfirmReducer(stalledState, {
+    type: "load-start",
+  });
+  assert.equal(duringRefresh.phase, "ready");
+  const actionDuringRefresh = admissionMappingPrimaryAction(duringRefresh);
+  assert.equal(actionDuringRefresh.key, "reload");
+  assert.equal(actionDuringRefresh.disabled, false);
+
+  // 无payload的初次加载与失败态重载仍进入loading反馈（用户显式动作）。
+  const initial = admissionMappingConfirmReducer(
+    createAdmissionMappingConfirmState(),
+    { type: "load-start" },
+  );
+  assert.equal(initial.phase, "loading");
+  const failedThenReload = admissionMappingConfirmReducer(
+    { ...stalledState, phase: "failed" },
+    { type: "load-start" },
+  );
+  assert.equal(failedThenReload.phase, "loading");
+});
