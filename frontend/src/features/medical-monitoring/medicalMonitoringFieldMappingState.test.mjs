@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   semanticQualityPresentation,
+  semanticQualityBlockedGroups,
 } from "./medicalMonitoringFieldMappingState.mjs";
 
 const blocked = semanticQualityPresentation({
@@ -16,9 +17,41 @@ const blocked = semanticQualityPresentation({
 assert.deepEqual(blocked, {
   level: "blocked",
   title: "还有 2 组字段关系需要处理",
-  detail: "请按页面提示补充必要信息，处理完成后即可继续。",
+  // R32-02：detail与下方阻断组明细卡呼应，不再空指「按页面提示」。
+  detail: "逐条说明见下方卡片；修订相关字段后系统会自动重新核对，核对通过前不能确认。",
   blocksConfirmation: true,
 });
+
+// R32-02：阻断组明细（标题/摘要/涉及字段当前角色）可被面板渲染。
+const blockedGroups = semanticQualityBlockedGroups({
+  status: "blocked",
+  finding_groups: [
+    {
+      finding_group_id: "fg-1",
+      rule_id: "G-CMIP-001",
+      severity: "global_blocker",
+      title_zh: "非试验用药与试验药物角色混用",
+      summary_zh: "同一语义域中混入 CM 与试验药物角色。",
+      affected_fields: [
+        { domain: "CM", source_field: "CMTRT", role_concept_id: "cm.name" },
+      ],
+    },
+    { severity: "capability_blocker", title_zh: "受限项不计入阻断组" },
+  ],
+});
+assert.deepEqual(blockedGroups, [
+  {
+    key: "fg-1",
+    ruleId: "G-CMIP-001",
+    title: "非试验用药与试验药物角色混用",
+    summary: "同一语义域中混入 CM 与试验药物角色。",
+    fields: [
+      { domain: "CM", sourceField: "CMTRT", currentRole: "cm.name" },
+    ],
+  },
+]);
+assert.deepEqual(semanticQualityBlockedGroups(null), []);
+assert.deepEqual(semanticQualityBlockedGroups({ finding_groups: [] }), []);
 
 const restricted = semanticQualityPresentation({
   status: "pass_with_warnings",

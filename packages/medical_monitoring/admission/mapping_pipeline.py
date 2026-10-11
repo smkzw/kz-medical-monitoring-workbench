@@ -269,6 +269,23 @@ def _evidence_summary(candidate: Any, evidence_ids: list[str]) -> list[dict[str,
     return rows
 
 
+def _chunk_business_identity(business_key: str) -> tuple[str, str, str]:
+    """Split a mapping chunk business key into (table, chunk, chunk_count).
+
+    R32-04：业务键形如 ``{cohort_prefix}:{attempt_id}:{TABLE}:0001-of-0003``
+    （cohort前缀与attempt id均无冒号），识别暴露层据此给出逐表/逐分片
+    失败清单。不可解析时原样返回空表名，由调用方回退展示原始键。
+    """
+
+    parts = str(business_key or "").split(":")
+    if len(parts) < 4:
+        return "", "", ""
+    table = parts[2]
+    spec = parts[-1]
+    chunk, _, total = spec.partition("-of-")
+    return table, chunk, total
+
+
 def _latest_job_cohort(
     jobs: Sequence[Any],
     *,
@@ -1533,6 +1550,92 @@ class AdmissionMappingPipeline:
             cohort=contract.cohort,
         )
 
+    def retry_failed_candidates(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Path,
+        cohort: str = MONITORING_MAPPING_COHORT_PRIMARY,
+        table_name: str = "",
+    ) -> Mapping[str, Any]:
+        """Requeue terminal-failed recognition shards as an explicit user action.
+
+        R32-04：识别分片终态失败（R32实测265片queue_dwell_timeout、
+        attempt_count=0）后用户只剩「全部采纳/全部重来」两个极端选项。
+        这里复用库层 retry_terminal 的显式重试语义（重置滞留基线、
+        失败原因清空），可按表过滤；成功重排后唤醒worker。
+        """
+
+        contract = self._cohort_contract(cohort)
+        service = self._cohort_service(contract.cohort)
+        if not self._configured(service):
+            raise AdmissionMappingPipelineError("mapping_bridge_unconfigured")
+        self._load_record(
+            project_id=project_id, attempt_id=attempt_id, workspace_dir=workspace_dir
+        )
+        resolver = getattr(service, "current_revision_resolver", None)
+        retry = getattr(self._repository, "retry_terminal", None)
+        if not callable(resolver) or not callable(retry):
+            raise AdmissionMappingPipelineError("mapping_retry_unavailable")
+        wanted = str(table_name or "").strip()
+        jobs = self._repository.list_jobs(
+            project_id,
+            task_type=str(_value(self._task_type)),
+            business_key_prefix=contract.job_business_key_prefix(attempt_id),
+        )
+        requeued: list[dict[str, str]] = []
+        skipped: list[dict[str, str]] = []
+        from services.api.app.monitoring_ai_repository import (
+            MonitoringAiStateConflictError,
+        )
+
+        for job in jobs:
+            status = str(_value(job.status))
+            if status not in {"failed", "blocked", "stale_input"}:
+                continue
+            table, chunk, _ = _chunk_business_identity(
+                str(getattr(job, "business_key", "") or ""),
+            )
+            identity = {
+                "job_id": str(getattr(job, "job_id", "") or ""),
+                "table_name": table,
+                "chunk_index": chunk,
+            }
+            if wanted and table != wanted:
+                continue
+            if getattr(job, "contract_retirement_code", ""):
+                skipped.append({**identity, "reason": "contract_retired"})
+                continue
+            try:
+                current_revision = resolver(job)
+            except Exception:
+                current_revision = None
+            if not current_revision or current_revision != job.input_revision_sha256:
+                skipped.append({**identity, "reason": "input_revision_changed"})
+                continue
+            try:
+                retry(
+                    project_id,
+                    job.job_id,
+                    current_input_revision_sha256=current_revision,
+                )
+            except MonitoringAiStateConflictError:
+                skipped.append({**identity, "reason": "state_conflict"})
+                continue
+            requeued.append(identity)
+        if requeued and callable(getattr(self, "_worker_wake", None)):
+            self._worker_wake()
+        return {
+            "attempt_id": attempt_id,
+            "cohort": contract.cohort,
+            "table_name": wanted,
+            "requeued_count": len(requeued),
+            "skipped_count": len(skipped),
+            "requeued": requeued,
+            "skipped": skipped,
+        }
+
     def adjudicate_candidates(
         self,
         *,
@@ -1996,7 +2099,23 @@ class AdmissionMappingPipeline:
         mappings = []
         for job in jobs:
             status = str(_value(job.status))
+            table_name, chunk_index, chunk_count = _chunk_business_identity(
+                str(getattr(job, "business_key", "") or ""),
+            )
+            # R32-04：逐分片暴露身份与失败原因——此前job_rows只有状态与
+            # 模型字段，前端无从构建「哪些表失败、为何失败、能否重跑」
+            # 的清单（report_B.md发现3：用户只剩全部采纳/全部重来）。
             job_rows.append({
+                "job_id": str(getattr(job, "job_id", "") or ""),
+                "business_key": str(getattr(job, "business_key", "") or ""),
+                "table_name": table_name,
+                "chunk_index": chunk_index,
+                "chunk_count": chunk_count,
+                "attempt_count": int(getattr(job, "attempt_count", 0) or 0),
+                "max_attempts": int(getattr(job, "max_attempts", 0) or 0),
+                "failure_message": str(
+                    getattr(job, "failure_message", "") or "",
+                )[:400],
                 "status": status,
                 "provider": str(job.provider),
                 "requested_model": str(job.requested_model),

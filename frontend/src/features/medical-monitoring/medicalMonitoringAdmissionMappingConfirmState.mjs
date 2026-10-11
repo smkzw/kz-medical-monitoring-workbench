@@ -3,7 +3,7 @@
 // the medically substantive ambiguities become Chinese question cards.
 // Keeps Chinese product copy and candidate/fact separation outside transport.
 
-import { semanticQualityPresentation } from "./medicalMonitoringFieldMappingState.mjs";
+import { semanticQualityPresentation, semanticQualityBlockedGroups } from "./medicalMonitoringFieldMappingState.mjs";
 
 // Transport-only filter: the wizard always reads the full candidate list and
 // derives question cards client-side, so no focus toggle is exposed.
@@ -224,12 +224,28 @@ export function projectMappingCandidates(payload) {
   }
   const fieldCount = summaryCount(summary.field_count, summary.candidate_count, projected.length);
   const questionCount = summaryCount(summary.user_question_count, summary.critical_count, questionCards.length);
+  // R32-04：后端按表聚合的识别失败清单（table_failures）——此前界面
+  // 只笼统说「部分识别任务已终态失败」，用户须自行心算失败表下落。
+  const failedTables = (Array.isArray(payload?.table_failures) ? payload.table_failures : [])
+    .map((item) => ({
+      tableName: String(item?.table_name || ""),
+      failedChunks: Number(item?.failed_chunks || 0),
+      failureCodes: Array.isArray(item?.failure_codes) ? item.failure_codes.map(String) : [],
+      chunks: Array.isArray(item?.chunks) ? item.chunks.map((chunk) => ({
+        chunkIndex: String(chunk?.chunk_index || ""),
+        status: String(chunk?.status || ""),
+        failureCode: String(chunk?.failure_code || ""),
+        attemptCount: Number(chunk?.attempt_count || 0),
+        maxAttempts: Number(chunk?.max_attempts || 0),
+      })) : [],
+    }));
   return {
     state: String(payload?.state || ""),
     confirmationStatus: String(payload?.confirmation_status || "pending_confirmation"),
     factsGenerated: Boolean(payload?.facts_generated),
     fieldCount,
     questionCount,
+    failedTables,
     headline: mappingHeadline({
       fieldCount,
       questionCount,
@@ -278,6 +294,13 @@ function draftQuestionCards(draft) {
 export function mappingUnansweredCount(mappingState) {
   const answered = mappingState?.answeredKeys || {};
   return mappingQuestionCards(mappingState).filter((card) => !answered[card.key]).length;
+}
+
+// R32-02：阻断确认的「待处理字段关系」组（标题/摘要/涉及字段当前角色）。
+// 数据一直随草稿下发，此前界面从不渲染——B位实测「还有1组字段关系需要
+// 处理」横幅下页面零控件、确认按钮永久disabled（report_B.md:33-34）。
+export function mappingBlockedRelationGroups(mappingState) {
+  return semanticQualityBlockedGroups(mappingState?.draft?.semantic_quality);
 }
 
 // Durable audit line for the confirm call; always longer than the server's
@@ -507,7 +530,11 @@ export function admissionMappingPrimaryAction(state) {
         ? "重试完成字段识别"
         : unanswered > 0
           ? `请先回答 ${unanswered} 个问题`
-          : "确认字段对应关系",
+          : quality.blocksConfirmation
+            // R32-02：阻断时按钮文案如实反映阻断（横幅同口径），不再
+            // 显示可点语义的「确认字段对应关系」却永远禁用。
+            ? (quality.title || "字段关系需要处理后才能确认")
+            : "确认字段对应关系",
       disabled: quality.blocksConfirmation || unanswered > 0,
     };
   }

@@ -491,7 +491,22 @@ def validate_document_evidence_packet(
     if packet.project_id != project_id:
         raise DocumentEvidenceError("document_packet_project_mismatch")
     if require_mapping_context and not packet.mapping_context_ready:
-        raise DocumentEvidenceError("mapping_document_evidence_incomplete")
+        # R32-05：配对文档未就绪（缺研究方案或电子病例报告表的「已识别」
+        # 绑定，含用户声明本次未提供）不再是「文件不可读/扫描版/损坏」。
+        # 旧代码把它归入 mapping_document_evidence_incomplete，错误文案
+        # 对已被系统成功识别的研究方案作不实完整性指控（report_C.md
+        # 发现2）。这里用独立代码承载真实语义，配文案如实指认缺件。
+        unmet = sorted(
+            item.role
+            for item in packet.roles
+            if item.role in MAPPING_REQUIRED_DOCUMENT_ROLES
+            and item.status != _CURRENT_STATUS
+        ) or sorted(MAPPING_REQUIRED_DOCUMENT_ROLES)
+        error = DocumentEvidenceError(
+            "mapping_document_evidence_roles_unmet"
+        )
+        error.missing_roles = tuple(unmet)
+        raise error
     return packet.to_dict()
 
 

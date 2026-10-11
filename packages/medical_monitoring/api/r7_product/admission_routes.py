@@ -28,6 +28,7 @@ from typing import Any, Mapping, Optional, Protocol, Sequence, Union
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from ...runtime import project_backup as pb
 from ...admission.pipeline import AdmissionPipelineError
@@ -325,10 +326,15 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
         except pb.ProjectBackupError as exc:
             return _run_entry_error_response(exc)
         try:
-            result = pipeline.create_attempt(
-                project_id=canonical,
-                source_dir=Path(source_dir),
-                workspace_dir=_workspace_dir(context.root, canonical),
+            # R32-01：create_attempt解析整个listing文件（大清单可达数十
+            # 万行）并落staging存储，曾直接跑在事件循环里拖死全站并发
+            # 请求；下放线程池。
+            result = await run_in_threadpool(
+                lambda: pipeline.create_attempt(
+                    project_id=canonical,
+                    source_dir=Path(source_dir),
+                    workspace_dir=_workspace_dir(context.root, canonical),
+                )
             )
             public = _public_admission_projection(result, required_keys=("attempt_id", "state"))
             if isinstance(public, JSONResponse):
@@ -404,13 +410,17 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
             str(upload.filename or "") for upload in files
         ][:50]
         try:
-            result = pipeline.create_uploaded_attempt(
-                project_id=canonical,
-                uploads=[
-                    (relative_path, upload.file)
-                    for relative_path, upload in zip(relative_paths, files)
-                ],
-                workspace_dir=_workspace_dir(context.root, canonical),
+            # R32-01：create_uploaded_attempt解析并暂存上传的listing
+            # 文件（哈希+落盘），阻塞调用下放线程池。
+            result = await run_in_threadpool(
+                lambda: pipeline.create_uploaded_attempt(
+                    project_id=canonical,
+                    uploads=[
+                        (relative_path, upload.file)
+                        for relative_path, upload in zip(relative_paths, files)
+                    ],
+                    workspace_dir=_workspace_dir(context.root, canonical),
+                )
             )
             public = _public_admission_projection(
                 result, required_keys=("attempt_id", "state")
@@ -450,7 +460,7 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
         finally:
             write_permit.release()
 
-    def _read_admission(
+    async def _read_admission(
         project_id: str,
         request: Request,
         attempt_id: str,
@@ -476,10 +486,14 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
             return _admission_error("admission_attempt_id_invalid")
         handler = getattr(pipeline, handler_name)
         try:
-            result = handler(
-                project_id=canonical,
-                attempt_id=validated_attempt,
-                workspace_dir=_workspace_dir(context.root, canonical),
+            # R32-01：状态/profile读取落workspace存储（manifest解析、
+            # 表概况构建），阻塞调用下放线程池。
+            result = await run_in_threadpool(
+                lambda: handler(
+                    project_id=canonical,
+                    attempt_id=validated_attempt,
+                    workspace_dir=_workspace_dir(context.root, canonical),
+                )
             )
             public = _public_admission_projection(result, required_keys=required_keys)
             if isinstance(public, JSONResponse):
@@ -513,9 +527,12 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
         if isinstance(pipeline, JSONResponse):
             return pipeline
         try:
-            result = pipeline.latest_attempt_status(
-                project_id=canonical,
-                workspace_dir=_workspace_dir(context.root, canonical),
+            # R32-01：latest读取落workspace存储，阻塞调用下放线程池。
+            result = await run_in_threadpool(
+                lambda: pipeline.latest_attempt_status(
+                    project_id=canonical,
+                    workspace_dir=_workspace_dir(context.root, canonical),
+                )
             )
             public = _public_admission_projection(
                 result, required_keys=("attempt_id", "state")
@@ -536,7 +553,7 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
     async def get_data_admission_status(
         project_id: str, attempt_id: str, request: Request
     ) -> Any:
-        return _read_admission(
+        return await _read_admission(
             project_id,
             request,
             attempt_id,
@@ -548,7 +565,7 @@ def register_admission_routes(router: APIRouter, context: AdmissionRouteContext)
     async def get_data_admission_profile(
         project_id: str, attempt_id: str, request: Request
     ) -> Any:
-        return _read_admission(
+        return await _read_admission(
             project_id,
             request,
             attempt_id,

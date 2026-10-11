@@ -122,9 +122,9 @@ const noRolePayload = generatedAdmissionFixture({ withRoles: false });
 
 // C3 candidates payload: the system auto-adopts the clear recognitions and
 // only the substantive ambiguities become question cards.
-function candidatesPayload({ withQuestions = true } = {}) {
+function candidatesPayload({ withQuestions = true, withTableFailures = false } = {}) {
   return {
-    state: "candidates_ready",
+    state: withTableFailures ? "needs_attention" : "candidates_ready",
     confirmation_status: "pending_confirmation",
     facts_generated: false,
     summary: {
@@ -132,6 +132,17 @@ function candidatesPayload({ withQuestions = true } = {}) {
       critical_count: withQuestions ? 1 : 0,
       displayed_count: 2,
     },
+    table_failures: withTableFailures ? [
+      {
+        table_name: "LB9",
+        failed_chunks: 2,
+        failure_codes: ["queue_dwell_timeout"],
+        chunks: [
+          { chunk_index: "0001", status: "failed", failure_code: "queue_dwell_timeout", attempt_count: 0, max_attempts: 2 },
+          { chunk_index: "0002", status: "failed", failure_code: "queue_dwell_timeout", attempt_count: 0, max_attempts: 2 },
+        ],
+      },
+    ] : undefined,
     candidates: [
       {
         domain: "访视列表",
@@ -198,6 +209,49 @@ const draftPayload = {
       user_action: "系统已自动对应。",
     },
   ],
+};
+
+// R32-02：语义质量全局阻断且无问题卡——死锁现场（横幅要求处理、
+// 页面零控件、确认按钮永久禁用）。修复后必须渲染阻断组明细卡与
+// 逐字段角色修订入口。
+const blockedDraftPayload = {
+  ...draftPayload,
+  semantic_quality: {
+    schema_version: "mm-mapping-semantic-quality-v2",
+    role_catalog_version: "monitoring_role_catalog_v5",
+    rule_catalog_version: "monitoring_rule_catalog_v5",
+    input_sha256: hex(21),
+    status: "blocked",
+    activation_disposition: "reject",
+    capability_manifest_version: "cap-v1",
+    capability_manifest_sha256: hex(22),
+    global_blocker_count: 1,
+    capability_blocker_count: 0,
+    warning_count: 0,
+    finding_groups: [
+      {
+        finding_group_id: "fg-r32-001",
+        rule_id: "G-CMIP-001",
+        severity: "global_blocker",
+        clinical_topic: "cm_ip_boundary",
+        title_zh: "非试验用药与试验药物角色混用",
+        summary_zh: "同一语义域中混入 CM 与试验药物角色；CM 仅表示非试验用药或治疗。",
+        affected_fields: [
+          { domain: "访视列表", source_field: "受试者编号", role_concept_id: "subject_id" },
+        ],
+        affected_capability_ids: ["ip_exposure_adherence"],
+      },
+    ],
+    capability_states: [
+      {
+        capability_id: "ip_exposure_adherence",
+        state: "blocked_by_quality",
+        blocking_finding_group_ids: ["fg-r32-001"],
+        limitation_codes: [],
+      },
+    ],
+    report_sha256: hex(23),
+  },
 };
 
 export const renders = {
@@ -378,6 +432,13 @@ export const renders = {
   confirmDrafting: render(readyWizardState(), mappingFrom([
     { type: "load-ready", payload: candidatesPayload() },
     { type: "adopt-ready", payload: draftPayload },
+  ])),
+  confirmBlockedQuality: render(readyWizardState(), mappingFrom([
+    { type: "load-ready", payload: candidatesPayload({ withQuestions: false }) },
+    { type: "adopt-ready", payload: blockedDraftPayload },
+  ])),
+  needsAttentionFailures: render(readyWizardState(), mappingFrom([
+    { type: "load-ready", payload: candidatesPayload({ withQuestions: false, withTableFailures: true }) },
   ])),
   confirmDraftingAnswered: render(readyWizardState(), mappingFrom([
     { type: "load-ready", payload: candidatesPayload() },

@@ -18,6 +18,7 @@ import {
   admissionMappingConfirmReducer,
   admissionMappingPrimaryAction,
   createAdmissionMappingConfirmState,
+  mappingBlockedRelationGroups,
   mappingCandidateKey,
   mappingConfirmationReason,
   mappingConfirmationFailureAction,
@@ -447,9 +448,14 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
 // Step three: a plain summary of what the system recognized plus one card per
 // medically substantive ambiguity. The per-field engineering list stays
 // collapsed; the user only meets the questions that change medical analysis.
-export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
+export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldRole, onRetryFailedChunks }) {
   const [noteKey, setNoteKey] = useState("");
   const [noteText, setNoteText] = useState("");
+  // R32-02：阻断组的逐字段角色修订输入（domain.source_field → 输入值）。
+  const [roleDrafts, setRoleDrafts] = useState({});
+  const [roleBusy, setRoleBusy] = useState("");
+  // R32-04：失败分片重跑中状态（""=空闲；"__all__"=全部；否则为表名）。
+  const [retryBusy, setRetryBusy] = useState("");
   // R5冲刺（R2-12）：全字段列表曾一次性渲染上千条DOM（两次CDP截图均
   // 超时）；改为展开才渲染+分批加载。
   // R4-03口径澄清（20260929，数据级核实后修正）：本页「已识别 N 张表」
@@ -464,6 +470,10 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
   const currentQuestion = questions.find((card) => !answeredKeys[card.key]);
   const drafting = mappingState.phase === "drafting";
   const quality = drafting ? semanticQualityPresentation(mappingState.draft?.semantic_quality) : null;
+  // R32-02：阻断确认的待处理字段关系组（此前只渲染横幅不给入口）。
+  const blockedGroups = drafting && quality?.blocksConfirmation
+    ? mappingBlockedRelationGroups(mappingState)
+    : [];
   const payload = mappingState.payload;
   // R25轮（R25-01）：generating超阈值无新字段时，headline如实切换为
   // 停滞提示（含可执行指引），不再恒显「识别仍在生成中」。轮询每2.5秒
@@ -484,6 +494,8 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
   const tables = payload?.tableSummaries || [];
   const questionTableCount = tables.filter((table) => table.questionCount > 0).length;
   const visibleCandidates = candidates.slice(0, fieldBatch);
+  // R32-04：按表聚合的识别失败清单（后端table_failures）。
+  const failedTables = payload?.failedTables || [];
 
   return (
     <div className="monitoring-admission-confirm monitoring-admission-mapping">
@@ -529,6 +541,61 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
           </ul>
         </details>
       ) : null}
+      {/* R32-04：识别失败分片按表清单+重跑入口——此前只笼统显示
+          「部分识别任务已终态失败」，失败表名单/原因/重跑均缺失。 */}
+      {failedTables.length ? (
+        <details className="monitoring-admission-table-details" aria-label="识别失败分片清单">
+          <summary>
+            {failedTables.length} 张数据表存在未完成的识别分片
+            <span>查看失败清单与重跑入口</span>
+          </summary>
+          <ul className="monitoring-admission-table-summary" aria-label="识别失败分片按表清单">
+            {failedTables.map((table) => (
+              <li key={table.tableName}>
+                <strong>{labelSheetName(table.tableName)}</strong>
+                <span>
+                  {table.failedChunks} 个分片未完成
+                  {table.failureCodes.length ? ` · ${table.failureCodes.join("、")}` : ""}
+                </span>
+                <span className="monitoring-admission-question-note">
+                  <button
+                    type="button"
+                    className="monitoring-admission-secondary"
+                    disabled={retryBusy !== "" || !onRetryFailedChunks}
+                    onClick={async () => {
+                      if (retryBusy !== "" || !onRetryFailedChunks) return;
+                      setRetryBusy(table.tableName);
+                      try {
+                        await onRetryFailedChunks(table.tableName);
+                      } finally {
+                        setRetryBusy("");
+                      }
+                    }}
+                  >
+                    {retryBusy === table.tableName ? "重跑中…" : `重跑「${labelSheetName(table.tableName)}」的失败分片`}
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="monitoring-admission-secondary"
+            disabled={retryBusy !== "" || !onRetryFailedChunks}
+            onClick={async () => {
+              if (retryBusy !== "" || !onRetryFailedChunks) return;
+              setRetryBusy("__all__");
+              try {
+                await onRetryFailedChunks("");
+              } finally {
+                setRetryBusy("");
+              }
+            }}
+          >
+            {retryBusy === "__all__" ? "重跑中…" : "重跑全部失败分片"}
+          </button>
+        </details>
+      ) : null}
       <p className="monitoring-admission-minor">
         确认前不会生成可用于监查的数据；确认后也只保存字段对应关系。
       </p>
@@ -563,6 +630,71 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
           {quality.detail ? <span>{quality.detail}</span> : null}
         </div>
       ) : null}
+      {/* R32-02：阻断组明细卡片——每条给出系统判断、涉及字段当前角色，
+          并提供逐字段角色修订入口（保存后自动重新复核）。此前该状态下
+          页面只有横幅+永久禁用的确认按钮，零处理控件（B位2.5小时死锁）。 */}
+      {blockedGroups.map((group) => (
+        <div key={group.key || group.title} className="monitoring-admission-quality is-blocked-group" role="group" aria-label={`待处理字段关系：${group.title}`}>
+          <strong>{group.title}</strong>
+          {group.summary ? <span>{group.summary}</span> : null}
+          {group.fields.length ? (
+            <ul className="monitoring-admission-blocked-fields">
+              {group.fields.map((ref) => {
+                const fieldKey = `${ref.domain}.${ref.sourceField}`;
+                const busy = roleBusy === fieldKey;
+                const draftValue = roleDrafts[fieldKey] ?? ref.currentRole;
+                return (
+                  <li key={fieldKey}>
+                    <span className="monitoring-admission-column-name">
+                      {labelSheetName(ref.domain)} · {ref.sourceField}
+                    </span>
+                    <span className="monitoring-admission-column-meta">
+                      当前角色：{ref.currentRole || "（未登记）"}
+                    </span>
+                    <span className="monitoring-admission-question-note">
+                      <input
+                        aria-label={`修订 ${ref.domain} 域 ${ref.sourceField} 的字段角色`}
+                        value={draftValue}
+                        disabled={busy || !onReviseFieldRole}
+                        placeholder="填写正确的字段角色后保存"
+                        onChange={(event) => setRoleDrafts((current) => ({
+                          ...current,
+                          [fieldKey]: event.target.value,
+                        }))}
+                      />
+                      <button
+                        type="button"
+                        className="monitoring-admission-secondary"
+                        disabled={
+                          busy
+                          || !onReviseFieldRole
+                          || !String(draftValue || "").trim()
+                          || String(draftValue).trim() === ref.currentRole
+                        }
+                        onClick={async () => {
+                          if (busy || !onReviseFieldRole) return;
+                          setRoleBusy(fieldKey);
+                          try {
+                            await onReviseFieldRole(
+                              ref.domain,
+                              ref.sourceField,
+                              String(draftValue).trim(),
+                            );
+                          } finally {
+                            setRoleBusy("");
+                          }
+                        }}
+                      >
+                        {busy ? "保存中…" : "保存修订并重新核对"}
+                      </button>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </div>
+      ))}
       {drafting && questions.length ? (
         <div className="monitoring-admission-questions">
           <p className="monitoring-admission-questions-head">
@@ -652,7 +784,9 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard }) {
           </ul>
         </div>
       ) : null}
-      {drafting && !questions.length ? (
+      {drafting && !questions.length && !quality?.blocksConfirmation ? (
+        // R32-02：blocked状态下不再显示「正在自动保存…无需逐项核对」——
+        // 该文案与红线alert直接矛盾且永不结束（B位死锁现场的组成部分）。
         <p className="monitoring-admission-pending-note" role="status">
           系统已完成判断，正在自动保存字段对应关系，无需您逐项核对。
         </p>
@@ -717,6 +851,8 @@ export function MedicalMonitoringAdmissionWizardView({
   onPrimaryAction,
   onSecondaryAction,
   onAnswerCard,
+  onReviseFieldRole,
+  onRetryFailedChunks,
   onDocumentFiles,
   onDocumentRetry,
   onDocumentAdjudicate,
@@ -1027,6 +1163,8 @@ export function MedicalMonitoringAdmissionWizardView({
               <MappingConfirmPanel
                 mappingState={resolvedMappingState}
                 onAnswerCard={onAnswerCard}
+                onReviseFieldRole={onReviseFieldRole}
+                onRetryFailedChunks={onRetryFailedChunks}
               />
             ) : null}
           </>
@@ -1905,6 +2043,78 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     }
   }, [api, loadMappingCandidates, mappingState.draft, mappingState.phase, state.attemptId, state.projectId]);
 
+  // R32-02：阻断组的字段角色修订——PATCH recommended_role（用户可编辑
+  // 键，库层白名单放行）后立即重新复核，semantic_quality 随复核载荷
+  // 刷新；通过则确认按钮自动解禁，未通过则继续如实显示剩余阻断组。
+  const onReviseFieldRole = useCallback(async (domain, sourceField, role) => {
+    if (!mappingState.draft || mappingState.phase !== "drafting") {
+      mappingDispatch({
+        type: "error",
+        error: {
+          serverText: "当前页面的识别状态已过期，本次修订未提交。系统正在重新读取最新进度，请稍候后重试。",
+          guidance: ["正在自动重新读取识别结果。"],
+        },
+      });
+      loadMappingCandidates();
+      return;
+    }
+    const generation = mappingRequestGeneration.current + 1;
+    mappingRequestGeneration.current = generation;
+    try {
+      const draft = await api.editDataAdmissionMappingDraftField(
+        state.projectId,
+        state.attemptId,
+        {
+          draft_id: mappingState.draft.draft_id,
+          domain,
+          source_field: sourceField,
+          patch: {
+            recommended_role: role,
+            user_action: `用户已核对：将字段角色修订为「${role}」。`,
+          },
+          expected_version: mappingState.draft.version,
+          idempotency_key: requestKey("admission-mapping-role-revision"),
+        },
+      );
+      if (mappingRequestGeneration.current !== generation) return;
+      mappingDispatch({ type: "answer-ready", key: `role:${domain}.${sourceField}`, payload: draft });
+      // 修订落库后主动推进复核，质量报告（阻断组）即时刷新。
+      await advanceAdjudication(draft, generation);
+    } catch (error) {
+      if (mappingRequestGeneration.current !== generation) return;
+      mappingDispatch({
+        type: "draft-error",
+        error: {
+          serverText: error?.detail?.message || error?.message || "字段角色修订保存失败。",
+          guidance: ["请核对角色写法后重试；确认前不会生成可用于监查的数据。"],
+        },
+      });
+    }
+  }, [advanceAdjudication, api, loadMappingCandidates, mappingState.draft, mappingState.phase, state.attemptId, state.projectId]);
+
+  // R32-04：重跑终态失败的识别分片（表名为空=全部失败分片），成功后
+  // 重新拉取识别结果让轮询与按钮态同源收敛。
+  const onRetryFailedChunks = useCallback(async (tableName) => {
+    if (!state.attemptId) return;
+    try {
+      await api.retryFailedDataAdmissionMappingCandidates(
+        state.projectId,
+        state.attemptId,
+        { tableName: tableName || "" },
+      );
+    } catch (error) {
+      mappingDispatch({
+        type: "draft-error",
+        error: {
+          serverText: error?.detail?.message || error?.message || "失败分片重跑请求未完成。",
+          guidance: ["请稍后重试；已完成的识别结果不受影响。"],
+        },
+      });
+      return;
+    }
+    loadMappingCandidates();
+  }, [api, loadMappingCandidates, state.attemptId, state.projectId]);
+
   return (
     <>
     {state.projectId && typeof api.getQueueState === "function" ? (
@@ -1920,6 +2130,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onPrimaryAction={onPrimaryAction}
       onSecondaryAction={onSecondaryAction}
       onAnswerCard={onAnswerCard}
+      onReviseFieldRole={onReviseFieldRole}
+      onRetryFailedChunks={onRetryFailedChunks}
       onDocumentFiles={analyzeDocuments}
       onDocumentRetry={retryDocumentCheck}
       onDocumentAdjudicate={submitDocumentAdjudication}

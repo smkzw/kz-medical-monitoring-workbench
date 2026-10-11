@@ -284,6 +284,60 @@ check(
   "zero-question draft completes without user confirmation",
 );
 
+// R32-02：语义质量全局阻断（无问题卡）——死锁现场必须给出处理入口，
+// 不再渲染自相矛盾的「正在自动保存」。
+check(
+  renders.confirmBlockedQuality.includes("还有 1 组字段关系需要处理"),
+  "blocked banner rendered with group count",
+);
+check(
+  renders.confirmBlockedQuality.includes("非试验用药与试验药物角色混用"),
+  "blocked group title rendered as a card",
+);
+check(
+  renders.confirmBlockedQuality.includes("同一语义域中混入 CM 与试验药物角色"),
+  "blocked group summary rendered",
+);
+check(
+  renders.confirmBlockedQuality.includes("当前角色：subject_id"),
+  "affected field current role surfaced",
+);
+check(
+  renders.confirmBlockedQuality.includes('aria-label="修订 访视列表 域 受试者编号 的字段角色"'),
+  "per-field role revision input rendered",
+);
+check(
+  renders.confirmBlockedQuality.includes("保存修订并重新核对"),
+  "role revision submit rendered",
+);
+check(
+  !renders.confirmBlockedQuality.includes("正在自动保存字段对应关系，无需您逐项核对"),
+  "false auto-save note suppressed while blocked",
+);
+
+// R32-04：识别失败分片按表清单与重跑入口可见可点。
+check(
+  renders.needsAttentionFailures.includes("1 张数据表存在未完成的识别分片"),
+  "failed-table summary rendered",
+);
+check(
+  renders.needsAttentionFailures.includes("查看失败清单与重跑入口"),
+  "failed-table details entry rendered",
+);
+check(
+  renders.needsAttentionFailures.includes("2 个分片未完成 · queue_dwell_timeout"),
+  "per-table failure count and reason rendered",
+);
+check(
+  renders.needsAttentionFailures.includes("重跑全部失败分片"),
+  "retry-all entry rendered",
+);
+check(
+  renders.needsAttentionFailures.includes("失败分片重跑") === false
+    || renders.needsAttentionFailures.includes("重跑中…") === false,
+  "retry buttons idle by default",
+);
+
 // Done: automatic fact generation and a plain ready state, without identities.
 check(renders.done.includes("系统已完成字段识别"), "done outcome uses plain Chinese recognition copy");
 check(!renders.done.includes("adm-20260902-0001"), "attempt record identity remains hidden");

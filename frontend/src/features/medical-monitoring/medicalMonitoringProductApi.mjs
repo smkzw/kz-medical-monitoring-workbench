@@ -211,6 +211,9 @@ export const MEDICAL_MONITORING_PRODUCT_PATHS = Object.freeze({
     `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/mapping-candidates`,
     { focus: options?.focus },
   ),
+  dataAdmissionMappingCandidatesRetry: (projectId, attemptId) => (
+    `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/mapping-candidates/retry-failed`
+  ),
   dataAdmissionMappingDraft: (projectId, attemptId) => (
     `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/mapping-draft`
   ),
@@ -534,6 +537,15 @@ export function createMedicalMonitoringProductApi({
         requireId(attemptId, "attemptId"),
         { focus },
       ), { signal });
+    },
+
+    // R32-04：重跑终态失败的识别分片（可按表过滤）；空表名=全部失败分片。
+    retryFailedDataAdmissionMappingCandidates(projectId, attemptId, { tableName = "", signal } = {}) {
+      const body = tableName ? { table_name: tableName } : {};
+      return post(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionMappingCandidatesRetry(
+        requireId(projectId, "projectId"),
+        requireId(attemptId, "attemptId"),
+      ), body, { signal });
     },
 
     adoptDataAdmissionMappingDraft(projectId, attemptId, payload, { signal } = {}) {

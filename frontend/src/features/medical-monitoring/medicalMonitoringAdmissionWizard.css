@@ -672,6 +672,51 @@ div.monitoring-admission-manual {
   background: #fdf6f5;
 }
 
+/* R32-02：阻断组明细卡（横幅之下逐条展开：标题/摘要/涉及字段+角色修订）。 */
+.monitoring-admission-quality.is-blocked-group {
+  border-color: var(--monitoring-red, #b83b3b);
+  background: #fdf6f5;
+}
+
+.monitoring-admission-blocked-fields {
+  display: grid;
+  gap: 10px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.monitoring-admission-blocked-fields li {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.monitoring-admission-blocked-fields .monitoring-admission-column-meta {
+  color: var(--monitoring-muted, #64727d);
+  font-size: 12px;
+}
+
+.monitoring-admission-blocked-fields .monitoring-admission-question-note {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.monitoring-admission-blocked-fields .monitoring-admission-question-note input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--monitoring-line, #dce3e9);
+  border-radius: 6px;
+  font: inherit;
+  font-family: var(--monitoring-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+}
+
 .monitoring-admission-quality.is-warning,
 .monitoring-admission-quality.is-restricted {
   border-color: var(--monitoring-orange, #e96828);

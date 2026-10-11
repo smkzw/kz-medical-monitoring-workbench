@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Mapping, Optional, Protocol
 from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
+from starlette.concurrency import run_in_threadpool
 
 from ...admission.mapping_confirmation import enrich_candidates
 from ...admission.document_authority import DocumentAuthorityError
@@ -78,9 +79,12 @@ _MAPPING_STATUS_CODES = {
     "mapping_adjudication_failed_payload_unreadable": 409,
     "mapping_draft_unconfigured": 503,
     "mapping_bridge_failed": 500,
+    "mapping_retry_unavailable": 503,
+    "mapping_retry_table_invalid": 422,
     "mapping_document_evidence_resolver_unavailable": 503,
     "mapping_document_evidence_missing": 409,
     "mapping_document_evidence_incomplete": 422,
+    "mapping_document_evidence_roles_unmet": 422,
     "document_packet_project_mismatch": 409,
     "mapping_document_selection_invalid": 422,
     "mapping_document_selection_not_found_or_role_mismatch": 404,
@@ -136,6 +140,12 @@ _MAPPING_MESSAGES = {    "mapping_admission_not_found": "未找到对应的数�
     ),
     "mapping_draft_unconfigured": "系统暂时无法保存识别结果，请稍后重试。",
     "mapping_bridge_failed": "生成字段对应建议时出现问题，本次结果未保存。请重试；如再次失败请联系管理员。",
+    "mapping_retry_unavailable": (
+        "当前识别会话不支持重跑失败分片，请重新发起字段识别。"
+    ),
+    "mapping_retry_table_invalid": (
+        "表名参数无效；请刷新后重试，或不带表名重跑全部失败分片。"
+    ),
     "mapping_document_evidence_resolver_unavailable": (
         "研究文档识别服务尚未就绪，本次未发送数据。请稍后重试。"
     ),
@@ -143,10 +153,19 @@ _MAPPING_MESSAGES = {    "mapping_admission_not_found": "未找到对应的数�
         "系统还没有完成研究方案和电子病例报告表的识别。"
         "请先补充这两类文件，系统会自行核对，无需逐字段确认。"
     ),
+    # R32-05：旧文案把「配对文档未就绪」误指为「全部为扫描版或文件损坏」，
+    # 对已被系统成功识别的研究方案构成不实指控（report_C.md发现2）。
+    # 该代码在证据门改造后不再由配对缺失路径触发；文案同步改为中性，
+    # 防止未来复用时重新引入不实归因。
     "mapping_document_evidence_incomplete": (
-        "研究文件未通过完整性核对：未能从这组文件中读取到可核对的内容"
-        "（如全部为扫描版或文件损坏）。请更换为可读取的文件版本后"
-        "重新上传。"
+        "研究文件证据链未通过完整性核对，本次未保存。"
+        "请重新核对研究文件后重试；已成功识别的文件不会被判定为损坏。"
+    ),
+    "mapping_document_evidence_roles_unmet": (
+        "研究文件配对不完整：生成字段映射需要研究方案与电子病例报告表"
+        "均完成识别（声明「本次未提供」的文件同样计入缺失）。"
+        "请补充上传缺失的研究文件并重新核对；"
+        "已上传且识别成功的文件完好可用，与文件是否损坏无关。"
     ),
     "document_packet_project_mismatch": (
         "研究文档与当前项目不一致，本次未发送数据。请返回项目首页重新选择文件。"
@@ -536,6 +555,52 @@ def _public_draft(value: Any) -> dict[str, Any]:
     return public
 
 
+def _public_table_failures(jobs: Any) -> list[dict[str, Any]]:
+    """R32-04：按表聚合的识别失败清单（无作业身份，公开投影安全）。
+
+    R32实测（ISO sqlite只读诊断）：265个识别分片queue_dwell_timeout终态
+    失败且attempt_count=0，LB域全部沦陷；而界面此前只笼统显示「部分识
+    别任务已终态失败」，用户须自行心算失败表名单。此处按表聚合分片
+    级失败（表名/分片/原因/尝试次数），供第3步渲染失败清单与重跑入口。
+    """
+
+    grouped: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for job in jobs or ():
+        if not isinstance(job, Mapping):
+            continue
+        status = str(job.get("status") or "")
+        if status not in {"failed", "blocked", "stale_input", "cancelled"}:
+            continue
+        table = str(job.get("table_name") or "").strip() or "（未知表）"
+        entry = grouped.get(table)
+        if entry is None:
+            entry = {
+                "table_name": table,
+                "failed_chunks": 0,
+                "chunks": [],
+                "failure_codes": [],
+            }
+            grouped[table] = entry
+            order.append(table)
+        entry["failed_chunks"] += 1
+        chunk_index = str(job.get("chunk_index") or "").strip()
+        entry["chunks"].append({
+            "chunk_index": chunk_index,
+            "status": status,
+            "failure_code": str(job.get("failure_code") or ""),
+            "failure_message": str(job.get("failure_message") or "")[:200],
+            "attempt_count": int(job.get("attempt_count") or 0),
+            "max_attempts": int(job.get("max_attempts") or 0),
+        })
+        code = str(job.get("failure_code") or "")
+        if code and code not in entry["failure_codes"]:
+            entry["failure_codes"].append(code)
+    for entry in grouped.values():
+        entry["chunks"].sort(key=lambda item: item["chunk_index"])
+    return [grouped[table] for table in order]
+
+
 def _public_mapping_projection(
     payload: Mapping[str, Any],
 ) -> dict[str, Any] | JSONResponse:
@@ -556,6 +621,9 @@ def _public_mapping_projection(
     public["candidates"] = [
         _public_mapping_field(item) for item in payload.get("candidates") or ()
     ]
+    table_failures = _public_table_failures(payload.get("jobs"))
+    if table_failures:
+        public["table_failures"] = table_failures
     if isinstance(payload.get("verification"), Mapping):
         public["verification"] = {
             "state": payload["verification"].get("state"),
@@ -678,33 +746,42 @@ def register_mapping_candidate_routes(
             content = await file.read(50 * 1024 * 1024 + 1)
             if not content or len(content) > 50 * 1024 * 1024:
                 return _mapping_error("mapping_document_registration_invalid")
-            result = context.monitoring_document_registrar(
-                project_id=canonical,
-                role=role,
-                filename=file.filename or "",
-                content=content,
+            # R32-01：登记/关联/就绪检查都落workspace存储（哈希、DDL、
+            # fsync），曾直接跑在事件循环里拖死全站并发请求；统一下放
+            # 线程池。
+            result = await run_in_threadpool(
+                lambda: context.monitoring_document_registrar(
+                    project_id=canonical,
+                    role=role,
+                    filename=file.filename or "",
+                    content=content,
+                )
             )
             source_entry_id = str(result.get("source_entry_id") or "").strip()
             if not source_entry_id:
                 return _mapping_error("mapping_document_registration_invalid")
             workspace = context.workspace_dir(context.root, canonical)
             try:
-                pipeline.select_document(
-                    project_id=canonical,
-                    attempt_id=validated_attempt,
-                    workspace_dir=workspace,
-                    role=role,
-                    source_entry_id=source_entry_id,
+                await run_in_threadpool(
+                    lambda: pipeline.select_document(
+                        project_id=canonical,
+                        attempt_id=validated_attempt,
+                        workspace_dir=workspace,
+                        role=role,
+                        source_entry_id=source_entry_id,
+                    )
                 )
             except AdmissionMappingPipelineError:
                 raise
             except Exception:
                 return _mapping_error("mapping_document_selection_pending")
             try:
-                readiness = pipeline.document_readiness(
-                    project_id=canonical,
-                    attempt_id=validated_attempt,
-                    workspace_dir=workspace,
+                readiness = await run_in_threadpool(
+                    lambda: pipeline.document_readiness(
+                        project_id=canonical,
+                        attempt_id=validated_attempt,
+                        workspace_dir=workspace,
+                    )
                 )
             except Exception:
                 return _mapping_error("mapping_document_refresh_pending")
@@ -740,10 +817,15 @@ def register_mapping_candidate_routes(
         if isinstance(pipeline, JSONResponse):
             return pipeline
         try:
-            result = pipeline.document_readiness(
-                project_id=canonical,
-                attempt_id=validated_attempt,
-                workspace_dir=context.workspace_dir(context.root, canonical),
+            # R32-01：readiness是第3步的高频轮询路径，readiness本身与
+            # 最近核对结论读取都落workspace；阻塞调用下放线程池，避免
+            # 占住事件循环拖死全站并发请求（含 /api/projects）。
+            result = await run_in_threadpool(
+                lambda: pipeline.document_readiness(
+                    project_id=canonical,
+                    attempt_id=validated_attempt,
+                    workspace_dir=context.workspace_dir(context.root, canonical),
+                )
             )
             # R5冲刺（R1-11）：最近一次核对结论随readiness带回——刷新后
             # 「尚未添加」不再吞掉此前数分钟核对得出的拒收/待确认原因。
@@ -820,10 +902,15 @@ def register_mapping_candidate_routes(
                 if not content or len(content) > 50 * 1024 * 1024:
                     return _mapping_error("mapping_document_registration_invalid")
                 captured.append((upload.filename or "", content))
-            result = context.monitoring_document_authority_starter(
-                project_id=canonical,
-                workspace_dir=context.workspace_dir(context.root, canonical),
-                files=captured,
+            # R32-01：starter包含docx/pdf抽取与OCR提交，曾直接跑在事件
+            # 循环里（单次可达分钟级），全站请求在其间一律停摆；下放
+            # 线程池。
+            result = await run_in_threadpool(
+                lambda: context.monitoring_document_authority_starter(
+                    project_id=canonical,
+                    workspace_dir=context.workspace_dir(context.root, canonical),
+                    files=captured,
+                )
             )
             response = {
                 "project_id": canonical,
@@ -885,8 +972,15 @@ def register_mapping_candidate_routes(
             # 缺少查询参数。
             return _mapping_error("mapping_resolve_batch_id_required")
         payload = DocumentAuthorityPromotionRequest(batch_id=batch_id.strip())
-        return _resolve_mapping_documents_impl(
-            project_id, attempt_id, payload, request
+        # R32-01：advance（核对推进）单次最长约30秒（本路由409文案即
+        # 自证），async轮询路径不得在事件循环内同步执行；与POST同义但
+        # 下放线程池。
+        return await run_in_threadpool(
+            _resolve_mapping_documents_impl,
+            project_id,
+            attempt_id,
+            payload,
+            request,
         )
 
     def _resolve_mapping_documents_impl(
@@ -1228,10 +1322,14 @@ def register_mapping_candidate_routes(
             return _run_entry_error_response(exc)
         try:
             workspace = context.workspace_dir(context.root, canonical)
-            result = pipeline.generate_dual_candidates(
-                project_id=canonical,
-                attempt_id=validated_attempt,
-                workspace_dir=workspace,
+            # R32-01：双候选生成本地装配逐表AI包（大清单可达数百分片），
+            # 阻塞调用下放线程池。
+            result = await run_in_threadpool(
+                lambda: pipeline.generate_dual_candidates(
+                    project_id=canonical,
+                    attempt_id=validated_attempt,
+                    workspace_dir=workspace,
+                )
             )
             public = _public_mapping_projection(result)
             if isinstance(public, JSONResponse):
@@ -1278,30 +1376,38 @@ def register_mapping_candidate_routes(
             confirmation = context.admission_mapping_confirmation
             workspace = context.workspace_dir(context.root, canonical)
             effective_cohort = "primary" if cohort == "dual" else cohort
+            # R32-01：候选列表/复核视图装配（264字段量级）是第3步高频
+            # 轮询路径，阻塞调用下放线程池。
             if confirmation is not None and effective_cohort == "primary":
-                result = confirmation.list_for_review(
-                    project_id=canonical,
-                    attempt_id=validated_attempt,
-                    workspace_dir=workspace,
-                    focus=focus,
-                )
-            else:
-                result = enrich_candidates(
-                    pipeline.list_candidates(
+                result = await run_in_threadpool(
+                    lambda: confirmation.list_for_review(
                         project_id=canonical,
                         attempt_id=validated_attempt,
                         workspace_dir=workspace,
-                        cohort=effective_cohort,
+                        focus=focus,
+                    )
+                )
+            else:
+                result = enrich_candidates(
+                    await run_in_threadpool(
+                        lambda: pipeline.list_candidates(
+                            project_id=canonical,
+                            attempt_id=validated_attempt,
+                            workspace_dir=workspace,
+                            cohort=effective_cohort,
+                        )
                     ),
                     focus=focus,
                 )
             if cohort == "dual":
                 try:
-                    verifier = pipeline.list_candidates(
-                        project_id=canonical,
-                        attempt_id=validated_attempt,
-                        workspace_dir=workspace,
-                        cohort="verifier",
+                    verifier = await run_in_threadpool(
+                        lambda: pipeline.list_candidates(
+                            project_id=canonical,
+                            attempt_id=validated_attempt,
+                            workspace_dir=workspace,
+                            cohort="verifier",
+                        )
                     )
                     result = {
                         **dict(result),
@@ -1332,6 +1438,86 @@ def register_mapping_candidate_routes(
             return _mapping_error(exc.code)
         except Exception:
             return _mapping_error("mapping_bridge_failed")
+
+    @router.post(
+        "/data-admissions/{attempt_id}/mapping-candidates/retry-failed",
+        status_code=202,
+    )
+    async def retry_failed_mapping_candidates(
+        project_id: str,
+        attempt_id: str,
+        request: Request,
+    ) -> Any:
+        # R32-04：识别分片终态失败（R32实测265片queue滞留收割）后，用户
+        # 此前只剩「全部采纳/全部重来」两个极端选项——本路由提供显式
+        # 重跑入口（可按表过滤），复用库层 retry_terminal（重置滞留
+        # 基线），唤醒worker后由既有轮询自然收敛。
+        canonical = context.resolve_project(project_id)
+        if isinstance(canonical, JSONResponse):
+            return canonical
+        auth = context.authorize(
+            request,
+            project_id=canonical,
+            action=context.monitoring_action.INTAKE_BATCH,
+        )
+        if isinstance(auth, JSONResponse):
+            return auth
+        pipeline = _pipeline_or_error()
+        if isinstance(pipeline, JSONResponse):
+            return pipeline
+        validated_attempt = _validated_attempt_id(attempt_id)
+        if validated_attempt is None:
+            return _mapping_error("mapping_attempt_id_invalid")
+        raw_body: Any = None
+        if request.headers.get("content-length") not in ("", "0", None):
+            try:
+                raw_body = await request.json()
+            except Exception:
+                raw_body = None
+        table_name = ""
+        if isinstance(raw_body, dict):
+            candidate_table = raw_body.get("table_name")
+            if candidate_table is not None:
+                if not isinstance(candidate_table, str):
+                    return _mapping_error("mapping_retry_table_invalid")
+                table_name = candidate_table.strip()
+                if len(table_name) > 200:
+                    return _mapping_error("mapping_retry_table_invalid")
+        try:
+            write_permit = context.acquire_product_write_gate(canonical)
+        except pb.ProjectBackupError as exc:
+            return _run_entry_error_response(exc)
+        try:
+            result = await run_in_threadpool(
+                lambda: pipeline.retry_failed_candidates(
+                    project_id=canonical,
+                    attempt_id=validated_attempt,
+                    workspace_dir=context.workspace_dir(context.root, canonical),
+                    cohort="primary",
+                    table_name=table_name,
+                )
+            )
+            result = dict(result)
+            # 公开投影不带作业身份（与mapping-candidates同规约）。
+            result["requeued"] = [
+                {k: v for k, v in item.items() if k != "job_id"}
+                for item in result.get("requeued") or ()
+            ]
+            result["skipped"] = [
+                {k: v for k, v in item.items() if k != "job_id"}
+                for item in result.get("skipped") or ()
+            ]
+            return {
+                "project_id": canonical,
+                "attempt_id": validated_attempt,
+                **result,
+            }
+        except AdmissionMappingPipelineError as exc:
+            return _mapping_error(exc.code)
+        except Exception:
+            return _mapping_error("mapping_bridge_failed")
+        finally:
+            write_permit.release()
 
     @router.post(
         "/data-admissions/{attempt_id}/mapping-draft",
@@ -1365,12 +1551,16 @@ def register_mapping_candidate_routes(
         except pb.ProjectBackupError as exc:
             return _run_entry_error_response(exc)
         try:
-            result = confirmation.adopt_draft(
-                project_id=canonical,
-                attempt_id=validated_attempt,
-                workspace_dir=context.workspace_dir(context.root, canonical),
-                actor=str(actor),
-                reason=body.reason,
+            # R32-01：草稿采纳/修订/裁决/确认都落workspace存储与库层
+            # 完整性门（R31-02槽位级校验），阻塞调用下放线程池。
+            result = await run_in_threadpool(
+                lambda: confirmation.adopt_draft(
+                    project_id=canonical,
+                    attempt_id=validated_attempt,
+                    workspace_dir=context.workspace_dir(context.root, canonical),
+                    actor=str(actor),
+                    reason=body.reason,
+                )
             )
             public = _public_mapping_projection(result)
             if isinstance(public, JSONResponse):
@@ -1420,16 +1610,18 @@ def register_mapping_candidate_routes(
         except pb.ProjectBackupError as exc:
             return _run_entry_error_response(exc)
         try:
-            result = confirmation.edit_field(
-                project_id=canonical,
-                attempt_id=validated_attempt,
-                draft_id=body.draft_id,
-                domain=body.domain,
-                source_field=body.source_field,
-                patch=body.patch,
-                expected_version=body.expected_version,
-                actor=str(actor),
-                idempotency_key=body.idempotency_key,
+            result = await run_in_threadpool(
+                lambda: confirmation.edit_field(
+                    project_id=canonical,
+                    attempt_id=validated_attempt,
+                    draft_id=body.draft_id,
+                    domain=body.domain,
+                    source_field=body.source_field,
+                    patch=body.patch,
+                    expected_version=body.expected_version,
+                    actor=str(actor),
+                    idempotency_key=body.idempotency_key,
+                )
             )
             public = _public_mapping_projection(result)
             if isinstance(public, JSONResponse):
@@ -1477,11 +1669,13 @@ def register_mapping_candidate_routes(
         except pb.ProjectBackupError as exc:
             return _run_entry_error_response(exc)
         try:
-            result = confirmation.adjudicate_draft(
-                project_id=canonical,
-                attempt_id=validated_attempt,
-                draft_id=body.draft_id,
-                workspace_dir=context.workspace_dir(context.root, canonical),
+            result = await run_in_threadpool(
+                lambda: confirmation.adjudicate_draft(
+                    project_id=canonical,
+                    attempt_id=validated_attempt,
+                    draft_id=body.draft_id,
+                    workspace_dir=context.workspace_dir(context.root, canonical),
+                )
             )
             public = _public_mapping_projection(result)
             if isinstance(public, JSONResponse):
@@ -1534,15 +1728,17 @@ def register_mapping_candidate_routes(
         except pb.ProjectBackupError as exc:
             return _run_entry_error_response(exc)
         try:
-            result = confirmation.confirm_draft(
-                project_id=canonical,
-                attempt_id=validated_attempt,
-                draft_id=body.draft_id,
-                expected_version=body.expected_version,
-                confirmed_by=str(actor),
-                confirmation_reason=body.confirmation_reason,
-                idempotency_key=body.idempotency_key,
-                workspace_dir=context.workspace_dir(context.root, canonical),
+            result = await run_in_threadpool(
+                lambda: confirmation.confirm_draft(
+                    project_id=canonical,
+                    attempt_id=validated_attempt,
+                    draft_id=body.draft_id,
+                    expected_version=body.expected_version,
+                    confirmed_by=str(actor),
+                    confirmation_reason=body.confirmation_reason,
+                    idempotency_key=body.idempotency_key,
+                    workspace_dir=context.workspace_dir(context.root, canonical),
+                )
             )
             public = _public_mapping_projection(result)
             if isinstance(public, JSONResponse):

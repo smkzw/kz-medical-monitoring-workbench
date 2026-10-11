@@ -13459,6 +13459,11 @@ export function App() {
   }, [projectCreatedNotice]);
   // R9轮（R7-02）：空列表自动重拉计数（防启动/预置写入期误显「暂无项目」）。
   const emptyListRetriesRef = useRef(0);
+  // R32-01：列表读取失败自动重试计数。R32实测后台核对/识别期间列表
+  // 请求被拖慢（后端事件循环阻塞已修），失败态此前只能靠用户手点
+  // 「重新读取」（A位35秒仍失败）——失败后按5/10/20秒退避自动重拉
+  // （最多3次），期间如实显示重试进度；成功后归零。
+  const projectsFailureRetriesRef = useRef(0);
   const rememberedProjectIdRef = useRef(readRememberedProjectId());
   const [activeProjectId, setActiveProjectId] = useState(monitoringBrowserState.initialProjectId);
   // 切换项目时持久记住，供刷新/重进回落（R1-07；R26-04改会话级）。
@@ -13620,6 +13625,8 @@ export function App() {
   }, [activePage, activeProjectId, projects, requestApplicationNavigation, resetMedicalMonitoringProjectState]);
 
   const retryProjects = useCallback(() => {
+    // R32-01：手动重读视为新一轮起点，复位自动退避计数。
+    projectsFailureRetriesRef.current = 0;
     setProjectsRequestNonce((current) => current + 1);
   }, []);
 
@@ -13707,6 +13714,8 @@ export function App() {
         } else if (canonicalProjects.length > 0) {
           emptyListRetriesRef.current = 0;
         }
+        // R32-01：读取成功即复位失败退避计数（下次故障重新从首轮退避起）。
+        projectsFailureRetriesRef.current = 0;
         const requestedProductProjectId = initialMedicalMonitoringProductRouteRef.current.canonical?.project_ref || "";
         const requestedMonitoringProjectId = initialMonitoringRouteRef.current.project_id || "";
         const requestedProjectAvailable = requestedMonitoringProjectId
@@ -13741,23 +13750,39 @@ export function App() {
         setProjectsLoaded(true);
       })
       .catch(() => {
-        if (!cancelled) {
-          clearTimeout(timeout);
-          setProjects([]);
-          // R30-01：列表读取失败不再清空工作区。URL深链或本会话已有明确
-          // 项目身份时保留选中——项目级读取（来源清单/总览/监查工作区）
-          // 不依赖全局列表，恢复后无需重建上下文；列表错误与重试入口照
-          // 常呈现。完全没有项目身份时才回落为空选。
-          const deepLinkedProjectId = initialMonitoringRouteRef.current.project_id || "";
-          setActiveProjectId((current) => (
-            initialMedicalMonitoringProductRouteRef.current.isProduct
-              ? current
-              : current || deepLinkedProjectId || rememberedProjectIdRef.current
-          ));
-          setMonitoringProjectRouteError("");
-          setProjectsLoadError("项目列表加载失败或超时（超过20秒未返回）。请点击重试；若持续失败请检查服务状态。");
+        if (cancelled) return;
+        clearTimeout(timeout);
+        setProjects([]);
+        // R30-01：列表读取失败不再清空工作区。URL深链或本会话已有明确
+        // 项目身份时保留选中——项目级读取（来源清单/总览/监查工作区）
+        // 不依赖全局列表，恢复后无需重建上下文；列表错误与重试入口照
+        // 常呈现。完全没有项目身份时才回落为空选。
+        const deepLinkedProjectId = initialMonitoringRouteRef.current.project_id || "";
+        setActiveProjectId((current) => (
+          initialMedicalMonitoringProductRouteRef.current.isProduct
+            ? current
+            : current || deepLinkedProjectId || rememberedProjectIdRef.current
+        ));
+        setMonitoringProjectRouteError("");
+        // R32-01：失败后按5/10/20秒退避自动重拉（最多3次），不再把
+        // 恢复完全压在用户手点「重新读取」上；重试期间如实显示第几轮。
+        const failedAttempt = projectsFailureRetriesRef.current;
+        if (failedAttempt < 3) {
+          projectsFailureRetriesRef.current = failedAttempt + 1;
+          const backoffMs = 5000 * (failedAttempt + 1);
+          setProjectsLoadError(
+            `项目列表加载失败或超时（超过20秒未返回）。${Math.round(backoffMs / 1000)}秒后自动重试（第${failedAttempt + 1}/3次）；也可立即点击「重新读取」。`,
+          );
           setProjectsLoaded(true);
+          // 卸载/重发时由 effect 清理函数置 cancelled，定时器回调自查。
+          setTimeout(() => {
+            if (!cancelled) setProjectsRequestNonce((value) => value + 1);
+          }, backoffMs);
+          return undefined;
         }
+        projectsFailureRetriesRef.current = 0;
+        setProjectsLoadError("项目列表加载失败或超时（超过20秒未返回）。请点击重试；若持续失败请检查服务状态。");
+        setProjectsLoaded(true);
       });
     return () => {
       cancelled = true;

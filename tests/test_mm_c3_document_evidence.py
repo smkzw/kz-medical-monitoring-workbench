@@ -159,15 +159,18 @@ def test_protocol_and_ecrf_are_required_for_mapping_context() -> None:
     packet = _packet(ecrf_status="incomplete")
 
     assert packet.mapping_context_ready is False
+    # R32-05：配对未就绪走独立诚实代码（如实指认缺件），不再暗示文件
+    # 为扫描版或损坏。
     with pytest.raises(
         DocumentEvidenceError,
-        match="mapping_document_evidence_incomplete",
-    ):
+        match="mapping_document_evidence_roles_unmet",
+    ) as exc_info:
         validate_document_evidence_packet(
             packet.to_dict(),
             project_id=PROJECT_ID,
             require_mapping_context=True,
         )
+    assert getattr(exc_info.value, "missing_roles", ()) == ("ecrf",)
 
 
 def test_project_and_packet_digest_are_fail_closed() -> None:
@@ -485,7 +488,8 @@ def test_missing_required_document_creates_no_mapping_job(
 
     with pytest.raises(
         AdmissionMappingPipelineError,
-        match="mapping_document_evidence_incomplete",
+        # R32-05：配对缺失=roles_unmet（422诚实缺件语义），门仍fail-closed。
+        match="mapping_document_evidence_roles_unmet",
     ):
         pipeline.generate_dual_candidates(
             project_id=PROJECT_ID,

@@ -941,75 +941,98 @@ export function MedicalMonitoringProductLoop({
     }
     const controller = new AbortController();
     let cancelled = false;
+    let retryTimer = null;
+    let failures = 0;
     setResultContext(null);
     setResultPayload(null);
     setResultLoading(true);
     setResultError(null);
     const expectedView = projectionView(routeView);
-    let request;
-    try {
-      if (expectedView === "overview") {
-        request = api.getResultOverview(normalizedProjectId, resultToken, { siteRef: route.site_ref, signal: controller.signal });
-      } else if (expectedView === "evidence") {
-        request = api.getResultSourceEvidence(normalizedProjectId, resultToken, {
-          riskInstanceRef: route.risk_instance_ref,
-          sourceLocatorRef: route.source_locator_ref,
-          signal: controller.signal,
-        });
-      } else if (route.site_ref && route.subject_ref && route.spine_ref && route.window_start && route.window_end) {
-        request = api.getResultSubject(normalizedProjectId, resultToken, route.subject_ref, {
-          siteRef: route.site_ref,
-          spineRef: route.spine_ref,
-          windowStart: route.window_start,
-          windowEnd: route.window_end,
-          riskInstanceRef: route.risk_instance_ref,
-          riskAnchorRef: route.risk_anchor_ref,
-          visitRef: route.visit_ref,
-          eventRef: route.event_ref,
-          signal: controller.signal,
-        });
-      } else {
-        // R25轮（R25-06）：旅程定位信息不完整必须与「结果不可用」可区分
-        // （见projectMonitoringPublicResultError的target_incomplete文案），
-        // 否则结果概览正常时用户仍被一句死文案挡在门外。
-        const incomplete = new Error("public result target incomplete");
-        incomplete.code = "public_result_target_incomplete";
-        throw incomplete;
-      }
-    } catch (error) {
-      setResultLoading(false);
-      setResultError(projectMonitoringPublicResultError(error));
-      return undefined;
-    }
-    request.then(async (payload) => {
-      if (cancelled) return;
-      const verified = await verifyMonitoringPublicResultEnvelope(payload, {
-        projectId: normalizedProjectId,
-        resultContextToken: resultToken,
-        view: expectedView,
-      });
-      if (cancelled) return;
-      const projected = projectMonitoringResultContext(verified, {
-        projectId: normalizedProjectId,
-        resultContextToken: resultToken,
-        view: expectedView,
-      });
-      if (projected.kind === "invalid") {
-        setResultError(projectMonitoringPublicResultError({ code: projected.code, message: projected.error }));
+
+    const startRead = () => {
+      let request;
+      try {
+        if (expectedView === "overview") {
+          request = api.getResultOverview(normalizedProjectId, resultToken, { siteRef: route.site_ref, signal: controller.signal });
+        } else if (expectedView === "evidence") {
+          request = api.getResultSourceEvidence(normalizedProjectId, resultToken, {
+            riskInstanceRef: route.risk_instance_ref,
+            sourceLocatorRef: route.source_locator_ref,
+            signal: controller.signal,
+          });
+        } else if (route.site_ref && route.subject_ref && route.spine_ref && route.window_start && route.window_end) {
+          request = api.getResultSubject(normalizedProjectId, resultToken, route.subject_ref, {
+            siteRef: route.site_ref,
+            spineRef: route.spine_ref,
+            windowStart: route.window_start,
+            windowEnd: route.window_end,
+            riskInstanceRef: route.risk_instance_ref,
+            riskAnchorRef: route.risk_anchor_ref,
+            visitRef: route.visit_ref,
+            eventRef: route.event_ref,
+            signal: controller.signal,
+          });
+        } else {
+          // R25轮（R25-06）：旅程定位信息不完整必须与「结果不可用」可区分
+          // （见projectMonitoringPublicResultError的target_incomplete文案），
+          // 否则结果概览正常时用户仍被一句死文案挡在门外。
+          const incomplete = new Error("public result target incomplete");
+          incomplete.code = "public_result_target_incomplete";
+          throw incomplete;
+        }
+      } catch (error) {
         setResultLoading(false);
+        setResultError(projectMonitoringPublicResultError(error));
         return;
       }
-      setResultContext(projected);
-      setResultPayload(normalizePublicProductPayload(projected));
-      setResultLoading(false);
-    }).catch((error) => {
-      if (cancelled || error?.name === "AbortError") return;
-      setResultLoading(false);
-      setResultError(projectMonitoringPublicResultError(error));
-    });
+      request.then(async (payload) => {
+        if (cancelled) return;
+        const verified = await verifyMonitoringPublicResultEnvelope(payload, {
+          projectId: normalizedProjectId,
+          resultContextToken: resultToken,
+          view: expectedView,
+        });
+        if (cancelled) return;
+        const projected = projectMonitoringResultContext(verified, {
+          projectId: normalizedProjectId,
+          resultContextToken: resultToken,
+          view: expectedView,
+        });
+        if (projected.kind === "invalid") {
+          setResultError(projectMonitoringPublicResultError({ code: projected.code, message: projected.error }));
+          setResultLoading(false);
+          return;
+        }
+        // R32-06：读取成功即复位自动重试计数。
+        failures = 0;
+        setResultContext(projected);
+        setResultPayload(normalizePublicProductPayload(projected));
+        setResultLoading(false);
+      }).catch((error) => {
+        // R32-06：视图切换/概览往返的旧请求abort必须保持静默替换
+        // （AbortError不入错误态）；真实失败按退避自动重试——R32实测
+        // 结果视图单轮5次「当前内容暂不可用」全部要手动「重新读取」
+        // 自救，其中一次滞留>5分钟（report_D.md发现#1）。
+        if (cancelled || error?.name === "AbortError") return;
+        failures += 1;
+        setResultLoading(false);
+        setResultError(projectMonitoringPublicResultError(error));
+        if (failures <= 3) {
+          const backoff = monitoringRefreshBackoffMs(failures);
+          retryTimer = setTimeout(() => {
+            if (cancelled) return;
+            setResultLoading(true);
+            startRead();
+          }, backoff);
+        }
+      });
+    };
+
+    startRead();
     return () => {
       cancelled = true;
       controller.abort();
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, [api, normalizedProjectId, resultRetryEpoch, resultToken, route.site_ref, route.source_locator_ref, route.spine_ref, route.subject_ref, route.view, route.window_end, route.window_start, routeView]);
 
@@ -1628,7 +1651,7 @@ export function MedicalMonitoringProductLoop({
           </div>
         </section>
       ) : null}
-      {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><div className="monitoring-product-state-panel-actions"><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button>{resultError?.code === "public_result_target_incomplete" && resultToken ? <button type="button" className="monitoring-product-button is-small" onClick={() => navigate("overview", { subject_ref: "", site_ref: "", spine_ref: "", window_start: "", window_end: "", risk_instance_ref: "", risk_anchor_ref: "", event_ref: "", visit_ref: "" })}>返回结果概览</button> : null}</div></section> : null}
+      {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><span>{resultError ? "系统会自动重试（最多3次，间隔递增）；若持续失败请点击「重新读取」或返回进度页。" : ""}</span><div className="monitoring-product-state-panel-actions"><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button>{resultError?.code === "public_result_target_incomplete" && resultToken ? <button type="button" className="monitoring-product-button is-small" onClick={() => navigate("overview", { subject_ref: "", site_ref: "", spine_ref: "", window_start: "", window_end: "", risk_instance_ref: "", risk_anchor_ref: "", event_ref: "", visit_ref: "" })}>返回结果概览</button> : null}</div></section> : null}
       {!loadingBody && !resultError && !setupHistoryError && publicRunToken && !resultToken ? <MonitoringPublicProgressSurface progress={progress} error={progressError} loading={progressLoading} onRefresh={() => setRefreshEpoch((value) => value + 1)} onBack={() => navigate("overview", { public_run_token: "" })} onOpenResult={() => openResult(publicRunToken)} /> : null}
       {!loadingBody && !resultError && !setupHistoryError && resultLoaded ? (
         <div className="monitoring-product-result-body">

@@ -111,8 +111,37 @@ function findingTitles(report, severity) {
   );
 }
 
-export function semanticQualityPresentation(report) {
-  if (!report) {
+// R32-02：阻断确认的全局阻断组明细（标题/摘要/涉及字段及当前角色）。
+// 后端 semantic_quality.finding_groups 一直随草稿下发（asdict 全量），
+// 此前界面只渲染「还有N组需要处理」横幅却不给任何处理入口——B位实测
+// 确认按钮disabled 2.5小时+、页面零控件（report_B.md:33-34）。这里把
+// 阻断组整理成可渲染、可逐字段修订的形状；无阻断时返回空数组。
+export function semanticQualityBlockedGroups(report) {
+  if (!report || typeof report !== "object" || Array.isArray(report)) {
+    return [];
+  }
+  return (report.finding_groups || [])
+    .filter((item) => (
+      item && typeof item === "object" && !Array.isArray(item)
+      && item.severity === "global_blocker"
+    ))
+    .map((item) => ({
+      key: String(item.finding_group_id || item.rule_id || item.title_zh || ""),
+      ruleId: String(item.rule_id || ""),
+      title: String(item.title_zh || "").trim(),
+      summary: String(item.summary_zh || "").trim(),
+      fields: (item.affected_fields || [])
+        .filter((ref) => ref && typeof ref === "object" && !Array.isArray(ref))
+        .map((ref) => ({
+          domain: String(ref.domain || ""),
+          sourceField: String(ref.source_field || ""),
+          currentRole: String(ref.role_concept_id || ""),
+        })),
+    }))
+    .filter((item) => item.title || item.fields.length);
+}
+
+export function semanticQualityPresentation(report) {  if (!report) {
     return {
       level: "unknown",
       title: "",
@@ -141,7 +170,9 @@ export function semanticQualityPresentation(report) {
       title: blockerCount > 0
         ? `还有 ${blockerCount} 组字段关系需要处理`
         : "还有字段关系需要处理",
-      detail: "请按页面提示补充必要信息，处理完成后即可继续。",
+      // R32-02：detail与下方阻断组卡片呼应——不再只说「按页面提示」
+      // 却不给任何提示（B位实测死锁2.5小时+）。
+      detail: "逐条说明见下方卡片；修订相关字段后系统会自动重新核对，核对通过前不能确认。",
       blocksConfirmation: true,
     };
   }
