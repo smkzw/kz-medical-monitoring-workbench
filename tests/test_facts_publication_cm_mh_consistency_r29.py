@@ -28,14 +28,20 @@ from packages.medical_monitoring.projections.facts_publication import (  # noqa:
 )
 
 
-def _cm_risk_records(tmp_path: Path, cm_rows, mh_rows):
+def _cm_risk_records(tmp_path: Path, cm_rows, mh_rows, extra_tables=None):
+    tables = {"CM": cm_rows, "MH": mh_rows}
+    for table, rows in (extra_tables or {}).items():
+        tables[table] = rows
     workspace = _workspace(
         tmp_path,
-        {"CM": cm_rows, "MH": mh_rows},
+        tables,
     )
     provider = FactsPublicationAuthorityProvider(workspace)
     packet = provider.get_packet("proj-test", snapshot_ref="facts-snapshot-001")
-    return [r for r in packet.risks if r.domain == "cm"]
+    # R35轮（R28-06）：AE-化验趋势核对断言也需要AE域风险行，返回CM+AE。
+    return [
+        r for r in packet.risks if r.domain in ("cm", "ae")
+    ]
 
 
 def test_indication_named_condition_missing_from_history_flags(tmp_path: Path) -> None:
@@ -183,3 +189,154 @@ def test_unknown_drug_without_indication_never_flags(tmp_path: Path) -> None:
     )
     assert records
     assert all("一致性待核实" not in (r.medical_note or "") for r in records)
+
+
+def test_drug_alias_all_indications_match_history_r34_10(tmp_path: Path) -> None:
+    """R35轮（R34-10）：常见用药对照的**全部**适应症别名都必须参与匹配。
+
+    R34实测（report_D.md F2）：24008 C014阿托伐他汀钙只对照「高血脂」，
+    病史「血脂异常(M014)」不命中即输出「病史无对应记录」待核实Query——
+    面板同句自引「血脂异常」病史却得出「无对应记录」，自相矛盾；
+    24008 C034孟鲁司特钠片只对照「哮喘」，病史「过敏性鼻炎(M015)」
+    （说明书适应症之一）未对照，同报无对应记录。别名全量匹配后这两条
+    必须回归「一致、不制造发现」。
+    """
+
+    records = _cm_risk_records(
+        tmp_path,
+        [
+            {
+                "SUBJID": "24008", "CMNUM": "C014", "CMTRT": "阿托伐他汀钙片",
+                "CMINDC": "既往用药", "CMSTDAT": "2025-11-01",
+                "CMENDAT": "2026-06-01", "CMONGO": "否",
+            },
+            {
+                "SUBJID": "24008", "CMNUM": "C034", "CMTRT": "孟鲁司特钠片",
+                "CMINDC": "", "CMSTDAT": "2025-12-01",
+                "CMENDAT": "2026-05-01", "CMONGO": "否",
+            },
+        ],
+        [
+            {"SUBJID": "24008", "MHTERM": "血脂异常", "MHSTDAT": "2014-02-01", "MHONGO": "是"},
+            {"SUBJID": "24008", "MHTERM": "过敏性鼻炎", "MHSTDAT": "2016-08-01", "MHONGO": "是"},
+        ],
+    )
+    assert len(records) >= 2
+    assert all(
+        "一致性待核实" not in (r.medical_note or "") for r in records
+    ), "病史载同名别名（血脂异常/过敏性鼻炎）时不得输出无对应记录误报"
+    assert all(r.severity != "medium" for r in records)
+
+
+def test_drug_alias_no_history_hit_still_flags_with_first_alias_r34_10(tmp_path: Path) -> None:
+    """别名全量不命中（真缺失）仍提示核实——修复不制造漏报。"""
+
+    records = _cm_risk_records(
+        tmp_path,
+        [{
+            "SUBJID": "24009", "CMNUM": "C001", "CMTRT": "阿托伐他汀钙片",
+            "CMINDC": "既往用药", "CMSTDAT": "2025-11-01",
+            "CMENDAT": "2026-06-01", "CMONGO": "否",
+        }],
+        [{"SUBJID": "24009", "MHTERM": "偏头痛", "MHSTDAT": "2015-06-01", "MHONGO": "否"}],
+    )
+    assert records
+    flagged = [r for r in records if "常见适应症对照" in (r.medical_note or "")]
+    assert flagged, "真缺失（病史无任何别名命中）仍须提示核实"
+    assert all(r.severity == "medium" for r in flagged)
+
+
+def test_ae_lab_trend_contradiction_flags_mild_labs_r28_06(tmp_path: Path) -> None:
+    """R35轮（R28-06）：AE-化验趋势矛盾交叉核对——监查重点方向检出。
+
+    R34实测：合成CSU数据植入「23003 血小板计数降低 3级（AESER=是）对应
+    W4/W8化验仅118/126（参考范围125-350，仅轻度偏低）」，96条输出中
+    零条引用化验数据——AE声明3级降幅而历次检测未低于参考下限的60%，
+    AE风险行必须追加矛盾提示并引用化验值，使「AE与化验趋势矛盾」方向
+    有可核实产出。
+    """
+
+    records = _cm_risk_records(
+        tmp_path,
+        [],
+        [],
+        extra_tables={
+            "AE": [{
+                "SUBJID": "23003", "AENUM": "A009", "AETERM": "血小板计数降低",
+                "AESEV": "3级", "AESTDAT": "2026-02-10", "AEENDAT": "2026-02-22",
+                "AEOUT": "好转", "AEREL": "可能有关", "AESER": "是",
+            }],
+            "LB_HEM": [
+                {"SUBJID": "23003", "VISIT": "W4", "LBDAT": "2026-01-29", "LBTEST": "血小板计数",
+                 "LBUNIT": "10^9/L", "LBORRES": "118", "LBREF": "125-350", "LBSIGNI": "偏低"},
+                {"SUBJID": "23003", "VISIT": "W8", "LBDAT": "2026-02-26", "LBTEST": "血小板计数",
+                 "LBUNIT": "10^9/L", "LBORRES": "126", "LBREF": "125-350", "LBSIGNI": "偏低"},
+            ],
+        },
+    )
+    ae_records = [
+        r for r in records
+        if r.domain == "ae" and "血小板" in str(getattr(r, "risk_key", "") or "") + str(getattr(r, "medical_note", "") or "")
+    ] or [r for r in records if r.domain == "ae"]
+    assert ae_records, "AE风险锚点行缺失"
+    flagged = [r for r in ae_records if "化验趋势存在矛盾待核实" in (r.medical_note or "")]
+    assert flagged, "3级血小板AE+化验仅轻度偏低——矛盾提示缺失（监查重点方向零产出）"
+    note = flagged[0].medical_note
+    assert "118" in note and "126" in note, "矛盾依据必须引用化验实测值"
+    assert "W4" in note and "W8" in note, "矛盾依据必须可定位到访视"
+
+
+def test_ae_lab_trend_severe_drop_stays_quiet_r28_06(tmp_path: Path) -> None:
+    """化验确有≥3级降幅（低于参考下限60%）时与AE分级一致——不制造发现。"""
+
+    records = _cm_risk_records(
+        tmp_path,
+        [],
+        [],
+        extra_tables={
+            "AE": [{
+                "SUBJID": "23004", "AENUM": "A001", "AETERM": "血小板计数降低",
+                "AESEV": "3级", "AESTDAT": "2026-02-10", "AEENDAT": "2026-02-22",
+                "AEOUT": "好转", "AEREL": "可能有关", "AESER": "否",
+            }],
+            "LB_HEM": [
+                {"SUBJID": "23004", "VISIT": "W4", "LBDAT": "2026-01-29", "LBTEST": "血小板计数",
+                 "LBUNIT": "10^9/L", "LBORRES": "40", "LBREF": "125-350", "LBSIGNI": "偏低"},
+            ],
+        },
+    )
+    ae_records = [r for r in records if r.domain == "ae"]
+    assert ae_records
+    assert all(
+        "化验趋势存在矛盾待核实" not in (r.medical_note or "") for r in ae_records
+    ), "化验已达3级降幅时不得输出矛盾提示"
+
+
+def test_ae_non_hematology_or_below_grade3_stays_quiet_r28_06(tmp_path: Path) -> None:
+    """非血常规术语或<3级AE不在本规则射程内——不制造发现。"""
+
+    records = _cm_risk_records(
+        tmp_path,
+        [],
+        [],
+        extra_tables={
+            "AE": [
+                {"SUBJID": "23005", "AENUM": "A001", "AETERM": "头痛",
+                 "AESEV": "3级", "AESTDAT": "2026-02-10", "AEENDAT": "2026-02-12",
+                 "AEOUT": "痊愈", "AEREL": "可能有关", "AESER": "否"},
+                {"SUBJID": "23006", "AENUM": "A002", "AETERM": "血小板计数降低",
+                 "AESEV": "2级", "AESTDAT": "2026-02-10", "AEENDAT": "2026-02-12",
+                 "AEOUT": "痊愈", "AEREL": "可能有关", "AESER": "否"},
+            ],
+            "LB_HEM": [
+                {"SUBJID": "23005", "VISIT": "W4", "LBDAT": "2026-01-29", "LBTEST": "血小板计数",
+                 "LBUNIT": "10^9/L", "LBORRES": "120", "LBREF": "125-350", "LBSIGNI": "偏低"},
+                {"SUBJID": "23006", "VISIT": "W4", "LBDAT": "2026-01-29", "LBTEST": "血小板计数",
+                 "LBUNIT": "10^9/L", "LBORRES": "120", "LBREF": "125-350", "LBSIGNI": "偏低"},
+            ],
+        },
+    )
+    assert records
+    assert all(
+        "化验趋势存在矛盾待核实" not in (r.medical_note or "") for r in records
+    ), "非血常规术语/低于3级不得触发矛盾提示"

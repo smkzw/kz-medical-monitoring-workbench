@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import threading
+import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Optional
@@ -20,6 +23,82 @@ from .frozen_read_model import (
 )
 from .publication_providers import _r5_publication_types
 from .route_utils import _workspace_dir
+
+
+# R35轮（R34-09/R32-07）：冻结结果包完整性校验的进程内会话缓存。
+# R32实测（report_D.md:109-112）：完整性校验不缓存，结果视图内每次
+# 「返回概览/点发现卡/切旅程页签」都全量重读（591行小数据集仍7~129秒，
+# 9次累计8-9分钟），并成为「暂不可用」失败态的高发诱因；R34实测自动
+# 重试3次全部落在未缓存的慢读窗口内失败、手动「重新读取」反而8-10秒
+# 成功——重试链路与读取链路行为脱节的根因是同一份冻结包被反复全量校验。
+# 发布行一旦AVAILABLE即不可变（token、冻结read model sha256、authority
+# packet digest、R6工件集合digest全部钉死内容），以发布行身份字段为指纹
+# 缓存「门禁核对+工件完整性校验+packet恢复」结果：TTL 600s兜底防在位
+# 篡改/异常重发布，LRU上限4个token控内存。registry/entry句柄仍按请求
+# 打开与关闭（请求作用域合同不变）；指纹不匹配或读取失败一律走全量路径。
+_FROZEN_CONTEXT_CACHE_TTL_SECONDS = 600.0
+_FROZEN_CONTEXT_CACHE_MAX_ENTRIES = 4
+_FROZEN_CONTEXT_CACHE_LOCK = threading.Lock()
+# 键含workspace root：同一进程内多workspace（隔离测试环境/并行测试夹具）
+# 同内容发布互不串扰；生产单root下即为会话内复用。
+_FROZEN_CONTEXT_CACHE: "OrderedDict[tuple[tuple[str, str, tuple], ...], tuple]" = OrderedDict()
+
+
+def _publication_fingerprint(publication: Any) -> tuple:
+    """发布行身份指纹——缓存命中必须逐一等于这些钉死内容的字段。"""
+
+    return (
+        str(getattr(publication, "result_context_token", "") or ""),
+        str(getattr(publication, "publication_state", "") or ""),
+        str(getattr(publication, "run_id", "") or ""),
+        str(getattr(publication, "snapshot_token", "") or ""),
+        str(getattr(publication, "data_cutoff", "") or ""),
+        str(getattr(publication, "setup_manifest_digest", "") or ""),
+        str(getattr(publication, "manifest_revision", "") or ""),
+        str(getattr(publication, "manifest_digest", "") or ""),
+        str(getattr(publication, "receipt_set_digest", "") or ""),
+        str(getattr(publication, "frozen_read_model_artifact_id", "") or ""),
+        str(getattr(publication, "frozen_read_model_sha256", "") or ""),
+        str(getattr(publication, "r5_authority_packet_id", "") or ""),
+        str(getattr(publication, "r5_authority_packet_digest", "") or ""),
+        str(getattr(publication, "r6_output_set_digest", "") or ""),
+        str(getattr(publication, "artifact_member_set_digest", "") or ""),
+        tuple(str(item) for item in getattr(publication, "artifact_member_ids", ()) or ()),
+        tuple(str(item) for item in getattr(publication, "site_coverage", ()) or ()),
+    )
+
+
+def _frozen_context_cache_get(
+    root: Path,
+    canonical_project_id: str,
+    fingerprint: tuple,
+) -> Optional[tuple]:
+    now = time.monotonic()
+    key = (str(root), canonical_project_id, fingerprint)
+    with _FROZEN_CONTEXT_CACHE_LOCK:
+        entry = _FROZEN_CONTEXT_CACHE.get(key)
+        if entry is None:
+            return None
+        created_at, payload = entry
+        if now - created_at > _FROZEN_CONTEXT_CACHE_TTL_SECONDS:
+            _FROZEN_CONTEXT_CACHE.pop(key, None)
+            return None
+        _FROZEN_CONTEXT_CACHE.move_to_end(key)
+        return payload
+
+
+def _frozen_context_cache_put(
+    root: Path,
+    canonical_project_id: str,
+    fingerprint: tuple,
+    payload: tuple,
+) -> None:
+    key = (str(root), canonical_project_id, fingerprint)
+    with _FROZEN_CONTEXT_CACHE_LOCK:
+        _FROZEN_CONTEXT_CACHE[key] = (time.monotonic(), payload)
+        _FROZEN_CONTEXT_CACHE.move_to_end(key)
+        while len(_FROZEN_CONTEXT_CACHE) > _FROZEN_CONTEXT_CACHE_MAX_ENTRIES:
+            _FROZEN_CONTEXT_CACHE.popitem(last=False)
 
 
 @dataclass(frozen=True)
@@ -244,6 +323,56 @@ def load_public_result_context(
         if isinstance(entry_candidate, JSONResponse):
             raise ProductPublicationError("result_context_unavailable")
         entry = entry_candidate
+
+        def _product_packet_provider_for(
+            product_packet_value: Any,
+        ) -> Any:
+            def product_packet_provider(
+                project_ref: str,
+                run_ref: Optional[str] = None,
+                snapshot_ref: Optional[str] = None,
+                cutoff_ref: Optional[str] = None,
+            ) -> Any:
+                if (
+                    project_ref != canonical_project_id
+                    or run_ref is not None
+                    and run_ref != launch.run_id
+                    or snapshot_ref is not None
+                    and snapshot_ref != (
+                        publication.snapshot_ref or publication.snapshot_token
+                    )
+                    or cutoff_ref is not None
+                    and cutoff_ref != publication.data_cutoff
+                ):
+                    raise R5ProductAdapterError(
+                        "AUTHORITY_IDENTITY_MISMATCH"
+                    )
+                return product_packet_value
+
+            return product_packet_provider
+
+        # R35轮（R34-09/R32-07）：指纹命中的会话缓存直接复用「门禁核对+
+        # 工件完整性校验+packet恢复」结果——发布行AVAILABLE后不可变，指纹
+        # 钉死内容字段；registry/entry仍按请求新开（调用方close合同不变）。
+        fingerprint = _publication_fingerprint(publication)
+        cached = _frozen_context_cache_get(
+            root, canonical_project_id, fingerprint
+        )
+        if cached is not None and getattr(cached[1], "product_packet", None) is not None:
+            _gate, packet, mode_outputs, mode_output_artifacts = cached
+            adapter = R5ProductAdapter(
+                _product_packet_provider_for(packet.product_packet)
+            )
+            return ResolvedResultContext(
+                registry=registry,
+                entry=entry,
+                launch=launch,
+                publication=publication,
+                adapter=adapter if require_product_adapter else None,
+                mode_outputs=mode_outputs,
+                mode_output_artifacts=mode_output_artifacts,
+            )
+
         gate = _read_publication_gate(
             _workspace_dir(root, canonical_project_id),
             launch.run_id,
@@ -401,29 +530,13 @@ def load_public_result_context(
             if bridge_refs != product_refs:
                 raise ProductPublicationError("result_context_unavailable")
 
-        def product_packet_provider(
-            project_ref: str,
-            run_ref: Optional[str] = None,
-            snapshot_ref: Optional[str] = None,
-            cutoff_ref: Optional[str] = None,
-        ) -> Any:
-            if (
-                project_ref != canonical_project_id
-                or run_ref is not None
-                and run_ref != launch.run_id
-                or snapshot_ref is not None
-                and snapshot_ref != (
-                    publication.snapshot_ref or publication.snapshot_token
-                )
-                or cutoff_ref is not None
-                and cutoff_ref != publication.data_cutoff
-            ):
-                raise R5ProductAdapterError(
-                    "AUTHORITY_IDENTITY_MISMATCH"
-                )
-            return product_packet
-
-        adapter = R5ProductAdapter(product_packet_provider)
+        _frozen_context_cache_put(
+            root,
+            canonical_project_id,
+            fingerprint,
+            (gate, packet, mode_outputs, mode_output_artifacts),
+        )
+        adapter = R5ProductAdapter(_product_packet_provider_for(product_packet))
         return ResolvedResultContext(
             registry=registry,
             entry=entry,

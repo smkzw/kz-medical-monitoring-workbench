@@ -790,9 +790,32 @@ class AdmissionMappingPipeline:
             for item in roles
             if item["required_now"] and item["status"] != "current"
         ]
-        return {
-            "ready": ready,
-            "headline": (
+        # R35轮（R34-01）：用户已裁决「本次未提供」的必需角色不得渲染
+        # 「研究文件已准备好/系统会自动完成字段理解和两次独立核对」——
+        # 运行门（mapping_document_evidence_roles_unmet）会硬性拒绝生成
+        # 字段映射（声明未提供的文件同样计入缺失），准备卡与运行门同屏
+        # 互斥会让审计/培训场景误以为审核已通过。ready保持True（R7轮
+        # 收口：声明未提供不阻断接入流程、不回退第2步死锁），但标题与
+        # 指引如实收敛为「受限」态并点名受限后果与唯一出路。
+        declared_missing_required_labels = [
+            _DOCUMENT_ROLE_LABELS[item["role"]]
+            for item in roles
+            if item["user_declared_missing"]
+            and item["role"] in MAPPING_REQUIRED_DOCUMENT_ROLES
+        ]
+        if declared_missing_required_labels:
+            headline = (
+                "研究文件配对不完整："
+                + "、".join(declared_missing_required_labels)
+                + "已确认本次未提供"
+            )
+            guidance = (
+                "生成字段映射需要研究方案与电子病例报告表均完成识别，"
+                "已确认未提供的文件同样计入缺失，因此本次无法生成字段"
+                "映射。如需完整字段识别，请补充上传该文件并重新核对。"
+            )
+        else:
+            headline = (
                 "研究文件已准备好"
                 if ready
                 else (
@@ -800,12 +823,16 @@ class AdmissionMappingPipeline:
                     if missing_required_labels
                     else "研究文件核对尚未完成"
                 )
-            ),
-            "guidance": (
+            )
+            guidance = (
                 "系统会自动完成字段理解和两次独立核对，无需逐项确认。"
                 if ready
                 else "添加文件后，系统会自动识别，不需要您填写技术信息。"
-            ),
+            )
+        return {
+            "ready": ready,
+            "headline": headline,
+            "guidance": guidance,
             "roles": roles,
         }
 

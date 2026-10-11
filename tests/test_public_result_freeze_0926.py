@@ -611,6 +611,130 @@ def test_a10_same_facts_two_publications_keep_own_frozen_identity(
 
 
 # ---------------------------------------------------------------------------
+# R35轮（R34-09/R32-07）：冻结包会话缓存——视图往返不再全量重校验
+# ---------------------------------------------------------------------------
+
+
+def test_frozen_context_session_cache_skips_reverification_within_ttl_r34_09(
+    tmp_path: Path,
+) -> None:
+    """同一result token的重复读取复用已校验冻结包（R32-07/R34-09）。
+
+    R32实测：结果视图内每次往返都全量重读（591行数据集7~129秒/次，
+    9次累计8-9分钟），并成为「暂不可用」失败态高发诱因。缓存命中必须
+    跳过门禁核对+工件完整性校验（此处以门禁读取计数为观测点），命中
+    返回的mode_outputs/launch身份与首读一致。
+    """
+
+    publication, _packet, _document, run_id = _publish(
+        tmp_path, PROJECT_A, RUN_A
+    )
+    gate_calls = {"count": 0}
+
+    def _counting_gate(workspace_dir, run_ref, *, entry, harness_r1_profile):
+        gate_calls["count"] += 1
+        return _publication_gate(workspace_dir, PROJECT_A, run_ref)
+
+    def load(project_ref: str, token: str):
+        workspace = _workspace_dir(tmp_path, project_ref)
+        dependencies = ResultContextDependencies(
+            root=tmp_path,
+            open_legacy_view=lambda project: None,
+            open_launch_registry=lambda project: lr.LaunchRegistry(
+                _workspace_dir(tmp_path, project) / lr.LAUNCH_REGISTRY_DB_NAME,
+                project_id=project,
+            ),
+            open_entry=lambda workspace_dir, allow_create: _StubEntry(),
+            publication_setup_inputs=lambda *args, **kwargs: None,
+            publication_bridge=None,
+            publication_provider=None,
+            r5_product_packet_factory=None,
+            harness_r1_profile=None,
+            build_r5_publication_packet=None,
+            read_publication_gate=_counting_gate,
+        )
+        return load_public_result_context(dependencies, project_ref, token)
+
+    first = load(PROJECT_A, publication.result_context_token)
+    try:
+        assert first.launch.run_id == run_id
+        first_mode_outputs = dict(first.mode_outputs)
+    finally:
+        first.close()
+    assert gate_calls["count"] == 1
+
+    second = load(PROJECT_A, publication.result_context_token)
+    try:
+        assert second.launch.run_id == run_id
+        assert dict(second.mode_outputs) == first_mode_outputs
+    finally:
+        second.close()
+    assert gate_calls["count"] == 1, (
+        "TTL内的重复读取必须复用缓存的校验结果，不得重做门禁核对"
+    )
+
+
+def test_frozen_context_cache_invalidates_when_publication_row_changes_r34_09(
+    tmp_path: Path,
+) -> None:
+    """发布行身份字段变化（如frozen sha被篡改）必须使缓存失效并fail-closed。
+
+    指纹钉死发布行内容字段：指纹不匹配走全量路径，篡改后的sha256引用
+    在加载冻结文档时被拒——缓存不得把被篡改的发布伪装成可读。
+    """
+
+    publication, _packet, _document, run_id = _publish(
+        tmp_path, PROJECT_A, RUN_A
+    )
+    gate_calls = {"count": 0}
+
+    def _counting_gate(workspace_dir, run_ref, *, entry, harness_r1_profile):
+        gate_calls["count"] += 1
+        return _publication_gate(workspace_dir, PROJECT_A, run_ref)
+
+    def load(project_ref: str, token: str):
+        workspace = _workspace_dir(tmp_path, project_ref)
+        dependencies = ResultContextDependencies(
+            root=tmp_path,
+            open_legacy_view=lambda project: None,
+            open_launch_registry=lambda project: lr.LaunchRegistry(
+                _workspace_dir(tmp_path, project) / lr.LAUNCH_REGISTRY_DB_NAME,
+                project_id=project,
+            ),
+            open_entry=lambda workspace_dir, allow_create: _StubEntry(),
+            publication_setup_inputs=lambda *args, **kwargs: None,
+            publication_bridge=None,
+            publication_provider=None,
+            r5_product_packet_factory=None,
+            harness_r1_profile=None,
+            build_r5_publication_packet=None,
+            read_publication_gate=_counting_gate,
+        )
+        return load_public_result_context(dependencies, project_ref, token)
+
+    first = load(PROJECT_A, publication.result_context_token)
+    first.close()
+    assert gate_calls["count"] == 1
+
+    workspace = _workspace_dir(tmp_path, PROJECT_A)
+    with sqlite3.connect(
+        str(workspace / lr.LAUNCH_REGISTRY_DB_NAME)
+    ) as connection:
+        connection.execute(
+            "UPDATE r7_result_publications SET frozen_read_model_sha256 = ? "
+            "WHERE run_id = ?",
+            ("c" * 64, run_id),
+        )
+        connection.commit()
+
+    with pytest.raises(Exception, match="result_context_unavailable"):
+        load(PROJECT_A, publication.result_context_token)
+    assert gate_calls["count"] == 2, (
+        "指纹变化必须走全量路径（门禁+工件校验），不得命中旧缓存"
+    )
+
+
+# ---------------------------------------------------------------------------
 # 坏工件：verify失败→明确错误，不回退live或重建（A13坏工件分支）
 # ---------------------------------------------------------------------------
 

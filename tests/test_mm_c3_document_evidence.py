@@ -745,6 +745,54 @@ def test_document_readiness_is_plain_chinese_and_hides_registry_identity(
     assert "packet_sha256" not in blob
 
 
+def test_document_readiness_renders_declared_missing_required_role_as_restricted_r34_01(
+    tmp_path: Path,
+) -> None:
+    """R35轮（R34-01）：eCRF裁决「本次未提供」后准备卡不得宣称已就绪。
+
+    R34实测（report_A.md:25）：用户对eCRF如实裁决「本次未提供」并保存
+    后，准备状态卡仍渲染「研究文件已准备好/系统会自动完成字段理解和两
+    次独立核对」，与同屏「已由用户确认未提供/0项字段/研究文件配对不完
+    整」及运行门硬性报错互斥——审计/培训场景会误以为审核已通过。门禁
+    本身阻止无eCRF映射是合理设计；缺陷在裁决后的状态文案未同步收敛。
+    ready保持True（R7轮收口：声明未提供不阻断接入流程、不回退第2步
+    死锁），但标题/指引必须如实呈现「配对不完整」受限态。
+    """
+
+    record, workspace = _admission_record(tmp_path)
+    pipeline = AdmissionMappingPipeline(
+        require_document_evidence=True,
+        document_evidence_resolver=lambda **_kwargs: _packet(
+            ecrf_status="missing",
+        ),
+    )
+    pipeline.declare_document_missing(
+        project_id=PROJECT_ID,
+        attempt_id=record["attempt_id"],
+        workspace_dir=workspace,
+        role="ecrf",
+    )
+
+    readiness = pipeline.document_readiness(
+        project_id=PROJECT_ID,
+        attempt_id=record["attempt_id"],
+        workspace_dir=workspace,
+    )
+
+    assert readiness["ready"] is True
+    assert readiness["headline"] != "研究文件已准备好"
+    assert "电子病例报告表" in readiness["headline"]
+    assert "已确认本次未提供" in readiness["headline"]
+    assert "配对不完整" in readiness["headline"]
+    assert "无法生成字段映射" in readiness["guidance"]
+    assert "自动完成字段理解" not in readiness["guidance"]
+    ecrf = next(
+        item for item in readiness["roles"] if item["role"] == "ecrf"
+    )
+    assert ecrf["user_declared_missing"] is True
+    assert ecrf["status_text"] == "已由用户确认未提供"
+
+
 class _Registry:
     def __init__(self, entries: list, spans: list) -> None:
         self._entries = entries

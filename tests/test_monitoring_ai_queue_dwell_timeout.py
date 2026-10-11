@@ -224,3 +224,95 @@ def test_legacy_row_without_dwell_since_falls_back_to_created_at(
         )
     )
     assert repo.queued_dwell_oldest(project_id=job.project_id) != ""
+
+
+def test_dwell_horizon_widens_with_queue_depth_r34_07(tmp_path: Path) -> None:
+    """R35轮（R34-07）：大工作簿分片风暴不得被固定视界误收割。
+
+    R34实测：54表工作簿一次性入队129个识别分片，单worker串行消费下
+    队尾排队2-4小时，52/54张表被queue_dwell_timeout打为终态失败——
+    字段映射无法生成，医学监查全链阻断。视界必须随在队深度放宽：
+    基线 + (在队数-1)×单作业预算。此处以10个分片+180s/分片预算复现：
+    基线2小时+1秒（旧固定视界必收割）时10分片队列一个都不收割；
+    视界=7200+9×180=8820s，推进8821s后全部收割（兜底仍存在）。
+    """
+
+    clock = _FakeClock()
+    repo = MonitoringAiRepository(
+        tmp_path / "monitoring_ai.sqlite3",
+        lease_seconds=300,
+        queue_dwell_timeout_seconds=7200,
+        queue_dwell_seconds_per_queued_job=180,
+        clock=clock,
+    )
+    jobs = [
+        repo.create_or_get(
+            _create_request(
+                business_key=(
+                    "listing-field-mapping:batch-1:DM:"
+                    f"{index:04d}-of-0010"
+                ),
+            )
+        )
+        for index in range(1, 11)
+    ]
+    assert all(job.status is MonitoringAiJobStatus.QUEUED for job in jobs)
+
+    # 推进7201s：旧固定视界下整队必被收割；新语义视界8820s——不得收割。
+    clock.advance(7201)
+    assert repo.fail_queued_jobs_exceeding_dwell() == 0
+    assert all(
+        repo.get(job.project_id, job.job_id).status
+        is MonitoringAiJobStatus.QUEUED
+        for job in jobs
+    )
+
+    # 推进越过动态视界（累计8821s）：兜底仍生效，整队收割为可重试终态。
+    clock.advance(1620)
+    reaped = repo.fail_queued_jobs_exceeding_dwell()
+    assert reaped == 10
+    final_jobs = [repo.get(job.project_id, job.job_id) for job in jobs]
+    assert all(job.status is MonitoringAiJobStatus.FAILED for job in final_jobs)
+    assert all(
+        job.failure_code == "queue_dwell_timeout" for job in final_jobs
+    )
+    assert all(int(job.retryable) == 1 for job in final_jobs)
+
+
+def test_dwell_horizon_is_per_project_and_loop_guard_keeps_base(
+    tmp_path: Path,
+) -> None:
+    """R35轮（R34-07）补：①视界按项目分组——别的项目队列深不放宽本项目；
+    ②单作业循环重排（R29-01场景）视界仍=基线，循环兜底语义不变。"""
+
+    clock = _FakeClock()
+    repo = MonitoringAiRepository(
+        tmp_path / "monitoring_ai.sqlite3",
+        lease_seconds=300,
+        queue_dwell_timeout_seconds=7200,
+        queue_dwell_seconds_per_queued_job=180,
+        clock=clock,
+    )
+    # proj_busy：9个分片在队（不该影响proj_single的收割视界）。
+    for index in range(1, 10):
+        repo.create_or_get(
+            _create_request(
+                project_id="proj_busy",
+                business_key=f"listing-field-mapping:batch-1:DM:{index:04d}",
+            )
+        )
+    single = repo.create_or_get(
+        _create_request(project_id="proj_single")
+    )
+    clock.advance(7201)
+    # proj_single只有1个在队作业：视界=基线7200s，应被收割——若跨项目
+    # 污染（按全库在队10算视界8820s）则此处收割为0。
+    assert repo.fail_queued_jobs_exceeding_dwell(project_id="proj_single") == 1
+    final = repo.get("proj_single", single.job_id)
+    assert final.status is MonitoringAiJobStatus.FAILED
+    assert final.failure_code == "queue_dwell_timeout"
+    # proj_busy的9个分片不受影响（视界7200+8×180=8640s尚未到）。
+    assert repo.fail_queued_jobs_exceeding_dwell(project_id="proj_busy") == 0
+    busy_jobs = repo.list_jobs("proj_busy")
+    assert len(busy_jobs) == 9
+    assert all(job.status is MonitoringAiJobStatus.QUEUED for job in busy_jobs)

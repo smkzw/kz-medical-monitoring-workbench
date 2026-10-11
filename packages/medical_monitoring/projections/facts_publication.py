@@ -239,26 +239,33 @@ def _cm_mh_consistency_note(
     判定完全基于受试者自身数据的交叉引用：CM行明示的适应症词或内置
     常见用药对照推定的适应症词，在该受试者MH全文中无任何出现→提示
     核实（中等级）；文案如实区分「记录交叉引用」与「医学诊断」。
+
+    R35轮（R34-10）：常见用药对照的**全部**适应症别名都必须参与病史
+    匹配——此前只对照aliases[0]（阿托伐他汀只查「高血脂」、孟鲁司特
+    只查「哮喘」），病史载「血脂异常/过敏性鼻炎」（同药说明书适应症）
+    也不命中，面板同句自引病史却输出「无对应记录」绝对化误报Query。
+    明示适应症路径（CMINDC直书疾病词）保持单词精确匹配不变。
     """
 
     indication = _cm_indication_text(row)
-    candidates: list[tuple[str, str]] = []
+    candidates: list[tuple[str, tuple[str, ...], bool]] = []
+    # (提示词, 病史可接受词组——任一命中即一致, 是否CM明示适应症)
     for term in _cm_indication_condition_terms(indication):
-        candidates.append((term, term))
+        candidates.append((term, (term,), True))
     if not candidates:
         drug = _cm_drug_text(row)
         if drug:
             for fragment, aliases in _CM_DRUG_INDICATIONS:
                 if fragment in drug:
-                    candidates.append((aliases[0], ""))  # (提示词, 无明示词)
+                    candidates.append((aliases[0], tuple(aliases), False))
                     break
     if not candidates:
         return None
     history = history_text or ""
-    for condition, explicit_term in candidates:
-        if condition and condition in history:
-            continue
-        if explicit_term and explicit_term in history:
+    for display, acceptable_terms, explicit in candidates:
+        if any(
+            term and term in history for term in acceptable_terms
+        ):
             continue
         record_no = _clean(row.get("CMNUM"))
         drug = _cm_drug_text(row)
@@ -271,16 +278,16 @@ def _cm_mh_consistency_note(
                 f"该受试者病史（MH）仅载：{history_text.strip('；')[:80]}"
                 "等，无对应记录"
             )
-        if explicit_term:
+        if explicit:
             note = (
                 f"合并用药与病史一致性待核实：本条合并用药记录{record_text}"
-                f"{drug_text}的用药目的写明「{explicit_term}」，但{basis}。"
+                f"{drug_text}的用药目的写明「{display}」，但{basis}。"
                 "请核实病史是否漏登，或用药目的是否填写有误。"
             )
         else:
             note = (
                 f"合并用药与病史一致性待核实：本条合并用药记录{record_text}"
-                f"{drug_text}按常见适应症对照提示「{condition}」，但{basis}。"
+                f"{drug_text}按常见适应症对照提示「{display}」，但{basis}。"
                 "系统按常见适应症对照提示核实，非医学诊断；请核实病史是否"
                 "漏登或该用药是否另有未记录原因。"
             )
@@ -324,6 +331,127 @@ def _is_roster_form_table(rows: Sequence[dict[str, Any]]) -> bool:
         for c in columns
     )
     return not (clinical_date or has_term or has_scale)
+
+
+# R35轮（R28-06）：AE-化验趋势矛盾交叉核对。监查重点方向「AE与化验趋
+# 势矛盾」零产出的根因：特殊关注已确认规则只登记为工作项，检测层没有
+# 对应的确定性交叉核对。本规则对照血常规类AE（声明血细胞计数降低）与
+# 该受试者同指标LB历次检测：AE严重度≥3级而历次检测降幅均未达到与3级
+# 一致的幅度（未低于参考下限的60%，CTCAE 3级中性粒细胞/血小板对应参考
+# 下限的约40%以下）→ 在AE风险行追加矛盾提示（分级过高或化验漏检待核
+# 实）。方向性保守设计：任一次检测达到3级降幅即视为与AE一致（不制造
+# 发现）；仅覆盖降低方向（升高方向样本不足，不做推定）。
+_AE_LAB_TREND_TERMS: tuple[tuple[str, str, str], ...] = (
+    # (AE术语子串, LBTEST匹配子串, 数值方向)
+    ("血小板", "血小板", "lower"),
+    ("白细胞", "白细胞", "lower"),
+    ("中性粒", "中性粒", "lower"),
+    ("淋巴细胞", "淋巴", "lower"),
+    ("血红蛋白", "血红蛋白", "lower"),
+    ("贫血", "血红蛋白", "lower"),
+)
+_AE_LAB_SEVERE_FRACTION = 0.6
+_LB_REF_RANGE_RE = re.compile(
+    r"^\s*([0-9]+(?:\.[0-9]+)?)\s*[-–~至]\s*([0-9]+(?:\.[0-9]+)?)\s*$"
+)
+
+
+def _ae_lab_observations_by_subject(
+    domains: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> dict[str, list[dict[str, Any]]]:
+    """按受试者汇总LB域化验观测（数值+参考范围可解析的行）。"""
+
+    observations: dict[str, list[dict[str, Any]]] = {}
+    for table, rows in domains.items():
+        if not table.upper().startswith("LB"):
+            continue
+        for row in rows:
+            subject = _clean(row.get("SUBJID"))
+            if not subject or subject in _UK_TOKENS:
+                continue
+            try:
+                value = float(_clean(row.get("LBORRES")))
+            except (TypeError, ValueError):
+                continue
+            ref_match = _LB_REF_RANGE_RE.match(_clean(row.get("LBREF")))
+            if ref_match is None:
+                continue
+            low = float(ref_match.group(1))
+            high = float(ref_match.group(2))
+            if low <= 0 or high <= low:
+                continue
+            observations.setdefault(subject, []).append(
+                {
+                    "test": _clean(row.get("LBTEST")),
+                    "visit": _clean(row.get("VISIT")),
+                    "value": value,
+                    "low": low,
+                    "high": high,
+                    "unit": _clean(row.get("LBUNIT")),
+                }
+            )
+    return observations
+
+
+def _ae_lab_trend_contradiction_note(
+    ae_row: Mapping[str, Any],
+    subject_lab_rows: Sequence[Mapping[str, Any]],
+) -> str:
+    """AE严重度≥3级而同指标化验无对应降幅时返回矛盾提示，否则空串。"""
+
+    sev_raw = _clean(ae_row.get("AESEV"))
+    grade_match = _AE_GRADE_RE.fullmatch(sev_raw)
+    if grade_match is not None:
+        grade_number = int(grade_match.group(1))
+    elif sev_raw in {"重度", "严重"}:
+        grade_number = 3
+    else:
+        return ""
+    if grade_number < 3:
+        return ""
+    term = _clean(ae_row.get("AETERM"))
+    if not term:
+        return ""
+    matched = next(
+        (
+            (lb_fragment, direction)
+            for ae_fragment, lb_fragment, direction in _AE_LAB_TREND_TERMS
+            if ae_fragment in term
+        ),
+        None,
+    )
+    if matched is None:
+        return ""
+    lb_fragment, direction = matched
+    observations = [
+        row
+        for row in (subject_lab_rows or ())
+        if lb_fragment in str(row.get("test") or "")
+    ]
+    if not observations:
+        return ""
+    if direction != "lower":
+        return ""
+    # 任一次检测达到≥3级降幅（低于参考下限的60%）即与AE分级一致。
+    if any(
+        row["value"] < row["low"] * _AE_LAB_SEVERE_FRACTION
+        for row in observations
+    ):
+        return ""
+    detail = "、".join(
+        f"{row['visit'] or '未知访视'} {row['value']:g}"
+        f"（参考范围下限 {row['low']:g}{' ' + row['unit'] if row['unit'] else ''}）"
+        for row in observations
+    )
+    test_name = str(observations[0].get("test") or "对应指标")
+    return (
+        f"注意：该AE声明的严重程度与同期化验趋势存在矛盾待核实——AE严重度"
+        f"为{sev_raw}，但受试者{test_name}历次检测（{detail}）均未出现与"
+        f"3级降幅一致的明显下降（未低于参考范围下限的"
+        f"{int(_AE_LAB_SEVERE_FRACTION * 100)}%）。请核查严重程度分级依据，"
+        "或确认化验样本与事件时间、指标的对应关系。"
+    )
+
 
 # subtype 英文标识 → 中文兜底标签（行内无术语列时使用）
 _SUBTYPE_LABEL_ZH = {
@@ -966,6 +1094,17 @@ class FactsPublicationAuthorityProvider:
                         "注意：该事件满足严重不良事件（SAE）漏报审查模式——"
                         "3级及以上+肯定有关+持续未愈+未报告SAE，建议核查严重性判定与SAE上报。"
                     )
+                # R35轮（R28-06）：AE-化验趋势矛盾交叉核对——监查重点方向
+                # 「AE与化验趋势矛盾」的确定性检出。AE声明血细胞计数降低
+                # ≥3级而该受试者同指标历次检测均无对应降幅时，在AE风险行
+                # 追加矛盾提示（发现卡可核实的化验引用），替代此前该方向
+                # 零产出。
+                ae_lab_note = _ae_lab_trend_contradiction_note(
+                    ae_row,
+                    ae_lab_observations_by_subj.get(subj, ()),
+                )
+                if ae_lab_note:
+                    ae_medical_note += ae_lab_note
             else:
                 severity = severity_hint
                 severity_source = "inferred"
@@ -1080,6 +1219,9 @@ class FactsPublicationAuthorityProvider:
         # R34轮（R29-07）：CM-MH一致性交叉核对数据源（按受试者汇总病史
         # 全文本），供下方CM行判定「合并用药适应症是否有病史记录」。
         cm_mh_history_by_subj = _cm_mh_subject_history_text(domains)
+        # R35轮（R28-06）：AE-化验趋势矛盾交叉核对数据源（按受试者汇总
+        # LB化验观测），供下方AE行判定「声明严重度与化验降幅是否矛盾」。
+        ae_lab_observations_by_subj = _ae_lab_observations_by_subject(domains)
         for table, rows in domains.items():
             if table in _EXCLUDED_TABLES or _is_roster_form_table(rows):
                 continue
