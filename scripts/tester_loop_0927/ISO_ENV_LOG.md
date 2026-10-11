@@ -597,3 +597,4 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 测试：backend pytest 本轮新增/更新=tests/test_monitoring_ai_queue_dwell_timeout.py 7/7（含深度放宽×2新测试）、tests/test_public_result_freeze_0926.py 10/10（含缓存命中跳过重校验+指纹失效fail-closed×2新测试）、tests/test_mm_c3_document_evidence.py（含受限态1条新测试）、tests/test_facts_publication_cm_mh_consistency_r29.py 12/12（含别名全量匹配×2+AE-化验矛盾×3新测试）；回归=monitoring AI/mapping 全家 1141、result/publication/admission 118、daily_run/batch/rule 546、monitoring_ai_service 500、facts/event_time 8+21 全过。前端 node --test resultReadRetry+admissionWizardRender+mappingConfirmState 26/26（前端零改动）。既有失败（与本轮无关，git stash 对照确认）：test_medical_monitoring_r7_product_router.py::test_late_project_dispatchers…、test_medical_writing_chapter_projection.py×2。
 - 纪律：零业务管道推进、零 runs/ 写入、8910/5177 全程未触碰。
 2026-10-11T14:33:30Z
+2026-10-11 22:43 轮次边界无损暂停（用户指令：当前节点完成后停）：R34自然收官（修复员全程做完、复盘落盘完成，用户守候期间零打断），8911/5178已停（边界暂停可安全停机，下轮环境门自动拉起）。恢复=项目根CreateWorkflow接R35
