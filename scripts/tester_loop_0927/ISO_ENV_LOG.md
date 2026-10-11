@@ -598,3 +598,12 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 纪律：零业务管道推进、零 runs/ 写入、8910/5177 全程未触碰。
 2026-10-11T14:33:30Z
 2026-10-11 22:43 轮次边界无损暂停（用户指令：当前节点完成后停）：R34自然收官（修复员全程做完、复盘落盘完成，用户守候期间零打断），8911/5178已停（边界暂停可安全停机，下轮环境门自动拉起）。恢复=项目根CreateWorkflow接R35
+
+## 2026-10-11 22:48:20 CST R35 隔离环境恢复
+- 探针失败现场：8911/5178 均无进程监听（lsof exit=1），运行时目录 runs/tester_loop_iso_20260928/runtime 存在，未丢失，无需重建
+- API 重启：uvicorn services.api.app.main:app 127.0.0.1:8911，PID=26745，WORKBENCH_RUNTIME_DIR=tester_loop_iso_20260928/runtime
+- vite 重启：npx vite --port 5178 --strictPort（VITE_API_PROXY_TARGET=http://127.0.0.1:8911），PID=26774
+- 自检1 runtime-readiness：curl http://127.0.0.1:8911/api/runtime-readiness → HTTP 200，ready:true，backend_build_id=api-4ee144cc0f399a1e
+- 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
+- 自检3 build id 一致：runtime-build.json expectedBackendBuildId=api-4ee144cc0f399a1e == 8911 backend_build_id → 一致
+- 结论：隔离环境已恢复可用（首次尝试即成功，未触 8910/5177）

@@ -4,6 +4,127 @@
 
 ---
 
+## R35 攻坚·第 1 次（2026-10-11，攻坚工程师-R35-第1次）
+
+### 0. 结论先行
+
+**墙未复发：R34 分诊修复（d4dbd691：R34-07/01/09/10+R28-06+R32-07 六条，
+backend_build_id 升为 api-4ee144cc0f399a1e，2026-10-11 14:29Z 双重启加载、
+22:48 R35 环境门按标准命令拉起）下，本轮两遍全新幂等键全链全绿，零阻断、
+零代码修复、零重启。** 本轮 = 该新代码面的**首次**全链运行证明（R34 攻坚
+两遍绿跑在其前一版 build api-f240b1ef669d7a88 上）。常驻项目「MX循开考-CSU」
+（proj_user_6ef58ac151e1）以两个全新幂等键（r35s-fresh-fd5bf2c69389 /
+r35s-fresh-2d38de5566fb）各走完 run-setup/options → workspace/bootstrap
+（留证）→ prepare-and-start → progress completed（15s/2 轮询）→
+publication available → result-entry → overview 可读，两遍逐项一致。
+**R34-09/R32-07 结果包会话缓存在役行为级实证**：同一 rct 第二次读取
+386→193ms / 405→214ms、字节逐位相等（首读为冷读全量校验，二读命中缓存）。
+**结果内容基线合法变化并逐项归因**（§2）：65→60 发现、1,489,541→1,469,932
+字节（R34-10 别名全量匹配清除 5 条 CM-MH 误报）、current_risks 477 恒定、
+R28-06 AE-化验趋势矛盾交叉核对在役首产 1 条。
+
+### 1. 复现（两遍全链，r35s_siege_repro.py，证据 r35s_siege_evidence.jsonl）
+
+前置（本轮开始时，22:48 环境门已拉起 8911/5178，PID 26745/26774；本轮零重启），
+三条件自检全过：① /api/runtime-readiness ready:true
+（backend_build_id=api-4ee144cc0f399a1e）；② http://localhost:5178/monitoring
+HTTP 200；③ 5178/runtime-build.json expectedBackendBuildId 配对一致
+（frontendBuildId=web-693e9d2ed763d7f6）。
+
+| 侧 | 信号 | 实测（两遍一致） |
+| --- | --- | --- |
+| 预置台/API | mapping-candidates | state=candidates_ready，confirmation_status=**confirmed** |
+| 预置台/API | facts | state=**ready** |
+| 预置台/API | r7/project/open | state=**current** |
+| 预置台/API | run-setup/options | 200，208/217ms，snapshot_token=snapshot:ef8692acfbab4d2a9846916f（与 R34 同快照） |
+| 磁盘 | launch_registry（基线） | 50 条全 completed、waiting_start=0（sequence 50=monitoring_b62c39e7…，10:40Z，R34 测试者轮回归运行） |
+| 磁盘 | execution_profiles | `global_default\|*\|1`（R19 修复在盘） |
+| 磁盘 | admission_events.jsonl | 6 行，本轮时间窗**零新增** |
+
+全链逐步（2026-10-11T14:55Z 起两遍共 37s）：
+
+| 步 | 端点 | 第一遍 | 第二遍 |
+| --- | --- | --- | --- |
+| 1 | GET run-setup/options | 200，208ms，同快照 | 200，217ms，同快照 |
+| 2 | POST workspace/bootstrap（留证：前端零组件调用） | 200，120ms，replayed=true revision=1 | 200，98ms，replayed=true revision=1 |
+| 3 | POST runs/prepare-and-start（全新幂等键） | **200，404ms**，run:c13f332e44e0dcee4dd22c31… | **200，403ms**，run:29fb5290c6b4bd5fe5d13074… |
+| 4 | GET runs/{token}/progress | **completed**，percent=100，2 次轮询，15s | **completed**，percent=100，2 次轮询，15s |
+| 5 | POST runs/{token}/publication | 200，741ms，publication_state=**available** | 200，683ms，**available** |
+| 6 | GET runs/{token}/result-entry | 200，350ms，rct=result-context:b8a1fa8d…79b05 | 200，388ms，rct=result-context:57afe01f…e478c3 |
+| 7 | GET results/{rct}/overview | 200，386ms，**1,469,932B/60 发现/16 受试者/477 现行风险** | 200，405ms，**逐项一致** |
+| 8 | GET results/{rct}/overview（缓存探针，本轮新增） | 200，193ms（首读 386ms），字节相等 | 200，214ms（首读 405ms），字节相等 |
+
+终态磁盘：sequence 51/52 两条新 run 全 completed、result_available=1、
+manifest_digest=f58ccf16c4f3（与 R34 两遍同快照同摘要）、registry 共 52 条
+全 completed、waiting_start=0；admission_events 仍 6 行（零新增拒绝）。
+
+### 2. 结果内容基线变化逐项归因（R34→R35 合法变化，非回归）
+
+R34 基线 1,489,541B/65 发现 → 本轮 1,469,932B/60 发现（-20,609B/-5 发现），
+current_risks 477 恒定。逐项钉到 d4dbd691 代码面：
+
+1. **-5 发现 = R34-10 别名全量匹配清除误报**：
+   `packages/medical_monitoring/projections/facts_publication.py:232-290`
+   `_cm_mh_consistency_note`——此前只对照 `aliases[0]`，现在
+   `acceptable_terms` 全组别名参与病史匹配（:268-271
+   `any(term and term in history for term in acceptable_terms)`）。行为级
+   实测：「合并用药与病史一致性待核实」24→**19**（CM 发现 24→19，精确
+   -5）；「常见适应症对照」46→**36**（第二分支同步收敛，其中
+   「常见适应症对照提示核实」新口径 18 条）。病史载「血脂异常/过敏性鼻炎」
+   的同药记录不再输出「无对应记录」绝对化误报——正是该修复的目标行为。
+2. **+1 条 AE-化验趋势矛盾 = R28-06 首产**：
+   `facts_publication.py:336-448` `_ae_lab_trend_contradiction_note`
+   （AESEV≥3 级 + 血常规 6 族术语匹配 + 同指标 LB 历次检测均未低于参考
+   下限 60% 才触发）。overview 原文实测「该AE声明的严重程度与同期化验
+   趋势存在矛盾待核实」×**1**（含实测值/访视引用与「请核查严重程度分级
+   依据」出口文案）——此前该监查重点方向确定性零产出，本轮首次有产出。
+   注意：该发现的 note 文本是「…与同期化验趋势存在矛盾待核实」，
+   不含「AE与化验趋势矛盾」字面（后者仅见于代码注释/监查方向名）。
+3. **字节差与发现数差自洽**：-5 条误报发现（每条约 4KB 文案）−1 条新
+   矛盾提示，净变化全部落在 query_findings 内容面；projection 结构、
+   受试者数（16）、现行风险数（477）、identity/指纹字段均不变。
+
+### 3. 修复
+
+**无（零阻断零代码改动）。** 运行链上无任何一道门拒绝：接入管线侧
+confirmed/ready/current 与运行门无口径差；prepare-and-start 首击即 200
+（404/403ms），无 waiting_start 残留、无 in_flight_conflict、无
+global_default_missing（R19 ensure_builtin_global_default 持续在役，
+profile_layer_versions 稳定 `global_default|*|1`）；publication 首击即
+available；result-entry/overview 新缓存路径首次实战即绿（fail-open 面未
+触发：两次冷读均正常全量校验后返回）。8911/5178 本轮全程未重启（22:48
+环境门拉起后持续在役，加载疑义由 22:48 自检三条件 + 本轮行为级证据共同
+关闭：缓存探针与 AE-化验矛盾文案均为 d4dbd691 新代码面才可能的行为）。
+
+### 4. 回归（本轮实跑）
+
+- `pytest tests/test_facts_publication_cm_mh_consistency_r29.py
+  tests/test_public_result_freeze_0926.py
+  tests/test_monitoring_ai_queue_dwell_timeout.py -q`：**29/29 绿**
+  （d4dbd691 三个后端改动面：CM-MH 别名全量匹配+AE-化验矛盾 ×12、
+  结果包冻结缓存 ×10、动态收割视界 ×7）；
+- `pytest tests/test_medical_monitoring_r7_product_router.py -k
+  "r19_siege or prepare_and_start or global_default" -q`：**7/7 绿**
+  （运行启动 siege 语义：缺失补种/失败 fail-closed 无僵尸/幂等重放）。
+
+### 5. 遗留与边界
+
+- backend_build_id 指纹仅覆盖 services/api/app、不含 packages/** 的口径
+  未变（R32 起在案，留待所有者裁决扩面）；d4dbd691 的 packages 改动面
+  （facts_publication）由 §1/§2 行为级证据确证在役，services/api 改动面
+  （result_context_service 缓存）由 build_id 升级+缓存探针双证。
+- R34-01 document_readiness 受限态与 R34-07 动态收割视界在本轮常驻项目
+  上属**不触发面**（该项目研究文件配对完整、运行 15s 远短于收割视界），
+  其单测 29/29 已覆盖，界面呈现归测试者轮。
+- 结果内容基线自本轮起更新为 **1,469,932B/60 发现/16 受试者/477 现行
+  风险/「合并用药与病史一致性待核实」×19/AE-化验矛盾 ×1**（R34-10 清误报
+  +R28-06 新产出的合法净变化），后续轮次勿再按 65 发现口径比对。
+
+留痕文件：`r35s_siege_repro.py`、`r35s_siege_evidence.jsonl`、本日志；
+本轮零重启，ISO_ENV_LOG 无新条目（22:48 环境门条目已在其上）。
+
+---
+
 ## R34 攻坚·第 1 次（2026-10-11，攻坚工程师-R34-第1次）
 
 ### 0. 结论先行
