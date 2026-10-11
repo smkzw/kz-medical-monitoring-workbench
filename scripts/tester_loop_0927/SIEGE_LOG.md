@@ -4,6 +4,108 @@
 
 ---
 
+## R34 攻坚·第 1 次（2026-10-11，攻坚工程师-R34-第1次）
+
+### 0. 结论先行
+
+**墙未复发：R34 轮次修复（047dfdcc：R33-02/01/03+R30-02/04+R29-07 六条，
+改动面=facts_publication CM-MH 交叉判定+mapping_candidate_routes 409 登记
++前端 wizard/workspace/confirm-state）下，本轮两遍全新幂等键全链全绿，
+零阻断、零代码修复。** 与前两轮（R32/R33 攻坚零重启）不同，本轮执行了
+一次 8911 重启：提交内全部 14 个文件 mtime 统一为 18:06:11，晚于前轮重启
+16:58:07，且无 stash reflog 可查——进程加载版本无法从 forensics 消除疑义，
+按纪律以标准命令重启 8911（只动 8911；registry 无在途运行，安全窗口），
+重启后三条件自检全过。常驻项目「MX循开考-CSU」（proj_user_6ef58ac151e1）
+以两个全新幂等键（r34s-fresh-e78fda541d63 / r34s-fresh-1d96f3c9daf7）各走完
+run-setup/options → workspace/bootstrap（留证）→ prepare-and-start →
+progress completed（15s/2 轮询）→ publication available → result-entry →
+overview 可读，两遍逐项一致。**R29-07 代码在役获行为级实证**：overview
+发现 41→65（+24 =「合并用药与病史一致性待核实」出现次数逐字相等），
+CM 发现 24 条全部升 medium（此前 41 发现中 CM=0），「常见适应症对照」
+46 次（第二分支同在役）——结果内容合法变化，与 R31–R33 恒定的
+1,392,075 字节/41 发现口径不再可比。
+
+### 1. 复现（两遍全链，r34s_siege_repro.py，证据 r34s_siege_evidence.jsonl）
+
+前置（本轮开始时，18:24）：8911 标准命令重启（见 ISO_ENV_LOG 同日条目），
+三条件自检：① /api/runtime-readiness ready:true（backend_build_id=
+api-f240b1ef669d7a88）；② http://localhost:5178/monitoring HTTP 200；
+③ 5178/runtime-build.json expectedBackendBuildId=api-f240b1ef669d7a88
+配对一致（frontendBuildId=web-693e9d2ed763d7f6）。
+
+| 侧 | 信号 | 实测（两遍一致） |
+| --- | --- | --- |
+| 预置台/API | mapping-candidates | state=candidates_ready，confirmation_status=**confirmed** |
+| 预置台/API | facts | state=**ready** |
+| 预置台/API | r7/project/open | state=**current** |
+| 磁盘 | launch_registry（基线） | 47 条全 completed、waiting_start=0 |
+| 磁盘 | execution_profiles | `global_default\|*\|1`（R19 修复在盘） |
+| 磁盘 | admission_events.jsonl | 6 行，本轮时间窗**零新增** |
+
+全链逐步（2026-10-11T10:28Z 起两遍共 37s）：
+
+| 步 | 端点 | 第一遍 | 第二遍 |
+| --- | --- | --- | --- |
+| 1 | GET run-setup/options | 200，282ms，snapshot_token=snapshot:ef8692acfbab4d2a9846916f | 200，206ms，同快照 |
+| 2 | POST workspace/bootstrap（留证：前端零组件调用） | 200，97ms，replayed | 200，94ms，replayed |
+| 3 | POST runs/prepare-and-start（全新幂等键） | **200，377ms**，run:5862c51a0a3681789f3d83cd… | **200，380ms**，run:af1225779260a2a157eab850… |
+| 4 | GET runs/{token}/progress | **completed**，percent=100，2 次轮询，15s | **completed**，percent=100，2 次轮询，15s |
+| 5 | POST runs/{token}/publication | 200，783ms，publication_state=**available** | 200，715ms，**available** |
+| 6 | GET runs/{token}/result-entry | 200，314ms，rct=result-context:f057e64d…de13de | 200，304ms，rct=result-context:8859336f…7b36a |
+| 7 | GET results/{rct}/overview | 200，397ms，**1,489,541B/65 发现/16 受试者/477 现行风险** | 200，365ms，**逐项一致** |
+
+终态磁盘：sequence 48/49 两条新 run 全 completed、result_available=1、
+registry 共 49 条全 completed、waiting_start=0；admission_events 仍 6 行
+（零新增拒绝）。
+
+### 2. R29-07 代码在役实证（行为级，消除 18:06:11 mtime 疑义）
+
+对第二遍 overview（rct=8859336f…）原文检索：
+
+- `合并用药与病史一致性待核实` **24 次** —— 与发现数增量 41→65 的 +24
+  逐字相等（facts_publication.py:276/282 的 note 文本）；
+- `常见适应症对照` **46 次** —— CMINDC 空/通用分支（facts_publication.py
+  内置 21 族对照表）同在役；
+- issue 分布：facts-issue-cm=**24**（R33 时 0）、facts-issue-ae=15、
+  facts-issue-protocol_compliance=26；CM 发现 basis/finding 文案示
+  「中度合并用药信号」= cm_mh_severity_hint="medium" 升级生效
+  （facts_publication.py:1211-1226 调用点）。
+
+即：运行中的 8911 进程（本轮 18:24 重启）加载的 facts_publication 与
+HEAD（047dfdcc+归档，运行时代码零差异）行为一致，加载疑义关闭。
+
+### 3. 修复
+
+**无（零阻断零代码改动）。** 运行链上无任何一道门拒绝：接入管线侧
+confirmed/ready/current 与运行门无口径差；prepare-and-start 首击即 200
+（377/380ms），无 waiting_start 残留、无 in_flight_conflict、无
+global_default_missing（R19 ensure_builtin_global_default 修复持续在役，
+profile_layer_versions 稳定 `global_default|*|1`）。
+
+### 4. 回归（本轮实跑）
+
+- `pytest tests/test_facts_publication_cm_mh_consistency_r29.py`：**7/7 绿**
+  （R34 本轮新增 CM-MH 代码面）；
+- `pytest tests/test_medical_monitoring_r7_product_router.py -k
+  "r19_siege or prepare_and_start or global_default"`：**7/7 绿**
+  （运行启动 siege 语义：缺失补种/失败 fail-closed 无僵尸/幂等重放）。
+
+### 5. 遗留与边界
+
+- backend_build_id 指纹仅覆盖 services/api/app、不含 packages/** 的口径
+  未变（R32 起在案，留待所有者裁决扩面）；本轮以行为级实证（§2）替代
+  指纹证明 packages 代码在役。
+- 前端 R34 修复（verifier_incomplete→adjudication-start 自动等待、阻断组
+  headline、结果分批挂载、建项弹窗 busy 复位）属向导/结果视图交互面，
+  本轮 API 驱动全链未触达；其界面回归归测试者轮。
+- 结果内容基线自本轮起更新为 1,489,541B/65 发现/16 受试者/477 现行风险
+  （R29-07 CM-MH 合法增量），后续轮次勿再按 41 发现口径比对。
+
+留痕文件：`r34s_siege_repro.py`、`r34s_siege_evidence.jsonl`、本日志；
+ISO_ENV_LOG.md 补 8911 重启条目。
+
+---
+
 ## R33 攻坚·第 1 次（2026-10-11，攻坚工程师-R33-第1次）
 
 ### 0. 结论先行
