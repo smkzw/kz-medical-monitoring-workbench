@@ -33,11 +33,11 @@
    "capability_status": "unverified",
    "capability_verified_at": "",
    "enabled": true,
-   "model": "deepseek-v4-flash",
-   "profile_id": "independent_ai__deepseek_v4_flash",
+   "model": "deepseek-v4.1-flash",
+   "profile_id": "medical_monitoring_verifier_ai__ollama_cloud_dsv41",
    "reasoning_effort": "high",
    "role_id": "independent_ai",
-   "thinking": "enabled"
+   "thinking": "disabled"
   },
   "medical_monitoring_ai": {
    "capability_evidence_model": "",
@@ -105,6 +105,6 @@
    "thinking": "enabled"
   }
  },
- "revision": 28,
+ "revision": 30,
  "schema_version": "ai_role_bindings_v2"
 }

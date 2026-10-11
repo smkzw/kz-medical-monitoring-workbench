@@ -561,3 +561,4 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 诊断留证（只读）：ISO runs sqlite 以 mode=ro 查询 R31B/C 停滞现场——monitoring_ai_jobs 287/205 个 queue_dwell_timeout 行、call_ledger 2h窗口85次调用、deterministic分片秒级完成而AI分片attempt=0，坐实容量型滞留而非异常吞噬；零写入。
 - 纪律：零业务管道推进、零 runs/ 写入（sqlite 诊断只读 mode=ro）、8910/5177 全程未触碰。
 2026-10-10 07:13 轮中无损暂停（用户指令：完成当前节点即停）：run dwfrun-6d5ff1cf停于R32修复员在途（测试位1/4通过+分诊完成12新条）。8911/5178有意保持运行；在途现场不清。恢复=ResumeWorkflowRun同run_id，详见PAUSE_HANDOFF_20261010.md
+2026-10-11 08:32 环境恢复+independent_ai终绑：暂停期间8911/5178掉线已按预案重启；zhipu摘除收尾——deepseek直连双钥匙401（历史死通道）、ollama qwen3.5下架404，终绑=medical_monitoring_verifier_ai__ollama_cloud_dsv41（活凭据1s探针过；与主分析cms-router不同通道，与盲核同通道同模型系当前最佳可得，钥匙分离待用户供新通道）；死档案independent_ai__deepseek_v4_flash已禁用

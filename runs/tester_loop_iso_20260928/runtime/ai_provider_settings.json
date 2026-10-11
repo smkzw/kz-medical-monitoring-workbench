@@ -1,5 +1,5 @@
 {
- "active_profile_id": "independent_ai__zhipu_coding_plan_glm_flash",
+ "active_profile_id": "independent_ai__deepseek_v4_flash",
  "profiles": [
   {
    "api_key_env": "",
@@ -240,25 +240,6 @@
    "transport": "openai_compatible"
   },
   {
-   "api_key_env": "DEEPSEEK_API_KEY",
-   "base_url": "https://api.deepseek.com/v1",
-   "deployment_profile": "local_private_clinical",
-   "deployment_scope": "cloud",
-   "discovery_mode": "models_endpoint",
-   "enabled": true,
-   "expected_response_model": "deepseek-v4-flash",
-   "extra_headers_json": "",
-   "label": "DeepSeek V4 Flash 综合AI",
-   "model": "deepseek-v4-flash",
-   "output_discipline": "",
-   "output_token_budget": 0,
-   "profile_id": "independent_ai__deepseek_v4_flash",
-   "provider": "deepseek",
-   "revision": 1,
-   "timeout_seconds": 300.0,
-   "transport": "openai_compatible"
-  },
-  {
    "api_key_env": "ZAI_CODING_CN_API_KEY",
    "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
    "deployment_profile": "local_private_clinical",
@@ -440,8 +421,28 @@
    "revision": 2,
    "timeout_seconds": 900.0,
    "transport": "openai_compatible"
+  },
+  {
+   "api_key_env": "DEEPSEEK_API_KEY",
+   "base_url": "https://api.deepseek.com/v1",
+   "deployment_profile": "local_private_clinical",
+   "deployment_scope": "cloud",
+   "discovery_mode": "models_endpoint",
+   "enabled": false,
+   "expected_response_model": "deepseek-v4-flash",
+   "extra_headers_json": "",
+   "label": "DeepSeek V4 Flash 综合AI",
+   "listing_mapping_chunk_size": 0,
+   "model": "deepseek-v4-flash",
+   "output_discipline": "",
+   "output_token_budget": 0,
+   "profile_id": "independent_ai__deepseek_v4_flash",
+   "provider": "deepseek",
+   "revision": 1,
+   "timeout_seconds": 300.0,
+   "transport": "openai_compatible"
   }
  ],
- "revision": 49,
+ "revision": 54,
  "schema_version": "ai_provider_registry_v1"
 }
