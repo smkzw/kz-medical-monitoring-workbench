@@ -1155,7 +1155,15 @@ function NewProjectConfigPanel({ handoff, onCompleted, onResolveExisting, onDism
   const findExistingProject = async () => {
     const finalName = (String(draft.project_name || "").trim() || synthesizedProjectName(draft)).toLowerCase();
     const finalCode = String(draft.project_code || "").trim().toLowerCase();
-    const response = await fetch("/api/projects");
+    // R34轮（R30-04）：核实列表读取必须有独立超时——此前裸fetch在
+    // /api/projects高负载时段（实测常态72-119s）会把submit末尾的busy
+    // 复位无限期拖住：超时提示已出现、按钮却仍是「创建中/取消/关闭」
+    // 全禁用死局（report_C.md发现1的DOM实据）。
+    const response = await fetch("/api/projects", {
+      signal: typeof AbortSignal !== "undefined" && AbortSignal.timeout
+        ? AbortSignal.timeout(10_000)
+        : undefined,
+    });
     const payload = await readJsonOrThrow(response);
     const list = Array.isArray(payload) ? payload : [];
     return list.find((item) => {
@@ -1217,6 +1225,10 @@ function NewProjectConfigPanel({ handoff, onCompleted, onResolveExisting, onDism
         const errorPayload = await response.json().catch(() => ({}));
         const conflictText = apiDetailText(errorPayload, `HTTP ${response.status}`);
         setMessage(`创建失败：${conflictText}`);
+        // R34轮（R30-04）：失败已定局，先复位busy放行取消/关闭/重试，
+        // 项目核实列表再慢速补拉（内部有10s上限）——不让列表读取拖住
+        // 按钮复位，重演「提示已出、弹窗全禁用」死局。
+        setBusy(false);
         if (response.status === 409) {
           try {
             setExistingProject(await findExistingProject());
@@ -1238,6 +1250,11 @@ function NewProjectConfigPanel({ handoff, onCompleted, onResolveExisting, onDism
       setMessage(aborted
         ? "创建请求超过120秒未返回，已停止等待。项目可能已在服务器创建，请先核实再重试。"
         : `创建失败：${error?.message || error}`);
+      // R34轮（R30-04）：超时分支立即复位busy——报告实测DOM此时为
+      // {closeBtn:disabled, cancelBtn:disabled, submitBtn:「创建中」
+      // disabled}，用户被死锁在弹窗内（提示自己都说「请先核实再重试」，
+      // 更应允许离开核实）。列表核实放行后慢速补拉（10s上限）。
+      setBusy(false);
       if (aborted) {
         try {
           setExistingProject(await findExistingProject());

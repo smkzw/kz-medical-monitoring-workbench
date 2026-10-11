@@ -67,7 +67,10 @@ const restricted = semanticQualityPresentation({
 });
 assert.deepEqual(restricted, {
   level: "restricted",
-  title: "可启用，但以下分析将受限",
+  // R34轮（R33-B-F2）：原文案「可启用，但以下分析将受限」暗示存在受限
+  // 启用入口，而页面并无任何「启用」控件（report_B.md F2穷举全部按钮
+  // 仅返回/重试）——改为陈述确认后果，不承诺操作。
+  title: "确认后以下分析将受限",
   detail: "受试者时间线 · 实验室异常与 CTCAE 分级 · 量表复算",
   blocksConfirmation: false,
 });

@@ -3,10 +3,12 @@ import test from "node:test";
 import { createMedicalMonitoringProductApi } from "./medicalMonitoringProductApi.mjs";
 
 import {
+  ADJUDICATION_STALL_THRESHOLD_MS,
   MAPPING_FOCUS_ALL,
   MAPPING_STALL_THRESHOLD_MS,
   admissionMappingConfirmReducer,
   admissionMappingPrimaryAction,
+  adjudicationStalledMs,
   createAdmissionMappingConfirmState,
   mappingConfirmationReason,
   mappingConfirmationFailureAction,
@@ -508,4 +510,90 @@ test("background refresh keeps ready phase so the stalled recovery entry stays v
     { type: "load-start" },
   );
   assert.equal(failedThenReload.phase, "loading");
+});
+
+// R34轮（R33-B-F1）：确认409「双盲复核未完成」不再落入draft-error重试
+// 死循环——转入adjudication-start自动等待，复核收敛后确认自动继续。
+test("verifier-incomplete confirm failure becomes a monitored review wait", () => {
+  const draft = { draft_id: "d1", version: 2 };
+  const action = mappingConfirmationFailureAction({
+    detail: { code: "mapping_verifier_incomplete", message: "双盲复核未完成" },
+  }, draft);
+  assert.equal(action.type, "adjudication-start");
+  const state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), action);
+  assert.equal(state.phase, "adjudicating");
+  assert.ok(state.progress.since > 0);
+  assert.equal(admissionMappingPrimaryAction(state).disabled, true);
+  assert.equal(adjudicationStalledMs(state, state.progress.since + 1000) < ADJUDICATION_STALL_THRESHOLD_MS, true);
+});
+
+// R34轮（R33-B-F1）：复核停滞超阈值后主按钮放行「重新加载识别结果」
+// 自救入口——实测busy文案20分钟零变化零控件（report_B.md F1末态）。
+// primary action读真实时钟，与R25-01生成停滞测试同法：把progress.since
+// 置于过去来构造已停滞状态。
+test("adjudicating stall past threshold enables the reload exit", () => {
+  let state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "adjudication-start",
+    payload: { draft_id: "d1", version: 1, user_questions: [] },
+  });
+  // adjudication-running（无进展）不重置计时：停滞跨轮询累计。
+  state = admissionMappingConfirmReducer(state, {
+    type: "adjudication-running",
+    payload: { draft_id: "d1", version: 1, adjudication: { state: "running" }, user_questions: [] },
+  });
+  assert.equal(state.progress.since > 0, true);
+  const stalledState = {
+    ...state,
+    progress: { fieldCount: null, since: Date.now() - ADJUDICATION_STALL_THRESHOLD_MS - 60_000 },
+  };
+  assert.equal(adjudicationStalledMs(stalledState) >= ADJUDICATION_STALL_THRESHOLD_MS, true);
+  const action = admissionMappingPrimaryAction(stalledState);
+  assert.equal(action.key, "reload");
+  assert.equal(action.disabled, false);
+  assert.match(action.label, /重新加载识别结果/);
+  // 进展到达（adjudication-ready）后计时重置：不再报告停滞。
+  const progressed = admissionMappingConfirmReducer(stalledState, {
+    type: "adjudication-ready",
+    payload: { draft_id: "d1", version: 2, adjudication: { state: "complete", resolved_count: 1 }, user_questions: [] },
+  });
+  assert.equal(adjudicationStalledMs(progressed), 0);
+});
+
+// R34轮（R33-A-03）：「全部对应关系清晰」必须派生自阻断组计数——
+// 存在待处理组时headline与同屏阻断横幅/禁用按钮不得互相矛盾。
+test("headline never claims all-clear while semantic blockers are open", () => {
+  const draft = {
+    draft_id: "d1",
+    version: 1,
+    user_questions: [],
+    semantic_quality: {
+      status: "blocked",
+      activation_disposition: "reject",
+      global_blocker_count: 2,
+      capability_blocker_count: 0,
+      warning_count: 0,
+      finding_groups: [],
+      capability_states: [],
+    },
+  };
+  // 真实流程中采纳发生在candidates_ready（fieldCount>0）之后——先构造
+  // ready态再采纳，与线上时序一致。
+  const ready = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "load-ready",
+    payload: candidatesPayload({ serverTriage: true }),
+  });
+  const state = admissionMappingConfirmReducer(ready, {
+    type: "adopt-ready",
+    payload: draft,
+  });
+  assert.equal(state.phase, "drafting");
+  assert.equal(state.payload.blockedGroupCount, 2);
+  assert.doesNotMatch(state.payload.headline, /全部对应关系清晰/);
+  assert.match(state.payload.headline, /2 组字段关系待处理/);
+  // 无阻断且零问题时保留原定论文案。
+  const clean = admissionMappingConfirmReducer(ready, {
+    type: "adopt-ready",
+    payload: { draft_id: "d1", version: 1, user_questions: [] },
+  });
+  assert.match(clean.payload.headline, /全部对应关系清晰/);
 });

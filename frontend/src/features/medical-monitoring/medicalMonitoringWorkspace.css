@@ -361,6 +361,26 @@
   opacity: 0.78;
 }
 
+/* R34轮（R30-02）：大清单分批挂载的「显示更多」——与风险行同宽、
+   同 muted 层级，不与真实风险行竞争视觉权重。 */
+.monitoring-load-more {
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 11px;
+  border: 1px dashed var(--monitoring-border, #d8dee6);
+  border-radius: 8px;
+  background: var(--monitoring-soft, #f6f8fa);
+  color: var(--monitoring-muted, #6b7785);
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.monitoring-load-more:hover {
+  border-color: #f3b18f;
+  color: inherit;
+}
+
 .monitoring-risk-row:hover,
 .monitoring-risk-row.is-selected,
 .monitoring-event-row:hover,

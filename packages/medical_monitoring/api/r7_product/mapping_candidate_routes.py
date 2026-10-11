@@ -72,6 +72,9 @@ _MAPPING_STATUS_CODES = {
     "mapping_verifier_unconfigured": 503,
     "mapping_cohort_invalid": 422,
     "mapping_cohort_legacy_route": 409,
+    # R34轮（R33-B-F1）：双盲复核两群组数据版本不一致是可恢复的系统性
+    # 状态（重新识别即收敛），不是服务器错误——不得落入兜底500。
+    "mapping_cohort_input_mismatch": 409,
     "mapping_verifier_incomplete": 409,
     "mapping_verifier_job_failed": 409,
     "mapping_verifier_revision_drift": 409,
@@ -121,7 +124,21 @@ _MAPPING_MESSAGES = {    "mapping_admission_not_found": "未找到对应的数�
         "此前的字段识别结果已过期，系统需要重新识别后才能继续。"
         "请点击重试。"
     ),
-    "mapping_verifier_incomplete": "系统仍在复核，当前不需要您确认。",
+    # R34轮（R33-B-F1）：原文案「系统仍在复核，当前不需要您确认。」不说明
+    # 是哪个环节在复核、也不说明确认会自动继续——5+次确认失败循环中该句
+    # 与「请点击重试」同屏构成互斥指引（report_B.md F2）。如实点名双盲
+    # 复核环节与自动推进路径。
+    "mapping_verifier_incomplete": (
+        "字段识别的双盲独立复核尚未完成（复核分片仍在生成或排队），"
+        "暂时不能进入字段确认。无需重复点击；系统会自动推进复核，"
+        "复核完成后确认环节将自动继续。"
+    ),
+    # R34轮（R33-B-F1）：该码此前未登记——落入兜底500「字段对应建议暂时
+    # 不可用。」，确认失败循环全程零错误码零原因。补登记+如实事由。
+    "mapping_cohort_input_mismatch": (
+        "双盲复核两次识别所依据的数据版本不一致（数据或研究文件在识别后"
+        "被重新提交），复核无法继续。请重新发起字段识别后再确认。"
+    ),
     "mapping_verifier_job_failed": (
         "字段复核的分片任务失败，系统已将其重新排队重跑；请稍候再次查询。"
         "若持续失败，请重新发起字段识别。"

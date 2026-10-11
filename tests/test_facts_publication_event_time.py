@@ -405,6 +405,11 @@ def test_severity_ctc_grades_and_honest_placeholders(tmp_path: Path) -> None:
     assert unknown.severity not in ("critical", "high", "medium")
     inferred = _risk_for("阿司匹林")
     assert inferred.severity_source == "inferred"
-    assert inferred.severity not in ("critical", "high", "medium")
+    # R34轮（R29-07）：CM-MH一致性专项上线后，该fixture无任何MH行——
+    # 阿司匹林锚点升格为系统交叉核对发现（中等级+可核实依据「病史无
+    # 任何记录」），不再是空白占位。「未知不得当中风险」约束的是无结论
+    # 占位（上方unknown断言仍保留），不适用于带医学依据的一致性发现。
+    assert inferred.severity == "medium"
+    assert "一致性待核实" in (inferred.medical_note or "")
     # 每条事件都有风险锚点行（包完整性合同）
     assert len(packet.risks) == len(packet.events) == 6

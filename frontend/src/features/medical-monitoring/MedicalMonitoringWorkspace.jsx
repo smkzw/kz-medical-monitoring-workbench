@@ -1156,9 +1156,25 @@ export const RiskRow = memo(function RiskRow({ risk, onSelect, marker = null, om
   );
 });
 
+// R34轮（R30-02）：结果视图一次性同步大渲染治理——风险定位清单此前
+// 一次渲染全部行（运行完成/结果视图首屏卡顿窗口的组成部分）。改为
+// 分批挂载：首屏渲染前80行，「显示更多」增量追加，已在 DOM 中的行
+// 不因追加而重挂载（rows按切片useMemo）。
+const RISK_LIST_INITIAL_BATCH = 80;
+const RISK_LIST_BATCH_STEP = 120;
+// R34轮（R30-02）：受试者阶段流向明细表同口径分批——明细行此前一次
+// 全量渲染（含每行按钮），首屏同步渲染量随队列规模线性放大。
+const FLOW_TABLE_INITIAL_BATCH = 60;
+const FLOW_TABLE_BATCH_STEP = 100;
+// 受试者入口按钮列表的分批口径（概览右侧栏）。
+const SUBJECT_LIST_INITIAL_BATCH = 60;
+const SUBJECT_LIST_BATCH_STEP = 100;
+
 function RiskList({ risks, onSelect, selectedRiskInstanceRef = "", emptyText = "当前没有可展示的风险定位。", markersByRiskInstance = null, omitChangeClaims = false }) {
   const listRef = useRef(null);
-  const rows = useMemo(() => risks.map((risk) => (
+  const [visibleCount, setVisibleCount] = useState(RISK_LIST_INITIAL_BATCH);
+  const visibleRisks = risks.length > visibleCount ? risks.slice(0, visibleCount) : risks;
+  const rows = useMemo(() => visibleRisks.map((risk) => (
     <RiskRow
       key={risk.riskInstanceRef || risk.riskRef || risk.eventRef}
       risk={risk}
@@ -1166,7 +1182,7 @@ function RiskList({ risks, onSelect, selectedRiskInstanceRef = "", emptyText = "
       marker={markersByRiskInstance?.[risk.riskInstanceRef] || null}
       omitChangeClaims={omitChangeClaims}
     />
-  )), [markersByRiskInstance, omitChangeClaims, onSelect, risks]);
+  )), [markersByRiskInstance, omitChangeClaims, onSelect, visibleRisks]);
   useLayoutEffect(() => {
     for (const row of listRef.current?.querySelectorAll("button.monitoring-risk-row") || []) {
       const selected = row.dataset.riskInstanceRef === selectedRiskInstanceRef;
@@ -1175,7 +1191,20 @@ function RiskList({ risks, onSelect, selectedRiskInstanceRef = "", emptyText = "
     }
   }, [selectedRiskInstanceRef, rows]);
   if (!risks.length) return <div className="monitoring-empty-inline">{emptyText}</div>;
-  return <div className="monitoring-risk-list" role="listbox" aria-label="当前风险" ref={listRef}>{rows}</div>;
+  return (
+    <div className="monitoring-risk-list" role="listbox" aria-label="当前风险" ref={listRef}>
+      {rows}
+      {risks.length > visibleRisks.length ? (
+        <button
+          type="button"
+          className="monitoring-load-more"
+          onClick={() => setVisibleCount((count) => count + RISK_LIST_BATCH_STEP)}
+        >
+          {`显示更多风险定位（已显示 ${visibleRisks.length} / ${risks.length}）`}
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function CenterTable({ centers, onSelect }) {
@@ -1391,6 +1420,12 @@ export function SubjectFlowSection({
   hideIncremental = false,
 }) {
   const [tableOpen, setTableOpen] = useState(initialTableOpen);
+  // R34轮（R30-02）：明细表分批挂载；筛选条件变化时重置批次，避免
+  // 「筛选后目标行落在已渲染批次之外」的错觉。
+  const [flowRowCount, setFlowRowCount] = useState(FLOW_TABLE_INITIAL_BATCH);
+  useEffect(() => {
+    setFlowRowCount(FLOW_TABLE_INITIAL_BATCH);
+  }, [selection.stageRef, selection.linkRef, selection.metric, selection.riskBand]);
   const focusItems = useRef([]);
   const registerFlowFocus = (orderIndex) => (element) => {
     if (element) focusItems.current[orderIndex] = element;
@@ -1532,7 +1567,7 @@ export function SubjectFlowSection({
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRows.map((row) => {
+                    {filteredRows.slice(0, flowRowCount).map((row) => {
                       const canJump = Boolean(row.spineRef && row.jumpStart && row.jumpEnd);
                       return (
                         <tr key={row.subjectRef} data-flow-subject-ref={row.subjectRef}>
@@ -1566,6 +1601,15 @@ export function SubjectFlowSection({
                     })}
                   </tbody>
                 </table>
+                {filteredRows.length > flowRowCount ? (
+                  <button
+                    type="button"
+                    className="monitoring-load-more"
+                    onClick={() => setFlowRowCount((count) => count + FLOW_TABLE_BATCH_STEP)}
+                  >
+                    {`显示更多受试者（已显示 ${Math.min(flowRowCount, filteredRows.length)} / ${filteredRows.length}）`}
+                  </button>
+                ) : null}
               </FlowTableScroll>
             )}
           </div>
@@ -1596,6 +1640,9 @@ export function OverviewView({
   continuityComparisonText = "",
   continuityLoading = false,
 }) {
+  // R34轮（R30-02）：受试者入口列表分批挂载（结果首屏一次性大渲染
+  // 治理——概览右侧此前一次渲染全部受试者按钮）。
+  const [subjectBatch, setSubjectBatch] = useState(SUBJECT_LIST_INITIAL_BATCH);
   const projection = payload.projection;
   const flow = normalizeSubjectFlowView(projection);
   const flowSelection = subjectFlowSelectionFromRoute(route);
@@ -1720,13 +1767,22 @@ export function OverviewView({
             <>
               <div className="monitoring-section-heading"><span className="monitoring-eyebrow">受试者入口</span><h2>查看受试者医学旅程</h2></div>
               <div className="monitoring-subject-list">
-                {(projection.subjects || []).map((subject) => (
+                {(projection.subjects || []).slice(0, subjectBatch).map((subject) => (
                   <button type="button" key={subject.subject_ref || subject.subject_id} onClick={() => onSubjectSelect?.(subject)}>
                     <span>{text(subject.label, subject.subject_ref || subject.subject_id)}</span>
                     <small>{centerLabels.get(subject.site_ref || subject.site_id) || "中心待确认"}</small>
                   </button>
                 ))}
               </div>
+              {(projection.subjects || []).length > subjectBatch ? (
+                <button
+                  type="button"
+                  className="monitoring-load-more"
+                  onClick={() => setSubjectBatch((count) => count + SUBJECT_LIST_BATCH_STEP)}
+                >
+                  {`显示更多受试者（已显示 ${Math.min(subjectBatch, (projection.subjects || []).length)} / ${(projection.subjects || []).length}）`}
+                </button>
+              ) : null}
             </>
           )}
         </section>

@@ -597,7 +597,12 @@ def test_reconciliation_errors_do_not_ask_user_for_bulk_review() -> None:
     diverged = _mapping_error("mapping_reconciliation_required")
 
     assert pending.status_code == diverged.status_code == 409
-    assert "不需要您确认" in pending.body.decode("utf-8")
+    # R34轮（R33-B-F1/F2）：旧文案「系统仍在复核，当前不需要您确认。」
+    # 不说明是哪个环节、且与同屏「请点击重试」互斥（report_B.md F2四条
+    # 矛盾文案之一）。新文案保留同一意图（无需用户批量复核/操作）并
+    # 如实点名双盲复核环节与自动推进路径。
+    assert "无需重复点击" in pending.body.decode("utf-8")
+    assert "双盲独立复核" in pending.body.decode("utf-8")
     assert "不需要您逐项确认" in diverged.body.decode("utf-8")
 
 

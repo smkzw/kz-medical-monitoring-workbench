@@ -183,7 +183,10 @@ export function semanticQualityPresentation(report) {  if (!report) {
     const visibleItems = capabilities.length ? capabilities : fallbackTopics;
     return {
       level: "restricted",
-      title: "可启用，但以下分析将受限",
+      // R34轮（R33-B-F2）：原文案「可启用，但以下分析将受限」暗示存在
+      // 受限启用入口，而页面上并不存在任何「启用」控件（测试穷举全部
+      // 按钮仅返回/重试/暂停）。改为陈述确认的后果——不承诺操作。
+      title: "确认后以下分析将受限",
       detail: visibleItems.length
         ? visibleItems.join(" · ")
         : "部分依赖字段语义的分析暂不可用",

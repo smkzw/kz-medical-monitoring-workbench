@@ -16,6 +16,13 @@ export const MAPPING_FOCUS_ALL = "all";
 // 新进展」并提供重读入口，不冒充失败结论）。
 export const MAPPING_STALL_THRESHOLD_MS = 30 * 60 * 1000;
 
+// R34轮（R33-B-F1）：复核（adjudicating）阶段的「无出口阈值」。实测
+// （report_B.md F1）：确认触发双盲复核后「系统正在复核少量疑点…」占据
+// 主按钮位20分钟零变化，页面无任何可点控件。复核单次查询本身可达数分
+// 钟（健康推进节奏），阈值取15分钟——显著超出单次查询时长且早于测试
+// 者放弃的20分钟；超时后主按钮放行「重新加载识别结果」自救入口。
+export const ADJUDICATION_STALL_THRESHOLD_MS = 15 * 60 * 1000;
+
 export function createAdmissionMappingConfirmState() {
   return {
     phase: "idle", // idle | loading | ready | adopting | adjudicating | drafting | confirming | confirmed | failed
@@ -40,6 +47,16 @@ export function mappingStalledMs(state, now = Date.now()) {
   const generating = payload.state === "generating"
     || payload.confirmationStatus === "generating";
   if (!generating) return 0;
+  const since = Number(state?.progress?.since) || 0;
+  if (!since) return 0;
+  return Math.max(0, now - since);
+}
+
+// R34轮（R33-B-F1）：复核阶段的已等待时长——自最近一次复核实际进展
+// （adjudication-ready载荷变化）起累计；adjudication-running（仍在等
+// 待，无新进展）不重置计时，故停滞跨轮询真实累加。
+export function adjudicationStalledMs(state, now = Date.now()) {
+  if (state?.phase !== "adjudicating") return 0;
   const since = Number(state?.progress?.since) || 0;
   if (!since) return 0;
   return Math.max(0, now - since);
@@ -138,7 +155,7 @@ function questionText(item) {
   return `请确认「${field}」这一列的识别结果是否符合实际。`;
 }
 
-export function mappingHeadline(payload, { stalledMs = 0 } = {}) {
+export function mappingHeadline(payload, { stalledMs = 0, blockedGroupCount = 0 } = {}) {
   if (!payload) return "正在读取系统识别结果…";
   // R2循环：识别未完成（generating）或尚未识别到任何字段时，禁止
   // 「全部对应关系清晰/无需您补充判断」类定论表述——0字段阶段给出
@@ -169,9 +186,18 @@ export function mappingHeadline(payload, { stalledMs = 0 } = {}) {
   if (!Number(payload.fieldCount)) {
     return "尚未识别到字段，识别结果为空，请确认数据文件是否包含数据列。";
   }
-  return payload.questionCount > 0
-    ? `系统已自动识别 ${payload.fieldCount} 个字段，其中 ${payload.questionCount} 个需要您确认`
-    : `系统已自动识别 ${payload.fieldCount} 个字段，全部对应关系清晰，无需您补充判断`;
+  if (payload.questionCount > 0) {
+    return `系统已自动识别 ${payload.fieldCount} 个字段，其中 ${payload.questionCount} 个需要您确认`;
+  }
+  // R34轮（R33-A-03）：「全部对应关系清晰，无需您补充判断」必须派生自
+  // 阻断组计数——语义质量门存在待处理组时（global_blocker_count>0 或
+  // 质量门阻断），该定论与同屏「还有N组字段关系需要处理」+禁用按钮
+  // 自相矛盾（A位实测1032字段时同屏两组矛盾文案）。如实改为「待处理」
+  // 口径，与阻断横幅、按钮态同源。
+  if (blockedGroupCount > 0) {
+    return `系统已自动识别 ${payload.fieldCount} 个字段；字段质量核对仍有 ${blockedGroupCount} 组字段关系待处理，处理前不能确认`;
+  }
+  return `系统已自动识别 ${payload.fieldCount} 个字段，全部对应关系清晰，无需您补充判断`;
 }
 
 function summaryCount(...values) {
@@ -324,13 +350,19 @@ function projectDraftState(state, draft, message = "") {
   // A server question is unresolved for this draft, even if the same field
   // was answered against an earlier evidence generation.
   for (const question of questions || []) delete answeredKeys[question.key];
+  // R34轮（R33-A-03）：headline必须携带阻断组计数——语义质量门的待处理
+  // 组来自 draft.semantic_quality，若headline只看问题卡数，0问题+有阻断
+  // 时会渲染「全部对应关系清晰」与同屏阻断横幅/禁用按钮互相矛盾。
+  const blockedGroupCount = Number(draft?.semantic_quality?.global_blocker_count)
+    || semanticQualityBlockedGroups(draft?.semantic_quality).length;
   const payload = questions === null ? state.payload : {
     ...state.payload,
     questionCount: questions.length,
+    blockedGroupCount,
     headline: mappingHeadline({
       fieldCount: state.payload?.fieldCount || 0,
       questionCount: questions.length,
-    }),
+    }, { blockedGroupCount }),
     questions,
     tableSummaries: (state.payload?.tableSummaries || []).map((table) => ({
       ...table,
@@ -354,9 +386,20 @@ export function mappingConfirmationFailureAction(error, draft) {
   if (error?.detail?.code === "mapping_reconciliation_required") {
     return { type: "adjudication-start", payload: draft };
   }
+  // R34轮（R33-B-F1）：双盲复核尚未完成时，确认被拒是「等待」而非
+  // 「失败」——此前该409落入draft-error，主按钮变「重试完成字段识别」，
+  // 用户被迫手动重试5+次（每次2-3.5分钟）且失败文案零环节信息。改走
+  // adjudication-start：界面进入自动轮询的复核等待，复核收敛后确认
+  // 自动继续，无需人工重试循环。
+  if (error?.detail?.code === "mapping_verifier_incomplete") {
+    return { type: "adjudication-start", payload: draft };
+  }
   return {
     type: "draft-error",
     error: {
+      // R34轮（R33-B-F1）：错误码随失败透出——此前只留serverText，
+      // 测试5+次失败循环无一给出错误码（report_B.md F1「零错误信息」）。
+      code: error?.detail?.code || error?.code || "",
       serverText: error?.detail?.message || error?.message || "字段识别结果保存失败。",
       guidance: ["请点击重试；系统不会要求您重新逐项核对。"],
     },
@@ -429,20 +472,33 @@ export function admissionMappingConfirmReducer(state, action) {
         phase: "adjudicating",
         draft: action.payload,
         message: "系统正在复核少量疑点，尽量减少需要您判断的内容…",
+        // R34轮（R33-B-F1）：复核停滞计时起点——adjudication-running
+        // 不重置（无进展持续累计），adjudication-ready（真实进展）重置。
+        progress: { fieldCount: null, since: Date.now() },
         error: null,
       };
     case "adjudication-running":
+      // R34轮（R33-B-F1）：running=仍在等待、无新进展——保留计时起点，
+      // 停滞时长跨轮询累计；超阈值后主按钮放行自救入口。
       return {
         ...state,
         phase: "adjudicating",
         draft: action.payload,
         message: "系统正在复核少量疑点，尽量减少需要您判断的内容…",
+        progress: state.progress?.since
+          ? state.progress
+          : { fieldCount: null, since: Date.now() },
         error: null,
       };
     case "adjudication-ready": {
       const resolved = Number(action.payload?.adjudication?.resolved_count) || 0;
       return projectDraftState(
-        state,
+        {
+          ...state,
+          // R34轮（R33-B-F1）：复核有真实进展，重置停滞计时（进入
+          // drafting后计时不再参与判定；保留干净状态供下轮复核使用）。
+          progress: { fieldCount: null, since: Date.now() },
+        },
         action.payload,
         resolved > 0 ? `系统又自动完成了 ${resolved} 项判断。` : "",
       );
@@ -508,9 +564,22 @@ export function admissionMappingPrimaryAction(state) {
   if (
     state.phase === "loading"
     || state.phase === "adopting"
-    || state.phase === "adjudicating"
     || state.phase === "confirming"
   ) {
+    return { key: "busy", label: state.message || "处理中…", disabled: true };
+  }
+  if (state.phase === "adjudicating") {
+    // R34轮（R33-B-F1）：复核超过无出口阈值时放行自救入口——实测
+    // 「系统正在复核少量疑点…」busy按钮20分钟零变化零控件（report_B
+    // .md F1末态）。reload重读识别结果：复核已收敛时会自然回到确认
+    // 门，未收敛则回到可重试状态，用户不再被锁死。
+    if (adjudicationStalledMs(state) >= ADJUDICATION_STALL_THRESHOLD_MS) {
+      return {
+        key: "reload",
+        label: "复核长时间无结果，重新加载识别结果",
+        disabled: false,
+      };
+    }
     return { key: "busy", label: state.message || "处理中…", disabled: true };
   }
   if (state.phase === "confirmed") {

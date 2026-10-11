@@ -127,6 +127,166 @@ _AE_SEVERITY_BY_GRADE = {1: "low", 2: "medium", 3: "high", 4: "critical", 5: "cr
 # 且必须与当日给药记录交叉核对（失约却给药=执行矛盾）。
 _MISSED_VISIT_STATES = {"失约", "未访视", "missed", "no_show", "not_done"}
 
+# R34轮（R29-07）：「合并用药与病史一致性」专项——CM 与 MH 交叉判定。
+# 此前CM记录只落「低风险·系统推定·医学依据空白」的模板旗标，无任何
+# CM-MH交叉核对产出（report_D.md发现3：22006植入「孟鲁司特钠片·适应
+# 症写明哮喘」而病史无哮喘记录未被检出）。本实现为确定性交叉核对，
+# 两条路径：
+# ①适应症-病史对应：CM记录的用药目的（CMINDC）剔除通用短语后若指明
+#   具体疾病/病史，而该受试者MH全文本不含对应词——提示核实（病史漏登
+#   或用药目的误填）。
+# ②常见用药-适应症对照：CMINDC为空或仅「既往用药」等通用描述时，按
+#   内置常见药物对照表推定适应症；病史无对应记录时提示核实。对照表
+#   只覆盖常见慢性病用药且文案明示「按常见适应症对照提示核实、非医
+#   学诊断」；未收录药物不做任何推定（不制造发现）。
+_CM_MH_GENERIC_INDC_PHRASES = (
+    "既往用药", "长期用药", "伴随治疗", "伴随用药", "合并用药", "对症治疗",
+    "维持治疗", "预防用药", "病史用药", "规律用药", "间歇使用", "按需使用",
+    "必要时使用", "本研究适应症", "研究用药", "适应症用药", "外用", "口服",
+    "静滴", "静脉", "皮下注射", "肌肉注射", "吸入", "局部",
+)
+_CM_DRUG_INDICATIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    # (药物名子串, (MH可接受病史词…任一命中即视为一致))
+    ("左甲状腺素", ("甲状腺功能减退", "甲减", "甲状腺")),
+    ("氨氯地平", ("高血压", "血压升高")),
+    ("硝苯地平", ("高血压", "血压升高")),
+    ("缬沙坦", ("高血压", "血压升高")),
+    ("厄贝沙坦", ("高血压", "血压升高")),
+    ("氯沙坦", ("高血压", "血压升高")),
+    ("美托洛尔", ("高血压", "心律失常", "冠心病", "血压升高")),
+    ("阿托伐他汀", ("高血脂", "血脂异常", "高脂血症", "血脂升高")),
+    ("瑞舒伐他汀", ("高血脂", "血脂异常", "高脂血症", "血脂升高")),
+    ("辛伐他汀", ("高血脂", "血脂异常", "高脂血症", "血脂升高")),
+    ("二甲双胍", ("糖尿病", "血糖升高")),
+    ("格列", ("糖尿病", "血糖升高")),
+    ("胰岛素", ("糖尿病", "血糖升高")),
+    ("孟鲁司特", ("哮喘", "过敏性鼻炎", "鼻炎")),
+    ("奥马珠单抗", ("哮喘", "荨麻疹", "过敏性鼻炎")),
+    ("氯雷他定", ("过敏性鼻炎", "荨麻疹", "过敏", "鼻炎", "湿疹")),
+    ("西替利嗪", ("过敏性鼻炎", "荨麻疹", "过敏", "鼻炎", "湿疹")),
+    ("兰索拉唑", ("胃炎", "胃溃疡", "反流", "胃食管反流")),
+    ("奥美拉唑", ("胃炎", "胃溃疡", "反流", "胃食管反流")),
+    ("雷贝拉唑", ("胃炎", "胃溃疡", "反流", "胃食管反流")),
+    ("阿司匹林", ("冠心病", "心肌梗死", "脑梗死", "房颤", "高血压")),
+    ("阿卡波糖", ("糖尿病", "血糖升高")),
+)
+
+
+def _cm_mh_subject_history_text(domains: Mapping[str, Sequence[Mapping[str, Any]]]) -> dict[str, str]:
+    """R34轮（R29-07）：按受试者汇总MH域全部非管理列文本，供CM-MH
+    交叉核对判定「病史是否载有对应记录」。空受试者/UK占位行跳过。"""
+
+    history: dict[str, str] = {}
+    for table in ("MH", "DAH", "DUH", "ASH", "ALR"):
+        for row in domains.get(table) or ():
+            subject = _clean(row.get("SUBJID"))
+            if not subject or subject in _UK_TOKENS:
+                continue
+            pieces = [
+                _clean(value)
+                for key, value in row.items()
+                if key != "SUBJID" and _clean(value)
+            ]
+            if pieces:
+                history[subject] = history.get(subject, "") + "；".join(pieces) + "；"
+    return history
+
+
+def _cm_indication_text(row: Mapping[str, Any]) -> str:
+    """CM记录的用药目的文本（CMINDC/用药目的/适应症，取第一个非空）。"""
+
+    for key in ("CMINDC", "用药目的", "适应症", "CMINDC_"):
+        value = _clean(row.get(key))
+        if value:
+            return value
+    return ""
+
+
+def _cm_drug_text(row: Mapping[str, Any]) -> str:
+    """CM记录的药物名称文本（CMTRT/药物名称/用药名称）。"""
+
+    for key in ("CMTRT", "药物名称", "用药名称", "治疗名称"):
+        value = _clean(row.get(key))
+        if value:
+            return value
+    return ""
+
+
+def _cm_indication_condition_terms(indication: str) -> list[str]:
+    """适应症文本剔除通用短语后的候选疾病词（用于路径①）。"""
+
+    text = indication
+    for phrase in _CM_MH_GENERIC_INDC_PHRASES:
+        text = text.replace(phrase, " ")
+    text = text.strip(" ，,。;；：:（）()、的-—/·")
+    text = re.sub(r"病史$", "", text).strip()
+    if len(text) < 2:
+        return []
+    terms = [
+        segment.strip(" ，,。;；：:（）()、的-—/·")
+        for segment in re.split(r"[，,、;；/（）()]|和|与|及", text)
+    ]
+    return [term for term in terms if len(term) >= 2]
+
+
+def _cm_mh_consistency_note(
+    row: Mapping[str, Any],
+    history_text: str,
+) -> tuple[str, str] | None:
+    """R34轮（R29-07）：CM-MH一致性判定。返回 (medical_note, severity)
+    或None（一致/无法判定时不制造发现）。
+
+    判定完全基于受试者自身数据的交叉引用：CM行明示的适应症词或内置
+    常见用药对照推定的适应症词，在该受试者MH全文中无任何出现→提示
+    核实（中等级）；文案如实区分「记录交叉引用」与「医学诊断」。
+    """
+
+    indication = _cm_indication_text(row)
+    candidates: list[tuple[str, str]] = []
+    for term in _cm_indication_condition_terms(indication):
+        candidates.append((term, term))
+    if not candidates:
+        drug = _cm_drug_text(row)
+        if drug:
+            for fragment, aliases in _CM_DRUG_INDICATIONS:
+                if fragment in drug:
+                    candidates.append((aliases[0], ""))  # (提示词, 无明示词)
+                    break
+    if not candidates:
+        return None
+    history = history_text or ""
+    for condition, explicit_term in candidates:
+        if condition and condition in history:
+            continue
+        if explicit_term and explicit_term in history:
+            continue
+        record_no = _clean(row.get("CMNUM"))
+        drug = _cm_drug_text(row)
+        drug_text = f"（{drug}）" if drug else ""
+        record_text = f"（记录号 {record_no}）" if record_no else ""
+        if not history.strip():
+            basis = "该受试者病史（MH）无任何记录"
+        else:
+            basis = (
+                f"该受试者病史（MH）仅载：{history_text.strip('；')[:80]}"
+                "等，无对应记录"
+            )
+        if explicit_term:
+            note = (
+                f"合并用药与病史一致性待核实：本条合并用药记录{record_text}"
+                f"{drug_text}的用药目的写明「{explicit_term}」，但{basis}。"
+                "请核实病史是否漏登，或用药目的是否填写有误。"
+            )
+        else:
+            note = (
+                f"合并用药与病史一致性待核实：本条合并用药记录{record_text}"
+                f"{drug_text}按常见适应症对照提示「{condition}」，但{basis}。"
+                "系统按常见适应症对照提示核实，非医学诊断；请核实病史是否"
+                "漏登或该用药是否另有未记录原因。"
+            )
+        return note, "medium"
+    return None
+
 
 def _is_roster_form_table(rows: Sequence[dict[str, Any]]) -> bool:
     """Generic roster/form-page exclusion.
@@ -917,6 +1077,9 @@ class FactsPublicationAuthorityProvider:
                 visit_week_dates.setdefault(
                     key, _clean(sv_row.get("VISDAT"))
                 )
+        # R34轮（R29-07）：CM-MH一致性交叉核对数据源（按受试者汇总病史
+        # 全文本），供下方CM行判定「合并用药适应症是否有病史记录」。
+        cm_mh_history_by_subj = _cm_mh_subject_history_text(domains)
         for table, rows in domains.items():
             if table in _EXCLUDED_TABLES or _is_roster_form_table(rows):
                 continue
@@ -1040,11 +1203,26 @@ class FactsPublicationAuthorityProvider:
                     if "共同页" in visit_name or "共同" == visit_name:
                         visit_name = ""
                     label = f"{fallback}·{visit_name}" if visit_name else fallback
+                # R34轮（R29-07）：「合并用药与病史一致性」交叉判定——
+                # 适应症明示或常见用药对照推定的疾病词在该受试者病史无
+                # 对应记录时，升级为中等级并填充可核实的医学依据，替代
+                # 此前的「低风险·系统推定·依据空白」模板旗标。一致/无法
+                # 判定的行保持原样（不制造发现）。
+                cm_mh_note = ""
+                cm_mh_severity_hint = "low"
+                if subtype == "concomitant_medication":
+                    consistency = _cm_mh_consistency_note(
+                        row, cm_mh_history_by_subj.get(subj, ""),
+                    )
+                    if consistency is not None:
+                        cm_mh_note, cm_mh_severity_hint = consistency
                 _add_event(
                     table=table, index=index, subj=subj, subtype=subtype,
                     domain=domain, start_raw=start_raw, label=label,
                     end_raw=end_raw,
                     record_id=_clean(row.get("Block顺序号")),
+                    severity_hint=cm_mh_severity_hint,
+                    note_override=cm_mh_note,
                 )
 
         # 受试者流向（SV/筛选表：ICF→筛选→治疗→研究状态）

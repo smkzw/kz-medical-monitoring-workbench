@@ -13,10 +13,12 @@ import {
   validateAdmissionSourceDir,
 } from "./medicalMonitoringAdmissionWizardState.mjs";
 import {
+  ADJUDICATION_STALL_THRESHOLD_MS,
   MAPPING_FOCUS_ALL,
   MAPPING_STALL_THRESHOLD_MS,
   admissionMappingConfirmReducer,
   admissionMappingPrimaryAction,
+  adjudicationStalledMs,
   createAdmissionMappingConfirmState,
   mappingBlockedRelationGroups,
   mappingCandidateKey,
@@ -479,6 +481,12 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
   // 停滞提示（含可执行指引），不再恒显「识别仍在生成中」。轮询每2.5秒
   // 重渲一次，停滞时长随之刷新。
   const stalledMs = mappingStalledMs(mappingState);
+  // R34轮（R33-B-F1）：复核等待时长与停滞出口——实测确认触发双盲复核后
+  // 「系统正在复核少量疑点…」20分钟零变化且零控件（report_B.md F1末态）。
+  const adjudicatingElapsedMs = mappingState.phase === "adjudicating"
+    ? adjudicationStalledMs(mappingState)
+    : 0;
+  const adjudicatingStalled = adjudicatingElapsedMs >= ADJUDICATION_STALL_THRESHOLD_MS;
   const headline = mappingState.phase === "adjudicating"
     ? "系统正在进一步核对少量疑点"
     : stalledMs >= MAPPING_STALL_THRESHOLD_MS
@@ -500,6 +508,25 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
   return (
     <div className="monitoring-admission-confirm monitoring-admission-mapping">
       <p className="monitoring-admission-big monitoring-admission-summary">{headline}</p>
+      {/* R34轮（R33-B-F1）：复核等待给出事实性时长反馈；超过无出口阈值
+          后如实报告停滞并指向主按钮位的「重新加载识别结果」自救入口，
+          不再让busy文案无限占据按钮位（R33B实测20分钟零变化零控件）。 */}
+      {mappingState.phase === "adjudicating" && adjudicatingElapsedMs >= 60000 && !adjudicatingStalled ? (
+        <p className="monitoring-admission-minor" role="status" style={{ margin: "2px 0 8px" }}>
+          复核已进行约 {Math.floor(adjudicatingElapsedMs / 60000)} 分钟（自本次复核发起起计）；页面自动刷新，完成前无需操作。
+        </p>
+      ) : null}
+      {mappingState.phase === "adjudicating" && adjudicatingStalled ? (
+        <div className="monitoring-admission-alert" role="alert" style={{ margin: "8px 0" }}>
+          <p className="monitoring-admission-alert-text">
+            复核已持续约 {Math.floor(adjudicatingElapsedMs / 60000)} 分钟仍无结果——复核作业可能仍在排队（上游识别服务繁忙）或已停滞。
+          </p>
+          <ul className="monitoring-admission-alert-guide">
+            <li>可点击下方「复核长时间无结果，重新加载识别结果」重新读取识别结果；复核若已收敛会自动进入确认。</li>
+            <li>已完成的识别结果与您的作答不会因重新加载丢失。</li>
+          </ul>
+        </div>
+      ) : null}
       {/* R4-03口径澄清：表数=已产出识别结果的表数（进行中口径），
           与导入概况「全部工作表」口径不同，见上注释。 */}
       <p className="monitoring-admission-minor" style={{ margin: "2px 0 8px" }}>
@@ -604,6 +631,11 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
       {mappingState.error ? (
         <div className="monitoring-admission-alert" role="alert" style={{ margin: "8px 0" }}>
           <p className="monitoring-admission-alert-text">{mappingState.error.serverText}</p>
+          {mappingState.error.code ? (
+            <p style={{ margin: "2px 0 4px", fontSize: 11, color: "var(--monitoring-muted, #6b7785)", fontFamily: "monospace" }}>
+              错误码：{mappingState.error.code}（报障时请提供）
+            </p>
+          ) : null}
           {mappingState.error.eventRef ? (
             <p style={{ margin: "2px 0 4px", fontSize: 11, color: "var(--monitoring-muted, #6b7785)", fontFamily: "monospace" }}>
               事件参考：{mappingState.error.eventRef}
@@ -784,9 +816,12 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
           </ul>
         </div>
       ) : null}
-      {drafting && !questions.length && !quality?.blocksConfirmation ? (
+      {drafting && !questions.length && !quality?.blocksConfirmation && !mappingState.error ? (
         // R32-02：blocked状态下不再显示「正在自动保存…无需逐项核对」——
         // 该文案与红线alert直接矛盾且永不结束（B位死锁现场的组成部分）。
+        // R34轮（R33-B-F2）：存在失败alert时同样不渲染——「正在自动保存」
+        // 与失败提示同屏是四条互斥文案死锁现场的组成部分，状态机按互斥
+        // 渲染：有错即只呈现错误与可操作出口。
         <p className="monitoring-admission-pending-note" role="status">
           系统已完成判断，正在自动保存字段对应关系，无需您逐项核对。
         </p>
@@ -1777,6 +1812,10 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       );
       if (mappingRequestGeneration.current !== generation) return;
       const adjudicationState = payload?.adjudication?.state;
+      // R34轮（R33-B-F1）：复核收敛为blocked时后端携带failure_code/
+      // failure_message（如「复核分片失败，已重新排队重跑N个」）——
+      // 此前前端丢弃该载荷、只显示通用「系统复核暂未完成」，失败原因
+      // 被吞（report_B.md F1零错误原因的组成部分）。
       mappingDispatch({
         type: adjudicationState === "running"
           ? "adjudication-running"
@@ -1784,6 +1823,13 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
             ? "adjudication-blocked"
             : "adjudication-ready",
         payload,
+        error: adjudicationState === "blocked"
+          ? {
+            code: payload?.adjudication?.failure_code || "",
+            serverText: payload?.adjudication?.failure_message
+              || "系统复核暂未完成，请稍后重试。原始数据不会受到影响。",
+          }
+          : undefined,
       });
     } catch (error) {
       if (mappingRequestGeneration.current !== generation) return;
