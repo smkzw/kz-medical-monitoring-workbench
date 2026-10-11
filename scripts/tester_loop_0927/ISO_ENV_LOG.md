@@ -607,3 +607,4 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
 - 自检3 build id 一致：runtime-build.json expectedBackendBuildId=api-4ee144cc0f399a1e == 8911 backend_build_id → 一致
 - 结论：隔离环境已恢复可用（首次尝试即成功，未触 8910/5177）
+2026-10-12 06:43 立刻无损暂停（用户指令）：run dwfrun-91c93297停于R35修复员在途（测试位1/4+分诊毕，修复员约50分钟被停、恢复重做）。8911/5178保持运行；STATE_V2保持round34。恢复=ResumeWorkflowRun同run_id，详见PAUSE_HANDOFF_20261012.md
