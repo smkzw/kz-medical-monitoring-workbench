@@ -625,3 +625,5 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
 - 自检3 build id 配对：runtime-build.json expectedBackendBuildId=api-4ee144cc0f399a1e == 8911 backend_build_id → 一致；frontendBuildId=web-95e6457ceeb785a3（R36前端改动面新指纹）
 - 结论：隔离环境已恢复可用，R36六条修复代码已加载（packages/medical_monitoring/** 与前端源码均为重启后加载面）
+- 更正（同日 16:5x）：提交前最后一次前端补丁（复核预算耗尽错误态补降级出口）晚于上一次 vite 启动，served 指纹滞后于磁盘——vite 再启一次；自检 monitoring 200、frontendBuildId=web-fbcf1a886af42cbf（最终指纹）、expectedBackendBuildId=api-4ee144cc0f399a1e == 8911 backend_build_id 一致、8911 ready:true 未动
+2026-10-12 17:06 快速无损暂停（用户指令）：run dwfrun-005a6979停于R36复盘在途（测试1/4+分诊17新条+修复阶段已全部完成）。8911/5178保持运行。恢复=ResumeWorkflowRun同run_id，详见PAUSE_HANDOFF_20261012B.md
