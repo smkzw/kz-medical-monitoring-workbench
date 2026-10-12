@@ -230,9 +230,9 @@ const SPECIALS_V2 = [
 ];
 
 const CHANNELS = [
-  { slot: "A", kind: "external", agent: "pi", provider: "openai-codex", model: "gpt-6-sol", label: "外部测试者A（gpt-6-sol）" },
+  { slot: "A", kind: "external", agent: "pi", provider: "openai-codex", model: "gpt-6.1-sol", label: "外部测试者A（gpt-6.1-sol）" },
   { slot: "B", kind: "external", agent: "cursor", provider: "omp", model: "cursor-grok-4.6", label: "外部测试者B（cursor-grok-4.6）" },
-  { slot: "C", kind: "external", agent: "pi", provider: "google-antigravity", model: "gemini-3.8-flash", label: "外部测试者C（gemini-3.8-flash）" },
+  { slot: "C", kind: "external", agent: "pi", provider: "cursor", model: "default", label: "外部测试者C（cursor/default）" },
   { slot: "D", kind: "internal", agent: "", provider: "", model: "internal", label: "内部测试者D（本机分身）" },
 ];
 
@@ -345,13 +345,13 @@ if ((state.baselineFailures ?? []).length === 0) {
   state.baselineFailures = failedSet(baselineRun.stdout);
   log("回归基线（重建）：监测子集现有失败 " + state.baselineFailures.length + " 条（存量债，修复门只看新增）");
 }
-if (Object.keys(state.channelOk ?? {}).length === 0) {
+if (CHANNELS.some((c) => c.kind === "external" && !(state.channelOk ?? {})[c.model])) {
   const probe = await agent("通道探针员", {
     system: "你只做外部测试通道的连通性探测与结果回读，绝不做任何测试操作。三条并行、各限时6分钟。失败如实记录，不重试超过一次。" + HONESTY,
   }).ask<{ channels: { model: string; ok: boolean; note: string }[] }>(
     "探测三条外部通道。先写探测提示文件（内容：连通性探测：请只回复四个字：通道就绪）到 /tmp/channel_probe_v2/probe.md，然后并行 nohup 运行：\n" +
-    "python3 " + RUNNER + " --agent pi --provider openai-codex --model gpt-6-sol --effort high --explicit-route --prompt /tmp/channel_probe_v2/probe.md --output /tmp/channel_probe_v2/out_a.md --stdout /tmp/channel_probe_v2/log_a.txt --max-turns 3 --timeout 300\n" +
-    "同样地：--agent cursor --provider omp --model cursor-grok-4.6（out_b）；--agent pi --provider google-antigravity --model gemini-3.8-flash（out_c）\n" +
+    "python3 " + RUNNER + " --agent pi --provider openai-codex --model gpt-6.1-sol --effort high --explicit-route --prompt /tmp/channel_probe_v2/probe.md --output /tmp/channel_probe_v2/out_a.md --stdout /tmp/channel_probe_v2/log_a.txt --max-turns 3 --timeout 300\n" +
+    "同样地：--agent cursor --provider omp --model cursor-grok-4.6（out_b）；--agent pi --provider cursor --model default（out_c）\n" +
     "等进程退出后读各 output 判断 ok（含『通道就绪』即ok），失败把 stderr 要点写 note。返回 channels 数组。",
   );
   for (const c of probe.channels ?? []) state.channelOk[c.model] = c.ok;
