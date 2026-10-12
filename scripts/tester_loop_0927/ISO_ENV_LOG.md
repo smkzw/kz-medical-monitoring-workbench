@@ -645,3 +645,4 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
 - 自检3 build id 配对：runtime-build.json expectedBackendBuildId=api-34f525073da51f3e == 8911 backend_build_id → 一致；frontendBuildId=web-fc1973818c3b7897（R38前端改动面新指纹）
 - R36-07浏览器探测（camofox，用户视角，只读）：/monitoring 载入后 0-12s 时间片采样：可见可达焦点元素19个全期稳定、[inert]=0、[aria-modal]=0、[tabindex=0]=0；代码面全量keydown扫描仅两处条件性Tab陷阱（JourneyDrawer overlay / SOA弹窗），页级自定义Tab链不存在——R36-07报告的「16个tabIndex=0仅6可达」在当前代码面无法复现（载入窗口可达集小=内容未渲染，非隐藏排除），如实跳过不改
+2026-10-13 06:43 轮中无损暂停（用户纠偏：修复员完成即停）：run dwfrun-4fce9e30停于R38复盘节点开头（修复阶段已完成过门；P0/P1 16→8腰斩、新P0/P1首次归零）。8911/5178保持运行。恢复=ResumeWorkflowRun同run_id，详见PAUSE_HANDOFF_20261013.md
