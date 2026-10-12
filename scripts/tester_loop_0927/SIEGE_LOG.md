@@ -4,6 +4,119 @@
 
 ---
 
+## R38 攻坚·第 1 次（2026-10-13，攻坚工程师-R38-第1次）
+
+### 0. 结论先行
+
+**墙未复发：R37 测试者修复（9e6f97a0：R37-01/02/06+R35-02/03 五条——后端面
+services/api/app/{main,source_content_validation,monitoring_ai_service}.py
++packages document authority 归并+前端向导面）与轮次归档（43aa3376）之后，
+8911 于 2026-10-13 02:29:10 重启（全部源码 mtime 02:28:11 均早于进程启动；
+`git diff HEAD -- packages services frontend/src` 为空——
+磁盘==HEAD==进程加载面），本轮两遍全新幂等键全链全绿，零阻断、零代码修复、
+零重启、零跳门。** 常驻项目「MX循开考-CSU」（proj_user_6ef58ac151e1）以两个
+全新幂等键（r38s-fresh-df73854baef2 / r38s-fresh-efdac43c3ab6）各走完
+run-setup/options → workspace/bootstrap（留证）→ prepare-and-start →
+progress completed（15s/2 轮询）→ publication available → result-entry →
+overview 可读，主投影（query_findings+current_risks）与 R37 基线**逐位相等**
+（1,242,681B/60 发现/16 受试者/389 现行风险）。
+
+### 1. 复现（两遍全链，r38s_siege_repro.py，证据 r38s_siege_evidence.jsonl）
+
+前置三条件自检全过：① /api/runtime-readiness ready:true
+（backend_build_id=**api-5b547c38911d4ad5**，即 9e6f97a0 提交内留痕的新指纹）；
+② http://localhost:5178/monitoring HTTP 200；③ 5178/runtime-build.json
+expectedBackendBuildId=api-5b547c38911d4ad5 配对一致
+（frontendBuildId=web-7c41e90d1490184a 与提交留痕同）。
+**加载实证（forensics）**：9e6f97a0（02:39 提交）全部源码 mtime 02:28:11 早于
+8911 进程启动 02:29:10；提交后 diff 空——进程加载面==HEAD（含 R37 五条修复）。
+
+| 侧 | 信号 | 实测（两遍一致） |
+| --- | --- | --- |
+| 预置台/API | mapping-candidates | state=candidates_ready，confirmation_status=**confirmed** |
+| 预置台/API | facts | state=**ready** |
+| 预置台/API | r7/project/open | state=**current** |
+| 预置台/API | run-setup/options | 200，222/224ms，snapshot_token=snapshot:ef8692acfbab4d2a9846916f（与 R34–R37 同快照） |
+| 磁盘 | launch_registry（基线） | 59 条全 completed、waiting_start=0；seq 59=monitoring_fb491a46…（10-12T12:23Z，R37 测试者轮 UI 回归运行） |
+| 磁盘 | execution_profiles | `global_default\|*\|1`（R19 修复在盘） |
+| 磁盘 | admission_events.jsonl | 6 行，本轮时间窗**零新增** |
+
+全链逐步（2026-10-12T19:09:46Z 起两遍共 36s）：
+
+| 步 | 端点 | 第一遍 | 第二遍 |
+| --- | --- | --- | --- |
+| 1 | GET run-setup/options | 200，222ms，同快照 | 200，224ms，同快照 |
+| 2 | POST workspace/bootstrap（留证：前端零组件调用） | 200，97ms，replayed=true revision=1 | 200，102ms，replayed=true revision=1 |
+| 3 | POST runs/prepare-and-start（全新幂等键） | **200，423ms**，run:da06f204577ee2dd4… | **200，416ms**，run:0e173979eb815986… |
+| 4 | GET runs/{token}/progress | **completed**，percent=100，2 次轮询，15s | **completed**，percent=100，2 次轮询，15s |
+| 5 | POST runs/{token}/publication | 200，712ms，publication_state=**available** | 200，678ms，**available** |
+| 6 | GET runs/{token}/result-entry | 200，335ms，rct=result-context:c74b910a…611b | 200，322ms，rct=result-context:d44c1391…2f17 |
+| 7 | GET results/{rct}/overview | 200，408ms，**1,242,681B/60 发现/16 受试者/389 现行风险** | 200，403ms，主投影逐位一致 |
+| 8 | GET results/{rct}/overview（缓存探针） | 200，181ms（首读 408ms） | 200，182ms（首读 403ms） |
+
+终态磁盘：sequence 60/61 两条新 run 全 completed、result_available=1、
+request_fingerprint=68ba60ad…（与 R34–R37 各轮 siege 运行逐位同指纹）、
+registry 共 61 条全 completed、waiting_start=0；admission_events 仍 6 行。
+
+### 2. 两处口径差异的归因（均非缺陷，留证防误判）
+
+1. **seq 59（R37 测试者轮 UI 运行）manifest_digest=e49f95084811 ≠
+   f58ccf16c4f3（R34–R38 siege 运行）**：launch_registry 行级对照（本轮
+   实测）——seq 59 的 `rule_tokens_json=["rule-revision:5d00d4ce2f2622ce…"]`
+   非空（UI 向导携带风险规则修订），seq 57/58/60/61 的 rule_tokens_json 为空；
+   输入不同 → request_fingerprint/manifest_digest 不同，**输入差非代码漂移**。
+   本轮两遍指纹与 R34–R37 同输入运行逐位一致。
+2. **两遍 overview 除主投影外 `query_findings_meta.query_drafts` 顺序不同**：
+   结构化 diff（本轮实测）——60 个 finding_id 集合两遍相等、逐 finding
+   内容（除每轮派生的 query_draft_id）逐字段相等、主投影
+   query_findings+current_risks 三方（p1/p2/R37）逐位相等；差异仅
+   query_drafts 列表顺序 + 由其派生的 artifact/content_sha256 哈希。属
+   列表顺序非确定性，结果内容**零漂移**；R37 节「两遍逐项一致」结论按
+   字节/计数口径成立，本轮将「顺序非确定」细目补记在案。
+
+### 3. 修复
+
+**无（零阻断零代码改动）。** 运行链上无任何一道门拒绝：接入管线侧
+confirmed/ready/current 与运行门无口径差；prepare-and-start 首击即 200
+（423/416ms），无 waiting_start 残留、无 in_flight_conflict、无
+global_default_missing（R19 ensure_builtin_global_default 持续在役，
+profile_layer_versions 稳定 `global_default|*|1`）；publication 首击即
+available；result-entry/overview 冻结包会话缓存（R34-09/R32-07）持续在役
+（二读 181/182ms vs 首读 408/403ms）。8911/5178 本轮全程未重启（02:29 拉起
+后持续在役，重启系 R37 测试者轮标准操作，非本轮所为）。
+
+### 4. 回归（本轮实跑，.venv/bin/pytest）
+
+- `pytest tests/test_medical_monitoring_r7_product_router.py -k
+  "r19_siege or prepare_and_start or global_default" -q`：**7/7 绿**
+  （运行启动 siege 语义：缺失补种/失败 fail-closed 无僵尸/幂等重放）；
+- `pytest tests/test_mm_r37_document_authority_multi_candidate.py
+  tests/test_mm_r35_project_code_not_study_number.py -q`：**10/10 绿**
+  （9e6f97a0 新代码面：document authority 多候选归并 ×6 + R35 项目代号
+  提示 ×4）；
+- `pytest tests/test_source_content_validation.py -q`：**23/23 绿**
+  （R35-02/R35-03 触达面 registered 基准与确认回执分离）。
+
+### 5. 遗留与边界
+
+- backend_build_id 指纹仅覆盖 services/api/app、不含 packages/** 的口径
+  未变（R32 起在案，留待所有者裁决扩面）；本轮 9e6f97a0 的 packages 改动面
+  由 mtime forensics + git diff 空 + §4 该面 10 项单测三重确证在役。
+- R37-01（向导复核进度段拼写修正）属界面交互面，本轮 API 驱动全链未触达
+  （mapping 已 confirmed、无在途复核）；其渲染级回归 3 fixture 已在
+  9e6f97a0 提交内留痕，界面呈现归测试者轮。
+- 结果内容基线与 R36/R37 相同：**1,242,681B/60 发现/16 受试者/389 现行
+  风险/病史一致性×19/常见适应症×36（提示核实×18）/化验趋势×1**，后续轮次
+  继续按此口径比对（注意 §2-2 顺序非确定细目）。
+- 常驻项目 registry 现 61 条全 completed；后续轮次开考直接走「开始运行
+  监查」即可。
+
+留痕文件：`r38s_siege_repro.py`、`r38s_siege_evidence.jsonl`、
+`r38s_overview_p1.json`、`r38s_overview_p2.json`、本日志；本轮零重启，
+ISO_ENV_LOG 无新条目（02:29 拉起条目已在 9e6f97a0 提交内留痕）。
+
+---
+
 ## R37 攻坚·第 1 次（2026-10-12，攻坚工程师-R37-第1次）
 
 ### 0. 结论先行
