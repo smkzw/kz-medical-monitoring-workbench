@@ -8,8 +8,10 @@ import {
   MAPPING_STALL_THRESHOLD_MS,
   admissionMappingConfirmReducer,
   admissionMappingPrimaryAction,
+  adjudicationPollDelayMs,
   adjudicationStalledMs,
   createAdmissionMappingConfirmState,
+  isDocumentEvidenceError,
   mappingConfirmationReason,
   mappingConfirmationFailureAction,
   mappingEvidenceText,
@@ -596,4 +598,95 @@ test("headline never claims all-clear while semantic blockers are open", () => {
     payload: { draft_id: "d1", version: 1, user_questions: [] },
   });
   assert.match(clean.payload.headline, /全部对应关系清晰/);
+});
+
+// R36轮（R36-01）：复核等待的停滞计时必须以服务端真实进展复位——复核
+// 分片完成数前进即推进（C位实测复核期验证队列以分钟级收尾，界面零展示
+// 致15分钟误判停滞并重入死循环）。分片数不变时停滞照旧跨轮询累计。
+test("adjudication-running resets the stall timer only on real shard progress", () => {
+  let state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "adjudication-start",
+    payload: { draft_id: "d1", version: 1, adjudication: { state: "running" }, user_questions: [] },
+  });
+  // 首个携带分片计数的轮询：只记录基线，不视为进展。
+  state = admissionMappingConfirmReducer(state, {
+    type: "adjudication-running",
+    payload: {
+      draft_id: "d1",
+      version: 1,
+      adjudication: { state: "running", total_job_count: 10, completed_job_count: 3 },
+      user_questions: [],
+    },
+  });
+  assert.equal(state.progress.verifiedCount, 3);
+  const baseline = state.progress.since;
+  const stalledTick = {
+    ...state,
+    progress: { ...state.progress, since: Date.now() - ADJUDICATION_STALL_THRESHOLD_MS - 60_000 },
+  };
+  // 分片完成数不变：停滞跨轮询累计（不重置）。
+  const unchanged = admissionMappingConfirmReducer(stalledTick, {
+    type: "adjudication-running",
+    payload: {
+      draft_id: "d1",
+      version: 1,
+      adjudication: { state: "running", total_job_count: 10, completed_job_count: 3 },
+      user_questions: [],
+    },
+  });
+  assert.equal(unchanged.progress.since, stalledTick.progress.since);
+  assert.equal(adjudicationStalledMs(unchanged) >= ADJUDICATION_STALL_THRESHOLD_MS, true);
+  // 分片完成数前进：真实进展——复位停滞计时与基线。
+  const advanced = admissionMappingConfirmReducer(stalledTick, {
+    type: "adjudication-running",
+    payload: {
+      draft_id: "d1",
+      version: 1,
+      adjudication: { state: "running", total_job_count: 10, completed_job_count: 4 },
+      user_questions: [],
+    },
+  });
+  assert.equal(advanced.progress.verifiedCount, 4);
+  assert.notEqual(advanced.progress.since, stalledTick.progress.since);
+  assert.equal(adjudicationStalledMs(advanced) < ADJUDICATION_STALL_THRESHOLD_MS, true);
+  assert.ok(baseline > 0);
+});
+
+// R36轮（R36-01）：复核轮询退避——等待越久轮询越疏（1.5s→5s→15s），
+// 不再把持写许可的复核端点打成雪崩源。
+test("adjudication polling backs off with the waiting time", () => {
+  const fresh = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "adjudication-start",
+    payload: { draft_id: "d1", version: 1, user_questions: [] },
+  });
+  assert.equal(adjudicationPollDelayMs(fresh, fresh.progress.since + 30_000), 1500);
+  assert.equal(adjudicationPollDelayMs(fresh, fresh.progress.since + 120_000), 5000);
+  assert.equal(adjudicationPollDelayMs(fresh, fresh.progress.since + 6 * 60_000), 15000);
+  // 非复核阶段恒返回快轮询基准（调用方不该用它，但语义要稳）。
+  assert.equal(adjudicationPollDelayMs(createAdmissionMappingConfirmState()), 1500);
+});
+
+// R34轮（R34-02）：研究文件证据链缺失族错误码——错误态据此内联补传入口。
+test("document evidence error codes drive the supplement-upload entry", () => {
+  assert.equal(isDocumentEvidenceError("mapping_document_evidence_roles_unmet"), true);
+  assert.equal(isDocumentEvidenceError("mapping_document_evidence_missing"), true);
+  assert.equal(isDocumentEvidenceError("mapping_document_evidence_incomplete"), true);
+  assert.equal(isDocumentEvidenceError("mapping_run_incomplete"), false);
+  assert.equal(isDocumentEvidenceError(""), false);
+});
+
+// R36轮（R36-01）：降级确认的回执如实区分——不冒充双盲复核已收敛。
+test("degraded confirm receipt states the downgrade honestly", () => {
+  const state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "confirm-ready",
+    payload: { mapping_revision: "monmaprev-1" },
+    degraded: true,
+  });
+  assert.equal(state.phase, "confirmed");
+  assert.match(state.message, /降级确认已留痕/);
+  const normal = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "confirm-ready",
+    payload: { mapping_revision: "monmaprev-2" },
+  });
+  assert.doesNotMatch(normal.message, /降级/);
 });

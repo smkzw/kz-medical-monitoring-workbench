@@ -766,10 +766,21 @@ class AdmissionMappingConfirmationService:
                 if exc.code != "mapping_verifier_incomplete":
                     raise
                 projected = self._draft_payload(draft)
+                adjudication_progress = {
+                    key: value
+                    for key, value in (
+                        getattr(exc, "cohort_progress", None) or {}
+                    ).items()
+                    if value is not None
+                }
+                # R36轮（R36-01）：running不再是裸状态——聚合进度随载荷
+                # 透出（复核分片已完成X/Y），前端停滞计时以真实进展复位，
+                # 不再把排队收尾误判为卡死。
                 projected["adjudication"] = {
                     "state": "running",
                     "resolved_count": 0,
                     "remaining_question_count": len(unresolved),
+                    **adjudication_progress,
                 }
                 return projected
             if reconciliation["state"] == "blocked":
@@ -1586,11 +1597,10 @@ class AdmissionMappingConfirmationService:
                 attempt_id,
                 MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX,
             )
-            primary_candidates = self._completed_candidates(
+            primary_candidates = self._cohort_candidates_with_progress(
                 project_id,
                 primary_jobs,
                 workspace_dir=workspace_dir,
-                allow_profile_evidence_upgrade=True,
             )
             primary = cohort_payload_from_candidates(primary_candidates)
             primary_mappings = primary["mappings"]
@@ -1622,8 +1632,7 @@ class AdmissionMappingConfirmationService:
                 and str(job.prompt_version) not in EVIDENCE_TOOL_PROMPT_VERSIONS
                 for job in verifier_jobs
             ):
-                raise AdmissionMappingPipelineError("mapping_verifier_incomplete")
-            # Dual-cohort input validation: agreement only counts when both
+                raise AdmissionMappingPipelineError("mapping_verifier_incomplete")            # Dual-cohort input validation: agreement only counts when both
             # cohorts contain the same set of per-job frozen revisions. The
             # cohort identity is shared, but deterministic metadata jobs may
             # carry a different revision from model-analyzed chunks.
@@ -1637,11 +1646,10 @@ class AdmissionMappingConfirmationService:
                 raise AdmissionMappingPipelineError(
                     "mapping_cohort_input_mismatch"
                 )
-            verifier_candidates = self._completed_candidates(
+            verifier_candidates = self._cohort_candidates_with_progress(
                 project_id,
                 verifier_jobs,
                 workspace_dir=workspace_dir,
-                allow_profile_evidence_upgrade=True,
             )
         verifier = cohort_payload_from_candidates(verifier_candidates or ())
         # R11预检：部分采纳（domain_gaps）的缺席域传入确定性对账——
@@ -1862,6 +1870,17 @@ class AdmissionMappingConfirmationService:
         retried = 0
         if self.ai_repository is None:
             return retried
+        # R36轮（R36-01）：adjudicate轮询驱动的自动重排队必须有界。原实现
+        # 不传automatic_recovery_limit（=显式重试语义，无预算）：复核分片
+        # 持续失败时每次1.5s轮询都会重排重跑——fail→requeue→fail无界循环，
+        # attempt与automatic_recovery_count无界增长，复核永不收敛（与
+        # R27-01在document authority上修掉的是同一族缺陷）。现与二轮
+        # adjudicate分片同预算（_ADJUDICATION_AUTO_RECOVERY_LIMIT）；预算
+        # 耗尽后retry_terminal原样返回终态作业，此处计0，adjudicate如实
+        # blocked并给出「已达重试上限」的真实出路。
+        from packages.medical_monitoring.admission.mapping_pipeline import (
+            _ADJUDICATION_AUTO_RECOVERY_LIMIT,
+        )
         for prefix in (
             MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX,
             MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX,
@@ -1876,12 +1895,19 @@ class AdmissionMappingConfirmationService:
                 }:
                     continue
                 try:
-                    self.ai_repository.retry_terminal(
+                    retried_job = self.ai_repository.retry_terminal(
                         project_id,
                         job.job_id,
                         current_input_revision_sha256=job.input_revision_sha256,
+                        automatic_recovery_limit=_ADJUDICATION_AUTO_RECOVERY_LIMIT,
                     )
-                    retried += 1
+                    # 预算耗尽时retry_terminal原样返回终态作业（不抛错）
+                    # ——只把真实重排成功的计入，让「已达重试上限」如实
+                    # 到达blocked文案。
+                    if str(_value(getattr(retried_job, "status", ""))) not in {
+                        "failed", "blocked", "cancelled", "stale_input",
+                    }:
+                        retried += 1
                 except Exception:
                     continue
         return retried
@@ -1953,6 +1979,87 @@ class AdmissionMappingConfirmationService:
             candidates.extend(rows)
         return tuple(candidates)
 
+    def _cohort_candidates_with_progress(
+        self,
+        project_id: str,
+        jobs: Iterable[Any],
+        *,
+        workspace_dir: Any = None,
+    ) -> tuple[Any, ...]:
+        """Load cohort candidates, annotating incomplete-cohort errors with
+        aggregate progress.
+
+        R36轮（R36-01）：复核等待必须可观察。此前
+        ``mapping_verifier_incomplete`` 只有一个裸错误码——adjudicate轮询
+        只能返回无信息量的running，前端停滞计时把「共享队列正常推进」
+        误判为卡死，15分钟后自救重入（C位实测复核期恰逢验证队列收尾，
+        11:36最后分片完成即可收敛，界面却零进度展示）。这里把在途cohort
+        的聚合计数（已完成/总数/执行中/排队中）附在错误对象上，仅聚合
+        数字、不含作业身份，公开投影安全；``adjudicate_draft`` 据此透出
+        进度，前端以真实进展驱动计时与展示。
+        """
+
+        try:
+            return self._completed_candidates(
+                project_id,
+                jobs,
+                workspace_dir=workspace_dir,
+                allow_profile_evidence_upgrade=True,
+            )
+        except AdmissionMappingPipelineError as exc:
+            if exc.code == "mapping_verifier_incomplete":
+                progress = _cohort_progress(jobs)
+                if progress is not None:
+                    exc.cohort_progress = progress
+            raise
+
+    @staticmethod
+    def _cohort_progress(jobs: Iterable[Any]) -> Optional[dict[str, Any]]:
+        """Aggregate in-flight counts over one job cohort (no job identity)."""
+
+        rows = list(jobs or ())
+        if not rows:
+            return None
+        pending_since = [
+            str(getattr(job, "created_at", "") or "")
+            for job in rows
+            if str(_value(getattr(job, "status", ""))) not in {"completed"}
+            and str(getattr(job, "created_at", "") or "")
+        ]
+        return {
+            "total_job_count": len(rows),
+            "completed_job_count": sum(
+                1
+                for job in rows
+                if str(_value(getattr(job, "status", ""))) == "completed"
+            ),
+            "pending_job_count": sum(
+                1
+                for job in rows
+                if str(_value(getattr(job, "status", "")))
+                not in {"completed", "failed", "blocked", "cancelled", "stale_input"}
+            ),
+            "pending_running_count": sum(
+                1
+                for job in rows
+                if str(_value(getattr(job, "status", ""))) == "running"
+            ),
+            "pending_queued_count": sum(
+                1
+                for job in rows
+                if str(_value(getattr(job, "status", ""))) == "queued"
+            ),
+            "pending_since": min(pending_since) if pending_since else "",
+        }
+
+    # R36轮（R36-01）：可降级确认的双盲复核失败族——「复核还没跑完/复核
+    # 分片预算耗尽」属于等待与外部资源问题；revision漂移（证据已变化）
+    # 不在此列，必须fail-closed重新识别。
+    _DEGRADABLE_DUAL_REVIEW_CODES = frozenset({
+        "mapping_verifier_incomplete",
+        "mapping_verifier_job_failed",
+    })
+
     def confirm_draft(
         self,
         *,
@@ -1964,6 +2071,7 @@ class AdmissionMappingConfirmationService:
         confirmation_reason: str,
         idempotency_key: str,
         workspace_dir: Any = None,
+        allow_unverified_dual_review: bool = False,
     ) -> Mapping[str, Any]:
         if self.mapping_repository is None:
             raise AdmissionMappingPipelineError("mapping_draft_unconfigured")
@@ -1973,28 +2081,57 @@ class AdmissionMappingConfirmationService:
             # Only medically substantive ambiguities block durable
             # confirmation; system-adopted candidates never do.
             raise AdmissionMappingPipelineError("mapping_questions_unresolved")
+        degraded_note = ""
+        reconciliation = None
         if self.require_dual_reconciliation:
-            reconciliation = self.reconcile_with_verifier(
-                project_id=project_id,
-                attempt_id=attempt_id,
-                draft_id=draft_id,
-                workspace_dir=workspace_dir,
-            )["reconciliation"]
-            if not reconciliation["auto_pass"] and not self._resolved_dual_review(
+            try:
+                reconciliation = self.reconcile_with_verifier(
+                    project_id=project_id,
+                    attempt_id=attempt_id,
+                    draft_id=draft_id,
+                    workspace_dir=workspace_dir,
+                )["reconciliation"]
+            except AdmissionMappingPipelineError as exc:
+                # R36轮（R36-01）：降级确认出口。复核长时间未收敛（验证
+                # 队列仍在排队/分片预算耗尽）且用户已逐条作答完毕时，
+                # 允许显式知情降级确认——降级事实与原因写入确认留痕，
+                # 不静默、不冒充双盲通过。仅由前端降级按钮显式传入。
+                if not (
+                    allow_unverified_dual_review
+                    and exc.code in self._DEGRADABLE_DUAL_REVIEW_CODES
+                ):
+                    raise
+                reconciliation = None
+                degraded_note = (
+                    f"双盲复核未完成（{exc.code}），用户知情选择不等待"
+                    "复核直接确认；该事实已如实留痕。"
+                )
+            if reconciliation is not None and not reconciliation["auto_pass"] and not self._resolved_dual_review(
                 project_id=project_id,
                 draft_id=draft_id,
                 draft_fields=payload.get("fields") or [],
                 reconciliation=reconciliation,
             ):
-                raise AdmissionMappingPipelineError(
-                    "mapping_reconciliation_required"
-                )
+                if allow_unverified_dual_review:
+                    degraded_note = (
+                        "双盲复核未收敛（存在待裁决分歧的系统性复核未闭合），"
+                        "用户知情选择降级确认；该事实已如实留痕。"
+                    )
+                else:
+                    raise AdmissionMappingPipelineError(
+                        "mapping_reconciliation_required"
+                    )
+        effective_reason = (
+            f"{degraded_note}{confirmation_reason}"
+            if degraded_note
+            else confirmation_reason
+        )
         revision = self.mapping_repository.confirm(
             project_id,
             draft_id,
             expected_version=expected_version,
             confirmed_by=confirmed_by,
-            confirmation_reason=confirmation_reason,
+            confirmation_reason=effective_reason[:2_000],
             idempotency_key=idempotency_key,
         )
         payload = revision.model_dump(mode="json")
@@ -2003,6 +2140,10 @@ class AdmissionMappingConfirmationService:
         payload["facts_generated"] = False
         payload["next_action"] = "generate_facts_later"
         payload["confirmation_status"] = "confirmed"
+        if degraded_note:
+            # 降级确认的显式回执：响应与调用方都能如实区分这条修订
+            # 不是双盲复核收敛后的常规确认。
+            payload["dual_review_degraded"] = degraded_note
         return payload
 
     def _resolved_dual_review(

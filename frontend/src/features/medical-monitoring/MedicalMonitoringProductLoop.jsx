@@ -47,6 +47,11 @@ import "./medicalMonitoringProductLoop.css";
 
 const PRODUCT_RESULT_SUBJECT_VIEWS = new Set(["journey", "profile", "timeline"]);
 const PRODUCT_RESULT_VIEWS = new Set(["overview", "site_overview", "queries", "journey", "profile", "timeline", "evidence"]);
+// R36轮（R36-04）：结果读取的自动重试上限。前3次递增退避（2s/5s/10s），
+// 此后封顶30秒节奏——总窗口约覆盖5分钟，界面文案与行为一致（旧实现
+// 3次在17秒内烧完，文案承诺的自动重试此后形同虚设，D位实测等待300秒
+// 零重试动作只能手动自救）。
+const RESULT_READ_AUTO_RETRY_LIMIT = 10;
 const PUBLIC_RESULT_LOCATORS = Object.freeze([
   "site_ref",
   "subject_ref",
@@ -860,6 +865,8 @@ export function MedicalMonitoringProductLoop({
   const [entryLoading, setEntryLoading] = useState(false);
   const [resultError, setResultError] = useState(null);
   const [resultRetryEpoch, setResultRetryEpoch] = useState(0);
+  // R36轮（R36-04）：自动重试进度可观察——「正在第N/10次自动重试」。
+  const [resultRetryAttempt, setResultRetryAttempt] = useState(0);
   // Slice-08C-2 continuity read: never blocks the existing result boards.
   const [continuityResult, setContinuityResult] = useState(null);
   const [continuityLoading, setContinuityLoading] = useState(false);
@@ -947,6 +954,7 @@ export function MedicalMonitoringProductLoop({
     setResultPayload(null);
     setResultLoading(true);
     setResultError(null);
+    setResultRetryAttempt(0);
     const expectedView = projectionView(routeView);
 
     const startRead = () => {
@@ -1005,6 +1013,7 @@ export function MedicalMonitoringProductLoop({
         }
         // R32-06：读取成功即复位自动重试计数。
         failures = 0;
+        setResultRetryAttempt(0);
         setResultContext(projected);
         setResultPayload(normalizePublicProductPayload(projected));
         setResultLoading(false);
@@ -1013,17 +1022,28 @@ export function MedicalMonitoringProductLoop({
         // （AbortError不入错误态）；真实失败按退避自动重试——R32实测
         // 结果视图单轮5次「当前内容暂不可用」全部要手动「重新读取」
         // 自救，其中一次滞留>5分钟（report_D.md发现#1）。
+        // R36轮（R36-04）：自动重试必须兑现承诺且可观察。旧实现3次
+        // 重试在前17秒内全部烧完，之后整屏文案仍宣称「系统会自动重试
+        // （最多3次）」——D位实测等待300秒零重试动作，只能手动自救。
+        // 现在前3次保持递增退避，此后以30秒节奏持续重试至10次
+        // （约覆盖5分钟窗口），并把「正在第N/10次自动重试」实时渲染
+        // 在暂不可看面板上，承诺与行为一致。
         if (cancelled || error?.name === "AbortError") return;
         failures += 1;
         setResultLoading(false);
         setResultError(projectMonitoringPublicResultError(error));
-        if (failures <= 3) {
+        if (failures <= RESULT_READ_AUTO_RETRY_LIMIT) {
           const backoff = monitoringRefreshBackoffMs(failures);
+          setResultRetryAttempt(failures);
           retryTimer = setTimeout(() => {
             if (cancelled) return;
             setResultLoading(true);
             startRead();
           }, backoff);
+        } else {
+          // R36轮（R36-04）：重试预算用尽也要如实说——不再让面板停留在
+          // 「正在第N次自动重试」的进行时表述。
+          setResultRetryAttempt(-1);
         }
       });
     };
@@ -1651,7 +1671,7 @@ export function MedicalMonitoringProductLoop({
           </div>
         </section>
       ) : null}
-      {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><span>{resultError ? "系统会自动重试（最多3次，间隔递增）；若持续失败请点击「重新读取」或返回进度页。" : ""}</span><div className="monitoring-product-state-panel-actions"><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button>{resultError?.code === "public_result_target_incomplete" && resultToken ? <button type="button" className="monitoring-product-button is-small" onClick={() => navigate("overview", { subject_ref: "", site_ref: "", spine_ref: "", window_start: "", window_end: "", risk_instance_ref: "", risk_anchor_ref: "", event_ref: "", visit_ref: "" })}>返回结果概览</button> : null}</div></section> : null}
+      {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><span>{resultError ? `系统会自动重试（最多${RESULT_READ_AUTO_RETRY_LIMIT}次，间隔递增、约每半分钟一次）；${resultRetryAttempt > 0 ? `正在第 ${resultRetryAttempt}/${RESULT_READ_AUTO_RETRY_LIMIT} 次自动重试…` : resultRetryAttempt < 0 ? `自动重试已用完（${RESULT_READ_AUTO_RETRY_LIMIT}次）` : "首次自动重试即将开始"}；请点击「重新读取」或返回进度页。` : ""}</span><div className="monitoring-product-state-panel-actions"><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button>{resultError?.code === "public_result_target_incomplete" && resultToken ? <button type="button" className="monitoring-product-button is-small" onClick={() => navigate("overview", { subject_ref: "", site_ref: "", spine_ref: "", window_start: "", window_end: "", risk_instance_ref: "", risk_anchor_ref: "", event_ref: "", visit_ref: "" })}>返回结果概览</button> : null}</div></section> : null}
       {!loadingBody && !resultError && !setupHistoryError && publicRunToken && !resultToken ? <MonitoringPublicProgressSurface progress={progress} error={progressError} loading={progressLoading} onRefresh={() => setRefreshEpoch((value) => value + 1)} onBack={() => navigate("overview", { public_run_token: "" })} onOpenResult={() => openResult(publicRunToken)} /> : null}
       {!loadingBody && !resultError && !setupHistoryError && resultLoaded ? (
         <div className="monitoring-product-result-body">

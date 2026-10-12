@@ -18,8 +18,10 @@ import {
   MAPPING_STALL_THRESHOLD_MS,
   admissionMappingConfirmReducer,
   admissionMappingPrimaryAction,
+  adjudicationPollDelayMs,
   adjudicationStalledMs,
   createAdmissionMappingConfirmState,
+  isDocumentEvidenceError,
   mappingBlockedRelationGroups,
   mappingCandidateKey,
   mappingConfirmationReason,
@@ -450,7 +452,7 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
 // Step three: a plain summary of what the system recognized plus one card per
 // medically substantive ambiguity. The per-field engineering list stays
 // collapsed; the user only meets the questions that change medical analysis.
-export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldRole, onRetryFailedChunks, onAdoptPartial }) {
+export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldRole, onRetryFailedChunks, onAdoptPartial, onDegradeConfirm, onSupplementFiles }) {
   const [noteKey, setNoteKey] = useState("");
   const [noteText, setNoteText] = useState("");
   // R32-02：阻断组的逐字段角色修订输入（domain.source_field → 输入值）。
@@ -505,6 +507,29 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
     ? adjudicationStalledMs(mappingState)
     : 0;
   const adjudicatingStalled = adjudicatingElapsedMs >= ADJUDICATION_STALL_THRESHOLD_MS;
+  // R36轮（R36-01）：复核等待不再只有一句静态文案（R34-03）——服务端
+  // 随running载荷透出的聚合进度（复核分片已完成X/Y、执行中/排队中）在此
+  // 渲染，用户可区分「正常排队推进」与「真停滞」。
+  const adjudicationProgress = mappingState.phase === "adjudicating"
+    ? mappingState.draft?.adjudication || null
+    : null;
+  const adjudicationProgressText = (() => {
+    if (!adjudicationProgress) return "";
+    const total = Number(adjudicationProgress.total_job_count);
+    const completed = Number(adjudicationProgress.completed_job_count);
+    const parts = [];
+    if (Number.isFinite(total) && total > 0 && Number.isFinite(completed)) {
+      parts.push(`复核分片已完成 ${completed}/${total}`);
+      const running = Number(adjudicationProgress.pending_running_count);
+      const queued = Number(adjudicationProgress.pending_queued_count);
+      if (Number.isFinite(running) && Number.isFinite(queued)) {
+        parts.push(`执行中 ${running} 项、排队中 ${queued} 项`);
+      }
+      const sinceText = String(adjudicationProgress.pending_since || "").replace("T", " ").slice(0, 19);
+      if (sinceText) parts.push(`最早入队 ${sinceText}`);
+    }
+    return parts.join("；");
+  })();
   const headline = mappingState.phase === "adjudicating"
     ? "系统正在进一步核对少量疑点"
     : stalledMs >= MAPPING_STALL_THRESHOLD_MS
@@ -531,18 +556,35 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
           不再让busy文案无限占据按钮位（R33B实测20分钟零变化零控件）。 */}
       {mappingState.phase === "adjudicating" && adjudicatingElapsedMs >= 60000 && !adjudicatingStalled ? (
         <p className="monitoring-admission-minor" role="status" style={{ margin: "2px 0 8px" }}>
-          复核已进行约 {Math.floor(adjudicatingElapsedMs / 60000)} 分钟（自本次复核发起起计）；页面自动刷新，完成前无需操作。
+          复核已进行约 {Math.floor(adjudicatingElapsedMs / 60000)} 分钟（自最近一次复核进展起计）；页面自动刷新，完成前无需操作。
+          {adjudicationProgressText ? `当前进度：${adjudicationProgressText}。` : ""}
+        </p>
+      ) : null}
+      {mappingState.phase === "adjudicating" && adjudicatingProgressText && !adjudicatingStalled ? (
+        <p className="monitoring-admission-minor" role="status" style={{ margin: "0 0 8px" }}>
+          {adjudicationProgressText}——分片完成数前进即复核在推进，无需操作。
         </p>
       ) : null}
       {mappingState.phase === "adjudicating" && adjudicatingStalled ? (
         <div className="monitoring-admission-alert" role="alert" style={{ margin: "8px 0" }}>
           <p className="monitoring-admission-alert-text">
-            复核已持续约 {Math.floor(adjudicatingElapsedMs / 60000)} 分钟仍无结果——复核作业可能仍在排队（上游识别服务繁忙）或已停滞。
+            复核已持续约 {Math.floor(adjudicatingElapsedMs / 60000)} 分钟无新进展——复核作业可能仍在排队（上游识别服务繁忙）或已停滞。
+            {adjudicationProgressText ? `当前进度：${adjudicationProgressText}。` : ""}
           </p>
           <ul className="monitoring-admission-alert-guide">
-            <li>可点击下方「复核长时间无结果，重新加载识别结果」重新读取识别结果；复核若已收敛会自动进入确认。</li>
+            <li>可继续等待（页面自动刷新，复核分片完成即自动推进确认）；也可点击下方「重新加载识别结果」重新读取。</li>
             <li>已完成的识别结果与您的作答不会因重新加载丢失。</li>
+            <li>若您不想继续等待双盲复核，可使用「不等待复核，知情降级确认」：确认会照常保存并如实记录「复核未完成、用户知情确认」，此后仍可重新发起字段识别补做复核。</li>
           </ul>
+          <button
+            type="button"
+            className="monitoring-admission-secondary"
+            disabled={!onDegradeConfirm}
+            onClick={() => onDegradeConfirm?.()}
+            title="跳过未完成的双盲复核，按当前已核对结果直接确认（留痕）"
+          >
+            不等待复核，知情降级确认
+          </button>
         </div>
       ) : null}
       {/* R4-03口径澄清：表数=已产出识别结果的表数（进行中口径），
@@ -706,6 +748,50 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
                 <li key={line}>{line}</li>
               ))}
             </ul>
+          ) : null}
+          {/* R36轮（R36-01）：复核分片重试预算耗尽后的blocked/错误态
+              （mapping_verifier_job_failed）同样提供知情降级确认出口——
+              否则用户只剩「重试完成字段识别」（同因再败）与「重新加载」
+              （重入同一条复核等待）。 */}
+          {(mappingState.error.code === "mapping_verifier_job_failed"
+            || mappingState.error.code === "mapping_verifier_incomplete")
+            && mappingState.draft?.draft_id && onDegradeConfirm ? (
+            <button
+              type="button"
+              className="monitoring-admission-secondary"
+              style={{ marginTop: 6 }}
+              onClick={() => onDegradeConfirm()}
+              title="跳过未完成的双盲复核，按当前已核对结果直接确认（留痕）"
+            >
+              不等待复核，知情降级确认
+            </button>
+          ) : null}
+          {/* R34轮（R34-02）：报错要求「补充上传缺失的研究文件并重新核对」
+              的证据链缺失族错误态，此前只有「重新加载识别结果」（同一422
+              死循环）与「返回上一步」，无任何上传入口——承诺了不存在的
+              纠错路径。现内联研究文件补传入口（复用第2步上传组件），
+              上传后自动重新核对并重读识别结果。 */}
+          {isDocumentEvidenceError(mappingState.error.code) && onSupplementFiles ? (
+            <div className="monitoring-admission-document-upload" style={{ marginTop: 8 }}>
+              <p style={{ margin: "0 0 6px", fontSize: 13, color: "#b4480c", fontWeight: 600 }}>
+                补充上传缺失的研究文件（研究方案 / eCRF，支持 .docx / .pdf / .xlsx），
+                上传后系统会自动重新核对；已识别的数据与字段不受影响。
+              </p>
+              <label className="monitoring-admission-document-picker">
+                <input
+                  type="file"
+                  multiple
+                  accept=".docx,.pdf,.xlsx"
+                  onChange={(event) => {
+                    const selected = Array.from(event.target.files || []);
+                    event.target.value = "";
+                    if (!selected.length) return;
+                    onSupplementFiles(selected);
+                  }}
+                />
+                选择研究文件并重新核对
+              </label>
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -948,6 +1034,8 @@ export function MedicalMonitoringAdmissionWizardView({
   onReviseFieldRole,
   onRetryFailedChunks,
   onAdoptPartial,
+  onDegradeConfirm,
+  onSupplementFiles,
   onDocumentFiles,
   onDocumentRetry,
   onDocumentAdjudicate,
@@ -1276,6 +1364,8 @@ export function MedicalMonitoringAdmissionWizardView({
                 onReviseFieldRole={onReviseFieldRole}
                 onRetryFailedChunks={onRetryFailedChunks}
                 onAdoptPartial={onAdoptPartial}
+                onDegradeConfirm={onDegradeConfirm}
+                onSupplementFiles={onSupplementFiles}
               />
             ) : null}
           </>
@@ -1468,6 +1558,11 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         type: "error",
         error: {
           serverText: error?.detail?.message || error?.message || "系统识别结果加载失败。",
+          // R34轮（R34-02）：错误码必须随失败透出——研究文件证据链缺失
+          // 族（roles_unmet等）的报错要求「补充上传缺失的研究文件」，但
+          // 无码时界面无法把该错误态与补传入口关联，用户只剩「重新加载
+          // 识别结果」死循环。
+          code: error?.detail?.code || error?.code || "",
           guidance: ["请稍后重试；若持续失败，请确认字段识别已生成完成。"],
         },
       });
@@ -1973,12 +2068,38 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     if (mappingState.phase !== "adjudicating" || !mappingState.draft) {
       return undefined;
     }
+    // R36轮（R36-01）：固定1.5秒曾把持项目写许可的复核推进端点打成
+    // 雪崩源（C位实测 /api/projects 11.5s）。改为按等待时长退避
+    // （1.5s→5s→15s）；复核以真实进展复位计时（见reducer），收敛时刻
+    // 不因轮询变慢而推迟。
     const timer = setTimeout(
       () => advanceAdjudication(mappingState.draft),
-      1500,
+      adjudicationPollDelayMs(mappingState),
     );
     return () => clearTimeout(timer);
-  }, [advanceAdjudication, mappingState.draft, mappingState.phase]);
+  }, [advanceAdjudication, mappingState, mappingState.draft, mappingState.phase]);
+
+  // R34轮（R34-04）：「页面每2.5秒自动刷新」承诺在标签页后台被浏览器
+  // 节流后失守——模拟离开1小时返回时，后台识别早已完成，页面却停留在
+  // 「复核长时间无结果」旧状态，需手动点击才恢复。返回前台时立即强制
+  // 刷新一次在途阶段（只读resync），不再等下一个被节流的定时器。
+  useEffect(() => {
+    const handleVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (mappingState.phase === "adjudicating" && mappingState.draft?.draft_id) {
+        advanceAdjudication(mappingState.draft);
+        return;
+      }
+      if (
+        mappingState.phase === "ready" && mappingState.payload?.state === "generating"
+        || mappingState.phase === "failed"
+      ) {
+        loadMappingCandidates();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisible);
+    return () => document.removeEventListener("visibilitychange", handleVisible);
+  }, [advanceAdjudication, loadMappingCandidates, mappingState.draft?.draft_id, mappingState.payload?.state, mappingState.phase]);
 
   useEffect(() => {
     if (mappingState.phase !== "ready") return undefined;
@@ -1989,7 +2110,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     return undefined;
   }, [adoptDraft, mappingState.phase, mappingState.payload]);
 
-  const confirmDraft = useCallback(async () => {
+  const confirmDraft = useCallback(async ({ allowUnverifiedDualReview = false } = {}) => {
     if (
       !mappingState.draft?.draft_id
       || (
@@ -2003,19 +2124,30 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     mappingDispatch({ type: "confirm-start" });
     try {
       const questionCount = mappingState.payload?.questionCount || 0;
+      // R36轮（R36-01）：降级确认是显式的人类知情决定，不冒充自动确认。
+      const reason = allowUnverifiedDualReview
+        ? `（双盲复核未完成，用户知情选择不等待复核直接确认）${mappingConfirmationReason(mappingState)}`
+        : mappingConfirmationReason(mappingState);
       const revision = await api.confirmDataAdmissionMappingDraft(
         state.projectId,
         state.attemptId,
         {
           draft_id: mappingState.draft.draft_id,
           expected_version: mappingState.draft.version,
-          confirmation_reason: mappingConfirmationReason(mappingState),
+          confirmation_reason: reason,
           idempotency_key: requestKey("admission-mapping-confirm"),
-          automatic: questionCount === 0,
+          automatic: questionCount === 0 && !allowUnverifiedDualReview,
+          allow_unverified_dual_review: allowUnverifiedDualReview,
         },
       );
       if (mappingRequestGeneration.current !== generation) return;
-      mappingDispatch({ type: "confirm-ready", payload: revision });
+      mappingDispatch({
+        type: "confirm-ready",
+        payload: revision,
+        // R36轮（R36-01）：降级确认的成功回执如实区分——不冒充常规
+        // 「双盲复核已收敛」的确认。
+        degraded: allowUnverifiedDualReview,
+      });
       dispatch({ type: "finish" });
     } catch (error) {
       if (mappingRequestGeneration.current !== generation) return;
@@ -2075,6 +2207,16 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     confirmDraft();
     return undefined;
   }, [confirmDraft, mappingState]);
+
+  // R34轮（R34-02）：第3步「补充上传缺失的研究文件」入口——证据链缺失
+  // 族错误态此前只有「重新加载识别结果」（同一422死循环）与「返回上一
+  // 步」。复用第2步研究文件上传组件（analyzeStudyDocuments），上传完成
+  // 后立即重读识别结果：核对就绪则映射自然继续，不再被困在同一缺失态。
+  const supplementStudyDocuments = useCallback(async (files) => {
+    if (!files?.length) return;
+    await analyzeDocuments(files);
+    await loadMappingCandidates();
+  }, [analyzeDocuments, loadMappingCandidates]);
 
   const onPrimaryAction = useCallback(async (key) => {
     if (key === "import") {
@@ -2257,6 +2399,12 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     await adoptDraft({ includeIncomplete: true, fieldCount });
   }, [adoptDraft]);
 
+  // R36轮（R36-01）：复核停滞超阈值后的知情降级确认出口——自救不再只有
+  // 「重新加载识别结果」（重入同一条复核等待）。
+  const onDegradeConfirm = useCallback(async () => {
+    await confirmDraft({ allowUnverifiedDualReview: true });
+  }, [confirmDraft]);
+
   return (
     <>
     {state.projectId && typeof api.getQueueState === "function" ? (
@@ -2275,6 +2423,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onReviseFieldRole={onReviseFieldRole}
       onRetryFailedChunks={onRetryFailedChunks}
       onAdoptPartial={onAdoptPartial}
+      onDegradeConfirm={onDegradeConfirm}
+      onSupplementFiles={supplementStudyDocuments}
       onDocumentFiles={analyzeDocuments}
       onDocumentRetry={retryDocumentCheck}
       onDocumentAdjudicate={submitDocumentAdjudication}

@@ -63,6 +63,34 @@ def _end_resolve(project_id: str) -> None:
     with _RESOLVE_INFLIGHT_LOCK:
         _RESOLVE_INFLIGHT.pop(project_id, None)
 
+# R36轮（R36-01）：adjudicate同族在途防重入。一次复核推进内部要跑完整
+# 双盲对账（输入修订重算可达分钟级）且持有项目写许可；前端1.5秒轮询+
+# 页面刷新（F5后旧请求仍在服务端线程里跑）会让同草稿的复核推进彼此
+# 叠加——C位实测期间 /api/projects 达11.5s、study-documents与
+# mapping-candidates超15s超时的雪崩即由此放大。同项目同草稿已有复核
+# 推进在途时，新请求立即返回诚实running快照（含draft_id维持前端轮询
+# 状态机），不再叠加昂贵重算。TTL兜底进程异常退出后的残留登记。
+_ADJUDICATE_INFLIGHT: Dict[str, float] = {}
+_ADJUDICATE_INFLIGHT_LOCK = threading.Lock()
+_ADJUDICATE_INFLIGHT_TTL_SECONDS = 240.0
+
+
+def _try_begin_adjudicate(project_id: str, draft_id: str) -> bool:
+    now = time.monotonic()
+    key = f"{project_id}:{draft_id}"
+    with _ADJUDICATE_INFLIGHT_LOCK:
+        started = _ADJUDICATE_INFLIGHT.get(key)
+        if started is not None and now - started < _ADJUDICATE_INFLIGHT_TTL_SECONDS:
+            return False
+        _ADJUDICATE_INFLIGHT[key] = now
+        return True
+
+
+def _end_adjudicate(project_id: str, draft_id: str) -> None:
+    with _ADJUDICATE_INFLIGHT_LOCK:
+        _ADJUDICATE_INFLIGHT.pop(f"{project_id}:{draft_id}", None)
+
+
 _MAPPING_STATUS_CODES = {
     "mapping_admission_not_found": 404,
     "mapping_candidates_not_found": 404,
@@ -423,6 +451,11 @@ class MappingDraftConfirmRequest(BaseModel):
     confirmation_reason: str = Field(min_length=10, max_length=2_000)
     idempotency_key: str = Field(min_length=2, max_length=240)
     automatic: bool = False
+    # R36轮（R36-01）：界面「不等待复核，知情降级确认」的显式标志——
+    # 双盲复核长时间未收敛（验证队列排队/分片预算耗尽）且用户已作答
+    # 完毕时的唯一非重入出路。默认False：常规确认的门与契约不变，仅
+    # 降级按钮路径传True；降级事实由确认层写入留痕，不静默。
+    allow_unverified_dual_review: bool = False
 
 
 class DocumentAuthorityIdentityConfirmation(BaseModel):
@@ -672,6 +705,16 @@ def _public_mapping_projection(
                 "state",
                 "resolved_count",
                 "remaining_question_count",
+                # R36轮（R36-01）：复核等待的聚合进度——分片已完成/总数、
+                # 执行中/排队中、最早入队时间。仅聚合计数，无作业身份，
+                # 公开投影安全；前端据此渲染复核进度并以真实进展复位
+                # 停滞计时（R34-03「复核少量疑点」零进度指示同修）。
+                "total_job_count",
+                "completed_job_count",
+                "pending_job_count",
+                "pending_running_count",
+                "pending_queued_count",
+                "pending_since",
             )
             if key in payload["adjudication"]
         }
@@ -1707,6 +1750,16 @@ def register_mapping_candidate_routes(
             write_permit = context.acquire_product_write_gate(canonical)
         except pb.ProjectBackupError as exc:
             return _run_entry_error_response(exc)
+        # R36轮（R36-01）：同草稿复核推进在途防重入——立即返回诚实running
+        # 快照，不叠加昂贵对账（响应含draft_id，前端轮询状态机不断链）。
+        if not _try_begin_adjudicate(canonical, body.draft_id):
+            return {
+                "project_id": canonical,
+                "state": "adjudicating",
+                "draft_id": body.draft_id,
+                "adjudication": {"state": "running"},
+                "schema_version": MAPPING_CONFIRMATION_SCHEMA_VERSION,
+            }
         try:
             result = await run_in_threadpool(
                 lambda: confirmation.adjudicate_draft(
@@ -1732,6 +1785,7 @@ def register_mapping_candidate_routes(
                 return _mapping_error(mapped)
             return _mapping_error("mapping_bridge_failed")
         finally:
+            _end_adjudicate(canonical, body.draft_id)
             write_permit.release()
 
     @router.post("/data-admissions/{attempt_id}/mapping-draft/confirm")
@@ -1777,6 +1831,9 @@ def register_mapping_candidate_routes(
                     confirmation_reason=body.confirmation_reason,
                     idempotency_key=body.idempotency_key,
                     workspace_dir=context.workspace_dir(context.root, canonical),
+                    allow_unverified_dual_review=bool(
+                        body.allow_unverified_dual_review
+                    ),
                 )
             )
             public = _public_mapping_projection(result)

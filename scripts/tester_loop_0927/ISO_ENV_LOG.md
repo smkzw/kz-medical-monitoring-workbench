@@ -616,3 +616,12 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
 - 自检3 build id 一致：runtime-build.json expectedBackendBuildId=api-4ee144cc0f399a1e == 8911 backend_build_id → 一致
 - 口径留痕（沿R32/R35前例）：backend指纹仅覆盖 services/api/app；本轮后端改动在 packages/medical_monitoring/**（mapping_confirmation/mapping_candidate_routes/facts_mode_outputs/facts_publication），指纹数值不变但重启已从源码重新加载全部 packages 代码
+
+## 2026-10-12 16:41 CST R36修复员六条修复后标准重启（R36-01/R36-02/R36-04/R34-02/R34-03/R34-04，未触 8910/5177）
+- 背景：R36修复批次改动 packages/medical_monitoring/admission/{pipeline,mapping_confirmation}.py + packages/medical_monitoring/api/r7_product/mapping_candidate_routes.py + 前端 medical-monitoring（AdmissionWizard/ProductLoop/confirmState）——backend指纹仅覆盖 services/api/app，数值不变（api-4ee144cc0f399a1e）；前端指纹因源码改动更新 web-2f9ae4d76eefc842→web-95e6457ceeb785a3
+- API 重启：lsof -ti:8911 kill → 标准命令拉起（WORKBENCH_RUNTIME_DIR=tester_loop_iso_20260928/runtime, WORKBENCH_MONITORING_AI_PARALLELISM=2），就绪耗时约1-2分钟（3.6GB sqlite冷启动导入），16:43 ready
+- vite 重启：lsof -ti:5178 kill → 标准命令拉起（VITE_API_PROXY_TARGET=http://127.0.0.1:8911，--port 5178 --strictPort）
+- 自检1 runtime-readiness：curl http://127.0.0.1:8911/api/runtime-readiness → HTTP 200，ready:true，backend_build_id=api-4ee144cc0f399a1e
+- 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
+- 自检3 build id 配对：runtime-build.json expectedBackendBuildId=api-4ee144cc0f399a1e == 8911 backend_build_id → 一致；frontendBuildId=web-95e6457ceeb785a3（R36前端改动面新指纹）
+- 结论：隔离环境已恢复可用，R36六条修复代码已加载（packages/medical_monitoring/** 与前端源码均为重启后加载面）

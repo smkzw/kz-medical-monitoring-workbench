@@ -3,6 +3,11 @@
 // auto-retry real failures with bounded backoff instead of rendering a
 // terminal 「当前内容暂不可用」 panel that only a manual 「重新读取」 can
 // clear (R32实测单轮5次暂不可用、其中一次滞留>5分钟，report_D.md发现#1).
+// R36轮（R36-04）契约升级：自动重试承诺必须兑现且可观察——旧实现3次重试
+// 在前17秒内全部烧完，面板却持续宣称「系统会自动重试（最多3次）」，D位
+// 实测等待300秒零重试动作只能手动自救。现改为前3次递增退避+30秒节奏
+// 至10次（约覆盖5分钟窗口），并把「正在第N/10次自动重试」实时渲染在
+// 暂不可看面板上；预算用尽如实改为完成时表述。
 // Same source-token style as medicalMonitoringContinuityIntegration.test.mjs.
 
 import assert from "node:assert/strict";
@@ -36,16 +41,32 @@ const needle = (text) => compact(text);
     "abort stays silent and only real failures count",
   );
   check(
-    src.includes(needle(`if (failures <= 3) {\n          const backoff = monitoringRefreshBackoffMs(failures);`)),
-    "auto-retry is bounded to 3 attempts with shared backoff",
+    src.includes(needle(`const RESULT_READ_AUTO_RETRY_LIMIT = 10;`)),
+    "auto-retry bound is a named module constant (10 attempts ≈ 5分钟窗口)",
+  );
+  check(
+    src.includes(needle(`if (failures <= RESULT_READ_AUTO_RETRY_LIMIT) {\n          const backoff = monitoringRefreshBackoffMs(failures);`)),
+    "auto-retry uses the shared escalating backoff up to the bound",
+  );
+  check(
+    src.includes(needle(`setResultRetryAttempt(failures);`)),
+    "each scheduled retry is observable via the attempt counter",
+  );
+  check(
+    src.includes(needle(`} else {\n          // R36轮（R36-04）：重试预算用尽也要如实说`)),
+    "exhausted retry budget switches the panel copy to a completed-tense statement",
   );
   check(
     src.includes(needle(`retryTimer = setTimeout(() => {\n            if (cancelled) return;\n            setResultLoading(true);\n            startRead();\n          }, backoff);`)),
     "auto-retry re-enters the same identity-scoped read",
   );
   check(
-    src.includes(needle(`failures = 0;\n        setResultContext(projected);`)),
-    "success resets the retry counter",
+    src.includes(needle(`failures = 0;\n        setResultRetryAttempt(0);\n        setResultContext(projected);`)),
+    "success resets the retry counter and the visible attempt state",
+  );
+  check(
+    src.includes(needle(`setResultError(null);\n    setResultRetryAttempt(0);`)),
+    "identity change / manual re-read resets the visible attempt state",
   );
   check(
     src.includes(needle(`cancelled = true;\n      controller.abort();\n      if (retryTimer) clearTimeout(retryTimer);`)),
@@ -56,8 +77,16 @@ const needle = (text) => compact(text);
 // --- the unavailable panel is honest about the auto-retry ---
 {
   check(
-    src.includes(needle("系统会自动重试（最多3次，间隔递增）；若持续失败请点击「重新读取」或返回进度页。")),
-    "unavailable panel explains the auto-retry",
+    src.includes(needle("系统会自动重试（最多${RESULT_READ_AUTO_RETRY_LIMIT}次，间隔递增、约每半分钟一次）")),
+    "unavailable panel explains the auto-retry promise with the real bound",
+  );
+  check(
+    src.includes(needle("正在第 ${resultRetryAttempt}/${RESULT_READ_AUTO_RETRY_LIMIT} 次自动重试…")),
+    "unavailable panel shows the live retry attempt",
+  );
+  check(
+    src.includes(needle("自动重试已用完（${RESULT_READ_AUTO_RETRY_LIMIT}次）")),
+    "unavailable panel states budget exhaustion honestly",
   );
   check(
     src.includes(needle('onClick={retryPage}>重新读取')),

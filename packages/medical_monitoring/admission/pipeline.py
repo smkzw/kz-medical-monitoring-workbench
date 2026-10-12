@@ -679,6 +679,16 @@ class DataAdmissionPipeline:
                 raw = str(raw_path or "").replace("\\", "/")
                 normalized = raw.strip("/")
                 relative = PurePosixPath(normalized)
+                # R36轮（R36-02）：「选择数据文件夹」主路径的真实形态是
+                # 「数据工作簿+方案/eCRF等文档混在一个文件夹里被整体选中」。
+                # 此前非数据后缀（docx/pdf等）与路径攻击同一分支硬拒整个
+                # 上报，主路径首步即报「目录不存在」（admission_source_
+                # invalid），只能手填路径兜底。现改为与目录语义一致：非
+                # 数据文件照常安全落盘进intake，由create_attempt的既定
+                # 跳过机制记入skipped_non_data_files随导入概况透出；一个
+                # 数据文件都没有时落admission_no_data_files（文案已如实
+                # 指引「文档在第3步单独上传」）。路径安全校验（绝对路径/
+                # 穿越/重名/盘符）保持fail-closed不变。
                 if (
                     not normalized
                     or raw.startswith("/")
@@ -686,7 +696,6 @@ class DataAdmissionPipeline:
                     or any(part in {"", ".", ".."} for part in relative.parts)
                     or ":" in relative.parts[0]
                     or normalized in seen
-                    or relative.suffix.lower() not in self._suffixes
                 ):
                     raise AdmissionPipelineError("admission_source_invalid")
                 seen.add(normalized)

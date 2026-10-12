@@ -23,6 +23,21 @@ export const MAPPING_STALL_THRESHOLD_MS = 30 * 60 * 1000;
 // 者放弃的20分钟；超时后主按钮放行「重新加载识别结果」自救入口。
 export const ADJUDICATION_STALL_THRESHOLD_MS = 15 * 60 * 1000;
 
+// R36轮（R36-01）：复核轮询退避。固定1.5秒轮询打在后端持项目写许可的
+// 复核推进端点上，叠加页面刷新后在途请求即成雪崩（C位实测 /api/projects
+// 11.5s、study-documents/mapping-candidates >15s超时）。等待1分钟内保持
+// 1.5秒（复核收敛时快速衔接确认）；此后按等待时长放宽到5秒/15秒——
+// 复核健康推进以分钟计，高频轮询不改变收敛时刻，只放大服务端负载。
+export const ADJUDICATION_POLL_FAST_MS = 1500;
+export const ADJUDICATION_POLL_SLOW_MS = 15000;
+
+export function adjudicationPollDelayMs(state, now = Date.now()) {
+  const waited = adjudicationStalledMs(state, now);
+  if (waited <= 60_000) return ADJUDICATION_POLL_FAST_MS;
+  if (waited <= 5 * 60_000) return 5_000;
+  return ADJUDICATION_POLL_SLOW_MS;
+}
+
 export function createAdmissionMappingConfirmState() {
   return {
     phase: "idle", // idle | loading | ready | adopting | adjudicating | drafting | confirming | confirmed | failed
@@ -70,6 +85,20 @@ export function confidencePercent(value) {
 
 export function mappingCandidateKey(item) {
   return `${item?.domain || ""}::${item?.source_field || ""}`;
+}
+
+// R34轮（R34-02）：研究文件证据链缺失族错误码。报错文案要求「补充上传
+// 缺失的研究文件并重新核对」，但错误态此前只有「重新加载识别结果」
+// （重载同一422）与「返回上一步」，无任何上传入口或跳转——承诺了不
+// 存在的纠错路径。命中这些码时错误区直接内联研究文件补传入口。
+export const DOCUMENT_EVIDENCE_ERROR_CODES = Object.freeze([
+  "mapping_document_evidence_roles_unmet",
+  "mapping_document_evidence_missing",
+  "mapping_document_evidence_incomplete",
+]);
+
+export function isDocumentEvidenceError(code) {
+  return DOCUMENT_EVIDENCE_ERROR_CODES.includes(String(code || ""));
 }
 
 const QUESTION_TYPE_TEXTS = Object.freeze({
@@ -478,22 +507,39 @@ export function admissionMappingConfirmReducer(state, action) {
         message: "系统正在复核少量疑点，尽量减少需要您判断的内容…",
         // R34轮（R33-B-F1）：复核停滞计时起点——adjudication-running
         // 不重置（无进展持续累计），adjudication-ready（真实进展）重置。
-        progress: { fieldCount: null, since: Date.now() },
+        // R36轮（R36-01）：verifiedCount记录服务端复核分片已完成数，
+        // 分片数前进同样是真实进展（复位停滞计时）。
+        progress: { fieldCount: null, since: Date.now(), verifiedCount: null },
         error: null,
       };
-    case "adjudication-running":
+    case "adjudication-running": {
       // R34轮（R33-B-F1）：running=仍在等待、无新进展——保留计时起点，
       // 停滞时长跨轮询累计；超阈值后主按钮放行自救入口。
+      // R36轮（R36-01）：服务端聚合进度（复核分片已完成数）前进即真实
+      // 进展——重置停滞计时，不再把验证队列正常收尾误判为卡死（C位实测
+      // 复核期队列以分钟级推进，界面零展示致15分钟误判停滞并重入）。
+      const completed = Number(action.payload?.adjudication?.completed_job_count);
+      const previousVerified = state.progress?.verifiedCount;
+      const verifiedAdvanced = Number.isFinite(completed)
+        && Number.isFinite(previousVerified)
+        && completed > previousVerified;
       return {
         ...state,
         phase: "adjudicating",
         draft: action.payload,
         message: "系统正在复核少量疑点，尽量减少需要您判断的内容…",
-        progress: state.progress?.since
-          ? state.progress
-          : { fieldCount: null, since: Date.now() },
+        progress: verifiedAdvanced
+          ? { fieldCount: null, since: Date.now(), verifiedCount: completed }
+          : {
+            fieldCount: null,
+            since: state.progress?.since || Date.now(),
+            verifiedCount: Number.isFinite(completed) && !Number.isFinite(previousVerified)
+              ? completed
+              : previousVerified ?? null,
+          },
         error: null,
       };
+    }
     case "adjudication-ready": {
       const resolved = Number(action.payload?.adjudication?.resolved_count) || 0;
       return projectDraftState(
@@ -539,7 +585,11 @@ export function admissionMappingConfirmReducer(state, action) {
         ...state,
         phase: "confirmed",
         revision: action.payload,
-        message: "字段对应关系已确认。可用于监查的数据尚未生成，需在后续步骤单独生成。",
+        // R36轮（R36-01）：降级确认的回执如实区分，不冒充双盲复核已
+        // 收敛的常规确认。
+        message: action.degraded
+          ? "已按您的选择在不等待复核的情况下确认字段对应关系（降级确认已留痕）。可用于监查的数据尚未生成，需在后续步骤单独生成。"
+          : "字段对应关系已确认。可用于监查的数据尚未生成，需在后续步骤单独生成。",
         error: null,
       };
     case "draft-error":
