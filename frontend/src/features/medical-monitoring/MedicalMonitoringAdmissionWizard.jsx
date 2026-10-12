@@ -130,6 +130,7 @@ function pendingJobsText(payload) {
 
 function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onContentConfirm, onIdentityConfirm, confirmingEntries = {}, confirmedEntries = {}, stageElapsedMs = 0 }) {
   const [choices, setChoices] = useState({});
+  const [contentReasons, setContentReasons] = useState({});
   const [identityNote, setIdentityNote] = useState("");
   const [identityBusy, setIdentityBusy] = useState(false);
   if (!state || (state.phase === "loading" && !state.payload)) {
@@ -211,12 +212,16 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
       ) : processing ? (
         // R25轮（R25-04）：处理中即给出事实性进度反馈——已用时与在途
         // 作业数，不虚报进度也不渲染失败，用户可据此区分正常慢与停滞。
+        // R38轮（R36-08）：A位实测68分钟全程只有「执行中/排队中」计数、
+        // 无阶段与预期——补阶段名与预期区间（口径=R25-03记录的健康
+        // 单阶段2-20分钟实测6.5-18.5分钟与停滞阈值）。
         <p className="monitoring-admission-stage-progress" role="status" style={{ margin: 0, fontSize: 13, color: "var(--monitoring-muted, #6b7785)" }}>
-          本轮核对已进行约 {roundElapsedMinutes} 分钟
+          当前阶段「{payload.headline || "核对中"}」，本轮已等待约 {roundElapsedMinutes} 分钟
           {pendingJobCount > 0
             ? `；${pendingJobsText(payload)}（最早入队 ${String(payload.pending_since || "").replace("T", " ").slice(0, 19) || "时间未知"}）`
             : ""}
-          。完成前无需任何操作，页面会自动更新核对结果。
+          。健康核对每个阶段通常在数分钟到20分钟内推进，同一阶段超过20分钟无变化会提示停滞；
+          完成前无需任何操作，页面会自动更新核对结果。
         </p>
       ) : null}
       <ul>
@@ -264,16 +269,34 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
                     ✓ 已记录确认（{entry.filename || "该文件"}）——台账「核验与确认记录」可查；如需复核请刷新来源台账。
                   </p>
                 ) : (
-                  <button
-                    type="button"
-                    className="monitoring-admission-secondary"
-                    disabled={processing || Boolean(confirmingEntries?.[entry.source_entry_id])}
-                    aria-busy={Boolean(confirmingEntries?.[entry.source_entry_id])}
-                    onClick={() => onContentConfirm?.(entry)}
-                    title="确认差异不影响本次医学监查，继续使用该文件"
-                  >
-                    {confirmingEntries?.[entry.source_entry_id] ? "正在记录确认…" : "差异不影响本次监查，继续使用"}
-                  </button>
+                  <>
+                    {/* R38轮（R36-09）：差异摘要承诺「逐项确认并说明理由」
+                        却没有任何理由输入（A位实测唯一按钮即「继续使用」）。
+                        对齐归属确认卡的理由文本域结构：留空时按既有默认
+                        口径落盘，填写时以医学经理本人的理由为准。 */}
+                    <label style={{ display: "block", margin: "6px 0" }}>
+                      <textarea
+                        aria-label={`确认理由（可选）——${entry.filename || "该文件"}`}
+                        value={contentReasons[entry.source_entry_id] || ""}
+                        placeholder="可补充说明确认依据（如：文件所载为研究早期版本信息，不影响本轮监查范围）"
+                        onChange={(event) => setContentReasons((current) => ({
+                          ...current,
+                          [entry.source_entry_id]: event.target.value,
+                        }))}
+                        disabled={processing || Boolean(confirmingEntries?.[entry.source_entry_id])}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="monitoring-admission-secondary"
+                      disabled={processing || Boolean(confirmingEntries?.[entry.source_entry_id])}
+                      aria-busy={Boolean(confirmingEntries?.[entry.source_entry_id])}
+                      onClick={() => onContentConfirm?.(entry, { reason: contentReasons[entry.source_entry_id] })}
+                      title="确认差异不影响本次医学监查，继续使用该文件"
+                    >
+                      {confirmingEntries?.[entry.source_entry_id] ? "正在记录确认…" : "差异不影响本次监查，继续使用"}
+                    </button>
+                  </>
                 )
               ) : (
                 <p className="monitoring-admission-warning">
@@ -1641,7 +1664,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     }
   }, [api, documentState.payload?.analysis_token, state.attemptId, state.projectId]);
 
-  const submitContentConfirmation = useCallback(async (entry) => {
+  const submitContentConfirmation = useCallback(async (entry, options = {}) => {
     if (!state.projectId || !entry?.source_entry_id || !entry?.can_confirm) return;
     const entryKey = String(entry.source_entry_id);
     if (confirmingEntries[entryKey]) return;
@@ -1649,8 +1672,11 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     const generation = documentRequestGeneration.current + 1;
     documentRequestGeneration.current = generation;
     try {
+      // R38轮（R36-09）：医学经理填写的理由优先，留空回退既有默认口径。
+      const reasonText = String(options?.reason || "").trim();
       await api.confirmContentValidation(state.projectId, entry.source_entry_id, {
-        reason: `已核对${entry.filename || "该研究文件"}所列差异，确认不影响本次医学监查并继续使用。`,
+        reason: reasonText
+          || `已核对${entry.filename || "该研究文件"}所列差异，确认不影响本次医学监查并继续使用。`,
         acknowledgedCheckCodes: entry.acknowledged_check_codes || [],
         expectedRevision: entry.revision || 1,
         idempotencyKey: `doc-content-confirm-${entry.source_entry_id}-${entry.revision || 1}`,

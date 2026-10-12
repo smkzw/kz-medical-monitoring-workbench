@@ -5379,6 +5379,13 @@ def get_workbench_inbox(
         ).model_dump(mode="json")
     try:
         return workbench_inbox_service.inbox(canonical_id, actor=actor, limit=limit).model_dump(mode="json")
+    except RuntimeError as exc:
+        # R38轮（R36-03）：构建期间发布链写入新快照会触发收件箱身份守卫
+        # （快照三元组在读程中变化）。按最新快照重建一次即可给出与当前
+        # 快照同源的诚实结果；仍失败则原样上抛，由前端如实呈报读取失败。
+        if "snapshot identity changed" not in str(exc):
+            raise
+        return workbench_inbox_service.inbox(canonical_id, actor=actor, limit=limit).model_dump(mode="json")
     except KeyError:
         # Greenfield MW project not in demo catalog: still surface durable notices.
         notices = workbench_inbox_service._workbench_notification_items(canonical_id)

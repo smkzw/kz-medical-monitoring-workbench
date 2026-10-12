@@ -636,3 +636,12 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
 - 自检3 build id 配对：runtime-build.json expectedBackendBuildId=api-5b547c38911d4ad5 == 8911 backend_build_id → 一致；frontendBuildId=web-7c41e90d1490184a（R37前端改动面新指纹）
 - 浏览器抽查（camofox，用户视角）：5178/monitoring 载入正常；选择常驻项目 MX循开考-CSU → 项目总看板数据载入正常（收件箱77项/高开13）；进入医学监查产品页（ProductLoop，含本轮改动渲染面）正常渲染「项目风险概览/本次结果已可查看/数据接入」，无错误边界告警；未打开数据接入向导（避免触发常驻项目管道动作），R37-01崩溃面以渲染级回归测试（adjudicatingRunning fixture 红→绿）为验收证据
+
+## 2026-10-13 06:26 CST R38修复员标准重启（R36-03/R36-05/R36-06/R36-08/R36-09 五条修复 + R36-07浏览器探测，未触 8910/5177）
+- 背景：R38分诊清单修复：R36-03 复核闭环（workbench_inbox.py 同含义发现处置/已读跨运行结转+main.py 收件箱身份守卫单次重建重试+前端收件箱读取中/失败诚实态与重试入口，App.jsx 保留旧列表+角标降级=R36-06）；R36-05 treatment-emergent核对（facts_publication.py AE早于首次给药+肯定有关出矛盾提示）；R36-08 核对进度补阶段名/预期区间；R36-09 内容差异确认卡补理由文本域（对齐归属确认卡）。改动面：services/api/app/{workbench_inbox,main}.py + packages/medical_monitoring/projections/facts_publication.py + 前端 App.jsx/AdmissionWizard + 测试（新增2后端1前端改）
+- API 重启：lsof -ti:8911 kill → 标准命令拉起（WORKBENCH_RUNTIME_DIR=tester_loop_iso_20260928/runtime, WORKBENCH_MONITORING_AI_PARALLELISM=2），06:26:06 拉起
+- vite 重启：lsof -ti:5178 kill → 标准命令拉起（VITE_API_PROXY_TARGET=http://127.0.0.1:8911，--port 5178 --strictPort）；首次误从 workbench 根目录启动（npx vite 404）即纠正为 frontend/ 目录重启
+- 自检1 runtime-readiness：curl http://127.0.0.1:8911/api/runtime-readiness → HTTP 200，ready:true，backend_build_id=api-34f525073da51f3e（services/api/app 本轮改动新指纹）
+- 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
+- 自检3 build id 配对：runtime-build.json expectedBackendBuildId=api-34f525073da51f3e == 8911 backend_build_id → 一致；frontendBuildId=web-fc1973818c3b7897（R38前端改动面新指纹）
+- R36-07浏览器探测（camofox，用户视角，只读）：/monitoring 载入后 0-12s 时间片采样：可见可达焦点元素19个全期稳定、[inert]=0、[aria-modal]=0、[tabindex=0]=0；代码面全量keydown扫描仅两处条件性Tab陷阱（JourneyDrawer overlay / SOA弹窗），页级自定义Tab链不存在——R36-07报告的「16个tabIndex=0仅6可达」在当前代码面无法复现（载入窗口可达集小=内容未渲染，非隐藏排除），如实跳过不改

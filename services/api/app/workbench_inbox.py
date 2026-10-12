@@ -213,9 +213,15 @@ class WorkbenchInboxService:
         复用，语义不变（读态/排序/可见截断/汇总口径与inbox一致）。
         """
 
-        read_versions = _read_versions(self.store.records(project_id, actor))
+        action_records = self.store.records(project_id, actor)
+        read_versions = _read_versions(action_records)
+        read_meaning_keys = _read_meaning_keys(action_records)
         hydrated = [
-            item.model_copy(update={"unread": read_versions.get(item.item_id) != item.source_version})
+            item.model_copy(
+                update={
+                    "unread": _item_is_unread(item, read_versions, read_meaning_keys)
+                }
+            )
             for item in items
         ]
         hydrated.sort(key=_item_sort_key)
@@ -233,9 +239,15 @@ class WorkbenchInboxService:
 
     def monitoring_risk_items(self, project_id: str, actor: str = "medical_manager") -> List[WorkbenchItem]:
         items = self._monitoring_risk_items(project_id)
-        read_versions = _read_versions(self.store.records(project_id, actor))
+        action_records = self.store.records(project_id, actor)
+        read_versions = _read_versions(action_records)
+        read_meaning_keys = _read_meaning_keys(action_records)
         return [
-            item.model_copy(update={"unread": read_versions.get(item.item_id) != item.source_version})
+            item.model_copy(
+                update={
+                    "unread": _item_is_unread(item, read_versions, read_meaning_keys)
+                }
+            )
             for item in items
         ]
 
@@ -865,9 +877,49 @@ class WorkbenchInboxService:
     ) -> Optional[RuxRiskDispositionRecord]:
         if self.rux_disposition_store is None:
             return None
+        latest = self._exact_latest_rux_disposition_record(
+            project_id, item_id, source_version
+        )
+        if latest is None:
+            # R38轮（R36-03）：新监查运行发布新快照后 source_revision 变化，
+            # 同一发现（item_id与医学含义均未变）沿用最近一次处置——决策
+            # 结转而非随运行出清。含义变化时token失配，回退默认待复核。
+            latest = self._meaning_latest_rux_disposition_record(
+                project_id,
+                item_id,
+                _monitoring_meaning_token(source_version),
+            )
+        return latest
+
+    def _exact_latest_rux_disposition_record(
+        self,
+        project_id: str,
+        item_id: str,
+        source_version: str,
+    ) -> Optional[RuxRiskDispositionRecord]:
+        if self.rux_disposition_store is None:
+            return None
         latest: Optional[RuxRiskDispositionRecord] = None
         for record in self.rux_disposition_store.records(project_id):
             if record.item_id != item_id or record.source_version != source_version:
+                continue
+            if latest is None or record.created_at > latest.created_at:
+                latest = record
+        return latest
+
+    def _meaning_latest_rux_disposition_record(
+        self,
+        project_id: str,
+        item_id: str,
+        meaning_token: str,
+    ) -> Optional[RuxRiskDispositionRecord]:
+        if self.rux_disposition_store is None or not meaning_token:
+            return None
+        latest: Optional[RuxRiskDispositionRecord] = None
+        for record in self.rux_disposition_store.records(project_id):
+            if record.item_id != item_id:
+                continue
+            if _monitoring_meaning_token(record.source_version) != meaning_token:
                 continue
             if latest is None or record.created_at > latest.created_at:
                 latest = record
@@ -1591,6 +1643,37 @@ def _read_versions(records: Iterable[WorkbenchInboxActionRecord]) -> Dict[str, s
     return read_versions
 
 
+def _read_meaning_keys(records: Iterable[WorkbenchInboxActionRecord]) -> set:
+    """R38轮（R36-03）：已读记账的（item_id, 医学含义token）索引。
+
+    监查新运行改变 source_revision 后，精确 source_version 匹配必然失配；
+    医学含义未变的发现沿用已读态，避免每次运行把已处理事项重新全部
+    置为未读（旧发现被出清）。
+    """
+
+    meaning_keys = set()
+    for record in records:
+        if record.action != WorkbenchItemAction.MARK_READ:
+            continue
+        token = _monitoring_meaning_token(record.source_version)
+        if token:
+            meaning_keys.add((record.item_id, token))
+    return meaning_keys
+
+
+def _item_is_unread(
+    item: WorkbenchItem,
+    read_versions: Dict[str, str],
+    read_meaning_keys: Optional[set] = None,
+) -> bool:
+    if read_versions.get(item.item_id) == item.source_version:
+        return False
+    meaning_token = _monitoring_meaning_token(item.source_version)
+    if meaning_token and read_meaning_keys and (item.item_id, meaning_token) in read_meaning_keys:
+        return False
+    return True
+
+
 def _module_summaries(module_manifests, items: List[WorkbenchItem]) -> List[WorkbenchModuleInboxSummary]:
     grouped: Dict[str, List[WorkbenchItem]] = defaultdict(list)
     for item in items:
@@ -1694,6 +1777,22 @@ def _monitoring_source_version(risk: RiskCase, source_revision: str) -> str:
         ]
     )
     return f"monitoring:{risk.rule_id}:{_stable_text_token(source_revision)}:{_stable_text_token(medical_meaning)}"
+
+
+def _monitoring_meaning_token(source_version: str) -> str:
+    """monitoring源版本里与run无关的医学含义token（末段）。
+
+    R38轮（R36-03）：发布链的 source_revision 携带 run id，每次新监查
+    运行都会让全部 monitoring 源版本失配——上一轮的已读/处置记录若只按
+    整串 source_version 精确匹配就会被整体出清。医学含义token由
+    _stable_text_token(医学含义) 生成，含义不变的发现跨运行token不变，
+    是「结转而非出清」的匹配键。非monitoring口径（rux-p0等）返回空串。
+    """
+
+    head, separator, token = source_version.rpartition(":")
+    if not separator or not head.startswith("monitoring:") or not token:
+        return ""
+    return token
 
 
 def _monitoring_project_label(project_id: str) -> str:

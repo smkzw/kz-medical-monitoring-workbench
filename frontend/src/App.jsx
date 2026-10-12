@@ -1654,6 +1654,18 @@ function AppShell({
             </button>
           </div>
         ) : null}
+        {hasActiveProject && projectsLoadError ? (
+          // R38轮（R36-06）：列表读取失败的局部降级角标——保留旧列表与
+          // 看板原地提示，不再整屏替换成错误页；恢复后角标消失（无整屏
+          // 闪动）。首次加载失败（无已选项目）仍走 EmptyProjectOverview。
+          <div className="project-list-degraded" role="alert" style={{ display: "flex", alignItems: "center", gap: "10px", margin: "0 16px 8px", padding: "8px 12px", borderRadius: "6px", background: "#fdf3e7", border: "1px solid #efd6b8", color: "#8a5a1f" }}>
+            <AlertTriangle size={15} />
+            <span style={{ flex: 1 }}>{projectsLoadError}当前显示的是上次读取的项目列表。</span>
+            <button type="button" className="icon-text-button" onClick={onRetryProjects}>
+              <RefreshCw size={14} /> 重新读取
+            </button>
+          </div>
+        ) : null}
         {hasActiveProject || forceRenderChildren ? children : (
           <EmptyProjectOverview
             loading={!projectsLoaded}
@@ -1879,6 +1891,11 @@ function OverviewPage({ projectId, dashboard, dashboardError, workbenchInbox, wo
     return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : "—";
   };
   const decisionItems = medicalDecisionItems(workbenchInbox);
+  // R38轮（R36-03）：收件箱读取中/失败不再是「0项待决策」。此前读程
+  // 在途或失败时按空箱渲染「0项待决策/当前无未读医学决策项」，监查
+  // 运行后接口偶发失败即呈现数据全清零的假象且无重试入口。
+  const inboxReady = !workbenchInboxError && Boolean(workbenchInbox);
+  const inboxCountLabel = inboxReady ? `${decisionItems.length} 项待决策` : workbenchInboxError ? "读取失败" : "读取中";
   const openItem = async (item) => {
     if (!item || (item.item_id && openingItemId === item.item_id)) return;
     setActionError("");
@@ -1919,14 +1936,18 @@ function OverviewPage({ projectId, dashboard, dashboardError, workbenchInbox, wo
     <main className="page">
       <SectionTitle
         eyebrow="项目全览"
-        title={`统一工作收件箱 · ${decisionItems.length} 项待决策`}
+        title={`统一工作收件箱 · ${inboxCountLabel}`}
         action={(
           <button
             className="primary-button"
-            disabled={!decisionItems.length || Boolean(openingItemId)}
-            title={decisionItems.length
-              ? `打开最高优先级未读决策项「${decisionItems[0]?.title || ""}」（医学监查 · ${severityLabel(decisionItems[0]?.priority)}）；跳转后在监查模块中处理，收件箱计数随后台记账更新`
-              : "当前无未读医学决策项"}
+            disabled={!inboxReady || !decisionItems.length || Boolean(openingItemId)}
+            title={workbenchInboxError
+              ? "收件箱读取失败，重试成功后才能打开待决策项"
+              : !inboxReady
+                ? "正在读取统一工作收件箱，读取完成前不显示待决策项"
+                : decisionItems.length
+                  ? `打开最高优先级未读决策项「${decisionItems[0]?.title || ""}」（医学监查 · ${severityLabel(decisionItems[0]?.priority)}）；跳转后在监查模块中处理，收件箱计数随后台记账更新`
+                  : "当前无未读医学决策项"}
             onClick={() => decisionItems[0] && openItem(decisionItems[0])}
           >
             {openingItemId ? "正在打开…" : "处理最高优先级"}
@@ -1934,9 +1955,26 @@ function OverviewPage({ projectId, dashboard, dashboardError, workbenchInbox, wo
         )}
       />
       {actionError && <p className="gate-error overview-action-error" role="alert">{actionError}</p>}
-      <section className="triage-panel workbench-inbox-panel">
+      <section className="triage-panel workbench-inbox-panel" data-inbox-state={workbenchInboxError ? "error" : inboxReady ? "ready" : "loading"}>
         {workbenchInboxError ? (
-          <MonitoringReadUnavailable surface="workbench_inbox" error={workbenchInboxError} compact />
+          <>
+            <MonitoringReadUnavailable surface="workbench_inbox" error={workbenchInboxError} compact />
+            <p className="inbox-scope-note">
+              收件箱读取失败期间的待决策计数不作为「无待决策」依据。
+            </p>
+            <button
+              type="button"
+              className="icon-text-button"
+              onClick={() => refreshWorkbenchInbox?.()}
+              disabled={Boolean(openingItemId)}
+            >
+              <RefreshCw size={16} /> 重试读取收件箱
+            </button>
+          </>
+        ) : !inboxReady ? (
+          <div className="empty-unread" role="status" aria-live="polite">
+            正在读取统一工作收件箱；读取完成前不显示待决策计数，也不以此判断「无待决策项」。
+          </div>
         ) : (
           <>
             <div className="table-header inbox-cols">
@@ -1997,7 +2035,7 @@ function OverviewPage({ projectId, dashboard, dashboardError, workbenchInbox, wo
                   <span>
                     {sourceOnly
                       ? "仅来源登记，等待结构解析与激活"
-                      : `待决策 ${decisionItems.filter((item) => item.module === module.module).length}`}
+                      : `待决策 ${inboxReady ? decisionItems.filter((item) => item.module === module.module).length : "—"}`}
                   </span>
                 </div>
                 <Progress value={module.completion_rate} />
@@ -13769,11 +13807,15 @@ export function App() {
       .catch(() => {
         if (cancelled) return;
         clearTimeout(timeout);
-        setProjects([]);
-        // R30-01：列表读取失败不再清空工作区。URL深链或本会话已有明确
-        // 项目身份时保留选中——项目级读取（来源清单/总览/监查工作区）
-        // 不依赖全局列表，恢复后无需重建上下文；列表错误与重试入口照
-        // 常呈现。完全没有项目身份时才回落为空选。
+        // R38轮（R36-06）：列表读取失败不再清空 projects——清空会让
+        // hasActiveProject 翻转、整屏替换成「项目服务暂不可用」错误页，
+        // 长任务（导入/复核）期间刷新即丢失整个看板、恢复瞬间又整屏
+        // 闪回。保留上次读取的列表原地降级（角标提示+自动重试），仅
+        // 首次加载失败（本来就没有列表）才走整屏错误态。
+        // R30-01：URL深链或本会话已有明确项目身份时保留选中——项目级
+        // 读取（来源清单/总览/监查工作区）不依赖全局列表，恢复后无需
+        // 重建上下文；列表错误与重试入口照常呈现。完全没有项目身份时
+        // 才回落为空选。
         const deepLinkedProjectId = initialMonitoringRouteRef.current.project_id || "";
         setActiveProjectId((current) => (
           initialMedicalMonitoringProductRouteRef.current.isProduct

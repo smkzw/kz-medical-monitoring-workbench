@@ -56,7 +56,13 @@ for (const [item, expected, label] of policyCases) {
 
 const overviewSource = sourceBetween(appSource, "function OverviewPage(", "function AiGatewayPanel(");
 assert.match(overviewSource, /decisionItems\.slice\(0,\s*10\)/, "Inbox must render filtered decision items");
-assert.match(overviewSource, /统一工作收件箱 · \$\{decisionItems\.length\} 项待决策/, "Title must use filtered count");
+// R38轮（R36-03）：标题不得在读取在途/失败时谎报「0项待决策」——
+// 就绪才显示计数，其余显示读取中/读取失败并给重试入口。
+assert.match(overviewSource, /统一工作收件箱 · \$\{inboxCountLabel\}/, "Title must use the honest read-state label");
+assert.match(overviewSource, /const inboxReady = !workbenchInboxError && Boolean\(workbenchInbox\);/, "Inbox readiness must gate the zero claim");
+assert.match(overviewSource, /重试读取收件箱/, "Failed inbox read must offer a retry");
+assert.match(overviewSource, /待决策 \$\{inboxReady \? decisionItems\.filter/, "Module matrix must not show a false zero while inbox is unreadable");
+assert.match(overviewSource, /收件箱读取失败期间的待决策计数不作为「无待决策」依据/, "Error state must disclaim the pending count");
 assert.doesNotMatch(overviewSource, /所有AI和交接内容均需医学经理确认/, "Retired blanket medical-approval copy");
 assert.doesNotMatch(overviewSource, /AI审计/, "AI audit must not be promoted on overview");
 

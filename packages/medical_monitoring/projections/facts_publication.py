@@ -1094,6 +1094,31 @@ class FactsPublicationAuthorityProvider:
                         "注意：该事件满足严重不良事件（SAE）漏报审查模式——"
                         "3级及以上+肯定有关+持续未愈+未报告SAE，建议核查严重性判定与SAE上报。"
                     )
+                # R38轮（R36-05）：treatment-emergent核对——AE开始日期早于
+                # 该受试者首次给药日期时，「与试验药关系：肯定有关」在时间
+                # 逻辑上不成立（给药前发生的事件不可能是试验药引起）。此前
+                # 医学依据仅转录源记录字段，矛盾无人点出。日期矛盾为确定性
+                # 核对（仅双方都是精确日期才判），提示核查并考虑出Query，
+                # 不代替医学判定、不自动改写关系字段。
+                if (
+                    "肯定有关" in rel_raw
+                    and "肯定无关" not in rel_raw
+                    and record.start_date is not None
+                ):
+                    first_dose_raw = first_dose_by_subj.get(subj)
+                    first_dose_date = _parse_date(first_dose_raw or "")
+                    if (
+                        first_dose_date is not None
+                        and record.start_date < first_dose_date
+                    ):
+                        ae_medical_note += (
+                            "注意：治疗emergent核对发现矛盾——事件开始日期"
+                            f"{record.start_date.isoformat()}早于该受试者首次给药日期"
+                            f"{first_dose_date.isoformat()}，给药前发生的事件判定"
+                            "「与试验药关系：肯定有关」时间逻辑不成立，"
+                            "关系字段可信度存疑，建议核实开始日期与关系判定"
+                            "（必要时向研究中心发Query）。"
+                        )
                 # R35轮（R28-06）：AE-化验趋势矛盾交叉核对——监查重点方向
                 # 「AE与化验趋势矛盾」的确定性检出。AE声明血细胞计数降低
                 # ≥3级而该受试者同指标历次检测均无对应降幅时，在AE风险行

@@ -179,26 +179,30 @@ check(
 // 事实，用户可区分正常慢与挂死；不渲染失败、不渲染警示。
 // R31轮（R31-06）：在途作业区分执行中/排队中——共享队列被大识别批次
 // 占用时用户此前把笼统的「在队列中」误读为系统卡死。
+// R38轮（R36-08）：A位实测68分钟全程只有计数反馈——补阶段名与预期
+// 区间（健康单阶段数分钟到20分钟，超20分钟无变化提示停滞）。
 check(
-  renders.documentsProcessingProgress.includes("本轮核对已进行约")
+  renders.documentsProcessingProgress.includes("本轮已等待约")
+    && renders.documentsProcessingProgress.includes("当前阶段「系统仍在独立核对研究文件」")
     && renders.documentsProcessingProgress.includes("2 项核对作业在途")
     && renders.documentsProcessingProgress.includes("执行中 1 项、排队中 1 项")
+    && renders.documentsProcessingProgress.includes("数分钟到20分钟内推进")
     && renders.documentsProcessingProgress.includes("完成前无需任何操作"),
-  "processing state shows factual elapsed and pending-job progress",
+  "processing state shows stage, elapsed, pending jobs and expectation",
 );
 check(
   !renders.documentsProcessingProgress.includes("无状态变化"),
   "pre-threshold processing does not show the stall alert",
 );
-// R28-11回归：刷新后重入（页面内阶段计时为0），已用时按响应携带的
-// 最早入队时间计算——「本轮核对已进行约 14 分钟」，与同屏最早入队
+// R28-11回归：刷新后重入（页面内阶段计时为0），已等待按响应携带的
+// 最早入队时间计算——「本轮已等待约 14 分钟」，与同屏最早入队
 // 时间一致，不得自相矛盾地显示 0 分钟。
 check(
-  renders.documentsProcessingRefreshed.includes("本轮核对已进行约 14 分钟"),
+  renders.documentsProcessingRefreshed.includes("本轮已等待约 14 分钟"),
   "refreshed stage elapsed is computed from the enqueued timestamp",
 );
 check(
-  !renders.documentsProcessingRefreshed.includes("已进行约 0 分钟"),
+  !renders.documentsProcessingRefreshed.includes("已等待约 0 分钟"),
   "refreshed stage elapsed must not reset to zero",
 );
 check(
@@ -215,6 +219,12 @@ check(
 check(
   renders.documentsContentDifference.includes("差异不影响本次监查，继续使用"),
   "an overridable difference has one consequence-based action",
+);
+// R38轮（R36-09）：差异摘要承诺「逐项确认并说明理由」，卡片必须真的
+// 提供理由输入（对齐归属确认卡的文本域结构），否则文案即撒谎。
+check(
+  renders.documentsContentDifference.includes("确认理由（可选）——研究方案V2.0.docx"),
+  "content difference card offers a reason textarea aligned with its wording",
 );
 for (const internal of ["project_identity", "requires_confirmation", "mismatch", "角色 protocol"]) {
   check(!renders.documentsContentDifference.includes(internal), `content decision hides internal value: ${internal}`);
