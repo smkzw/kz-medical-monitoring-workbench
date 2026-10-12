@@ -4,6 +4,128 @@
 
 ---
 
+## R37 攻坚·第 1 次（2026-10-12，攻坚工程师-R37-第1次）
+
+### 0. 结论先行
+
+**墙未复发：R36 测试者修复（76bef91c：R36-01/02/04+R34-02/03/04 六条——
+后端改动全在 packages/admission/mapping_confirmation.py+pipeline.py+
+api/r7_product/mapping_candidate_routes.py，前端四文件；services/api/app
+零改动故 build 指纹不变 api-4ee144cc0f399a1e；8911 进程 16:41:13 拉起、
+3 个 packages 文件 mtime 16:40:45 均早于进程启动、16:44:49 提交后
+`git diff 76bef91c..HEAD -- packages services frontend/src` 为空——
+磁盘==HEAD==进程加载面）下，本轮两遍全新幂等键全链全绿，零阻断、零代码
+修复、零重启。本轮 = 76bef91c 新代码面（双盲复核收敛/文件夹混选收口/
+结果读取重试承诺）在役下的首次运行链证明；该提交不触 facts_publication，
+结果内容与 R36 基线逐项零漂移（1,242,681B/60 发现/16 受试者/389 现行
+风险、病史一致性×19/常见适应症×36（提示核实×18）/化验趋势×1/严重程度
+中度 15 卡全 AE recorded/系统按中重度标记 45/SV 残留 26 全失约行）。**
+常驻项目「MX循开考-CSU」（proj_user_6ef58ac151e1）以两个全新幂等键
+（r37s-fresh-10dc32f36488 / r37s-fresh-c7244c48489d）各走完
+run-setup/options → workspace/bootstrap（留证）→ prepare-and-start →
+progress completed（15s/2 轮询）→ publication available → result-entry →
+overview 可读，两遍逐项一致（合计 40s）。
+
+### 1. 复现（两遍全链，r37s_siege_repro.py，证据 r37s_siege_evidence.jsonl）
+
+前置（本轮开始时 8911 PID 92639=16:41:13 拉起、5178 PID 93548=16:45 拉起，
+本轮零重启），三条件自检全过：① /api/runtime-readiness ready:true
+（backend_build_id=api-4ee144cc0f399a1e）；② http://localhost:5178/monitoring
+HTTP 200；③ 5178/runtime-build.json expectedBackendBuildId 配对一致——
+该文件由 vite 插件 workbench-runtime-build-manifest 在 dev server 每次启动
+时按源码现算（frontend/vite.config.mjs:58-77 sourceFingerprint），16:45
+启动晚于末次源码 mtime 16:44:43，故 frontendBuildId=web-fbcf1a886af42cbf
+即当前源码指纹（与 R36 修复提交内留痕 web-95e6457ceeb785a3 的差异为指纹
+时点差异，非源码漂移——提交后源码零改动为 git diff 空所证）。
+**加载实证（forensics）**：76bef91c 的 3 个 packages 文件 mtime 16:40:45
+早于进程启动 16:41:13；提交后 diff 空——进程加载面==HEAD。
+
+| 侧 | 信号 | 实测（两遍一致） |
+| --- | --- | --- |
+| 预置台/API | mapping-candidates | 200，state=candidates_ready，confirmation_status=confirmed |
+| 预置台/API | facts | 200，state=ready |
+| 预置台/API | r7/project/open | 200，state=current |
+| 预置台/API | run-setup/options | 200，295/298ms，snapshot_token=snapshot:ef8692acfbab4d2a9846916f（与 R34–R36 同快照） |
+| 磁盘 | launch_registry（基线） | 56 条全 completed、waiting_start=0（sequence 56=monitoring_a71dd3c5…，10-12T02:14Z，R36 测试者轮回归运行，mdig f58ccf16c4f3） |
+| 磁盘 | execution_profiles | `global_default\|*\|1`（R19 修复在盘） |
+| 磁盘 | admission_events.jsonl | 6 行，本轮时间窗**零新增** |
+
+全链逐步（2026-10-12T12:12:24Z 起两遍共 40s）：
+
+| 步 | 端点 | 第一遍 | 第二遍 |
+| --- | --- | --- | --- |
+| 1 | GET run-setup/options | 200，298ms，同快照 | 200，295ms，同快照 |
+| 2 | POST workspace/bootstrap（留证：前端零组件调用） | 200，144ms，replayed=true revision=1 | 200，140ms，replayed=true revision=1 |
+| 3 | POST runs/prepare-and-start（全新幂等键） | **200，562ms**，run:08ed0ccade19445b… | **200，572ms**，run:ce99f8c0d3906088… |
+| 4 | GET runs/{token}/progress | **completed**，percent=100，2 次轮询，15s | **completed**，percent=100，2 次轮询，15s |
+| 5 | POST runs/{token}/publication | 200，921ms，publication_state=**available** | 200，885ms，**available** |
+| 6 | GET runs/{token}/result-entry | 200，423ms，rct=result-context:3f53bea4…caf42 | 200，435ms，rct=result-context:59eba9bf…bd646 |
+| 7 | GET results/{rct}/overview | 200，469ms，**1,242,681B/60 发现/16 受试者/389 现行风险** | 200，513ms，**逐项一致** |
+| 8 | GET results/{rct}/overview（缓存探针） | 200，245ms（首读 469ms），字节相等 | 200，275ms（首读 513ms），字节相等 |
+
+终态磁盘：sequence 57/58 两条新 run 全 completed、result_available=1、
+manifest_digest=f58ccf16c4f3（与 R34/R35/R36 同快照同摘要）、registry 共
+58 条全 completed、waiting_start=0；admission_events 仍 6 行（零新增拒绝）。
+
+### 2. 结果内容基线比对（R36→R37 零漂移，逐项实测）
+
+R36 基线 1,242,681B/60 发现/16 受试者/389 现行风险 → 本轮**逐项相同**
+（overview_bytes=1,242,681 两遍；current_risks=389 两遍；两遍 overview
+除 identity.public_run_token 外内容一致）。家族计数逐项核对（p1 全文）：
+「合并用药与病史一致性待核实」×19、「常见适应症」×36（「提示核实」×18）、
+「化验趋势」×1（AE-化验矛盾）、发现卡「严重程度中度」15/15 全为 AE
+recorded 域（「记录一条不良事件」）、inferred 域 45 张卡「系统按中度/
+重度关注标记」、protocol_compliance:SV 残留 26 条 **26/26 全失约行**。
+与 R36 节记录逐字一致——76bef91c 六条修复全部不触结果内容面
+（mapping_confirmation/pipeline/mapping_candidate_routes 为识别与确认面，
+前端四文件为呈现面），本轮实测证实。
+
+### 3. 修复
+
+**无（零阻断零代码改动）。** 运行链上无任何一道门拒绝：接入管线侧
+confirmed/ready/current 与运行门无口径差；prepare-and-start 首击即 200
+（562/572ms），无 waiting_start 残留、无 in_flight_conflict、无
+global_default_missing（R19 ensure_builtin_global_default 持续在役，
+profile_layer_versions 稳定 `global_default|*|1`）；publication 首击即
+available；result-entry/overview 冻结包会话缓存（R34-09/R32-07）持续在役
+（二读 245/275ms vs 首读 469/513ms，字节逐位相等）。8911/5178 本轮全程
+未重启（16:41/16:45 拉起后持续在役；本轮开始前的该次重启非本轮所为，
+属 R36 测试者轮标准重启，加载疑义由 mtime forensics + git diff 空 +
+§2 行为零漂移三重关闭）。
+
+### 4. 回归（本轮实跑，.venv/bin/pytest）
+
+- `pytest tests/test_medical_monitoring_r7_product_router.py -k
+  "r19_siege or prepare_and_start or global_default" -q`：**7/7 绿**
+  （运行启动 siege 语义：缺失补种/失败 fail-closed 无僵尸/幂等重放）；
+- `pytest tests/test_mm_r36_dual_review_convergence.py
+  tests/test_mapping_inflight_adoption_r35.py
+  tests/test_facts_mode_outputs_severity_semantics_r35.py
+  "tests/test_medical_monitoring_r7_data_admission.py::test_resolve_get_rejects_missing_and_malformed_batch_id_structured" -q`：
+  **13/13 绿**（76bef91c 最新改动面双盲复核收敛 ×7 + R35 分诊面
+  降级采纳 ×4 + 严重程度语义 ×1 + resolve 422 结构化门 ×1）。
+
+### 5. 遗留与边界
+
+- backend_build_id 指纹仅覆盖 services/api/app、不含 packages/** 的口径
+  未变（R32 起在案，留待所有者裁决扩面）；76bef91c 的 packages 改动面由
+  §1 mtime forensics + git diff 空 + §2 行为零漂移三重确证在役。
+- R36-01（双盲复核收敛）四条后端语义中，常驻项目本轮仅触及
+  prepare-and-start→progress→publication 链（mapping 已 confirmed、无
+  在途复核），复核收敛/文件夹混选/降级通道属**不触发面**，其单测 13 项
+  中 7 项已覆盖，界面呈现归测试者轮。
+- 结果内容基线与 R36 相同：**1,242,681B/60 发现/16 受试者/389 现行
+  风险/残留 SV 锚点 26 条全失约行/病史一致性×19/常见适应症×36
+  （提示核实×18）/AE-化验矛盾×1**，后续轮次继续按此口径比对。
+- 常驻项目 registry 现 58 条全 completed；后续轮次开考直接走「开始运行
+  监查」即可。
+
+留痕文件：`r37s_siege_repro.py`、`r37s_siege_evidence.jsonl`、
+`r37s_overview_p1.json`、`r37s_overview_p2.json`、本日志；本轮零重启，
+ISO_ENV_LOG 无新条目（16:41/16:45 拉起条目已在 76bef91c 提交内留痕）。
+
+---
+
 ## R36 攻坚·第 1 次（2026-10-12，攻坚工程师-R36-第1次）
 
 ### 0. 结论先行
