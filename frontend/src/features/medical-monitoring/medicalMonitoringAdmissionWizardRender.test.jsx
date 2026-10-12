@@ -463,6 +463,78 @@ export const renders = {
   ]), mappingFrom([
     { type: "confirm-ready", payload: { mapping_revision: "rev-1", facts_generated: false } },
   ]), { phase: "generating", payload: null, error: null }),
+  // R37-01回归：确认完成后的真实重进路径——list投影携带公开投影形状
+  // （confirmation_status=confirmed + 最小confirmed草稿），重进向导
+  // 必须直达done完成态并自动续跑监查数据生成，不得崩溃、不得重跑确认。
+  doneRemountConfirmed: render(wizardState([
+    { type: "source-dir-change", value: "/data/listings/2026-08" },
+    { type: "import-start" },
+    { type: "import-created", payload: profilePayload },
+    { type: "profile-loaded", payload: profilePayload },
+    { type: "advance" },
+    { type: "finish" },
+  ]), mappingFrom([
+    { type: "load-ready", payload: {
+      state: "candidates_ready",
+      confirmation_status: "confirmed",
+      facts_generated: false,
+      summary: { field_count: 60, user_question_count: 0, system_adopted_count: 60 },
+      candidates: candidatesPayload({ withQuestions: false }).candidates,
+      draft: { draft_id: "mdraft-1", version: 2, status: "confirmed", fields: [], user_questions: [] },
+    } },
+  ]), { phase: "generating", payload: null, error: null }),
+  // R37-01回归：复核运行中的公开投影形状（聚合进度+剥离后的语义质量门）。
+  adjudicatingRunning: render(readyWizardState(), mappingFrom([
+    { type: "load-ready", payload: candidatesPayload({ withQuestions: false }) },
+    { type: "adopt-ready", payload: draftPayload },
+    { type: "adjudication-start", payload: draftPayload },
+    { type: "adjudication-running", payload: {
+      ...draftPayload,
+      adjudication: {
+        state: "running",
+        resolved_count: 0,
+        remaining_question_count: 0,
+        total_job_count: 12,
+        completed_job_count: 7,
+        pending_job_count: 5,
+        pending_running_count: 2,
+        pending_queued_count: 3,
+        pending_since: "2026-10-12T14:30:00+00:00",
+      },
+      semantic_quality: {
+        status: "pass",
+        activation_disposition: "accept",
+        global_blocker_count: 0,
+        capability_blocker_count: 0,
+        warning_count: 0,
+        finding_groups: [],
+        capability_states: [],
+      },
+    } },
+  ])),
+  // R37-01回归：确认成功回执（公开投影形状，含draft展开与语义质量）。
+  confirmedRevision: render(wizardState([
+    { type: "source-dir-change", value: "/data/listings/2026-08" },
+    { type: "import-start" },
+    { type: "import-created", payload: profilePayload },
+    { type: "profile-loaded", payload: profilePayload },
+    { type: "advance" },
+    { type: "finish" },
+  ]), mappingFrom([
+    { type: "confirm-ready", payload: {
+      project_id: "proj-e2e-check",
+      draft_id: "mdraft-1",
+      version: 3,
+      status: "confirmed",
+      facts_generated: false,
+      confirmation_status: "confirmed",
+      next_action: "generate_facts_later",
+      summary: { field_count: 60, user_question_count: 0 },
+      fields: [],
+      user_questions: [],
+      review_summary: { field_count: 60, user_question_count: 0, system_adjudicated_count: 4 },
+    } },
+  ]), { phase: "generating", payload: null, error: null }),
   doneReady: render(wizardState([
     { type: "source-dir-change", value: "/data/listings/2026-08" },
     { type: "import-start" },

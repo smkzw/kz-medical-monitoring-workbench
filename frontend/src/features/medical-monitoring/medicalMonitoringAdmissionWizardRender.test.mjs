@@ -343,6 +343,17 @@ check(renders.done.includes("系统已完成字段识别"), "done outcome uses p
 check(!renders.done.includes("adm-20260902-0001"), "attempt record identity remains hidden");
 check(renders.done.includes("无需逐项确认"), "post-confirm facts generate automatically");
 check(renders.done.includes("正在生成监查数据"), "done primary reports automatic progress");
+// R37-01回归：确认完成后的重进路径（公开投影形状）不得崩溃、不得重跑确认。
+check(renders.doneRemountConfirmed.includes("系统已完成字段识别"), "remount with confirmed projection renders the done outcome");
+check(renders.doneRemountConfirmed.includes("正在生成监查数据"), "confirmed remount continues into automatic fact generation");
+check(!renders.doneRemountConfirmed.includes("确认字段对应关系"), "confirmed remount never re-runs the confirmation action");
+check(renders.confirmedRevision.includes("系统已完成字段识别"), "confirm success receipt renders the done outcome");
+// R37-01回归：复核运行中的聚合进度随公开投影形状渲染。
+check(
+  renders.adjudicatingRunning.includes("复核分片已完成 7/12")
+    && renders.adjudicatingRunning.includes("执行中 2 项、排队中 3 项"),
+  "adjudication running projection renders aggregate progress",
+);
 check(renders.doneReady.includes("监查数据已准备完成"), "ready outcome names the user result");
 check(renders.doneReady.includes("已核对 640 个原始数据位置"), "ready outcome explains automatic source alignment");
 check(renders.doneReady.includes("已整理 3 张数据表、128 条记录、640 个数据项"), "ready outcome summarizes generated data");

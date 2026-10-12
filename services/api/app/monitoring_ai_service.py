@@ -2558,7 +2558,7 @@ class MonitoringAiService:
                 return payload
 
             initial_output = self._normalize_document_authority_provider_output(
-                job, initial_output
+                job, initial_output, normalization_notes
             )
             initial_output = self._normalize_cross_table_provider_output(
                 job, initial_output, input_payload
@@ -2643,7 +2643,7 @@ class MonitoringAiService:
                     raw_outputs.append(repaired_output)
                 repaired_output = (
                     self._normalize_document_authority_provider_output(
-                        job, repaired_output
+                        job, repaired_output, normalization_notes
                     )
                 )
                 repaired_output = self._normalize_cross_table_provider_output(
@@ -3438,9 +3438,25 @@ class MonitoringAiService:
                 + "。"
             )
         elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS:
-            candidate_count = "必须恰好输出1个完整的文档权威分析候选。"
+            # R37轮（R37-02）：多文件/多角色批次曾把候选拆成每文件一个
+            # （4次同错拒绝）。明确：candidates数组永远恰好1个元素，
+            # 所有文件/角色决定放进该候选structured_payload的内部数组。
+            candidate_count = (
+                "必须恰好输出1个完整的文档权威分析候选；无论冻结批次"
+                "包含多少份文件或角色，candidates数组都只含这1个候选，"
+                "全部文件评估（candidate_assessments）、全部角色决定"
+                "（role_selections）与项目身份结论都放在该候选的"
+                "structured_payload内部数组中，不得按文件或角色拆成"
+                "多个候选。"
+            )
         elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
-            candidate_count = "必须恰好输出1个完整的文档权威冲突复核候选。"
+            candidate_count = (
+                "必须恰好输出1个完整的文档权威冲突复核候选；无论冲突包"
+                "包含多少份文件或角色（conflict_roles），candidates数组"
+                "都只含这1个候选，全部角色的决定（decisions数组）都放在"
+                "该候选的structured_payload中，不得按文件或角色拆成"
+                "多个候选。"
+            )
         elif job.task_type == MonitoringAiTaskType.QUERY_EXPLANATION_CANDIDATES:
             candidate_count = "必须恰好输出2至3个候选。"
         elif job.task_type == MonitoringAiTaskType.RULE_TEMPLATE_RECOMMENDATION:
@@ -8607,6 +8623,7 @@ class MonitoringAiService:
     def _normalize_document_authority_provider_output(
         job: MonitoringAiJob,
         output: Any,
+        normalization_notes: Optional[List[Dict[str, Any]]] = None,
     ) -> Any:
         """Rewrap a bare document-authority payload into the task envelope.
 
@@ -8617,6 +8634,20 @@ class MonitoringAiService:
         content validation (batch digest, locators, identity) still judges
         the model's own work. Malformed payloads that do not match the
         known bare shape keep failing closed unchanged.
+
+        R37轮（R37-02）：多文档同批核对的确定性归并。独立模型对含多份
+        研究文件（方案+eCRF）的批次会把「每个角色/每份文件的决定」输出
+        成多个候选（models偶发把candidates理解为逐文档），单候选契约
+        fail-closed拒绝后整条核对链必败（R37B实测4次同错：document
+        authority review requires exactly one candidate；单文件对照
+        实验通过）。归并只接受机械无歧义的形态：全部候选的
+        structured_payload均能按本任务模型解析、身份字段（批次哈希/
+        冲突包哈希）彼此一致、且按身份键（候选评估candidate_id、角色
+        selection role、复核decision role）严格不相交；满足时拼接为单
+        候选并留痕，任何解析失败、身份不一致或键重叠都原样返回（照旧
+        fail-closed）。归并后下游全部内容校验（validate_document_
+        authority_analysis、覆盖率契约、身份绑定）不变，模型内容逐字
+        保留。
         """
 
         if job.task_type not in (
@@ -8625,7 +8656,12 @@ class MonitoringAiService:
         ) or not isinstance(output, Mapping):
             return output
         if "candidates" in output:
-            return output
+            merged = MonitoringAiService._merge_document_authority_candidates(
+                job,
+                output,
+                normalization_notes,
+            )
+            return merged if merged is not None else output
         if output.get("schema_version") != DOCUMENT_AUTHORITY_SCHEMA_VERSION:
             return output
         is_analysis = (
@@ -8651,6 +8687,149 @@ class MonitoringAiService:
                 }
             ],
         }
+
+    @staticmethod
+    def _merge_document_authority_candidates(
+        job: MonitoringAiJob,
+        output: Mapping[str, Any],
+        normalization_notes: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Deterministically join per-role/document candidates into one.
+
+        Returns None unless every candidate parses as this task's payload
+        model, all identity fields agree, and all identity keys are
+        disjoint — anything else keeps the output unchanged so the
+        existing exactly-one-candidate contract fails closed as before.
+        """
+
+        candidates = output.get("candidates")
+        if (
+            not isinstance(candidates, list)
+            or len(candidates) < 2
+            or not all(isinstance(item, Mapping) for item in candidates)
+        ):
+            return None
+        structured_payloads = [
+            item.get("structured_payload")
+            for item in candidates
+        ]
+        if not all(isinstance(item, Mapping) for item in structured_payloads):
+            return None
+        if job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS:
+            try:
+                parsed = [
+                    DocumentAuthorityAnalysis.model_validate(dict(item))
+                    for item in structured_payloads
+                ]
+            except ValidationError:
+                return None
+            identities = {
+                (item.batch_id, item.input_sha256) for item in parsed
+            }
+            if len(identities) != 1:
+                return None
+            assessment_ids = [
+                assessment.candidate_id
+                for item in parsed
+                for assessment in item.candidate_assessments
+            ]
+            selection_roles = [
+                selection.role
+                for item in parsed
+                for selection in item.role_selections
+            ]
+            if len(set(assessment_ids)) != len(assessment_ids):
+                return None
+            if len(set(selection_roles)) != len(selection_roles):
+                return None
+            identity_models = [item.study_identity for item in parsed]
+            # R37轮（R37-02）：身份结论按文件拆分时常只出现在其中一个
+            # 候选（其余为默认not_assessed空结论）。归并规则：非默认
+            # 结论至多一种（全部一致）——取该结论；全为默认取默认。
+            # 多个彼此不同的非默认结论无法机械裁决，照旧fail-closed。
+            non_default_identities = [
+                item for item in identity_models if item.status != "not_assessed"
+            ]
+            if len({
+                json.dumps(
+                    item.model_dump(mode="json"),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                for item in non_default_identities
+            }) > 1:
+                return None
+            identity = (
+                non_default_identities[0]
+                if non_default_identities
+                else identity_models[0]
+            )
+            merged_payload = dict(parsed[0].model_dump(mode="json"))
+            merged_payload["study_identity"] = identity.model_dump(mode="json")
+            merged_payload["candidate_assessments"] = [
+                assessment.model_dump(mode="json")
+                for item in parsed
+                for assessment in item.candidate_assessments
+            ]
+            merged_payload["role_selections"] = [
+                selection.model_dump(mode="json")
+                for item in parsed
+                for selection in item.role_selections
+            ]
+            overlap_note = "analysis"
+        else:
+            try:
+                parsed = [
+                    DocumentAuthorityAdjudicationReview.model_validate(dict(item))
+                    for item in structured_payloads
+                ]
+                review_kind = "adjudication"
+            except ValidationError:
+                try:
+                    parsed = [
+                        DocumentAuthorityConflictReview.model_validate(dict(item))
+                        for item in structured_payloads
+                    ]
+                    review_kind = "conflict_review"
+                except ValidationError:
+                    return None
+            packet_ids = {item.conflict_packet_sha256 for item in parsed}
+            if len(packet_ids) != 1:
+                return None
+            decision_roles = [
+                decision.role
+                for item in parsed
+                for decision in item.decisions
+            ]
+            if len(set(decision_roles)) != len(decision_roles):
+                return None
+            merged_payload = dict(parsed[0].model_dump(mode="json"))
+            merged_payload["decisions"] = [
+                decision.model_dump(mode="json")
+                for item in parsed
+                for decision in item.decisions
+            ]
+            overlap_note = review_kind
+        if normalization_notes is not None:
+            normalization_notes.append(
+                {
+                    "normalization": (
+                        "document_authority_multi_candidate_deterministically_joined"
+                    ),
+                    "task_type": job.task_type.value,
+                    "candidate_count": len(candidates),
+                    "payload_kind": overlap_note,
+                }
+            )
+        merged = dict(output)
+        merged["candidates"] = [
+            {
+                **dict(candidates[0]),
+                "structured_payload": merged_payload,
+            },
+        ]
+        return merged
 
     @staticmethod
     def _migrate_rule_template_expression_strings(

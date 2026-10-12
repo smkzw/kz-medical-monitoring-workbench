@@ -560,7 +560,13 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
           {adjudicationProgressText ? `当前进度：${adjudicationProgressText}。` : ""}
         </p>
       ) : null}
-      {mappingState.phase === "adjudicating" && adjudicatingProgressText && !adjudicatingStalled ? (
+      {/* R37轮（R37-01）：此处曾引用拼错的adjudicatingProgressText
+          （定义为adjudicationProgressText）——phase!=="adjudicating"
+          时短路不触发，一旦进入复核等待即ReferenceError，整页被错误
+          边界替换为「当前页面加载失败」（R37B实测89分钟7次崩溃），
+          确认完成→复核等待的转换点因此必崩、复核进度与降级确认出口
+          全部不可达。拼写修正后该分支正常渲染。 */}
+      {mappingState.phase === "adjudicating" && adjudicationProgressText && !adjudicatingStalled ? (
         <p className="monitoring-admission-minor" role="status" style={{ margin: "0 0 8px" }}>
           {adjudicationProgressText}——分片完成数前进即复核在推进，无需操作。
         </p>
@@ -1649,7 +1655,30 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         expectedRevision: entry.revision || 1,
         idempotencyKey: `doc-content-confirm-${entry.source_entry_id}-${entry.revision || 1}`,
       });
-      // 确认后重发resolve推进链路
+      // R35轮（R35-03）：确认记录落盘即回执——此前「✓ 已记录确认」被
+      // 绑定在后续resolve长请求之后（B位实测「正在记录确认…」持续
+      // 3-5分钟，与同屏「单次最长约30秒」承诺差一个数量级），且resolve
+      // 撞上并发轮询的document_resolve_in_progress 409时整条链被当
+      // 失败处理：按钮静默复位回「继续使用」，确认明明已落盘却被
+      // 伪装成未生效（假确认风险）。现在：①确认接口成功即置✓并
+      // 保持（后续载荷刷新不清除）；②后续resolve只是链路推进，
+      // 409在途冲突按「已在推进」如实吞掉并刷新readiness，不报错、
+      // 不复位按钮；resolve其余失败显式报错且✓不受影响（记录本身
+      // 已落盘，如实区分「确认已记录」与「链路推进失败」）。
+      setConfirmedEntries((current) => ({ ...current, [entryKey]: true }));
+    } catch (error) {
+      // 确认记录本身失败：显式报错并复位按钮态（此时确未落盘）。
+      if (documentRequestGeneration.current === generation) {
+        setDocumentState((current) => ({
+          ...current,
+          error: error?.detail?.message || error?.message || "内容确认失败，请重试。",
+        }));
+      }
+      setConfirmingEntries((current) => ({ ...current, [entryKey]: false }));
+      return;
+    }
+    try {
+      // 确认后重发resolve推进链路（仅推进，不影响确认回执）
       const payload = await api.resolveStudyDocuments(
         state.projectId,
         state.attemptId,
@@ -1662,18 +1691,24 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           error: null,
         });
       }
-      setConfirmedEntries((current) => ({ ...current, [entryKey]: true }));
     } catch (error) {
-      if (documentRequestGeneration.current === generation) {
+      const code = String(error?.detail?.code || error?.code || "");
+      if (code === "document_resolve_in_progress") {
+        // 并发轮询已在推进同一批次：不是本次确认的失败，如实静默
+        // 等待既有推进，刷新readiness即可。
+        if (documentRequestGeneration.current === generation) {
+          loadDocumentReadiness();
+        }
+      } else if (documentRequestGeneration.current === generation) {
         setDocumentState((current) => ({
           ...current,
-          error: error?.detail?.message || error?.message || "内容确认失败，请重试。",
+          error: error?.detail?.message || error?.message || "确认已记录，但核对链路推进失败，请稍后重试或点击「重新核对研究文件」。",
         }));
       }
     } finally {
       setConfirmingEntries((current) => ({ ...current, [entryKey]: false }));
     }
-  }, [api, confirmingEntries, documentState.payload?.analysis_token, state.attemptId, state.projectId]);
+  }, [api, confirmingEntries, documentState.payload?.analysis_token, loadDocumentReadiness, state.attemptId, state.projectId]);
 
   // R2循环：「重新核对研究文件」必须真正重发核对（有analysis_token时
   // 重新resolve推进链路），而不是只重读readiness快照——否则失败态下

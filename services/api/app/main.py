@@ -1033,18 +1033,31 @@ def _expected_source_context(
     # 研究代号token）；无用户基准时按R2口径not_assessed（明说缺少
     # 基准），不判差异。
     system_generated_baseline = _project_is_greenfield_shell(project_id)
+    # R35轮（R35-02）：登记基准=建项登记的项目代号/方案编号；名称尾段
+    # 挖出的研究代号token（user_identifiers）只作匹配加分项。判「不一致」
+    # 以登记基准缺席为前提，管理代号不再被误当研究编号（假阳性差异卡）。
+    registered_identifiers = tuple(
+        dict.fromkeys(
+            value
+            for value in (
+                "" if system_generated_baseline else header.project_code,
+                "" if system_generated_baseline else header.protocol_id,
+            )
+            if value
+        )
+    )
     return SourceExpectedContext(
         project_identifiers=tuple(
             dict.fromkeys(
                 value
                 for value in (
-                    "" if system_generated_baseline else header.project_code,
-                    "" if system_generated_baseline else header.protocol_id,
+                    *registered_identifiers,
                     *user_identifiers,
                 )
                 if value
             )
         ),
+        registered_project_identifiers=registered_identifiers,
         indication_terms=(header.indication,) if header.indication else (),
         expected_file_role=expected_role,
         # 绿地空壳项目的"草案"是平台占位版本，不是用户断言的方案版本；

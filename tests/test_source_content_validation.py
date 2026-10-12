@@ -346,6 +346,9 @@ class SourceContentValidationTests(unittest.TestCase):
             expected=SourceExpectedContext(
                 project_identifiers=("CMS-D001", "D001"),
                 expected_file_role="edc_data_listing",
+                # R35轮（R35-02）：生产路径registered基准恒由项目代号/
+                # 方案编号填充；错文件（STUDYID=RUX-03-002）仍须判不一致。
+                registered_project_identifiers=("CMS-D001", "D001"),
             ),
             actor="system_validator",
         )
@@ -767,6 +770,9 @@ class SourceContentValidationTests(unittest.TestCase):
                 indication_terms=("银屑病",),
                 expected_file_role="protocol_docx",
                 expected_protocol_version="V1.0",
+                # R35轮（R35-02）：registered基准=建项登记编号（生产路径恒
+                # 填充）；错项目文件（RUX-03-002内容）仍须判不一致。
+                registered_project_identifiers=("CMS-D001",),
             ),
             actor="system_validator",
         )

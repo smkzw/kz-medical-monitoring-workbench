@@ -94,4 +94,25 @@ const needle = (text) => compact(text);
   );
 }
 
+// --- R37轮（R37-06）：自动重试承诺与调度事实一致 ---
+// public_result_target_incomplete 是客户端在请求发出前确定性抛出的
+// （路由缺定位参数），从不调度自动重试；旧实现照样渲染「首次自动重试
+// 即将开始/正在第N次自动重试」，D位实测70秒零推进且文案回退。
+// 契约：重试承诺句必须收敛到 resultRetryPromiseText，且该句对
+// target_incomplete 给出如实陈述而非重试承诺。
+{
+  check(
+    src.includes(needle(`const resultRetryPromiseText = resultError?.code === "public_result_target_incomplete"`)),
+    "retry promise copy is centralized with a target_incomplete branch",
+  );
+  check(
+    src.includes(needle(`此错误自动重试无法恢复，请点击「返回结果概览」。`)),
+    "target_incomplete states honestly that auto-retry cannot recover",
+  );
+  check(
+    src.includes('${resultRetryPromiseText}请点击「重新读取」或返回进度页。'),
+    "unavailable panel renders the centralized retry promise copy",
+  );
+}
+
 console.log(`medicalMonitoringResultReadRetry: ${passed} passed`);

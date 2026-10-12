@@ -93,6 +93,11 @@ class SourceExpectedContext:
     expected_file_role: str = ""
     expected_protocol_version: str = ""
     expected_subject_id: str = ""
+    # R35轮（R35-02）：建项时登记的基准标识（项目代号/方案编号）。名称
+    # 启发式挖出的研究代号token只作匹配加分项，不作为判「不一致」的
+    # 唯一依据——管理代号（如「MX循R35B-RUX」尾段）≠研究编号，两份
+    # 与项目匹配的文件曾因唯一期望值来自名称尾段而遭假阳性差异卡。
+    registered_project_identifiers: tuple[str, ...] = ()
 
     @property
     def context_hash(self) -> str:
@@ -477,6 +482,7 @@ class SourceContentValidationService:
                 rows,
                 expected.project_identifiers,
                 expected.expected_file_role,
+                registered_identifiers=expected.registered_project_identifiers,
             ),
         ]
         if safety_event_check is not None and safety_scope_check is not None:
@@ -562,6 +568,7 @@ class SourceContentValidationService:
                 spans=list(document.spans),
                 filename=filename,
                 title=str(document.title or ""),
+                registered_identifiers=expected.registered_project_identifiers,
             ),
         ]
         protocol_role = expected.expected_file_role in {
@@ -822,6 +829,7 @@ class SourceContentValidationService:
         rows: Sequence[dict[str, object]],
         expected_identifiers: Sequence[str],
         expected_role: str = "",
+        registered_identifiers: Sequence[str] = (),
     ) -> SourceContentValidationCheck:
         observed = sorted(
             {
@@ -832,6 +840,11 @@ class SourceContentValidationService:
             }
         )
         expected_normalized = {_normalize_identifier(value) for value in expected_identifiers if value.strip()}
+        registered_normalized = {
+            _normalize_identifier(value)
+            for value in registered_identifiers
+            if value.strip()
+        }
         observed_normalized = {_normalize_identifier(value) for value in observed}
         if not expected_normalized:
             outcome = "not_assessed"
@@ -848,8 +861,20 @@ class SourceContentValidationService:
             for observed in observed_normalized
         ):
             outcome = "match"
-        else:
+        elif (
+            registered_normalized
+            and not any(
+                _identifiers_compatible(expected, observed)
+                for expected in registered_normalized
+                for observed in observed_normalized
+            )
+        ):
+            # R35轮（R35-02）：登记基准（项目代号/方案编号）与数据内
+            # 研究标识全部不兼容才判不一致；仅名称尾段管理代号未命中
+            # 降为提示，不再把管理代号当研究编号制造假阳性。
             outcome = "mismatch"
+        else:
+            outcome = "warning"
         return SourceContentValidationCheck(
             check_code="project_identity",
             label="项目/研究标识",
@@ -957,6 +982,7 @@ class SourceContentValidationService:
         *,
         filename: str = "",
         title: str = "",
+        registered_identifiers: Sequence[str] = (),
     ) -> SourceContentValidationCheck:
         """Compare project identifiers against strings actually present.
 
@@ -966,9 +992,20 @@ class SourceContentValidationService:
         被改写后在原文中检索不到。现约定：只展示在原文中真实存在（保
         留原大小写）、非通用病原/检验缩写、且有可回查定位（文件名/
         文档标题/正文段落）的命中。
+
+        R35轮（R35-02）：判「不一致」必须以建项登记的基准标识
+        （registered_identifiers=项目代号/方案编号）缺席为前提。名称
+        尾段挖出的管理代号token（如项目名「MX循R35B-RUX」→R35B-RUX）
+        只作匹配加分项：文件不含管理代号但登记基准为空时，outcome降为
+        warning（提示），不再把管理代号当研究编号制造假阳性差异卡。
         """
         expected_normalized = {
             _normalize_identifier(value) for value in expected_identifiers if value.strip()
+        }
+        registered_normalized = {
+            _normalize_identifier(value)
+            for value in registered_identifiers
+            if value.strip()
         }
         normalized_text = _normalize_identifier(full_text)
         raw_tokens = set(
@@ -1015,8 +1052,19 @@ class SourceContentValidationService:
             outcome = "not_assessed"
         elif any(identifier in normalized_text for identifier in expected_normalized):
             outcome = "match"
-        elif observed:
+        elif (
+            registered_normalized
+            and not any(
+                identifier in normalized_text
+                for identifier in registered_normalized
+            )
+        ):
+            # 登记基准存在且全部缺席：文件确与当前项目不符，维持不一致。
             outcome = "mismatch"
+        elif observed:
+            # R35轮（R35-02）：仅名称启发式token未命中——管理代号≠研究
+            # 编号，输出为提示而非「不一致」结论。
+            outcome = "warning"
         else:
             outcome = "warning"
         return SourceContentValidationCheck(

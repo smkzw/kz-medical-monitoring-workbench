@@ -627,3 +627,12 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 结论：隔离环境已恢复可用，R36六条修复代码已加载（packages/medical_monitoring/** 与前端源码均为重启后加载面）
 - 更正（同日 16:5x）：提交前最后一次前端补丁（复核预算耗尽错误态补降级出口）晚于上一次 vite 启动，served 指纹滞后于磁盘——vite 再启一次；自检 monitoring 200、frontendBuildId=web-fbcf1a886af42cbf（最终指纹）、expectedBackendBuildId=api-4ee144cc0f399a1e == 8911 backend_build_id 一致、8911 ready:true 未动
 2026-10-12 17:06 快速无损暂停（用户指令）：run dwfrun-005a6979停于R36复盘在途（测试1/4+分诊17新条+修复阶段已全部完成）。8911/5178保持运行。恢复=ResumeWorkflowRun同run_id，详见PAUSE_HANDOFF_20261012B.md
+
+## 2026-10-13 02:29 CST R37修复员五条修复后标准重启（R37-01/R37-02/R37-06/R35-02/R35-03，未触 8910/5177）
+- 背景：R37分诊清单修复（R35-04如实跳过）：R37-01 字段映射确认死锁根因=76bef91c引入的前端拼写错误（MedicalMonitoringAdmissionWizard.jsx:563 引用不存在的adjudicatingProgressText，adjudicating态渲染即ReferenceError→错误边界整页告警，渲染级回归测试红→绿实证）；R37-02 document authority多文档单候选契约新增确定性归并（monitoring_ai_service.py，归并条件不满足照旧fail-closed）；R37-06 target_incomplete假自动重试承诺改如实文案；R35-02 项目名管理代号不再作判不一致唯一基准（source_content_validation.py+main.py）；R35-03 内容确认落盘即回执+resolve在途409如实容忍。改动面：services/api/app/{main,monitoring_ai_service,source_content_validation}.py + 前端 medical-monitoring 三文件 + 测试3新2改
+- API 重启：lsof -ti:8911 kill → 标准命令拉起（WORKBENCH_RUNTIME_DIR=tester_loop_iso_20260928/runtime, WORKBENCH_MONITORING_AI_PARALLELISM=2），冷启动约5分钟（3.6GB sqlite导入，100%CPU 6分钟内就绪）
+- vite 重启：lsof -ti:5178 kill → 标准命令拉起（VITE_API_PROXY_TARGET=http://127.0.0.1:8911，--port 5178 --strictPort）
+- 自检1 runtime-readiness：curl http://127.0.0.1:8911/api/runtime-readiness → HTTP 200，ready:true，backend_build_id=api-5b547c38911d4ad5（services/api/app 本轮改动新指纹，与前轮 api-4ee144cc0f399a1e 不同属预期）
+- 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
+- 自检3 build id 配对：runtime-build.json expectedBackendBuildId=api-5b547c38911d4ad5 == 8911 backend_build_id → 一致；frontendBuildId=web-7c41e90d1490184a（R37前端改动面新指纹）
+- 浏览器抽查（camofox，用户视角）：5178/monitoring 载入正常；选择常驻项目 MX循开考-CSU → 项目总看板数据载入正常（收件箱77项/高开13）；进入医学监查产品页（ProductLoop，含本轮改动渲染面）正常渲染「项目风险概览/本次结果已可查看/数据接入」，无错误边界告警；未打开数据接入向导（避免触发常驻项目管道动作），R37-01崩溃面以渲染级回归测试（adjudicatingRunning fixture 红→绿）为验收证据

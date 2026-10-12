@@ -1645,6 +1645,15 @@ export function MedicalMonitoringProductLoop({
       : productState.kind === "active_run"
         ? "工作条中的“查看本次进度”进入真实进度页面。"
         : "工作条中的操作会读取已导入的研究数据与历史，不使用本地示例结果。";
+  // R37轮（R37-06）：自动重试承诺必须与调度事实一致。旅程/证据视图的
+  // public_result_target_incomplete是客户端在请求发出前确定性抛出的
+  // （路由缺定位参数），该分支从不调度自动重试；旧实现却照样渲染
+  // 「首次自动重试即将开始/正在第N次自动重试」，D位实测70秒零推进
+  // 且文案在计数与「首次」间回退（重进向导计数复位所致）。该错误码
+  // 改为如实陈述缺失入口与返回出口，不再许诺不存在的重试。
+  const resultRetryPromiseText = resultError?.code === "public_result_target_incomplete"
+    ? "本次入口缺少必需的定位信息（请从结果概览的风险卡重新进入该旅程）；此错误自动重试无法恢复，请点击「返回结果概览」。"
+    : `系统会自动重试（最多${RESULT_READ_AUTO_RETRY_LIMIT}次，间隔递增、约每半分钟一次）；${resultRetryAttempt > 0 ? `正在第 ${resultRetryAttempt}/${RESULT_READ_AUTO_RETRY_LIMIT} 次自动重试…` : resultRetryAttempt < 0 ? `自动重试已用完（${RESULT_READ_AUTO_RETRY_LIMIT}次）` : "首次自动重试即将开始"}；`;
   return (
     <main className="monitoring-page monitoring-product-page" data-monitoring-view={routeView} data-monitoring-product-state={productStatus} data-monitoring-product-view={routeView}>
       <header className="monitoring-page-header monitoring-product-header">
@@ -1671,7 +1680,7 @@ export function MedicalMonitoringProductLoop({
           </div>
         </section>
       ) : null}
-      {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><span>{resultError ? `系统会自动重试（最多${RESULT_READ_AUTO_RETRY_LIMIT}次，间隔递增、约每半分钟一次）；${resultRetryAttempt > 0 ? `正在第 ${resultRetryAttempt}/${RESULT_READ_AUTO_RETRY_LIMIT} 次自动重试…` : resultRetryAttempt < 0 ? `自动重试已用完（${RESULT_READ_AUTO_RETRY_LIMIT}次）` : "首次自动重试即将开始"}；请点击「重新读取」或返回进度页。` : ""}</span><div className="monitoring-product-state-panel-actions"><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button>{resultError?.code === "public_result_target_incomplete" && resultToken ? <button type="button" className="monitoring-product-button is-small" onClick={() => navigate("overview", { subject_ref: "", site_ref: "", spine_ref: "", window_start: "", window_end: "", risk_instance_ref: "", risk_anchor_ref: "", event_ref: "", visit_ref: "" })}>返回结果概览</button> : null}</div></section> : null}
+      {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><span>{resultError ? `${resultRetryPromiseText}请点击「重新读取」或返回进度页。` : ""}</span><div className="monitoring-product-state-panel-actions"><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button>{resultError?.code === "public_result_target_incomplete" && resultToken ? <button type="button" className="monitoring-product-button is-small" onClick={() => navigate("overview", { subject_ref: "", site_ref: "", spine_ref: "", window_start: "", window_end: "", risk_instance_ref: "", risk_anchor_ref: "", event_ref: "", visit_ref: "" })}>返回结果概览</button> : null}</div></section> : null}
       {!loadingBody && !resultError && !setupHistoryError && publicRunToken && !resultToken ? <MonitoringPublicProgressSurface progress={progress} error={progressError} loading={progressLoading} onRefresh={() => setRefreshEpoch((value) => value + 1)} onBack={() => navigate("overview", { public_run_token: "" })} onOpenResult={() => openResult(publicRunToken)} /> : null}
       {!loadingBody && !resultError && !setupHistoryError && resultLoaded ? (
         <div className="monitoring-product-result-body">
