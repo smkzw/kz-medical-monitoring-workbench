@@ -799,14 +799,33 @@ class FactsModeOutputProvider:
             domain_zh = _DOMAIN_ZH.get(event.domain, event.domain)
             severity_zh = _SEVERITY_ZH.get(risk.severity, risk.severity)
             date_text = str(event.start_date or "日期缺失")
-            basis = (
-                f"已核验事实：受试者{subject_label}于{date_text}记录一条"
-                f"{domain_zh}（{event.label_zh}），严重程度{severity_zh}。"
-            )
-            finding_text = (
-                f"「{event.label_zh}」为{severity_zh}{domain_zh}信号，"
-                "需要医学监察员人工核对。"
-            )
+            # R35轮（R35-06）：「严重程度」是AE源记录载明的属性（severity_
+            # source=recorded）。合并用药、访视记录等域没有该属性——风险桶
+            # 的medium/critical只是系统分诊档位，此前被无差别写成「已核验
+            # 事实：…严重程度中度」，以核实口吻陈述了记录上不存在的属性。
+            # 现在只有源记录载明严重度时才输出该子句；其余域如实陈述记录
+            # 存在，分诊档位以「系统按中度/重度关注标记」归因于系统。
+            severity_recorded = str(
+                getattr(risk, "severity_source", "") or ""
+            ) == "recorded"
+            if severity_recorded:
+                basis = (
+                    f"已核验事实：受试者{subject_label}于{date_text}记录一条"
+                    f"{domain_zh}（{event.label_zh}），严重程度{severity_zh}。"
+                )
+                finding_text = (
+                    f"「{event.label_zh}」为{severity_zh}{domain_zh}信号，"
+                    "需要医学监察员人工核对。"
+                )
+            else:
+                basis = (
+                    f"已核验事实：受试者{subject_label}于{date_text}记录一条"
+                    f"{domain_zh}（{event.label_zh}）。"
+                )
+                finding_text = (
+                    f"系统按{severity_zh}关注标记该{domain_zh}记录"
+                    f"「{event.label_zh}」，需要医学监察员人工核对。"
+                )
             action = "请下钻受试者旅程与来源记录核对临床语境后确认处置。"
             findings.append(
                 {

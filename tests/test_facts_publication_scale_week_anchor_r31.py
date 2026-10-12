@@ -50,6 +50,17 @@ def test_sv_recorded_visit_date_anchors_scale_week(tmp_path: Path) -> None:
                 {"SUBJID": "21009", "VISIT": "W2", "VISDAT": "2026-03-29"},
                 {"SUBJID": "21009", "VISIT": "W12", "VISDAT": "2026-06-07"},
             ],
+            # R35轮（R33-11）：按期正常访视不再生成风险锚点，权威包要求
+            # 风险行非空——补一条AE行满足包完整性，测试焦点（量表周日期
+            # 锚定）不受影响。
+            "AE": [
+                {
+                    "SUBJID": "21009",
+                    "AETERM": "荨麻疹加重",
+                    "AESEV": "中度",
+                    "AESTDAT": "2026-06-03",
+                },
+            ],
         },
     )
     packet = FactsPublicationAuthorityProvider(workspace).get_packet(

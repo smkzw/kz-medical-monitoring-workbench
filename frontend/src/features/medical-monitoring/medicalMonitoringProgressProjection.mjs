@@ -145,6 +145,14 @@ export function projectMonitoringProgress(payload) {
       progressText: cleanText(row.progress_text),
     });
   }));
+  // R35轮（R33-10）：总数与阶段分布同源自洽性对账——阶段合计与总数
+  // 不一致时如实标注差额归属（如特殊关注/数据变化等未逐行展开的项），
+  // 不再让「11/11」与「7+3=10」无说明同屏（R33D实测）。
+  const stageTotalSum = stageProgress.reduce((sum, stage) => sum + stage.total, 0);
+  const stageUnlistedCount = total - stageTotalSum;
+  const stageReconciliationText = stageProgress.length > 0 && stageUnlistedCount > 0
+    ? `另有 ${stageUnlistedCount} 项未列入上方阶段分行（如特殊关注、数据变化等专项工作项）`
+    : "";
 
   const currentWorkAll = cleanList(payload.current_work).map((item) => {
     const row = item && typeof item === "object" ? item : {};
@@ -199,6 +207,7 @@ export function projectMonitoringProgress(payload) {
     total,
     percent,
     stageProgress,
+    stageReconciliationText,
     currentWork,
     currentWorkRemaining,
     currentWorkEmptyText: runState === "running" && currentWork.length === 0

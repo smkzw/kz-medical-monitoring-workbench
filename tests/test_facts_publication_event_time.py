@@ -254,9 +254,12 @@ def test_missed_visit_marks_state_and_same_day_dosing_conflict(
         if event.label_zh.startswith("访视记录")
     ]
     assert len(attended) == 1
-    attended_risk = risks_by_event[attended[0].event_ref]
-    assert attended_risk.severity == "low"
-    assert attended_risk.medical_note == ""
+    # R35轮（R33-11）：按期完成的正常访视不再是风险锚点——把记录存在
+    # 误当风险信号、对其挂「是否需按偏离流程上报」Query模板是对正常
+    # 执行的冤枉（R33D实测23003的W2按期访视被列锚点）。访视事件保留
+    # 在时间轴/事件面，但不生成风险行（旧实现断言attended有low风险行，
+    # 该行为随本缺陷修复移除）；仅失约访视继续生成中等级锚点。
+    assert attended[0].event_ref not in risks_by_event
 
 
 def test_severity_source_honesty(tmp_path: Path) -> None:

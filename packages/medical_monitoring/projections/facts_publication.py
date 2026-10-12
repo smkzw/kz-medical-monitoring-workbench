@@ -1365,6 +1365,14 @@ class FactsPublicationAuthorityProvider:
                     record_id=_clean(row.get("Block顺序号")),
                     severity_hint=cm_mh_severity_hint,
                     note_override=cm_mh_note,
+                    # R35轮（R33-11）：按期完成的正常访视不是风险信号——
+                    # 此前每条SV行都落一条「低风险·系统推定·医学依据空白」
+                    # 锚点并挂「是否需按偏离流程上报」Query模板，把记录存在
+                    # 误当风险、对正常执行提出偏离质疑（D位实测23003的W2
+                    # 按期访视被冤枉）。访视记录保留在时间轴与事件面（事件
+                    # 照常落账），仅失约（上方专用分支）与真正的偏离/资格
+                    # 表（PD/DS/IE等）继续生成风险锚点与Query。
+                    with_risk=(table != "SV"),
                 )
 
         # 受试者流向（SV/筛选表：ICF→筛选→治疗→研究状态）

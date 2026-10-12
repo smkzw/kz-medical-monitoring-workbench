@@ -170,9 +170,13 @@ export function mappingHeadline(payload, { stalledMs = 0, blockedGroupCount = 0 
     // 的部分结果采纳入口）。
     if (stalledMs >= MAPPING_STALL_THRESHOLD_MS) {
       const minutes = Math.floor(stalledMs / 60000);
+      // R35轮（R35-01）：入口承诺改为已兑现的事实——停滞且已有已识别
+      // 字段时，「采用已识别字段继续」降级入口即在本页呈现（此前仅在
+      // 全部作业落终态失败后出现，大队列场景用户等不到）。
       return `已识别 ${payload.fieldCount} 个字段，但已约 ${minutes} 分钟没有新进展`
-        + "——识别可能仍在排队或已停滞。可重新读取识别进度；若识别任务"
-        + "最终失败，系统会给出「采用已识别字段继续」的入口，无需一直等待。";
+        + "——识别可能仍在排队或已停滞。可重新读取识别进度继续等待；"
+        + "也可使用下方「采用已识别字段继续」入口，先行采纳已识别的"
+        + "字段（停滞分片覆盖的字段不在本批结果中）。";
     }
     return payload.questionCount > 0
       ? `已识别 ${payload.fieldCount} 个字段（其中 ${payload.questionCount} 个待确认），识别仍在生成中…`

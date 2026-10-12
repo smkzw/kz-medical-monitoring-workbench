@@ -450,7 +450,7 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
 // Step three: a plain summary of what the system recognized plus one card per
 // medically substantive ambiguity. The per-field engineering list stays
 // collapsed; the user only meets the questions that change medical analysis.
-export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldRole, onRetryFailedChunks }) {
+export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldRole, onRetryFailedChunks, onAdoptPartial }) {
   const [noteKey, setNoteKey] = useState("");
   const [noteText, setNoteText] = useState("");
   // R32-02：阻断组的逐字段角色修订输入（domain.source_field → 输入值）。
@@ -458,6 +458,24 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
   const [roleBusy, setRoleBusy] = useState("");
   // R32-04：失败分片重跑中状态（""=空闲；"__all__"=全部；否则为表名）。
   const [retryBusy, setRetryBusy] = useState("");
+  // R35轮（R33-04）：重跑受理在重负载下可达分钟级（A位实测批量重跑
+  // 按钮「重跑中…」>9分钟零变化）——记录点击时刻并每秒重渲，把已等待
+  // 时长与「后台在推进、可看字段数增长」的事实摆在按钮旁，不再静默。
+  const [retryStartedAt, setRetryStartedAt] = useState(0);
+  const [retryNow, setRetryNow] = useState(0);
+  useEffect(() => {
+    if (retryBusy === "" || !retryStartedAt) return undefined;
+    const timer = setInterval(() => setRetryNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [retryBusy, retryStartedAt]);
+  const retryElapsedSeconds = retryBusy !== "" && retryStartedAt
+    ? Math.max(0, Math.floor((retryNow - retryStartedAt) / 1000))
+    : 0;
+  const retryElapsedText = retryElapsedSeconds >= 60
+    ? `已等待约 ${Math.floor(retryElapsedSeconds / 60)} 分 ${retryElapsedSeconds % 60} 秒`
+    : retryElapsedSeconds > 0
+      ? `已等待约 ${retryElapsedSeconds} 秒`
+      : "";
   // R5冲刺（R2-12）：全字段列表曾一次性渲染上千条DOM（两次CDP截图均
   // 超时）；改为展开才渲染+分批加载。
   // R4-03口径澄清（20260929，数据级核实后修正）：本页「已识别 N 张表」
@@ -547,6 +565,32 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
           识别已进行约 {Math.max(0, Math.floor(stalledMs / 60000))} 分钟（自最近一次识别进展起计）；页面每2.5秒自动刷新，完成前无需操作。
         </p>
       ) : null}
+      {/* R35轮（R35-01）：识别停滞≥阈值且已有已识别字段时，兑现停滞
+          提示承诺的「采用已识别字段继续」降级入口——此前该入口只在
+          全部作业落终态失败（needs_attention）后出现，大队列场景下
+          终态最早也在数小时后，用户被夹在「不失败、不推进、无出路」
+          死态（B位实测82分钟）。知情采纳：未完成分片的字段不在本批
+          结果中（后端物化为缺口记录，可重新识别补全）。 */}
+      {payload?.state === "generating"
+        && stalledMs >= MAPPING_STALL_THRESHOLD_MS
+        && Number(payload?.fieldCount) > 0
+        && onAdoptPartial ? (
+        <div className="monitoring-admission-alert" role="alert" style={{ margin: "8px 0" }}>
+          <p className="monitoring-admission-alert-text">
+            已识别 {payload.fieldCount} 个字段后识别已停滞约 {Math.floor(stalledMs / 60000)} 分钟。
+            您可以选择采用已识别的字段继续进入确认（停滞分片覆盖的字段不在本批结果中，
+            后续可重新发起识别补全）；也可以继续等待或重新读取识别进度。
+          </p>
+          <button
+            type="button"
+            className="monitoring-admission-secondary"
+            disabled={mappingState.phase === "adopting" || mappingState.phase === "adjudicating"}
+            onClick={() => onAdoptPartial(Number(payload.fieldCount))}
+          >
+            采用已识别的 {payload.fieldCount} 个字段并继续
+          </button>
+        </div>
+      ) : null}
       {tables.length ? (
         <details className="monitoring-admission-table-details">
           <summary>
@@ -585,22 +629,27 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
                   {table.failureCodes.length ? ` · ${table.failureCodes.join("、")}` : ""}
                 </span>
                 <span className="monitoring-admission-question-note">
-                  <button
-                    type="button"
-                    className="monitoring-admission-secondary"
-                    disabled={retryBusy !== "" || !onRetryFailedChunks}
-                    onClick={async () => {
-                      if (retryBusy !== "" || !onRetryFailedChunks) return;
-                      setRetryBusy(table.tableName);
-                      try {
-                        await onRetryFailedChunks(table.tableName);
-                      } finally {
-                        setRetryBusy("");
-                      }
-                    }}
-                  >
-                    {retryBusy === table.tableName ? "重跑中…" : `重跑「${labelSheetName(table.tableName)}」的失败分片`}
-                  </button>
+                    <button
+                      type="button"
+                      className="monitoring-admission-secondary"
+                      disabled={retryBusy !== "" || !onRetryFailedChunks}
+                      onClick={async () => {
+                        if (retryBusy !== "" || !onRetryFailedChunks) return;
+                        setRetryBusy(table.tableName);
+                        setRetryStartedAt(Date.now());
+                        setRetryNow(Date.now());
+                        try {
+                          await onRetryFailedChunks(table.tableName);
+                        } finally {
+                          setRetryBusy("");
+                          setRetryStartedAt(0);
+                        }
+                      }}
+                    >
+                      {retryBusy === table.tableName
+                        ? `重跑中…${retryElapsedText ? `（${retryElapsedText}）` : ""}`
+                        : `重跑「${labelSheetName(table.tableName)}」的失败分片`}
+                    </button>
                 </span>
               </li>
             ))}
@@ -612,15 +661,25 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
             onClick={async () => {
               if (retryBusy !== "" || !onRetryFailedChunks) return;
               setRetryBusy("__all__");
+              setRetryStartedAt(Date.now());
+              setRetryNow(Date.now());
               try {
                 await onRetryFailedChunks("");
               } finally {
                 setRetryBusy("");
+                setRetryStartedAt(0);
               }
             }}
           >
-            {retryBusy === "__all__" ? "重跑中…" : "重跑全部失败分片"}
+            {retryBusy === "__all__" ? `重跑全部失败分片…${retryElapsedText ? `（${retryElapsedText}）` : ""}` : "重跑全部失败分片"}
           </button>
+          {retryBusy !== "" ? (
+            <p className="monitoring-admission-minor" role="status" style={{ margin: "6px 0 0" }}>
+              重跑请求已提交（{retryElapsedText || "刚刚点击"}）：失败分片由后台队列依次重新识别，
+              期间上方「已识别字段数」会随分片完成逐步增长，页面每2.5秒自动刷新。
+              单表重跑约需10分钟量级、批量更久——无需等待本按钮恢复，也无需重复点击。
+            </p>
+          ) : null}
         </details>
       ) : null}
       <p className="monitoring-admission-minor">
@@ -888,6 +947,7 @@ export function MedicalMonitoringAdmissionWizardView({
   onAnswerCard,
   onReviseFieldRole,
   onRetryFailedChunks,
+  onAdoptPartial,
   onDocumentFiles,
   onDocumentRetry,
   onDocumentAdjudicate,
@@ -949,6 +1009,21 @@ export function MedicalMonitoringAdmissionWizardView({
           return {
             key: "documents-check-failed",
             label: "研究文件核对未通过——请按上方原因处理后重试",
+            disabled: true,
+          };
+        }
+        // R35轮（R33-07）：文件角色人工裁决挂起时，主按钮不得再把已上传
+        // 的文件误述为「请先添加所需文件」——C位实测该文案与同屏裁决卡
+        // （已上传方案却只剩缺失选项）互相矛盾，用户被指向重传。如实
+        // 指向上方的裁决卡。
+        if (
+          documentPhase === "needs_user_input"
+          || (Array.isArray(documentState?.payload?.user_choices)
+            && documentState.payload.user_choices.length > 0)
+        ) {
+          return {
+            key: "documents-adjudication-required",
+            label: "请先完成上方文件角色确认",
             disabled: true,
           };
         }
@@ -1200,6 +1275,7 @@ export function MedicalMonitoringAdmissionWizardView({
                 onAnswerCard={onAnswerCard}
                 onReviseFieldRole={onReviseFieldRole}
                 onRetryFailedChunks={onRetryFailedChunks}
+                onAdoptPartial={onAdoptPartial}
               />
             ) : null}
           </>
@@ -1683,6 +1759,9 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
             error?.detail?.code === "mapping_attempt_id_invalid"
             || error?.detail?.code === "admission_attempt_not_found"
             || error?.detail?.code === "mapping_resolve_batch_id_required"
+            // R35轮（R33-07）：批次参数格式非法与缺失同族处理——自愈
+            // 重新读取最新导入记录，不再把可恢复的参数态滞留在failed。
+            || error?.detail?.code === "mapping_resolve_batch_id_invalid"
           ) {
             setDocumentState((current) => ({
               ...current,
@@ -1849,17 +1928,28 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
 
   // The system adopts the basically-correct recognition draft and performs
   // one focused independent pass before showing any residual questions.
-  const adoptDraft = useCallback(async () => {
+  const adoptDraft = useCallback(async ({ includeIncomplete = false, fieldCount = 0 } = {}) => {
     if (adoptInFlight.current) return;
     const generation = mappingRequestGeneration.current + 1;
     mappingRequestGeneration.current = generation;
     adoptInFlight.current = generation;
     mappingDispatch({ type: "adopt-start" });
     try {
+      // R35轮（R35-01）：识别停滞时的知情降级采纳携带include_incomplete
+      // ——后端把未完成分片排除出草稿并物化缺口记录，普通路径不带该
+      // 标志（generating态照旧拒绝，R19-01契约不变）。
       const draft = await api.adoptDataAdmissionMappingDraft(
         state.projectId,
         state.attemptId,
-        { reason: "采用系统字段识别结果，进入医学确认。" },
+        includeIncomplete
+          ? {
+            reason: (
+              `字段识别长时间无新进展，知情采用已识别的 ${fieldCount} 个字段继续；`
+              + "未完成分片的字段不在本批结果中。"
+            ),
+            include_incomplete: true,
+          }
+          : { reason: "采用系统字段识别结果，进入医学确认。" },
       );
       if (mappingRequestGeneration.current !== generation) return;
       mappingDispatch({ type: "adjudication-start", payload: draft });
@@ -2161,6 +2251,12 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     loadMappingCandidates();
   }, [api, loadMappingCandidates, state.attemptId, state.projectId]);
 
+  // R35轮（R35-01）：识别停滞≥30分钟时面板降级入口——知情采用已识别
+  // 字段继续（include_incomplete），不再等待不可预期的终态。
+  const onAdoptPartial = useCallback(async (fieldCount) => {
+    await adoptDraft({ includeIncomplete: true, fieldCount });
+  }, [adoptDraft]);
+
   return (
     <>
     {state.projectId && typeof api.getQueueState === "function" ? (
@@ -2178,6 +2274,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onAnswerCard={onAnswerCard}
       onReviseFieldRole={onReviseFieldRole}
       onRetryFailedChunks={onRetryFailedChunks}
+      onAdoptPartial={onAdoptPartial}
       onDocumentFiles={analyzeDocuments}
       onDocumentRetry={retryDocumentCheck}
       onDocumentAdjudicate={submitDocumentAdjudication}

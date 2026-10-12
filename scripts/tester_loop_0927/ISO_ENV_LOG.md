@@ -608,3 +608,11 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 自检3 build id 一致：runtime-build.json expectedBackendBuildId=api-4ee144cc0f399a1e == 8911 backend_build_id → 一致
 - 结论：隔离环境已恢复可用（首次尝试即成功，未触 8910/5177）
 2026-10-12 06:43 立刻无损暂停（用户指令）：run dwfrun-91c93297停于R35修复员在途（测试位1/4+分诊毕，修复员约50分钟被停、恢复重做）。8911/5178保持运行；STATE_V2保持round34。恢复=ResumeWorkflowRun同run_id，详见PAUSE_HANDOFF_20261012.md
+2026-10-12 08:5x（R35修复员六条修复后双重启，标准命令，未触 8910/5177）
+- 背景：R35修复员提交六条修复（R35-01降级采纳/R33-07 resolve 422-R35-06严重程度语义/R33-04重跑反馈/R33-10对账标注/R33-11按期访视不生成锚点；后端改动全在 packages/**+前端 medical-monitoring，services/api/app 无改动故 backend_build_id 指纹不变）
+- API 重启：lsof -ti:8911 kill → 标准命令拉起（WORKBENCH_RUNTIME_DIR=tester_loop_iso_20260928/runtime, WORKBENCH_MONITORING_AI_PARALLELISM=2），重启后进程在位
+- vite 重启：lsof -ti:5178 kill → 标准命令拉起（VITE_API_PROXY_TARGET=http://127.0.0.1:8911，--port 5178 --strictPort）
+- 自检1 runtime-readiness：curl http://127.0.0.1:8911/api/runtime-readiness → HTTP 200，ready:true，backend_build_id=api-4ee144cc0f399a1e
+- 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
+- 自检3 build id 一致：runtime-build.json expectedBackendBuildId=api-4ee144cc0f399a1e == 8911 backend_build_id → 一致
+- 口径留痕（沿R32/R35前例）：backend指纹仅覆盖 services/api/app；本轮后端改动在 packages/medical_monitoring/**（mapping_confirmation/mapping_candidate_routes/facts_mode_outputs/facts_publication），指纹数值不变但重启已从源码重新加载全部 packages 代码

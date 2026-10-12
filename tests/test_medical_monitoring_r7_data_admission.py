@@ -1524,3 +1524,34 @@ def test_document_authority_explicit_retry_is_threaded_to_promoter(
 
     assert resolve({}).status_code == 200
     assert calls[-1]["explicit_retry"] is False
+
+
+def test_resolve_get_rejects_missing_and_malformed_batch_id_structured(
+    tmp_path: Path,
+) -> None:
+    """R35轮（R33-07）：GET resolve缺batch_id→结构化422（既有语义）；
+    batch_id格式不合法（如把来源修订号srcc1_*当批次号）曾直接在路由体
+    内抛pydantic ValidationError→裸500（C位实测「补参后500」，用户侧
+    表现为不可诊断的服务器错误）。现在两者都是结构化422。"""
+
+    client = _client(
+        tmp_path / "runtime",
+        mapping_pipeline=FakeMappingPipeline(),
+        document_authority_promoter=lambda **kwargs: {
+            "state": "analyzing",
+            "authority_status": "not_promoted",
+        },
+    )
+    resolve_url = (
+        f"{_base()}/data-admissions/attempt-0001/study-documents/resolve"
+    )
+
+    missing = client.get(resolve_url)
+    assert missing.status_code == 422
+    assert missing.json()["code"] == "mapping_resolve_batch_id_required"
+
+    malformed = client.get(resolve_url, params={"batch_id": "srcc1_123456789012345678901234"})
+    assert malformed.status_code == 422
+    assert malformed.json()["code"] == "mapping_resolve_batch_id_invalid"
+    body = json.dumps(malformed.json(), ensure_ascii=False)
+    assert "Internal Server Error" not in body

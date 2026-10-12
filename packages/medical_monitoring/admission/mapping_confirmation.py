@@ -471,6 +471,7 @@ class AdmissionMappingConfirmationService:
         workspace_dir: Any,
         actor: str,
         reason: str,
+        allow_inflight_adoption: bool = False,
     ) -> Mapping[str, Any]:
         if self.mapping_repository is None or self.ai_repository is None:
             raise AdmissionMappingPipelineError("mapping_draft_unconfigured")
@@ -483,9 +484,25 @@ class AdmissionMappingConfirmationService:
         # 该状态下采纳导致「识别已完成N字段但确认路径不存在」的全链
         # 死锁（177任务约4小时吞吐下不可接受）。现允许对已完成任务
         # 的结果子集知情采纳；generating（仍在产出）依旧拒绝。
-        if payload.get("state") == "generating":
+        # R35轮（R35-01）：唯一例外是界面的「知情降级采纳」——识别长
+        # 时间无新进展（前端停滞阈值30分钟）且已有已识别字段时，用户
+        # 可显式选择「采用已识别字段继续」，不再被「不失败、不推进、
+        # 无出路」夹住（B位实测54表大工作簿停滞82分钟无终态无入口；
+        # R34-07动态收割视界使大队列的终态失败最早也要数小时后到达）。
+        # 该入口要求显式标志，仅由前端降级按钮传入；未完成分片按部分
+        # 采纳同规约排除出草稿，其(域,槽位)一并豁免完整性门并物化为
+        # 缺口记录。识别仍在正常产出（未停滞）时generating照旧拒绝，
+        # R19-01的「未终态→一律generating→拒绝采纳」契约对默认路径
+        # 不变。
+        inflight_adoption = (
+            allow_inflight_adoption
+            and payload.get("state") == "generating"
+        )
+        if payload.get("state") == "generating" and not inflight_adoption:
             raise AdmissionMappingPipelineError("mapping_run_incomplete")
-        partial_adoption = payload.get("state") == "needs_attention"
+        partial_adoption = (
+            payload.get("state") == "needs_attention" or inflight_adoption
+        )
         task_type = self.task_type
         if task_type is None:
             task_type = getattr(self.mapping_pipeline, "_task_type", "")
@@ -502,11 +519,16 @@ class AdmissionMappingConfirmationService:
         # R19轮（R19-01双保险）：list_candidates的state约定已统一为
         # 「任何作业未终态→generating」，防御性再校验——cohort中仍有
         # queued/running作业时部分采纳立即失败（快失败，不再让用户等
-        # 70秒强校验后422）。
-        if partial_adoption and any(
-            str(_value(getattr(job, "status", "")))
-            not in {"completed", "failed", "blocked", "stale_input", "cancelled"}
-            for job in jobs
+        # 70秒强校验后422）。R35轮（R35-01）：知情降级采纳是唯一例外
+        # ——在途作业按未完成排除出草稿（见下方循环与缺口豁免）。
+        if (
+            partial_adoption
+            and not inflight_adoption
+            and any(
+                str(_value(getattr(job, "status", "")))
+                not in {"completed", "failed", "blocked", "stale_input", "cancelled"}
+                for job in jobs
+            )
         ):
             raise AdmissionMappingPipelineError("mapping_run_incomplete")
         # Migration gate: the durable draft may only be assembled from the
@@ -612,6 +634,7 @@ class AdmissionMappingConfirmationService:
                     accepted_job_ids={
                         str(item["job_id"]) for item in candidate_acceptances
                     },
+                    include_inflight=inflight_adoption,
                 )
             )
         draft = self.mapping_repository.assemble(
@@ -1633,11 +1656,15 @@ class AdmissionMappingConfirmationService:
             }
             # R31轮（R31-02）：返回值扩为三元组（全失败域、缺口原因、
             # 部分覆盖域的终态失败槽位豁免集）；复核豁免只消费域列表。
+            # R35轮（R35-01）：include_inflight=True——知情降级采纳的
+            # 草稿在后续双盲对账时，在途分片覆盖的域同样豁免（单侧
+            # 无completed结果不构成比对分歧；全部完成时本参数无效果）。
             gap_domains, _gap_reasons, _gap_slots = (
                 self._terminal_failure_domain_gaps(
                     project_id=project_id,
                     jobs=primary_jobs,
                     accepted_job_ids=accepted_ids,
+                    include_inflight=True,
                 )
             )
         report = reconcile_mapping_cohorts(
@@ -1667,6 +1694,7 @@ class AdmissionMappingConfirmationService:
         project_id: str,
         jobs: Iterable[Any],
         accepted_job_ids: set[str],
+        include_inflight: bool = False,
     ) -> tuple[tuple[str, ...], list[dict[str, str]], frozenset[tuple[str, int]]]:
         """Domains whose every shard is terminally failed and uncovered.
 
@@ -1680,12 +1708,19 @@ class AdmissionMappingConfirmationService:
         耗尽）后的混合域（同域既有completed又有终态失败分片）在库层
         槽位完整性门处同样需要合法缺席通道，否则部分采纳100%被422
         硬拒（R31C-MY008实测556字段全量识别后采纳3连拒）。
+
+        R35轮（R35-01）：include_inflight=True（知情降级采纳）时，
+        尚未终态（queued/running）的分片同样计入缺席域/缺席槽位——
+        用户显式放弃等待这些分片，其字段必须作为缺口如实物化，否则
+        库层完整性门会以「缺槽位」422硬拒本次采纳。
         """
 
         covered: set[str] = set()
         failed_only: dict[str, list[str]] = {}
         covered_slots: set[tuple[str, int]] = set()
         failed_slots: set[tuple[str, int]] = set()
+        inflight_only: dict[str, list[str]] = {}
+        inflight_slots: set[tuple[str, int]] = set()
         for job in jobs:
             job_id = str(getattr(job, "job_id", "") or "")
             domain, chunk_index = self._job_profile_slot(project_id, job)
@@ -1696,46 +1731,92 @@ class AdmissionMappingConfirmationService:
             ) == "completed":
                 covered.add(domain)
                 failed_only.pop(domain, None)
+                inflight_only.pop(domain, None)
                 if chunk_index is not None:
                     covered_slots.add((domain, int(chunk_index)))
                 continue
-            if str(_value(getattr(job, "status", ""))) in {
-                "failed", "blocked", "cancelled", "stale_input",
-            }:
+            status = str(_value(getattr(job, "status", "")))
+            if status in {"failed", "blocked", "cancelled", "stale_input"}:
                 failed_only.setdefault(domain, []).append(job_id)
                 if chunk_index is not None:
                     failed_slots.add((domain, int(chunk_index)))
-        gaps = sorted(set(failed_only).difference(covered))
+            elif include_inflight and status in {"queued", "running", "pending"}:
+                inflight_only.setdefault(domain, []).append(job_id)
+                if chunk_index is not None:
+                    inflight_slots.add((domain, int(chunk_index)))
+        gaps = sorted(
+            (set(failed_only) | set(inflight_only)).difference(covered)
+        )
         reasons = []
         for domain in gaps:
-            first_job_id = failed_only[domain][0]
-            reasons.append({
-                "domain": domain,
-                "reason": (
-                    "该数据域的识别分片全部终态失败（自动重排预算耗尽），"
-                    "本批字段映射不覆盖此域；如需覆盖请重新发起字段识别。"
-                ),
-                "source_job_id": first_job_id,
-            })
+            if domain in failed_only:
+                first_job_id = failed_only[domain][0]
+                reasons.append({
+                    "domain": domain,
+                    "reason": (
+                        "该数据域的识别分片全部终态失败（自动重排预算耗尽），"
+                        "本批字段映射不覆盖此域；如需覆盖请重新发起字段识别。"
+                    ),
+                    "source_job_id": first_job_id,
+                })
+            else:
+                first_job_id = inflight_only[domain][0]
+                reasons.append({
+                    "domain": domain,
+                    "reason": (
+                        "该数据域的识别分片尚未完成（知情采纳时仍在排队或"
+                        "执行中），本批字段映射不覆盖此域；如需覆盖请重新"
+                        "发起字段识别。"
+                    ),
+                    "source_job_id": first_job_id,
+                })
         # R31轮（R31-02）：部分覆盖域——同域既有completed分片又有终态
         # 失败分片。失败槽位豁免出库层槽位门，并给每域一条如实的缺口
-        # 记录（缺失分片数可见）。
+        # 记录（缺失分片数可见）。R35轮（R35-01）：知情降级采纳时在途
+        # 分片的槽位以同一通道豁免，原因文本如实区分「尚未完成」。
         partial_missing_slots = frozenset(
-            slot for slot in failed_slots - covered_slots
+            slot
+            for slot in (failed_slots | inflight_slots) - covered_slots
             if slot[0] not in gaps
         )
         missing_by_domain: dict[str, int] = {}
+        inflight_by_domain: dict[str, int] = {}
         for domain, _index in sorted(partial_missing_slots):
             missing_by_domain[domain] = missing_by_domain.get(domain, 0) + 1
+        for domain, _index in sorted(
+            slot for slot in inflight_slots - covered_slots
+            if slot[0] not in gaps
+        ):
+            inflight_by_domain[domain] = inflight_by_domain.get(domain, 0) + 1
         for domain in sorted(missing_by_domain):
-            reasons.append({
-                "domain": domain,
-                "reason": (
+            inflight_count = inflight_by_domain.get(domain, 0)
+            failed_count = missing_by_domain[domain] - inflight_count
+            if inflight_count >= missing_by_domain[domain]:
+                reason_text = (
+                    f"该数据域有 {inflight_count} 个识别分片尚未完成"
+                    "（知情采纳时仍在排队或执行中），这些分片覆盖的字段"
+                    "不在本批结果中；如需补全请重新发起字段识别。"
+                )
+            elif inflight_count > 0:
+                reason_text = (
+                    f"该数据域有 {failed_count} 个识别分片终态失败"
+                    "（队列滞留收割或重排预算耗尽）、另有 "
+                    f"{inflight_count} 个识别分片尚未完成（仍在排队或"
+                    "执行中），这些分片覆盖的字段不在本批结果中；"
+                    "如需补全请重新发起字段识别。"
+                )
+            else:
+                reason_text = (
                     f"该数据域有 {missing_by_domain[domain]} 个识别分片终态失败"
                     "（队列滞留收割或重排预算耗尽），这些分片覆盖的字段不在"
                     "本批结果中；如需补全请重新发起字段识别。"
-                ),
-                "source_job_id": failed_only.get(domain, [""])[0],
+                )
+            reasons.append({
+                "domain": domain,
+                "reason": reason_text,
+                "source_job_id": (
+                    failed_only.get(domain) or inflight_only.get(domain, [""])
+                )[0],
             })
         return tuple(gaps), reasons, partial_missing_slots
 

@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Mapping, Optional, Protocol
 
 from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from ...admission.mapping_confirmation import enrich_candidates
@@ -101,6 +101,11 @@ _MAPPING_STATUS_CODES = {
     "mapping_document_refresh_pending": 409,
     "mapping_attempt_id_invalid": 422,
     "mapping_resolve_batch_id_required": 422,
+    # R35轮（R33-07）：GET resolve曾把格式不合法的batch_id直接传给
+    # pydantic模型构造，ValidationError在路由体内抛出→裸500（C位实测
+    # 「补参后500」）。现在格式校验前置，参数非法与缺失一样给结构化
+    # 422，不再出现不可诊断的服务器错误。
+    "mapping_resolve_batch_id_invalid": 422,
     "mapping_focus_invalid": 422,
     "mapping_run_incomplete": 409,
     "mapping_candidate_not_adoptable": 409,
@@ -221,6 +226,10 @@ _MAPPING_MESSAGES = {    "mapping_admission_not_found": "未找到对应的数�
     "mapping_resolve_batch_id_required": (
         "研究文件核对查询缺少批次参数（batch_id）。请返回向导重新进入第3步；"
         "若持续出现请刷新页面。"
+    ),
+    "mapping_resolve_batch_id_invalid": (
+        "研究文件核对查询的批次参数（batch_id）格式无效。请返回向导重新进入"
+        "第3步；若持续出现请刷新页面。"
     ),
     "mapping_focus_invalid": "筛选条件无效。请使用“重点优先”或“全部建议”。",
     "mapping_run_incomplete": "字段对应建议尚未完整完成，暂时不能进入确认。请等待生成完成或只重试失败部分。",
@@ -375,6 +384,12 @@ class MappingDraftAdoptRequest(BaseModel):
 
     reason: str = Field(min_length=1, max_length=2_000)
     actor: str = Field(default="medical_manager", min_length=2, max_length=160)
+    # R35轮（R35-01）：界面「采用已识别字段继续」降级入口的显式标志——
+    # 识别长时间停滞（前端阈值30分钟）且已有已识别字段时，允许对已
+    # 完成分片的结果子集知情采纳，未完成分片按部分采纳同规约排除出
+    # 草稿并物化为缺口。默认False：普通generating态照旧拒绝（R19-01
+    # 契约不变），仅降级按钮路径传True。
+    include_incomplete: bool = False
 
 
 class MappingDraftFieldEditRequest(BaseModel):
@@ -988,7 +1003,13 @@ def register_mapping_candidate_routes(
             # invalid（与「attempt失效」混淆，误导排障）——如实报告
             # 缺少查询参数。
             return _mapping_error("mapping_resolve_batch_id_required")
-        payload = DocumentAuthorityPromotionRequest(batch_id=batch_id.strip())
+        try:
+            payload = DocumentAuthorityPromotionRequest(batch_id=batch_id.strip())
+        except ValidationError:
+            # R35轮（R33-07）：batch_id格式不合法（如把来源修订号srcc1_*
+            # 当批次号传入）曾在路由体内抛pydantic ValidationError→裸500
+            #（C位实测「补参后500」）。现在与缺失同样给结构化422。
+            return _mapping_error("mapping_resolve_batch_id_invalid")
         # R32-01：advance（核对推进）单次最长约30秒（本路由409文案即
         # 自证），async轮询路径不得在事件循环内同步执行；与POST同义但
         # 下放线程池。
@@ -1577,6 +1598,7 @@ def register_mapping_candidate_routes(
                     workspace_dir=context.workspace_dir(context.root, canonical),
                     actor=str(actor),
                     reason=body.reason,
+                    allow_inflight_adoption=bool(body.include_incomplete),
                 )
             )
             public = _public_mapping_projection(result)

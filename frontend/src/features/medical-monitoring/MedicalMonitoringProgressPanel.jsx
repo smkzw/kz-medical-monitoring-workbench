@@ -127,6 +127,11 @@ export function MonitoringProgressPanelView({
                     </li>
                   ))}
                 </ul>
+                {view.stageReconciliationText ? (
+                  <p className="monitoring-progress-minor" style={{ margin: "4px 0 0" }}>
+                    {view.stageReconciliationText}
+                  </p>
+                ) : null}
               </section>
             ) : null}
             {view.currentWork.length > 0 || view.currentWorkEmptyText ? (
