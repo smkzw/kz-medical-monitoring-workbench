@@ -4,6 +4,133 @@
 
 ---
 
+## R40 攻坚·第 1 次（2026-10-13，攻坚工程师-R40-第1次）
+
+### 0. 结论先行
+
+**墙未复发：R39 测试者修复（81e1ce14：R39-01/02/03+R37-03/04/05 六条——
+后端面 monitoring_ai_service 身份注入口径/mapping_candidate_routes 失败
+分支文案/main.py，前端读取退避重试与查询工作区覆盖说明面）+ Ollama 额度
+切换（d6013072）+ 轮次归档（69d972bf）之后，8911 于 2026-10-13 10:38:27
+重启、5178 于 10:38:28 重启（ISO_ENV_LOG 10:37 标准条目），本轮两遍全新
+幂等键全链全绿，零阻断、零代码修复、零重启、零跳门。** 常驻项目
+「MX循开考-CSU」（proj_user_6ef58ac151e1）以两个全新幂等键
+（r40s-fresh-06f7a95b4b8d=registry seq 66 / r40s-fresh-0ff08c0c7c1c=
+seq 67）各走完 run-setup/options → workspace/bootstrap（留证）→
+prepare-and-start → progress completed（15s/2 轮询）→ publication
+available → result-entry → overview 可读（两遍均 1,243,923B/60 发现/
+16 受试者/389 现行风险，与 R39 基线字节数逐位一致）。主投影 60 条
+finding 逐字段（除每轮派生 query_draft_id）与 R39 基线**零漂移**、389 条
+risk_instance_ref 逐字段全等；query_drafts 归一化多重集全等仅列表顺序异
+（59/60 位次）=R38 §2-2 已在案的顺序非确定性，非内容漂移。
+
+### 1. 环境前置（复现前，未重启任何服务）
+
+- 8911（pid 83537，2026-10-13 10:38:27 拉起，127.0.0.1 IPv4 监听）
+  `/api/runtime-readiness` 200 ready=true、
+  backend_build_id=**api-71272c9b18ef5f5d**（81e1ce14 提交说明
+  ISO_ENV_LOG 条目同指纹）；`/api/health` 200（integrity ok, schema v16）。
+- 5178（vite node pid 83561，10:38:28 拉起）`http://localhost:5178/monitoring`
+  200；runtime-build.json expectedBackendBuildId=api-71272c9b18ef5f5d 与
+  后端**配对一致**（frontendBuildId=web-02219adfb901b542，与 81e1ce14
+  留痕同）。
+- 加载面实证：`find services/api/app packages frontend/src -newermt
+  "2026-10-13 10:38:27"` 为空（全部源码 mtime 早于进程启动）；
+  `git diff HEAD -- packages services frontend/src` 为空——
+  磁盘==HEAD==进程加载面（HEAD=69d972bf，含 81e1ce14 六条修复）。
+- 复现前磁盘基线：launch_registry 65 条全部 completed+result_available=1、
+  **waiting_start=0**（seq 65=monitoring_fcf70e4f… 系 R39 测试者轮 UI
+  回归运行 00:33:52Z，同 f58ccf16c4f3 主指纹家族）；execution_profiles
+  `global_default|*|1` 在位；admission_events 6 行。
+
+### 2. 复现（任务①）——两遍全链（驱动 `r40s_siege_repro.py`，证据
+`r40s_siege_evidence.jsonl` 54 行、0 阻断，两遍链路壁钟 39s）
+
+忠实界面路径（不先 workspace/bootstrap；bootstrap 仅按任务书列名留证实测）。
+
+**第一遍（03:20:58Z 起，key=r40s-fresh-06f7a95b4b8d，seq 66）**：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线双侧 | mapping-candidates 200（233ms）、facts 200（91ms）、project/open 200（104ms）、protocol-versions 200（49ms）——预置台与运行门无口径差 |
+| run-setup/options | 200，237ms，snapshot:ef8692acfbab4d2a9846916f（与 R34–R39 同快照） |
+| workspace/bootstrap（留证） | 200，105ms，replayed=true revision=1 |
+| prepare-and-start | **200，455ms**，run:2ee789b9ad0a2eab18a5f89d |
+| progress | completed，percent=100.0，polls=2，run_seconds=15（result_available 投影时序沿 R20 §4：发布后才置 1） |
+| publication | POST 200 → **available**（756ms） |
+| result-entry | 200，349ms，rct=result-context:1785e059cc8d4e228cb44aa8cfc58dc5 |
+| results/{rct}/overview | 200，381ms，**1,243,923B、60 发现/16 受试者/389 现行风险**；缓存探针二读 189ms 字节相等 |
+
+**第二遍=重验（任务③，key=r40s-fresh-0ff08c0c7c1c，seq 67）**：全绿同型
+——options 200（249ms，同快照）→ bootstrap 200 replayed →
+prepare-and-start **200**（467ms，run:ab9e4d3d261275c8aa2523c0）→
+progress completed（polls=2，15s）→ publication **available**（820ms）→
+entry 200（354ms，rct=result-context:65984710fb52482aa13497ea7fb30360）→
+overview 200（391ms，1,243,923B/60/16，chain_ok=True；缓存探针 191ms
+字节相等）。
+
+终态磁盘：sequence 1-67 全部 completed+result_available=1（新增 66/67 两行
+request_fingerprint 均为 68ba60ad574c326b=与 R34–R39 各轮 siege 同输入
+运行逐位同指纹）、**waiting_start=0**、admission_events 6 行=6 行（零新增
+接入事件）、global_default|*|1 三次采样稳定。
+
+### 3. 基线归因（本轮实测）
+
+- **主投影零漂移**：R40p1/R40p2/R39p1 三方 60 个 finding_id 集合全等、
+  389 个 risk_instance_ref 集合全等；逐 finding 逐字段比对（剔除每轮
+  派生 query_draft_id 后）**零差异**，逐 risk 逐字段**零差异**——81e1ce14
+  六条修复（身份注入/退避重试/覆盖说明等）对映射/结果面零影响，符合
+  预期（该提交不触结果投影管线）。
+- **query_drafts 顺序非确定**（R38 §2-2 细目在案复现）：两遍 60 条归一化
+  多重集全等、59/60 位次顺序不同，content_sha256 随顺序派生——非内容
+  漂移。
+- 字节数 1,243,923 与 R39 完全一致；R36-05 的 2 条治疗 emergent 提示
+  （R39 归因）在位不新增。
+
+### 4. 修复（任务②）
+
+**无需新修复，本轮零代码改动、零重启。** 运行链上无任何一道门拒绝：
+接入管线侧 confirmed/ready/current 与运行门无口径差；prepare-and-start
+首击即 200（455/467ms），无 waiting_start 残留、无 in_flight_conflict、
+无 global_default_missing（profile_layer_versions 稳定
+`global_default|*|1`）；publication 首击即 available；result-entry/
+overview 冻结包会话缓存（R34-09/R32-07）持续在役（二读 189/191ms vs
+首读 381/391ms）。
+
+### 5. 在役回归（本轮实跑，.venv/bin/pytest）
+
+- 全量：`pytest tests/test_medical_monitoring_r7_product_router.py -q` →
+  **96 passed / 1 failed**（44.15s）。唯一失败
+  `test_late_project_dispatchers_keep_two_actual_api_results_isolated`：
+  本轮单独重跑 2.11s 确定性复现，签名 `409 {"code":
+  "result_context_unavailable","message":"本次结果暂不可查看，请返回进度页"}`
+  @ tests/test_medical_monitoring_r7_product_router.py:2844——与 81e1ce14
+  提交说明/ISO_ENV_LOG 留痕**逐字同签名**（该轮 git stash 对照已证 HEAD
+  既有、与 R39 改动无关）。属双项目晚接入派发隔离场景，非常驻项目运行链
+  墙（本轮两遍全链绿+该套件 96 过直接证明）；继续挂修复员排期。
+- R39 新代码面：`pytest
+  tests/test_mm_r39_document_authority_identity_injection.py
+  tests/test_monitoring_document_authority_jobs.py -q` → **33 passed**
+  （4.38s：身份注入口径 ×6 + monitoring jobs 契约 ×27，81e1ce14 改动面
+  在役）。
+
+### 6. 遗留与边界（转台账，不属本轮墙判据）
+
+- test_late_project_dispatchers 409 result_context_unavailable：见 §5，
+  本轮第三次独立复现（R39 测试者 stash 对照 + ISO_ENV_LOG + 本轮），留
+  修复员沿双项目 late-dispatcher 隔离场景定位。
+- study-documents ready=false/R38-03 台账项未在本轮复测（R39 攻坚已留
+  代码行归因与不拦链证据，归修复员）。
+- 浏览器像素级全链回归未执行（工程验证身份以 API 驱动+状态机代码核验为
+  口径，沿 R25-R39 历轮边界）。
+- 常驻项目 registry 现 67 条全 completed；后续轮次开考直接走「开始运行
+  监查」即可。
+
+留痕文件：`r40s_siege_repro.py`、`r40s_siege_evidence.jsonl`、
+`r40s_overview_p1.json`、`r40s_overview_p2.json`、本日志节。
+
+---
+
 ## R39 攻坚·第 1 次（2026-10-13，攻坚工程师-R39-第1次）
 
 ### 0. 结论先行
