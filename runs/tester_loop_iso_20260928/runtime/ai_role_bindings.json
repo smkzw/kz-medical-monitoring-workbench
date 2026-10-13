@@ -20,8 +20,8 @@
    "capability_status": "unverified",
    "capability_verified_at": "",
    "enabled": true,
-   "model": "deepseek-v4.1-flash",
-   "profile_id": "document_authority_verifier_ai__medical_monitoring_verifier_ai__ollama_cloud_dsv",
+   "model": "glm-5.3-flash",
+   "profile_id": "medical_monitoring_ai__cms_router_glm53flash",
    "reasoning_effort": "high",
    "role_id": "document_authority_verifier_ai",
    "thinking": "enabled"
@@ -33,8 +33,8 @@
    "capability_status": "unverified",
    "capability_verified_at": "",
    "enabled": true,
-   "model": "deepseek-v4.1-flash",
-   "profile_id": "medical_monitoring_verifier_ai__ollama_cloud_dsv41",
+   "model": "glm-5.3-flash",
+   "profile_id": "medical_monitoring_ai__cms_router_glm53flash",
    "reasoning_effort": "high",
    "role_id": "independent_ai",
    "thinking": "disabled"
@@ -59,8 +59,8 @@
    "capability_status": "unverified",
    "capability_verified_at": "",
    "enabled": true,
-   "model": "deepseek-v4.1-flash",
-   "profile_id": "medical_monitoring_verifier_ai__ollama_cloud_dsv41",
+   "model": "glm-5.3-flash",
+   "profile_id": "medical_monitoring_ai__cms_router_glm53flash",
    "reasoning_effort": "high",
    "role_id": "medical_monitoring_verifier_ai",
    "thinking": "enabled"
