@@ -353,7 +353,9 @@ export function createMedicalMonitoringProductApi({
       riskInstanceRef: source.riskInstanceRef || source.risk_instance_ref,
       sourceLocatorRef: source.sourceLocatorRef || source.source_locator_ref,
     };
-    requiredOption(publicOptions.riskInstanceRef, "riskInstanceRef");
+    // R41轮（R39-04收口）：riskInstanceRef 可选——量表周分值（UAS7等）
+    // 与检验/检查域事件按设计不落风险行，事件详情按定位符直读来源证据；
+    // 定位符仍必填。路径构造器对空值跳过该查询参数。
     requiredOption(publicOptions.sourceLocatorRef, "sourceLocatorRef");
     return get(
       MEDICAL_MONITORING_PRODUCT_PATHS.resultSourceEvidence(

@@ -1344,6 +1344,25 @@ def _closed_role_catalog_v2(
     return _compile_role_catalog(ROLE_CATALOG_V2)
 
 
+def closed_role_catalog_payload() -> tuple[dict[str, str], ...]:
+    """R41轮（R41-01）：闭合目录角色的公开投影，供字段角色修订候选。
+
+    第3步语义质量门抛出 G-ROLE-002（核心角色未进入闭合目录）时，界面
+    必须让用户在目录角色中选择或将字段保持未映射——目录清单随阻断组
+    一起下发（仅含项目无关的角色概念元数据：id/语义族/值语义，不含任何
+    项目数据），前端渲染为输入候选，用户不再对着自由文本猜合法角色名。
+    """
+    _aliases, concepts = _closed_role_catalog_v2()
+    return tuple(
+        {
+            "role_concept_id": concept.role_concept_id,
+            "role_family": concept.role_family,
+            "value_semantics": concept.value_semantics,
+        }
+        for concept in concepts.values()
+    )
+
+
 def resolve_closed_monitoring_role_concept(
     role: str,
 ) -> RoleConcept | None:

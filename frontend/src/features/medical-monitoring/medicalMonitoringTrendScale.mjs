@@ -29,6 +29,11 @@ export function monitoringTrendScaleView(indicator) {
     displayValue: typeof point?.value === "string" ? point.value : knownValue(point),
     unit: pointUnit(point) || unit,
     heightPercent: 0,
+    // R41轮（R39-04/R34-11）：趋势点携带可回看的原始记录定位——指标趋势
+    // 柱此前不可点，监查员看到异常分值却无法跳到对应原始记录。
+    recordRefs: Array.isArray(point?.record_refs)
+      ? point.record_refs.filter((ref) => typeof ref === "string" && ref.trim())
+      : [],
   }));
 
   const knownValues = items.map((item) => item.value).filter((value) => value !== null);

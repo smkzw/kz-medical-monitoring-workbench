@@ -118,8 +118,18 @@ export function monitoringJourneyDrawerSections({
   const labels = domainLabels && typeof domainLabels === "object" ? domainLabels : MONITORING_JOURNEY_DEFAULT_DOMAIN_LABELS;
   const row = currentRow && typeof currentRow === "object" ? currentRow : null;
   const riskInstance = clean(row?.risk_instance_ref) || clean(risk?.riskInstanceRef || risk?.risk_instance_ref);
-  const sourceLocator = clean(row?.source_locator_ref) || clean(risk?.sourceLocatorRef || risk?.source_locator_ref);
-  const sourceEnabled = Boolean(riskInstance && sourceLocator);
+  // R41轮（R39-04收口）：事件自身携带的来源定位也参与证据入口判定——
+  // 量表周分值（UAS7等）与检验/检查域事件按设计不落风险行，此前
+  // sourceEnabled 要求 riskInstance&&sourceLocator，这些事件的详情恒
+  // 显示「原始记录位置待确认」且无「查看来源证据」入口（证据链在
+  // LB/症状/疗效域不闭环）。事件定位符直读即可回看原始行。
+  const eventLocator = event && Array.isArray(event.sourceLocatorRefs) && event.sourceLocatorRefs.length
+    ? clean(event.sourceLocatorRefs[0])
+    : "";
+  const sourceLocator = clean(row?.source_locator_ref)
+    || clean(risk?.sourceLocatorRef || risk?.source_locator_ref)
+    || eventLocator;
+  const sourceEnabled = Boolean(sourceLocator);
   const beforeAfter = monitoringJourneyBeforeAfterModel(comparison, row);
   const category = event
     ? clean(labels[event.domain] || event.domainEncoding?.shortLabel || "")

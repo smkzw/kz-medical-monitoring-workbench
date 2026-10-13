@@ -743,6 +743,15 @@ export function MonitoringWizardView({
             <section className="monitoring-wizard-section" aria-labelledby="monitoring-wizard-confirm-heading">
               <div className="monitoring-wizard-section-head"><div><span className="monitoring-eyebrow">第 4 步</span><h3 id="monitoring-wizard-confirm-heading">确认并开始</h3></div><p>开始后将进入本次监查进度；离开页面不会停止本次监查。</p></div>
               <dl className="monitoring-confirm-summary"><div><dt>监查方式</dt><dd>{wizard?.summary?.modeText || "待确认"}</dd></div><div><dt>数据范围</dt><dd>{wizard?.summary?.scopeDescription || currentData.scopeDescription || "待确认"}</dd></div><div><dt>数据截止</dt><dd>{wizard?.summary?.dataCutoffText || currentData.dataCutoff || "待确认"}</dd></div><div><dt>比较基线</dt><dd>{wizard?.summary?.comparisonRangeText || "不使用上次结果"}</dd></div><div><dt>中心数量</dt><dd>{wizard?.serverSummary?.centerCount ?? "开始后由系统确认"}</dd></div><div><dt>受试者数量</dt><dd>{wizard?.serverSummary?.subjectCount ?? "开始后由系统确认"}</dd></div><div><dt>特殊关注</dt><dd>{wizard?.summary?.selectedRuleCount ?? wizard?.riskRuleTokens?.length ?? 0} 项</dd></div><div><dt>工作项总数</dt><dd>{wizard?.serverSummary?.workItemCount ?? "开始后由系统确认"}</dd></div></dl>
+              {/* R41轮（R35-05）：确认步如实声明发起时强制执行的前置校验
+                  ——后端在发起时逐项校验（来源激活→字段映射确认→方案版本
+                  确认），未就绪即409阻断并把原因与前置链指引呈现在本向导
+                  的错误区。「方案监查准备」抽屉只是观察窗口：抽屉核对停滞
+                  （超时/重开）不改变发起时的强制校验，用户不会因抽屉卡死
+                  而误判"绕过了准备校验"。 */}
+              <p className="monitoring-wizard-gate-note" data-monitoring-wizard-gate-note>
+                发起时系统将强制校验前置链：研究文件核对与来源激活、字段映射确认、方案版本确认——任一未就绪即阻断开始并给出原因与去向；「方案监查准备」面板的核对结论可在发起前随时查看。
+              </p>
             </section>
           ) : null}
           {wizard?.errorText ? <p className="monitoring-wizard-error" role="alert">{wizard.errorText}</p> : null}
@@ -1046,7 +1055,20 @@ export function MedicalMonitoringProductLoop({
         }
       } catch (error) {
         setResultLoading(false);
+        // R41轮（R41-02）：请求构造阶段的同步失败此前一律只设错误态、
+        // 不进调度——但除 target_incomplete（客户端在请求发出前确定性
+        // 抛出的路由缺定位，自动重试无法恢复，保持专属文案）外，API
+        // 客户端的必填参数校验（requiredOption/requireId）等其他同步
+        // 错误也会落进本分支，面板却照样渲染「首次自动重试即将开始」
+        // （承诺无行为，D位R41实测计数恒0）。非确定性同步错误同样
+        // 计数并进入共用退避调度。
+        if (error?.code === "public_result_target_incomplete") {
+          setResultError(projectMonitoringPublicResultError(error));
+          return;
+        }
+        failures += 1;
         setResultError(projectMonitoringPublicResultError(error));
+        scheduleRetryAfterFailure();
         return;
       }
       request.then(async (payload) => {
@@ -1244,20 +1266,72 @@ export function MedicalMonitoringProductLoop({
     if (!target) return;
     navigate("overview", { public_run_token: target, result_context_token: "" });
   }, [navigate, productState?.selectedPublicRunToken, productState?.selection?.inFlightRun?.publicRunToken, productState?.selection?.otherInFlightRun?.publicRunToken, publicRunToken, resultToken]);
-  const openResult = useCallback(async (token = productState?.selectedPublicRunToken) => {
+  // R41轮（R41-02）：结果入口（getResultEntry）读取失败的退避自动重试。
+  // 此前入口失败只设错误态——面板照样渲染「首次自动重试即将开始」，
+  // 但没有任何调度器在跑（概览首开失败即此场景，D位R41实测6次中断
+  // 的第1次；计数恒0、只能手动「重新读取」）。预算与退避口径与结果
+  // 读取共用（RESULT_READ_AUTO_RETRY_LIMIT + monitoringRefreshBackoffMs），
+  // 计数复用 resultRetryAttempt 在同一面板如实渲染；成功/手动重读复位。
+  const entryRetryRef = useRef({ failures: 0, timer: null });
+  const entryTokenRef = useRef("");
+  const clearEntryRetryTimer = useCallback(() => {
+    if (entryRetryRef.current.timer) {
+      clearTimeout(entryRetryRef.current.timer);
+      entryRetryRef.current.timer = null;
+    }
+  }, []);
+  useEffect(() => () => clearEntryRetryTimer(), [clearEntryRetryTimer]);
+  const openResult = useCallback(async (token = productState?.selectedPublicRunToken, options = {}) => {
     if (!token) return;
+    if (options?.manual || entryTokenRef.current !== token) {
+      // 手动重读或换了目标运行：重置预算，不让历史失败挤占本次。
+      clearEntryRetryTimer();
+      entryRetryRef.current.failures = 0;
+      entryTokenRef.current = token;
+      if (options?.manual) setResultRetryAttempt(0);
+    }
     setEntryLoading(true);
     try {
       const payload = await api.getResultEntry(normalizedProjectId, token);
       const entry = projectMonitoringResultEntry(payload, { projectId: normalizedProjectId, publicRunToken: token });
       if (entry.kind === "invalid") throw new Error(entry.error || "本次结果暂不可查看，请返回进度页");
+      clearEntryRetryTimer();
+      entryRetryRef.current.failures = 0;
+      entryTokenRef.current = "";
+      setResultRetryAttempt(0);
       navigate("overview", { result_context_token: entry.resultContextToken, public_run_token: "" });
     } catch (error) {
       setResultError(projectMonitoringPublicResultError(error));
+      entryRetryRef.current.failures += 1;
+      if (entryRetryRef.current.failures <= RESULT_READ_AUTO_RETRY_LIMIT) {
+        const failures = entryRetryRef.current.failures;
+        setResultRetryAttempt(failures);
+        clearEntryRetryTimer();
+        entryRetryRef.current.timer = setTimeout(() => {
+          entryRetryRef.current.timer = null;
+          openResultRef.current?.(token);
+        }, monitoringRefreshBackoffMs(failures));
+      } else {
+        setResultRetryAttempt(-1);
+      }
     } finally {
       setEntryLoading(false);
     }
-  }, [api, navigate, normalizedProjectId, productState?.selectedPublicRunToken]);
+  }, [api, clearEntryRetryTimer, navigate, normalizedProjectId, productState?.selectedPublicRunToken]);
+  const openResultRef = useRef(null);
+  useEffect(() => {
+    openResultRef.current = openResult;
+  }, [openResult]);
+  // R41轮（R41-02）：已进入结果上下文后入口重试不再有意义——挂起的
+  // 入口重试定时器随结果读取启动一并清掉，避免迟到的一次重试把用户
+  // 又拽回概览导航。
+  useEffect(() => {
+    if (resultToken) {
+      clearEntryRetryTimer();
+      entryRetryRef.current.failures = 0;
+      entryTokenRef.current = "";
+    }
+  }, [clearEntryRetryTimer, resultToken]);
   const retryPage = useCallback(() => {
     setResultError(null);
     if (resultToken) {
@@ -1265,7 +1339,7 @@ export function MedicalMonitoringProductLoop({
       return;
     }
     if (productState.kind === "result_available" && productState.selectedPublicRunToken) {
-      openResult(productState.selectedPublicRunToken);
+      openResult(productState.selectedPublicRunToken, { manual: true });
       return;
     }
     refreshAll();

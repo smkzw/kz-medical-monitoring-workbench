@@ -193,7 +193,11 @@ passed += 4;
   const noSourceEvent = { ...event, sourceLocatorRefs: [] };
   const closedNoSource = monitoringJourneyDrawerSections({ event: noSourceEvent, risk: null, currentRow: closedRow, comparison });
   check(closedNoSource.relatedRecords === MONITORING_JOURNEY_DRAWER_FALLBACK_TEXTS.relatedRecords, "no source count falls back");
-  check(upgradedSections.sourceEnabled === true && closedSections.sourceEnabled === false, "source pair gate: enabled only with instance + locator");
+  // R41轮（R39-04收口③）：证据入口判定改为「有定位即可」——量表/检验等
+  // 无风险行的事件按事件自身定位符直读来源证据（后端已支持）；行级定位
+  // 缺失但事件携带定位时仍可回看该事件的原始行。
+  check(upgradedSections.sourceEnabled === true && closedSections.sourceEnabled === true, "locator alone enables the source entry (row locator or event locator fallback)");
+  check(closedNoSource.sourceEnabled === false, "no locator on row or event keeps the source entry disabled");
 }
 passed += 10;
 

@@ -913,11 +913,23 @@ function normalizeSourceEvidenceProjection(projection, identity, sourceRefs, rec
   if (!projection || typeof projection !== "object" || Array.isArray(projection) || projection.kind !== "source_evidence") {
     throw new MedicalMonitoringWorkspaceApiError("SOURCE_EVIDENCE_PROJECTION_INVALID", "来源依据 projection kind is invalid.");
   }
-  for (const field of ["risk_ref", "risk_instance_ref", "source_locator_ref", "authority_receipt_ref"]) {
+  // R41轮（R39-04收口）：risk_ref/risk_instance_ref不再强制必填——量表
+  // 周分值（UAS7等）与检验/检查域事件按设计不落风险行，定位符直读的
+  // 来源证据没有风险语义（projection/identity两处同空=合法）。定位符
+  // 本身仍必填；有风险语义时投影与身份必须一致（原有fail-closed不变）。
+  for (const field of ["source_locator_ref", "authority_receipt_ref"]) {
     requiredString(projection[field], `projection.${field}`);
   }
+  for (const field of ["risk_ref", "risk_instance_ref"]) {
+    const value = projection[field];
+    if (value !== undefined && value !== null && typeof value !== "string") {
+      throw new MedicalMonitoringWorkspaceApiError("SOURCE_EVIDENCE_FIELDS_INVALID", `projection.${field} must be a string.`);
+    }
+  }
   for (const [projectionKey, identityKey] of [["risk_ref", "risk_ref"], ["risk_instance_ref", "risk_instance_ref"], ["source_locator_ref", "source_locator_ref"]]) {
-    if (projection[projectionKey] !== identity[identityKey]) {
+    const projected = projection[projectionKey] ?? "";
+    const identified = identity[identityKey] ?? "";
+    if (projected !== identified) {
       throw new MedicalMonitoringWorkspaceApiError("SOURCE_EVIDENCE_IDENTITY_MISMATCH", `来源依据 identity mismatch: ${projectionKey}`, { field: projectionKey });
     }
   }
@@ -940,8 +952,8 @@ function normalizeSourceEvidenceProjection(projection, identity, sourceRefs, rec
   sourceRefMatchesEvidence(sourceRefs[0], evidence, identity, projection);
   return {
     ...evidence,
-    riskRef: projection.risk_ref,
-    riskInstanceRef: projection.risk_instance_ref,
+    riskRef: projection.risk_ref || "",
+    riskInstanceRef: projection.risk_instance_ref || "",
     sourceLocatorRef: projection.source_locator_ref,
     authorityReceiptRef: projection.authority_receipt_ref,
   };

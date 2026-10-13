@@ -1,6 +1,7 @@
 """Pure renderer-neutral helpers for R5 product read models."""
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import Any, Callable, Mapping, Optional, Sequence
 
@@ -332,6 +333,11 @@ def _value_indicator(
     })
 
 
+# R41轮（R34-11）：周分值事件label的周次后缀（如「UAS7量表（第2周）」），
+# 量表趋势按剥离后缀后的量表名归并为同一条指标序列。
+_SCALE_LABEL_WEEK_SUFFIX_RE = re.compile(r"^(.+)（第\d+周）$")
+
+
 def _indicator_payloads(
     packet: R5AuthorityPacket,
     *,
@@ -370,20 +376,35 @@ def _indicator_payloads(
             source_refs_getter=lambda item: item.source_locator_refs,
             receipt_ref=receipt_ref,
         ))
-    # R24轮（R24-06）：量表数值序列（UAS7等）——按 measure_label 分组，
-    # 每组一条指标。此前指标页只有计数柱图，项目申明的UAS7趋势零产出。
+    # R24轮（R24-06）：量表数值序列（UAS7等）——按量表名分组，每组一条
+    # 指标。此前指标页只有计数柱图，项目申明的UAS7趋势零产出。
+    # R41轮（R34-11）：按「量表名」而非「量表名+周次」分组——周分值事件
+    # 的label形如「UAS7量表（第2周）」，此前逐周各成一条单点指标，UAS7
+    # 的跨周趋势（W2→W12评分变化）在指标趋势页不可见（D位实测只见
+    # 「事件记录数」柱图、量表系列有名无数据）。现剥离周次后缀归并为
+    # 一条量表指标，各周分值按时间排序为同序列点，按分值轴绘制。
     measure_groups: dict[str, list[Any]] = {}
     for item in events:
         if item.measure_value is None or not str(item.measure_label or "").strip():
             continue
-        measure_groups.setdefault(str(item.measure_label).strip(), []).append(item)
+        label = str(item.measure_label).strip()
+        base_match = _SCALE_LABEL_WEEK_SUFFIX_RE.match(label)
+        group_key = base_match.group(1) if base_match else label
+        measure_groups.setdefault(group_key, []).append(item)
     for position, (measure_label, items) in enumerate(
         sorted(measure_groups.items()), start=1
     ):
         indicators.append(_value_indicator(
             f"r5-indicator-scale-value-{position:02d}",
             measure_label,
-            items,
+            sorted(
+                items,
+                key=lambda item: (
+                    item.start_date is None,
+                    item.start_date or date.min,
+                    item.event_ref,
+                ),
+            ),
             receipt_ref=receipt_ref,
         ))
     return indicators

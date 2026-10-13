@@ -1517,6 +1517,19 @@ button.monitoring-pending-date.is-selected {
   background: #3976bd;
 }
 
+/* R41轮（R39-04/R34-11）：可点趋势柱的悬停/焦点态——沿用监控页既有
+   蓝色主色，仅轻微背景反馈，不引入新的视觉语言。 */
+.monitoring-trend-point button.monitoring-trend-point-bar {
+  border-radius: 4px;
+}
+.monitoring-trend-point button.monitoring-trend-point-bar:hover {
+  background: rgba(57, 118, 189, 0.1);
+}
+.monitoring-trend-point button.monitoring-trend-point-bar:focus-visible {
+  outline: 2px solid #3976bd;
+  outline-offset: 2px;
+}
+
 .monitoring-trend-point strong {
   font-size: 12px;
 }

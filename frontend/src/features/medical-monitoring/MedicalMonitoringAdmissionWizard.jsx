@@ -32,7 +32,10 @@ import {
   mappingStalledMs,
   mappingUnansweredCount,
 } from "./medicalMonitoringAdmissionMappingConfirmState.mjs";
-import { semanticQualityPresentation } from "./medicalMonitoringFieldMappingState.mjs";
+import {
+  semanticQualityPresentation,
+  semanticQualityRoleCatalog,
+} from "./medicalMonitoringFieldMappingState.mjs";
 import "./medicalMonitoringAdmissionWizard.css";
 
 // R6-01：resolve既可能返回核对流程载荷（含state/analysis_token），
@@ -489,7 +492,7 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
 // Step three: a plain summary of what the system recognized plus one card per
 // medically substantive ambiguity. The per-field engineering list stays
 // collapsed; the user only meets the questions that change medical analysis.
-export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldRole, onRetryFailedChunks, onAdoptPartial, onDegradeConfirm, onSupplementFiles }) {
+export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldRole, onKeepFieldUnmapped, onRetryFailedChunks, onAdoptPartial, onDegradeConfirm, onSupplementFiles }) {
   const [noteKey, setNoteKey] = useState("");
   const [noteText, setNoteText] = useState("");
   // R32-02：阻断组的逐字段角色修订输入（domain.source_field → 输入值）。
@@ -532,6 +535,11 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
   // R32-02：阻断确认的待处理字段关系组（此前只渲染横幅不给入口）。
   const blockedGroups = drafting && quality?.blocksConfirmation
     ? mappingBlockedRelationGroups(mappingState)
+    : [];
+  // R41轮（R41-01）：G-ROLE-002 阻断组随组下发的闭合目录角色候选——
+  // 修订输入的 datalist 候选源；用户不再对着自由文本猜合法角色名。
+  const roleCatalog = drafting && quality?.blocksConfirmation
+    ? semanticQualityRoleCatalog(mappingState.draft?.semantic_quality)
     : [];
   const payload = mappingState.payload;
   // R25轮（R25-01）：generating超阈值无新字段时，headline如实切换为
@@ -863,8 +871,12 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
         </div>
       ) : null}
       {/* R32-02：阻断组明细卡片——每条给出系统判断、涉及字段当前角色，
-          并提供逐字段角色修订入口（保存后自动重新复核）。此前该状态下
-          页面只有横幅+永久禁用的确认按钮，零处理控件（B位2.5小时死锁）。 */}
+          并提供逐字段角色修订入口（保存后自动重新核对）。此前该状态下
+          页面只有横幅+永久禁用的确认按钮，零处理控件（B位2.5小时死锁）。
+          R41轮（R41-01）：修复公开投影剥掉 affected_fields 后卡片只有
+          标题摘要、零处置入口的死锁（R41B实测确认按钮恒disabled）——
+          现在每字段带目录角色候选（datalist）与「保持未映射」出口，
+          与后端文案「应选择目录角色或保持未映射」逐字对应。 */}
       {blockedGroups.map((group) => (
         <div key={group.key || group.title} className="monitoring-admission-quality is-blocked-group" role="group" aria-label={`待处理字段关系：${group.title}`}>
           <strong>{group.title}</strong>
@@ -886,9 +898,10 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
                     <span className="monitoring-admission-question-note">
                       <input
                         aria-label={`修订 ${ref.domain} 域 ${ref.sourceField} 的字段角色`}
+                        list="monitoring-admission-role-catalog-options"
                         value={draftValue}
                         disabled={busy || !onReviseFieldRole}
-                        placeholder="填写正确的字段角色后保存"
+                        placeholder="从目录候选中选择或输入正确的字段角色"
                         onChange={(event) => setRoleDrafts((current) => ({
                           ...current,
                           [fieldKey]: event.target.value,
@@ -919,6 +932,23 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
                       >
                         {busy ? "保存中…" : "保存修订并重新核对"}
                       </button>
+                      <button
+                        type="button"
+                        className="monitoring-admission-secondary"
+                        disabled={busy || !onKeepFieldUnmapped}
+                        title="该字段不参与医学语义映射（不进入任何医学分析），记录后重新核对"
+                        onClick={async () => {
+                          if (busy || !onKeepFieldUnmapped) return;
+                          setRoleBusy(fieldKey);
+                          try {
+                            await onKeepFieldUnmapped(ref.domain, ref.sourceField);
+                          } finally {
+                            setRoleBusy("");
+                          }
+                        }}
+                      >
+                        {busy ? "处理中…" : "保持未映射"}
+                      </button>
                     </span>
                   </li>
                 );
@@ -927,6 +957,16 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
           ) : null}
         </div>
       ))}
+      {roleCatalog.length ? (
+        <datalist id="monitoring-admission-role-catalog-options">
+          {roleCatalog.map((entry) => (
+            <option key={entry.roleConceptId} value={entry.roleConceptId}>
+              {entry.roleFamily}
+              {entry.valueSemantics ? ` · ${entry.valueSemantics}` : ""}
+            </option>
+          ))}
+        </datalist>
+      ) : null}
       {drafting && questions.length ? (
         <div className="monitoring-admission-questions">
           <p className="monitoring-admission-questions-head">
@@ -1087,6 +1127,7 @@ export function MedicalMonitoringAdmissionWizardView({
   onSecondaryAction,
   onAnswerCard,
   onReviseFieldRole,
+  onKeepFieldUnmapped,
   onRetryFailedChunks,
   onAdoptPartial,
   onDegradeConfirm,
@@ -1417,6 +1458,7 @@ export function MedicalMonitoringAdmissionWizardView({
                 mappingState={resolvedMappingState}
                 onAnswerCard={onAnswerCard}
                 onReviseFieldRole={onReviseFieldRole}
+                onKeepFieldUnmapped={onKeepFieldUnmapped}
                 onRetryFailedChunks={onRetryFailedChunks}
                 onAdoptPartial={onAdoptPartial}
                 onDegradeConfirm={onDegradeConfirm}
@@ -2464,6 +2506,59 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     }
   }, [advanceAdjudication, api, loadMappingCandidates, mappingState.draft, mappingState.phase, state.attemptId, state.projectId]);
 
+  // R41轮（R41-01）：阻断组「保持未映射」出口——与后端文案逐字对应的
+  // 处置动作。field_kind 改为 unmapped 后 G-ROLE-002 不再把该字段计为
+  // 未闭合角色（语义质量门按 unmapped 豁免），医学分析不含该字段。
+  const onKeepFieldUnmapped = useCallback(async (domain, sourceField) => {
+    if (!mappingState.draft || mappingState.phase !== "drafting") {
+      mappingDispatch({
+        type: "error",
+        error: {
+          serverText: "当前页面的识别状态已过期，本次操作未提交。系统正在重新读取最新进度，请稍候后重试。",
+          guidance: ["正在自动重新读取识别结果。"],
+        },
+      });
+      loadMappingCandidates();
+      return;
+    }
+    const generation = mappingRequestGeneration.current + 1;
+    mappingRequestGeneration.current = generation;
+    try {
+      const draft = await api.editDataAdmissionMappingDraftField(
+        state.projectId,
+        state.attemptId,
+        {
+          draft_id: mappingState.draft.draft_id,
+          domain,
+          source_field: sourceField,
+          patch: {
+            field_kind: "unmapped",
+            user_action: "用户已核对：该字段不参与医学语义映射，保持未映射。",
+          },
+          expected_version: mappingState.draft.version,
+          idempotency_key: requestKey("admission-mapping-keep-unmapped"),
+        },
+      );
+      if (mappingRequestGeneration.current !== generation) return;
+      mappingDispatch({
+        type: "answer-ready",
+        key: `role:${domain}.${sourceField}`,
+        payload: draft,
+        note: `已将「${sourceField}」保持未映射（不参与医学语义分析）`,
+      });
+      await advanceAdjudication(draft, generation);
+    } catch (error) {
+      if (mappingRequestGeneration.current !== generation) return;
+      mappingDispatch({
+        type: "draft-error",
+        error: {
+          serverText: error?.detail?.message || error?.message || "保持未映射保存失败。",
+          guidance: ["请稍后重试；确认前不会生成可用于监查的数据。"],
+        },
+      });
+    }
+  }, [advanceAdjudication, api, loadMappingCandidates, mappingState.draft, mappingState.phase, state.attemptId, state.projectId]);
+
   // R32-04：重跑终态失败的识别分片（表名为空=全部失败分片），成功后
   // 重新拉取识别结果让轮询与按钮态同源收敛。
   const onRetryFailedChunks = useCallback(async (tableName) => {
@@ -2515,6 +2610,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       onSecondaryAction={onSecondaryAction}
       onAnswerCard={onAnswerCard}
       onReviseFieldRole={onReviseFieldRole}
+      onKeepFieldUnmapped={onKeepFieldUnmapped}
       onRetryFailedChunks={onRetryFailedChunks}
       onAdoptPartial={onAdoptPartial}
       onDegradeConfirm={onDegradeConfirm}

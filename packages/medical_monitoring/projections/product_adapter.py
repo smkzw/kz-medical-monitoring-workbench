@@ -553,16 +553,76 @@ class R5ProductAdapter:
         run_ref: str,
         snapshot_ref: str,
         cutoff_ref: str,
-        risk_instance_ref: str,
         source_locator_ref: str,
+        risk_instance_ref: Optional[str] = None,
     ) -> dict[str, Any]:
+        """按风险实例+定位符或仅按定位符出示原始来源证据。
+
+        R41轮（R39-04收口）：risk_instance_ref 可选——量表周分值（UAS7等）
+        与检验/检查域事件按设计不落风险行，监查员从事件详情回看原始行时
+        没有风险锚点可带；定位符必须命中包内已登记来源行（不存在的定位
+        一律拒绝），有风险绑定时保持原身份语义不变。"""
         packet = self._packet(project_ref, run_ref, snapshot_ref, cutoff_ref)
-        risk = next((item for item in packet.risks if item.risk_instance_ref == risk_instance_ref), None)
-        if risk is None or source_locator_ref not in risk.source_locator_refs:
-            raise R5ProductAdapterError("SOURCE_LOCATOR_NOT_BOUND")
+        risk = None
+        if risk_instance_ref:
+            risk = next((item for item in packet.risks if item.risk_instance_ref == risk_instance_ref), None)
+            if risk is None or source_locator_ref not in risk.source_locator_refs:
+                raise R5ProductAdapterError("SOURCE_LOCATOR_NOT_BOUND")
         source = next((item for item in packet.sources if item.locator_ref == source_locator_ref and item.snapshot_ref == snapshot_ref), None)
         if source is None:
             raise R5ProductAdapterError("SOURCE_LOCATOR_NOT_BOUND")
+        if risk is None:
+            # 定位符直读：无风险绑定时从引用该定位符的风险/事件回收受试者
+            # 与中心身份（返回旅程的上下文锚点），回收不到则保持空串，
+            # 绝不冒充；投影不携带风险语义（counts不含该"风险"）。
+            owning_risk = next(
+                (item for item in packet.risks if source_locator_ref in item.source_locator_refs),
+                None,
+            )
+            owning_event = next(
+                (
+                    item
+                    for item in packet.events
+                    if source_locator_ref in item.source_locator_refs
+                ),
+                None,
+            )
+            projection = _with_content_hash({
+                "kind": "source_evidence",
+                "risk_ref": getattr(owning_risk, "risk_ref", "") or "",
+                "risk_instance_ref": getattr(owning_risk, "risk_instance_ref", "") or "",
+                "source_locator_ref": source.locator_ref,
+                "evidence": {
+                    "excerpt": source.excerpt,
+                    "record_ref": source.record_ref,
+                    "canonical_location": source.canonical_location,
+                    "lineage": list(source.lineage),
+                    "source_revision_ref": source.source_revision_ref,
+                    "source_revision_content_hash": source.source_revision_content_hash,
+                },
+                "authority_receipt_ref": packet.receipt_id,
+            })
+            counts = self._counts(packet, events=(), risks=())
+            return self._result(
+                packet,
+                projection,
+                counts,
+                [_public_source(source, include_excerpt=True)],
+                view="evidence",
+                return_context_key=f"r5:return:evidence:locator:{source.locator_ref}",
+                identity_overrides={
+                    "site_ref": getattr(owning_risk, "site_ref", None)
+                    or getattr(owning_event, "site_ref", None),
+                    "subject_ref": getattr(owning_risk, "subject_ref", None)
+                    or getattr(owning_event, "subject_ref", None),
+                    "spine_ref": getattr(owning_risk, "spine_ref", None)
+                    or getattr(owning_event, "spine_ref", None),
+                    "risk_ref": getattr(owning_risk, "risk_ref", None) or "",
+                    "risk_instance_ref": getattr(owning_risk, "risk_instance_ref", None) or "",
+                    "risk_anchor_ref": getattr(owning_risk, "risk_anchor_ref", None) or "",
+                    "source_locator_ref": source.locator_ref,
+                },
+            )
         projection = _with_content_hash({
             "kind": "source_evidence",
             "risk_ref": risk.risk_ref,

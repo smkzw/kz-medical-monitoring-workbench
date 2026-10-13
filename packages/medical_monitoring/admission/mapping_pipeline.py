@@ -1557,7 +1557,17 @@ class AdmissionMappingPipeline:
         attempt_id: str,
         workspace_dir: Path,
         cohort: str = MONITORING_MAPPING_COHORT_PRIMARY,
+        include_candidates: bool = True,
     ) -> Mapping[str, Any]:
+        """列出cohort识别结果；``include_candidates=False``为轻量状态包。
+
+        R41轮（R34-08）：focus=all GET 对verifier cohort只消费 state 与
+        summary（聚合计数），此前却对verifier做全量候选装配（逐分片取
+        候选+逐字段证据摘要）——54表量级下单次GET=主cohort+verifier两次
+        全量装配，实测14.4s+、后台写入时>15s触发客户端10s限时AbortError。
+        轻量模式跳过候选装配（candidate_count=0），state/summary聚合口径
+        不变；需要候选列表的调用方默认值不变。
+        """
         contract = self._cohort_contract(cohort)
         if not self._configured(self._cohort_service(contract.cohort)):
             raise AdmissionMappingPipelineError("mapping_bridge_unconfigured")
@@ -1575,6 +1585,7 @@ class AdmissionMappingPipeline:
             _latest_job_cohort(jobs, repository=self._repository),
             attempt_id=attempt_id,
             cohort=contract.cohort,
+            include_candidates=include_candidates,
         )
 
     def retry_failed_candidates(
@@ -2121,6 +2132,7 @@ class AdmissionMappingPipeline:
         *,
         attempt_id: str,
         cohort: str = MONITORING_MAPPING_COHORT_PRIMARY,
+        include_candidates: bool = True,
     ) -> dict[str, Any]:
         job_rows = []
         mappings = []
@@ -2149,7 +2161,10 @@ class AdmissionMappingPipeline:
                 "response_model": str(job.response_model),
                 "failure_code": str(job.failure_code),
             })
-            if status != "completed":
+            if status != "completed" or not include_candidates:
+                # R41轮（R34-08）：轻量状态包跳过逐分片候选装配——verifier
+                # cohort的GET消费方只读state/summary聚合计数，不需要候选与
+                # 证据摘要（主cohort路径默认不受影响）。
                 continue
             for candidate in self._repository.candidates(job.project_id, job.job_id):
                 for item in candidate.structured_payload.get("field_mappings", []):

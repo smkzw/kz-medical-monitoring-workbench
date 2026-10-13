@@ -365,7 +365,11 @@ def _ae_lab_observations_by_subject(
     for table, rows in domains.items():
         if not table.upper().startswith("LB"):
             continue
-        for row in rows:
+        # R41轮（R39-04收口）：携带行身份（表名+行号）——「AE严重度vs化验
+        # 矛盾」发现引用的化验行必须能回指原始记录行，否则监查员只能看到
+        # 化验数值却无法定位核实（R39-D实测发现引用4次血小板值、关联记录
+        # 仅AE行）。
+        for row_index, row in enumerate(rows):
             subject = _clean(row.get("SUBJID"))
             if not subject or subject in _UK_TOKENS:
                 continue
@@ -388,6 +392,8 @@ def _ae_lab_observations_by_subject(
                     "low": low,
                     "high": high,
                     "unit": _clean(row.get("LBUNIT")),
+                    "table": table,
+                    "row_index": row_index,
                 }
             )
     return observations
@@ -396,8 +402,12 @@ def _ae_lab_observations_by_subject(
 def _ae_lab_trend_contradiction_note(
     ae_row: Mapping[str, Any],
     subject_lab_rows: Sequence[Mapping[str, Any]],
-) -> str:
-    """AE严重度≥3级而同指标化验无对应降幅时返回矛盾提示，否则空串。"""
+) -> tuple[str, tuple[str, ...]]:
+    """AE严重度≥3级而同指标化验无对应降幅时返回（矛盾提示, 化验行坐标）。
+
+    R41轮（R39-04收口）：第二返回值是提示所引用化验行的(表名, 行号)元组，
+    供装配处经 _locator 把这些化验原始行加入AE风险行的source_locator_refs
+    ——发现卡引用的每个数值都要能一跳回看原始行，证据链才算闭环。"""
 
     sev_raw = _clean(ae_row.get("AESEV"))
     grade_match = _AE_GRADE_RE.fullmatch(sev_raw)
@@ -406,12 +416,12 @@ def _ae_lab_trend_contradiction_note(
     elif sev_raw in {"重度", "严重"}:
         grade_number = 3
     else:
-        return ""
+        return "", ()
     if grade_number < 3:
-        return ""
+        return "", ()
     term = _clean(ae_row.get("AETERM"))
     if not term:
-        return ""
+        return "", ()
     matched = next(
         (
             (lb_fragment, direction)
@@ -421,7 +431,7 @@ def _ae_lab_trend_contradiction_note(
         None,
     )
     if matched is None:
-        return ""
+        return "", ()
     lb_fragment, direction = matched
     observations = [
         row
@@ -429,28 +439,33 @@ def _ae_lab_trend_contradiction_note(
         if lb_fragment in str(row.get("test") or "")
     ]
     if not observations:
-        return ""
+        return "", ()
     if direction != "lower":
-        return ""
+        return "", ()
     # 任一次检测达到≥3级降幅（低于参考下限的60%）即与AE分级一致。
     if any(
         row["value"] < row["low"] * _AE_LAB_SEVERE_FRACTION
         for row in observations
     ):
-        return ""
+        return "", ()
     detail = "、".join(
         f"{row['visit'] or '未知访视'} {row['value']:g}"
         f"（参考范围下限 {row['low']:g}{' ' + row['unit'] if row['unit'] else ''}）"
         for row in observations
     )
     test_name = str(observations[0].get("test") or "对应指标")
+    matched_rows = tuple(
+        (str(row.get("table") or ""), int(row.get("row_index", 0)))
+        for row in observations
+        if row.get("table")
+    )
     return (
         f"注意：该AE声明的严重程度与同期化验趋势存在矛盾待核实——AE严重度"
         f"为{sev_raw}，但受试者{test_name}历次检测（{detail}）均未出现与"
         f"3级降幅一致的明显下降（未低于参考范围下限的"
         f"{int(_AE_LAB_SEVERE_FRACTION * 100)}%）。请核查严重程度分级依据，"
         "或确认化验样本与事件时间、指标的对应关系。"
-    )
+    ), matched_rows
 
 
 # subtype 英文标识 → 中文兜底标签（行内无术语列时使用）
@@ -1047,6 +1062,8 @@ class FactsPublicationAuthorityProvider:
             # severity仅是schema占位（取low不取medium——审阅点名"未知不得
             # 当中风险"），呈现层按severity_source区分。
             ae_medical_note = ""
+            # R41轮（R39-04收口）：矛盾提示引用的化验行坐标（仅AE分支填充）
+            ae_lab_rows: tuple[tuple[str, int], ...] = ()
             if domain == "ae":
                 ae_row = domains.get("AE", [{}])[index] if index < len(domains.get("AE", [])) else {}
                 sev_raw = _clean(ae_row.get("AESEV"))
@@ -1124,7 +1141,7 @@ class FactsPublicationAuthorityProvider:
                 # ≥3级而该受试者同指标历次检测均无对应降幅时，在AE风险行
                 # 追加矛盾提示（发现卡可核实的化验引用），替代此前该方向
                 # 零产出。
-                ae_lab_note = _ae_lab_trend_contradiction_note(
+                ae_lab_note, ae_lab_rows = _ae_lab_trend_contradiction_note(
                     ae_row,
                     ae_lab_observations_by_subj.get(subj, ()),
                 )
@@ -1137,6 +1154,20 @@ class FactsPublicationAuthorityProvider:
             # ——评分是测量事实而非监查发现，逐周分数自动成风险会制造
             # 大量低风险噪声并稀释真实风险信号。事件仍进时间轴与指标。
             if with_risk:
+                # R41轮（R39-04收口）：「AE严重度vs化验矛盾」类发现把被引用
+                # 的化验原始行加入关联记录——此前风险行只绑定AE行，发现卡
+                # 引用4次化验值却无处回看（R39-D实测，AE/CM/SV闭环、LB断链）。
+                risk_locator_refs = record.source_locator_refs
+                if ae_lab_rows:
+                    lab_refs = tuple(
+                        _locator(lab_table, lab_index).locator_ref
+                        for lab_table, lab_index in ae_lab_rows
+                        if lab_table in table_entries
+                        and lab_table in domains
+                        and 0 <= lab_index < len(domains[lab_table])
+                    )
+                    risk_locator_refs = tuple(
+                        dict.fromkeys((*risk_locator_refs, *lab_refs)))
                 risks.append(
                     R5RiskRecord(
                         medical_note=(
@@ -1157,7 +1188,7 @@ class FactsPublicationAuthorityProvider:
                         event_ref=record.event_ref,
                         visit_ref=None,
                         risk_anchor_ref=record.event_ref,
-                        source_locator_refs=record.source_locator_refs,
+                        source_locator_refs=risk_locator_refs,
                         change_kind="initial_current",
                         severity_source=severity_source,
                     )

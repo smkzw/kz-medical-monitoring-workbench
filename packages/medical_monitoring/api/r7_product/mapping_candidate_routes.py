@@ -574,6 +574,33 @@ def _public_mapping_field(value: Any) -> dict[str, Any]:
     }
 
 
+def _closed_role_catalog_payload() -> list[dict[str, str]]:
+    """R41轮（R41-01）：闭合目录角色候选（G-ROLE-002 阻断组随组下发）。
+
+    延迟导入 services 侧语义质量模块（本仓库既有方向约定，见
+    mapping_pipeline.py:1523 等处），避免包层顶层反向依赖。"""
+
+    from services.api.app.monitoring_mapping_semantic_quality import (  # noqa: PLC0415
+        closed_role_catalog_payload,
+    )
+
+    return [dict(item) for item in closed_role_catalog_payload()]
+
+
+def _public_affected_field(value: Any) -> dict[str, Any]:
+    """R41轮（R41-01）：阻断组涉及字段的公开投影（定位三键）。
+
+    域/源字段/当前角色概念都是用户自己数据集的字段映射信息，非提供方
+    或作业身份；前端据此渲染逐字段角色修订入口。"""
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        key: value[key]
+        for key in ("domain", "source_field", "role_concept_id")
+        if key in value
+    }
+
+
 def _public_draft(value: Any) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         return {}
@@ -602,10 +629,22 @@ def _public_draft(value: Any) -> dict[str, Any]:
             )
             if key in quality
         }
-        public["semantic_quality"]["finding_groups"] = [
-            {
+        # R41轮（R41-01）：阻断组必须携带可处置载荷——此前公开投影把
+        # rule_id/affected_fields 全部剥掉，「应选择目录角色或保持未映射」
+        # 成了无处置入口的死锁文案（R41B实测：blocked-group恒在、全页
+        # 零角色编辑控件、确认按钮恒disabled约60分钟，刷新+3次重走向导
+        # 均复现）。现随投影下发规则id与涉及字段定位，并给角色未闭合组
+        # 附目录角色候选（供前端datalist），处置入口才真实存在。
+        projected_groups = []
+        has_unresolved_role_group = False
+        for item in quality.get("finding_groups") or ():
+            if not isinstance(item, Mapping):
+                continue
+            group = {
                 key: item[key]
                 for key in (
+                    "finding_group_id",
+                    "rule_id",
                     "severity",
                     "title_zh",
                     "summary_zh",
@@ -613,9 +652,19 @@ def _public_draft(value: Any) -> dict[str, Any]:
                 )
                 if key in item
             }
-            for item in quality.get("finding_groups") or ()
-            if isinstance(item, Mapping)
-        ]
+            affected = item.get("affected_fields")
+            if isinstance(affected, list):
+                group["affected_fields"] = [
+                    _public_affected_field(ref) for ref in affected
+                ]
+            if group.get("rule_id") == "G-ROLE-002":
+                has_unresolved_role_group = True
+            projected_groups.append(group)
+        public["semantic_quality"]["finding_groups"] = projected_groups
+        if has_unresolved_role_group:
+            public["semantic_quality"]["role_catalog"] = (
+                _closed_role_catalog_payload()
+            )
         public["semantic_quality"]["capability_states"] = [
             {
                 key: item[key]
@@ -1565,6 +1614,11 @@ def register_mapping_candidate_routes(
                             attempt_id=validated_attempt,
                             workspace_dir=workspace,
                             cohort="verifier",
+                            # R41轮（R34-08）：GET对verifier只消费state与
+                            # summary聚合计数——轻量状态包跳过全量候选装配
+                            # （54表量级下单次GET=主+verifier两次全量装配，
+                            # 实测14.4s+、写入期>15s触发客户端AbortError）。
+                            include_candidates=False,
                         )
                     )
                     result = {

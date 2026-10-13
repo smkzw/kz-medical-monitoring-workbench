@@ -933,7 +933,15 @@ export function DomainTracks({
                       >
                         {expanded ? (
                           <span className="monitoring-aggregate-members" role="list" aria-label={`本组 ${aggregate.count} 条记录`}>
-                            {aggregate.eventRefs.map((ref, memberIndex) => (
+                            {aggregate.eventRefs.map((ref, memberIndex) => {
+                              // R41轮（R39-04收口）：成员按事件标签渲染
+                              // （eventMembers缺标签时回退内部ref）——聚合
+                              // 展开不再是一列不可读的内部ID。
+                              const member = aggregate.eventMembers?.[memberIndex];
+                              const memberLabel = member && member.ref === ref
+                                ? member.label
+                                : ref;
+                              return (
                               <button
                                 key={ref}
                                 type="button"
@@ -947,9 +955,10 @@ export function DomainTracks({
                                 }
                                 onClick={() => onEventSelect?.({ event_ref: ref })}
                               >
-                                {ref}
+                                {memberLabel}
                               </button>
-                            ))}
+                              );
+                            })}
                             <button
                               type="button"
                               className="monitoring-aggregate-collapse"
@@ -1973,7 +1982,13 @@ export function SubjectWorkspaceView({
     ? {
       riskRef: drawerRisk?.riskRef || "",
       riskInstanceRef: drawerRow?.risk_instance_ref || drawerRisk?.riskInstanceRef || "",
-      sourceLocatorRef: drawerRow?.source_locator_ref || drawerRisk?.sourceLocatorRef || "",
+      // R41轮（R39-04收口）：无风险行的事件（量表/检验/检查）回退事件
+      // 自身定位符——后端已支持定位符直读来源证据。
+      sourceLocatorRef: drawerRow?.source_locator_ref
+        || drawerRisk?.sourceLocatorRef
+        || (Array.isArray(enrichedSelectedEvent?.sourceLocatorRefs) && enrichedSelectedEvent.sourceLocatorRefs.length
+          ? enrichedSelectedEvent.sourceLocatorRefs[0]
+          : ""),
       subjectRef: drawerRisk?.subjectRef || route.subject_ref,
       siteRef: drawerRisk?.siteRef || route.site_ref,
       spineRef: drawerRisk?.spineRef || route.spine_ref,
@@ -2040,17 +2055,38 @@ export function SubjectWorkspaceView({
                   ? `指标趋势图：真实数值标尺 0 至 ${trendView.max}${trendView.unit ? `（${trendView.unit}）` : ""}，柱高按数值等比绘制，缺数值不画柱`
                   : "指标趋势数值列表：该指标数值无法共用同一真实标尺，仅逐点列出原始数值"}
               >
-                {trendView.items.map((item) => (
+                {trendView.items.map((item) => {
+                  // R41轮（R39-04/R34-11）：趋势点可点——点携带原始记录
+                  // 定位（record_refs）时整点成为按钮，点击跳到对应事件
+                  // 详情；此前柱图纯展示，监查员看到异常分值无法一跳回看。
+                  const selectable = (item.recordRefs || []).length > 0 && Boolean(onEventSelect);
+                  const selectPoint = () => onEventSelect?.({ event_ref: item.recordRefs[0] });
+                  return (
                   <div className="monitoring-trend-point" key={`${item.index}-${item.date}`}>
-                    <div style={{ height: 140, width: 28, display: "flex", alignItems: "end", flexShrink: 0 }}>
-                      {trendView.mode === MONITORING_TREND_MODE_BARS && item.value !== null ? (
-                        <span style={{ "--point-height": `${item.heightPercent}%`, minHeight: 0, flexShrink: 0 }} />
-                      ) : null}
-                    </div>
+                    {selectable ? (
+                      <button
+                        type="button"
+                        className="monitoring-trend-point-bar"
+                        style={{ height: 140, width: 28, display: "flex", alignItems: "end", flexShrink: 0, padding: 0, background: "none", border: "none", cursor: "pointer" }}
+                        aria-label={`查看 ${text(item.date, "该日期")} 的原始记录（${numberText(item.displayValue)}${item.unit ? ` ${item.unit}` : ""}）`}
+                        onClick={selectPoint}
+                      >
+                        {trendView.mode === MONITORING_TREND_MODE_BARS && item.value !== null ? (
+                          <span style={{ "--point-height": `${item.heightPercent}%`, minHeight: 0, flexShrink: 0 }} />
+                        ) : null}
+                      </button>
+                    ) : (
+                      <div style={{ height: 140, width: 28, display: "flex", alignItems: "end", flexShrink: 0 }}>
+                        {trendView.mode === MONITORING_TREND_MODE_BARS && item.value !== null ? (
+                          <span style={{ "--point-height": `${item.heightPercent}%`, minHeight: 0, flexShrink: 0 }} />
+                        ) : null}
+                      </div>
+                    )}
                     <strong>{numberText(item.displayValue)}{item.unit ? ` ${item.unit}` : ""}</strong>
                     <small>{text(item.date, "日期待确认")}</small>
                   </div>
-                ))}
+                  );
+                })}
               </div>
               {trendView.mode === MONITORING_TREND_MODE_BARS ? (
                 <p className="monitoring-trend-scale-note">标尺 0 — {trendView.max}{trendView.unit ? `（${trendView.unit}）` : ""}；柱高按真实数值等比绘制，缺数值不画柱。</p>

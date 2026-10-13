@@ -354,6 +354,13 @@ export function layoutJourneyTimeline({
           x,
           label: `另有 ${group.length} 条低风险或常规记录`,
           eventRefs: group.map((event) => event.eventRef),
+          // R41轮（R39-04收口）：展开成员带事件标签——此前只渲染内部
+          // event_ref（如 event-LB_HEM-000016），监查员无法从聚合展开里
+          // 看到检验/检查记录的名称与数值（R39-D实测）。
+          eventMembers: group.map((event) => ({
+            ref: event.eventRef,
+            label: String(event.eventLabel || "").trim() || event.eventRef,
+          })),
         });
       }
     }

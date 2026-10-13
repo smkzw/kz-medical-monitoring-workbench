@@ -940,7 +940,12 @@ def register_public_result_routes(router: APIRouter, context: PublicationRouteCo
         query = _parse_public_result_query(
             request,
             allowed=frozenset({"risk_instance_ref", "source_locator_ref"}),
-            required=frozenset({"risk_instance_ref", "source_locator_ref"}),
+            # R41轮（R39-04收口）：risk_instance_ref改为可选——量表周分值
+            # （UAS7等）与检验/检查域事件按设计不落风险行（评分/检测是测量
+            # 事实而非监查发现），事件详情的证据链此前因无风险锚点而恒
+            # 「原始记录位置待确认」。定位到包内已登记的原始行即可出示
+            # 来源证据，不依赖风险绑定。
+            required=frozenset({"source_locator_ref"}),
         )
         if isinstance(query, JSONResponse):
             return query
@@ -954,7 +959,7 @@ def register_public_result_routes(router: APIRouter, context: PublicationRouteCo
                     snapshot_ref=publication.snapshot_ref
                     or publication.snapshot_token,
                     cutoff_ref=publication.data_cutoff,
-                    risk_instance_ref=query["risk_instance_ref"],
+                    risk_instance_ref=query.get("risk_instance_ref") or None,
                     source_locator_ref=query["source_locator_ref"],
                 )
                 return _public_result_envelope(

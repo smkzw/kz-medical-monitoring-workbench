@@ -141,6 +141,24 @@ export function semanticQualityBlockedGroups(report) {
     .filter((item) => item.title || item.fields.length);
 }
 
+// R41轮（R41-01）：闭合目录角色候选——G-ROLE-002 阻断组随组下发的目录
+// 清单，供字段角色修订输入做 datalist 候选。用户此前面对自由文本输入
+// 只能猜合法角色名（后端按闭合目录精确解析，猜不中就永远阻断）。
+export function semanticQualityRoleCatalog(report) {
+  if (!report || typeof report !== "object" || Array.isArray(report)) {
+    return [];
+  }
+  const entries = Array.isArray(report.role_catalog) ? report.role_catalog : [];
+  return entries
+    .filter((item) => item && typeof item === "object" && !Array.isArray(item)
+      && String(item.role_concept_id || "").trim())
+    .map((item) => ({
+      roleConceptId: String(item.role_concept_id || "").trim(),
+      roleFamily: String(item.role_family || "").trim(),
+      valueSemantics: String(item.value_semantics || "").trim(),
+    }));
+}
+
 export function semanticQualityPresentation(report) {  if (!report) {
     return {
       level: "unknown",
@@ -172,7 +190,10 @@ export function semanticQualityPresentation(report) {  if (!report) {
         : "还有字段关系需要处理",
       // R32-02：detail与下方阻断组卡片呼应——不再只说「按页面提示」
       // 却不给任何提示（B位实测死锁2.5小时+）。
-      detail: "逐条说明见下方卡片；修订相关字段后系统会自动重新核对，核对通过前不能确认。",
+      // R41轮（R41-01）：明示医学疑点作答与字段角色阻断的关系——R41B
+      // 实测用户答完医学疑点（已完成1/1）后blocked-group依旧、误以为
+      // 答题即解锁，无处处置入口时约60分钟死锁。
+      detail: "逐条说明见下方卡片；在卡片中修订相关字段的目录角色或将其保持未映射，系统会自动重新核对，核对通过前不能确认。回答上方医学疑点不会解除此类字段角色阻断。",
       blocksConfirmation: true,
     };
   }

@@ -157,4 +157,36 @@ const needle = (text) => compact(text);
   );
 }
 
+// --- R41轮（R41-02）：D位实测6次「暂不可查看」全部要手动重读、计数
+// 恒0（report_D.md D-02：21:01-21:04停留「首次自动重试即将开始」≥3.5
+// 分钟）。R39-02已收口两条投影/网络路径后仍有两个失败分支只设错误态、
+// 不进任何调度，面板却照样渲染自动重试承诺：
+// ①结果入口getResultEntry失败（概览首开场景）——openResult catch；
+// ②请求构造阶段的同步失败（除target_incomplete确定性缺定位外，
+//   requiredOption/requireId等校验错误也走这里）。
+// 契约：两条路径都必须计数并进入同一退避调度；入口重试在结果上下文
+// 建立后清场；target_incomplete保持不调度+专属如实文案。
+{
+  check(
+    src.includes(needle(`entryRetryRef.current.failures += 1;\n      if (entryRetryRef.current.failures <= RESULT_READ_AUTO_RETRY_LIMIT) {\n        const failures = entryRetryRef.current.failures;\n        setResultRetryAttempt(failures);`)),
+    "result entry failures count into the same bounded auto-retry",
+  );
+  check(
+    src.includes(needle(`entryRetryRef.current.timer = setTimeout(() => {\n          entryRetryRef.current.timer = null;\n          openResultRef.current?.(token);\n        }, monitoringRefreshBackoffMs(failures));`)),
+    "result entry retry re-enters the same entry read with the shared backoff",
+  );
+  check(
+    src.includes(needle(`if (options?.manual || entryTokenRef.current !== token) {\n      // 手动重读或换了目标运行：重置预算，不让历史失败挤占本次。`)),
+    "manual re-read / target change resets the entry retry budget",
+  );
+  check(
+    src.includes(needle(`if (resultToken) {\n      clearEntryRetryTimer();\n      entryRetryRef.current.failures = 0;\n      entryTokenRef.current = "";\n    }`)),
+    "entry retry clears once a result context is established",
+  );
+  check(
+    src.includes(needle(`if (error?.code === "public_result_target_incomplete") {\n          setResultError(projectMonitoringPublicResultError(error));\n          return;\n        }\n        failures += 1;\n        setResultError(projectMonitoringPublicResultError(error));\n        scheduleRetryAfterFailure();`)),
+    "synchronous request-construction failures schedule retry except the deterministic target_incomplete",
+  );
+}
+
 console.log(`medicalMonitoringResultReadRetry: ${passed} passed`);

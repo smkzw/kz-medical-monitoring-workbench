@@ -59,6 +59,10 @@ import {
 import "./MedicalMonitoringProtocolPreparationPanel.css";
 
 const POLL_INTERVAL_MS = 5000;
+// R41轮（R35-05）：准备核对请求的无进展上限。健康核对秒级返回；实测
+// 停滞场景>90秒零响应且无任何失败终态（spinner永久挂起）。45秒显著
+// 超出健康节奏，超时即如实报错并给出重读出口，不再无限spinner。
+const PROTOCOL_STATUS_TIMEOUT_MS = 45_000;
 const DEFAULT_REJECTION_REASON = "该候选不适用于当前方案监查。";
 
 function normalizeStatusOrThrow(payload) {
@@ -635,6 +639,20 @@ function MedicalMonitoringProtocolPreparationPanelForProject({
   const readStatus = useCallback(async ({ resumePolling = false } = {}) => {
     if (!selectedVersionId) return null;
     const request = requestScope.begin("protocol-status");
+    // R41轮（R35-05）：核对请求此前无超时——大项目后台核对停滞后抽屉
+    // 永久停在「正在核对方案原文和准备状态」spinner（R41-D实测>90秒、
+    // 关闭重开/整页刷新均不恢复，用户无法得知准备核对结论）。现给核对
+    // 请求加45秒上限：超时落诚实失败终态（错误+重新读取出口），不再
+    // 无限spinner；后台核对可能仍在进行，发起监查时后端前置门
+    // （来源激活/字段映射确认/方案版本确认）仍会强制校验。
+    const controller = new AbortController();
+    const timer = window.setTimeout(
+      () => controller.abort(new DOMException("方案准备状态核对超时", "TimeoutError")),
+      PROTOCOL_STATUS_TIMEOUT_MS,
+    );
+    const onScopeAbort = () => controller.abort(request.signal.reason);
+    if (request.signal.aborted) controller.abort(request.signal.reason);
+    else request.signal.addEventListener("abort", onScopeAbort, { once: true });
     setLoadingStatus(true);
     setError("");
     if (resumePolling) setPollStopped(false);
@@ -642,7 +660,7 @@ function MedicalMonitoringProtocolPreparationPanelForProject({
       const payload = await api.getProtocolPreparationStatus(
         projectId,
         selectedVersionId,
-        { signal: request.signal },
+        { signal: controller.signal },
       );
       if (!requestScope.isCurrent(request)) return null;
       const normalized = normalizeStatusOrThrow(payload);
@@ -654,9 +672,15 @@ function MedicalMonitoringProtocolPreparationPanelForProject({
       setCandidateDecisions({});
       setRuleTemplateStates({});
       setPollStopped(true);
-      setError(errorText(nextError, "方案规则准备状态读取失败"));
+      setError(
+        nextError?.name === "TimeoutError"
+          ? `方案准备状态核对已等待约 ${Math.round(PROTOCOL_STATUS_TIMEOUT_MS / 1000)} 秒仍无响应——后台核对可能仍在进行。请点击「重新读取」重试；若持续超时，可先关闭本面板稍后重开。发起监查时的前置校验不受本面板影响。`
+          : errorText(nextError, "方案规则准备状态读取失败"),
+      );
       return null;
     } finally {
+      window.clearTimeout(timer);
+      request.signal.removeEventListener("abort", onScopeAbort);
       if (requestScope.isCurrent(request)) setLoadingStatus(false);
       requestScope.finish(request);
     }
