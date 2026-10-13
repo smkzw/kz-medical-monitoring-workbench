@@ -360,3 +360,28 @@ def test_response_digest_is_deterministic_and_excludes_self_reference(
     response["identity"]["response_snapshot_sha256"] = digest
     response["read_handoff"]["response_snapshot_sha256"] = digest
     assert response_snapshot_sha256(response) == digest
+
+
+def test_overview_projection_is_deterministic_across_repeated_reads(
+    adapter: R5ProductAdapter,
+) -> None:
+    """R42轮（R42-06）：同一冻结packet的概览投影必须逐字节可复现。
+
+    R42-D实测同一result token两次读取行数不一致（76→74，方案符合性
+    28→26）——排查结论：冻结读取链（frozen read model sha256+authority
+    packet digest+ref集合比对）当前逐读取均校验且实测线上两次读取字节
+    相等；本测试钉住投影层自身的确定性——同一packet重复overview/读取
+    不得因首渲染与再渲染走不同分支而漂移，行集与content_hash恒等。
+    """
+
+    first = adapter.overview(project_ref=PROJECT, run_ref=RUN, snapshot_ref=SNAPSHOT, cutoff_ref=CUTOFF)
+    second = adapter.overview(project_ref=PROJECT, run_ref=RUN, snapshot_ref=SNAPSHOT, cutoff_ref=CUTOFF)
+    third = adapter.overview(project_ref=PROJECT)
+
+    assert first["projection"]["content_hash"] == second["projection"]["content_hash"]
+    assert first["projection"]["current_risks"] == second["projection"]["current_risks"]
+    # 无site过滤与显式三 ref 的读取走同一packet：投影内容一致。
+    assert first["projection"]["content_hash"] == third["projection"]["content_hash"]
+    assert len(first["projection"]["current_risks"]) == len(third["projection"]["current_risks"])
+    # response snapshot digest同样可复现（前端连续性校验的消费面）。
+    assert response_snapshot_sha256(first) == response_snapshot_sha256(second)

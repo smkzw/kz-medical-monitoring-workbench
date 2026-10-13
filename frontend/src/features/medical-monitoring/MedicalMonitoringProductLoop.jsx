@@ -982,6 +982,46 @@ export function MedicalMonitoringProductLoop({
     };
   }, [api, normalizedProjectId, refreshEpoch]);
 
+  // R42轮（R42-05）：运行完成后回到工作区，「本次」此前停在旧运行——
+  // setup/history只在挂载、显式刷新与「进度→可用」跳变（用户仍停在进度
+  // 页）时读取；从进度/结果返回工作区（深层路由token清空）或标签页回到
+  // 前台都不再重读历史，新完成运行对工作条/选择器不可见，全界面又没有
+  // 独立发布控件（B位channelNote：监查结果无独立发布动作，运行完成即
+  // 结果可用），用户不知道历史抽屉就只能认为运行没生效（R42实测：新运行
+  // a7cfb1df完成后工作条仍显示旧运行、结果仅经历史抽屉可达）。现补两个
+  // 静默重读时机：深层路由→工作区、前台恢复且不在深层路由。只更新
+  // history、不清空在读状态；既有选择器默认选最新可用结果（显式结果
+  // 上下文不被历史刷新顶掉——R24V2契约保持），新运行由此自然成为「本次」。
+  const refreshHistoryQuietly = useCallback(async () => {
+    if (!normalizedProjectId) return;
+    try {
+      const payload = await api.listRuns(normalizedProjectId);
+      const nextHistory = projectMonitoringHistory(payload, { projectId: normalizedProjectId });
+      if (nextHistory?.kind === "history") setHistory(nextHistory);
+    } catch {
+      // 静默刷新失败不打扰用户：工作区仍显示上一次历史，显式「重新读取」
+      // 与既有自动重试路径保持可用。
+    }
+  }, [api, normalizedProjectId]);
+
+  const deepRouteRef = useRef(Boolean(publicRunToken || resultToken));
+  useEffect(() => {
+    const deep = Boolean(publicRunToken || resultToken);
+    const wasDeep = deepRouteRef.current;
+    deepRouteRef.current = deep;
+    if (wasDeep && !deep) refreshHistoryQuietly();
+  }, [publicRunToken, resultToken, refreshHistoryQuietly]);
+
+  useEffect(() => {
+    const handleVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (publicRunToken || resultToken) return;
+      refreshHistoryQuietly();
+    };
+    document.addEventListener("visibilitychange", handleVisible);
+    return () => document.removeEventListener("visibilitychange", handleVisible);
+  }, [publicRunToken, resultToken, refreshHistoryQuietly]);
+
   useEffect(() => {
     if (!resultToken) {
       setResultContext(null);
@@ -1505,9 +1545,23 @@ export function MedicalMonitoringProductLoop({
     if (target === "wizard") openWizard();
     else if (target === "history") setHistoryOpen(true);
     else if (target === "progress") goToProgress();
-    else if (target === "result") openResult();
+    else if (target === "result") {
+      // R42轮（R42-04）：工作条「查看本次结果」此前在「仅有结果上下文、
+      // 历史行缺席」的合法选择态（route_result_context）下静默失效——
+      // openResult对空public token直接return，按钮点击零反馈（R42实测
+      // 工作区/结果视图4次点击URL不变无跳转，唯一可用入口是「查看历史」
+      // 抽屉行内同名按钮）。现按选择态双通路打开：有运行token走入口
+      // 读取（原契约不变）；只有结果上下文token时直接携带该token进入
+      // 概览——上下文本就是已通过校验的结果入口，不重复入口读取。
+      const publicToken = productState?.selectedPublicRunToken || "";
+      const contextToken = productState?.selectedResultContextToken || "";
+      if (publicToken) openResult(publicToken);
+      else if (contextToken) {
+        navigate("overview", { result_context_token: contextToken, public_run_token: "" });
+      }
+    }
     else if (target === "overview") navigate("overview", { public_run_token: "", result_context_token: "" });
-  }, [goToProgress, navigate, openResult, openWizard]);
+  }, [goToProgress, navigate, openResult, openWizard, productState?.selectedPublicRunToken, productState?.selectedResultContextToken]);
   const selectHistoryRow = useCallback((row) => {
     setHistoryOpen(false);
     if (!row?.publicRunToken) return;

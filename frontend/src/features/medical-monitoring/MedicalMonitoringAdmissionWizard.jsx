@@ -145,6 +145,15 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
     "uploading", "analyzing", "reviewing", "adjudicating", "cross_checking",
   ]
     .includes(state.phase);
+  // R42轮（R40-02）：核对失败态此前同屏并存四种互相矛盾的口径——
+  // ①顶部「核对尚未得出结论/无需重新上传」（readiness载荷里的在途批次
+  // 简报，phase=failed时已是过时快照）②角色行「已上传，核对中」③橙色
+  // 「还缺研究文件……唯一待办」（本轮文件明明在列）④底部失败错误。
+  // 实测诱发重复上传（R40-A两快照同屏五条原文）。现在失败态只保留
+  // 单一权威口径：核对未完成+失败原因+唯一建议动作（就地重核或换件
+  // 重传）；「自动推进/无需重新上传」的等待文案与「还缺文件」的缺件
+  // 口径在失败态一律不再渲染。
+  const failed = state.phase === "failed";
   // R25轮（R25-03）：核对在单一阶段停留超过阈值（R25C实测归属确认后
   // 45分钟零状态变化、无超时无提示无重试入口）时如实提示停滞并给出
   // 重试入口。核对作业本身有租约超时与尝试上限，worker侧收割（R25-01）
@@ -189,8 +198,20 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
   return (
     <section className="monitoring-admission-documents" aria-label="研究文档准备情况">
       <header>
-        <strong>{payload.headline || "正在核对研究文档"}</strong>
-        <span>{payload.guidance || "系统会自动识别，无需填写技术信息。"}</span>
+        {failed ? (
+          <>
+            <strong>研究文件核对未完成</strong>
+            <span>
+              已上传的文件核对未得出可用结论——下面只呈现失败原因与唯一建议动作
+              （就地重新核对，或更换文件后重新上传）；此前上传与确认不会丢失。
+            </span>
+          </>
+        ) : (
+          <>
+            <strong>{payload.headline || "正在核对研究文档"}</strong>
+            <span>{payload.guidance || "系统会自动识别，无需填写技术信息。"}</span>
+          </>
+        )}
       </header>
       {payload.previously_analyzed ? (
         <p className="monitoring-admission-warning" role="status">
@@ -231,7 +252,16 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
       <ul>
         {(payload.roles || []).map((item) => (
           <li key={item.role}>
-            <span><strong>{item.label}</strong><small>{item.status_text}</small></span>
+            <span>
+              <strong>{item.label}</strong>
+              <small>
+                {/* R42轮（R40-02）：失败态下不再复述载荷里的「核对中」——
+                    单一权威口径见顶部失败横幅。 */}
+                {failed && item.status_text === "已上传，核对中"
+                  ? "已上传，核对未完成"
+                  : item.status_text}
+              </small>
+            </span>
           </li>
         ))}
       </ul>
@@ -437,6 +467,15 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
             <p style={{ margin: "0 0 6px", fontSize: 13, color: "var(--monitoring-muted, #6b7785)", fontWeight: 600 }} role="status">
               系统正在核对已上传的研究文件，请稍候——核对完成后此处会显示
               仍缺的文件（如有）。
+            </p>
+          ) : failed ? (
+            /* R42轮（R40-02）：失败态不复述「还缺研究文件/唯一待办」的
+               缺件口径——本轮文件已上传且在列，缺的不是文件而是可用结论。
+               唯一建议动作与失败原因由顶部失败横幅+底部错误统一承载。 */
+            <p style={{ margin: "0 0 6px", fontSize: 13, color: "#b4480c", fontWeight: 600 }} role="status">
+              研究文件核对未完成：请点击下方「重新核对研究文件」就地重建核对；
+              如需更换文件，可在下方重新上传新版本（重新上传完全相同的文件会
+              直接复用既有结论，不会重新核对）。
             </p>
           ) : (
             <p style={{ margin: "0 0 6px", fontSize: 13, color: "#b4480c", fontWeight: 600 }}>
@@ -2276,6 +2315,9 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         // R36轮（R36-01）：降级确认的成功回执如实区分——不冒充常规
         // 「双盲复核已收敛」的确认。
         degraded: allowUnverifiedDualReview,
+        // R42轮（R42-01）：降级确认的事后补偿回执（盲核分片重新排队
+        // 补跑）透传给回执文案，复核缺口不再静默受限。
+        compensation: revision?.dual_review_compensation || null,
       });
       dispatch({ type: "finish" });
     } catch (error) {

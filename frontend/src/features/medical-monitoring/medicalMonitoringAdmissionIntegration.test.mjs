@@ -241,8 +241,12 @@ check(
     "result route tabs render with the journey back-to-queries control (A25/U18)",
   );
   check(
-    src.includes(needle(`const onWorkbarAction = useCallback((target) => {\n    if (target === "wizard") openWizard();\n    else if (target === "history") setHistoryOpen(true);\n    else if (target === "progress") goToProgress();\n    else if (target === "result") openResult();\n    else if (target === "overview") navigate("overview", { public_run_token: "", result_context_token: "" });\n  }, [goToProgress, navigate, openResult, openWizard]);`)),
-    "workbar action routing is unchanged",
+    src.includes(needle(`if (publicToken) openResult(publicToken);\n      else if (contextToken) {\n        navigate("overview", { result_context_token: contextToken, public_run_token: "" });\n      }`)),
+    "workbar result action opens via public run token or result context token (R42-04 dual path)",
+  );
+  check(
+    src.includes(needle(`const onWorkbarAction = useCallback((target) => {\n    if (target === "wizard") openWizard();\n    else if (target === "history") setHistoryOpen(true);\n    else if (target === "progress") goToProgress();\n    else if (target === "result") {`)),
+    "workbar action routing keeps wizard/history/progress targets unchanged",
   );
   check(
     src.includes(needle(`const loadingBody = setupHistoryLoading || resultLoading || entryLoading;`)),

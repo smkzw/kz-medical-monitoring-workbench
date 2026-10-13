@@ -25,6 +25,7 @@ from .mapping_gate import (
     MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX,
     MONITORING_C3_VERIFIER_BUSINESS_KEY_PREFIX,
     MONITORING_C3_VERIFIER_PROMPT_VERSION,
+    MONITORING_MAPPING_COHORT_VERIFIER,
     monitoring_mapping_cohort_dual_model_eligible,
     monitoring_mapping_execution_route,
     normalize_monitoring_mapping_model,
@@ -2144,7 +2145,55 @@ class AdmissionMappingConfirmationService:
             # 降级确认的显式回执：响应与调用方都能如实区分这条修订
             # 不是双盲复核收敛后的常规确认。
             payload["dual_review_degraded"] = degraded_note
+            # R42轮（R42-01）：降级确认不把被绕过的复核缺口留在「静默
+            # 受限」——用户知情跳过的盲核cohort就地补跑（终态失败的复核
+            # 分片按有界预算重新排队+唤醒worker），复核结果随批次持久化，
+            # 此后无需整轮重识别即可收敛双盲证据。补偿是尽力而为：失败
+            # 不回滚已留痕的确认，补偿计数并入降级回执如实可见。
+            compensation = self._post_hoc_verifier_compensation(
+                project_id=project_id,
+                attempt_id=attempt_id,
+                workspace_dir=workspace_dir,
+            )
+            if compensation is not None:
+                payload["dual_review_compensation"] = compensation
         return payload
+
+    def _post_hoc_verifier_compensation(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Any,
+    ) -> Optional[dict[str, Any]]:
+        """Requeue terminally-failed verifier shards after a degraded confirm.
+
+        R42轮（R42-01）：降级确认的知情留痕解决了「卡死」，但盲核缺口
+        此前没有任何自动出口——分析受限状态 permanent。把队列里终态失败
+        的verifier分片重新排队（retry_terminal显式重试语义，重置滞留
+        基线），分片完成后盲核cohort自然收敛。任何失败都不阻塞确认
+        （补偿是best-effort），返回None时调用方回执不含补偿字段。
+        """
+
+        retry = getattr(self.mapping_pipeline, "retry_failed_candidates", None)
+        if not callable(retry):
+            return None
+        try:
+            result = dict(
+                retry(
+                    project_id=project_id,
+                    attempt_id=attempt_id,
+                    workspace_dir=workspace_dir,
+                    cohort=MONITORING_MAPPING_COHORT_VERIFIER,
+                    table_name="",
+                )
+            )
+        except Exception:
+            return None
+        return {
+            "requeued_count": int(result.get("requeued_count") or 0),
+            "skipped_count": int(result.get("skipped_count") or 0),
+        }
 
     def _resolved_dual_review(
         self,

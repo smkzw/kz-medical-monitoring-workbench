@@ -1224,9 +1224,13 @@ function MedicalMonitoringProtocolPreparationPanelForProject({
                     {topic.data_gap && <p>{topic.data_gap}</p>}
                     {topic.status === "ready" && (
                       <p>
-                        {independentAiReady
-                          ? "已找到相关方案原文，启动后将生成结构化监查候选。"
-                          : "已找到相关方案原文；独立AI当前不可运行，配置后再生成语义候选。"}
+                        {topic.execution_status === "not_prepared"
+                          ? (independentAiReady
+                            ? "该主题尚未核对方案原文；点击「一键准备全部主题」后系统会检索原文并生成结构化监查候选。"
+                            : "该主题尚未核对方案原文；独立AI当前不可运行，配置后再一键准备。")
+                          : (independentAiReady
+                            ? "已找到相关方案原文，启动后将生成结构化监查候选。"
+                            : "已找到相关方案原文；独立AI当前不可运行，配置后再生成语义候选。")}
                       </p>
                     )}
                     {["queued", "running"].includes(topic.status) && (

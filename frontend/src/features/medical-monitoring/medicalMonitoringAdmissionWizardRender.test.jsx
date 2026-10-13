@@ -321,13 +321,19 @@ export const renders = {
     {
       phase: "failed",
       error: "研究文档核对暂未完成，请重试。",
+      // R42轮（R40-02）：复刻实测矛盾载荷——phase已failed，payload仍是
+      // 在途批次简报（核对尚未得出结论/无需重新上传/已上传核对中）。
       payload: {
         ready: false,
-        headline: "还需补充研究文件",
-        guidance: "已添加的文件会保留。",
+        headline: "已上传研究文件的核对尚未得出结论",
+        guidance: (
+          "已上传的研究文件仍在核对或尚未得出结论（此前上传与您作出"
+          + "的确认均已保存）。系统会继续推进该批文件的核对并自动返回"
+          + "结论；刷新或重开后同样继续，无需重新上传。"
+        ),
         roles: [
-          { role: "protocol", label: "当前研究方案", required_now: true, status: "current", status_text: "已识别" },
-          { role: "ecrf", label: "当前 eCRF", required_now: true, status: "missing", status_text: "尚未添加" },
+          { role: "protocol", label: "当前研究方案", required_now: true, status: "missing", status_text: "已上传，核对中" },
+          { role: "ecrf", label: "当前 eCRF", required_now: true, status: "missing", status_text: "已上传，核对中" },
         ],
       },
     },

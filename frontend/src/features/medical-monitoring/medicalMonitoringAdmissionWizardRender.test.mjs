@@ -168,9 +168,38 @@ check(
   "mapping summary appears only after required evidence is ready",
 );
 check(renders.documentsFailed.includes("当前研究方案"), "readiness failure preserves known document status");
-check(renders.documentsFailed.includes("已识别"), "readiness failure keeps completed work visible");
 check(renders.documentsFailed.includes(">重新核对研究文件</button>"), "readiness failure offers one plain retry action");
 check(renders.documentsFailed.includes('role="alert"'), "readiness failure is announced accessibly");
+// R42轮（R40-02）：失败态单一权威口径——载荷里的过时「核对中/无需重新
+// 上传」等待文案与「还缺研究文件/唯一待办」缺件口径不得同屏渲染。
+check(
+  renders.documentsFailed.includes("研究文件核对未完成"),
+  "failed readiness leads with the single authoritative failure headline",
+);
+check(
+  !renders.documentsFailed.includes("无需重新上传"),
+  "stale waiting copy is suppressed in failed state",
+);
+check(
+  !renders.documentsFailed.includes("系统会继续推进该批文件的核对"),
+  "stale auto-advance guidance is suppressed in failed state",
+);
+check(
+  !renders.documentsFailed.includes("已上传，核对中"),
+  "stale per-role checking copy is overridden in failed state",
+);
+check(
+  renders.documentsFailed.includes("已上传，核对未完成"),
+  "failed roles state the honest not-concluded status",
+);
+check(
+  !renders.documentsFailed.includes("还缺研究文件"),
+  "missing-file copy is not shown when files are uploaded but check failed",
+);
+check(
+  renders.documentsFailed.includes("重新上传完全相同的文件会"),
+  "failed state keeps the honest same-file reuse fact",
+);
 check(
   renders.documentsCrossChecking.includes("系统正在复核最后几个分歧"),
   "critique progress stays in plain Chinese",

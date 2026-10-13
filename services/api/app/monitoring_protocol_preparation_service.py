@@ -973,11 +973,28 @@ class MonitoringProtocolPreparationService:
         *,
         prepared: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        prepared = (
-            prepared
-            or self._prepared_from_existing_job(version, topic)
-            or self._prepare_topic(version, topic)
-        )
+        # R42轮（R42-02）：状态读取是GET轮询路径，绝不能就地执行重准备
+        # （逐主题原文span检索+上下文扩展）。此前 prepared 快照缺席时
+        # status会同步跑 `_prepare_topic`——该检索耗时随项目登记规模无界
+        # 增长，实测确定性超过前端45秒核对上限（R42-B/D两位8+次重读全
+        # 数超时循环，规则发布链整段不可达）。现在快照缺席=如实返回
+        # 「未准备」（ready/not_prepared）：主题可被「一键准备全部主题」
+        # 经 start 写路径准备（202语义），状态读取本身恒有界。
+        prepared = prepared or self._prepared_from_existing_job(version, topic)
+        if prepared is None:
+            return {
+                "topic_id": topic.topic_id,
+                "label": topic.label,
+                "allowed_fact_types": list(topic.fact_types),
+                "source_span_count": None,
+                "source_revision": "",
+                "status": "ready",
+                "execution_status": "not_prepared",
+                "reason_code": "not_prepared",
+                "data_gap": "",
+                "job": None,
+                "candidates": [],
+            }
         base = {
             "topic_id": topic.topic_id,
             "label": topic.label,

@@ -3635,3 +3635,47 @@ def test_retired_protocol_identity_resubmission_fails_loudly(
     assert after.attempt_count == 0
     assert after.contract_retirement_code == "superseded_job_contract"
     assert repository.candidates(PROJECT_ID, current_v12.job_id) == ()
+
+
+def test_status_read_never_runs_topic_preparation_inline(
+    tmp_path: Path,
+) -> None:
+    """R42轮（R42-02）：状态读取不得就地执行重准备（原文span检索）。
+
+    R42-B/D实测：快照缺席时GET status同步跑 `_prepare_topic`，检索耗时
+    随项目登记规模无界增长，确定性超过前端45秒核对上限——8+次「重新
+    读取」全数超时循环，规则发布链整段不可达。修复后：快照缺席=如实
+    返回「未准备」（ready/not_prepared），零检索调用；准备只能经
+    start写路径发生（202语义）。
+    """
+
+    resolver = FakeProtocolSpanResolver()
+    service, _repository, _ai_service, _provider, version, _wakes = _service(
+        tmp_path,
+        resolver=resolver,
+    )
+
+    status = service.status(
+        project_id=PROJECT_ID,
+        protocol_version_id=version.protocol_version_id,
+    )
+
+    # 零检索：状态读取不触发任何原文span搜索。
+    assert resolver.search_calls == []
+    # 未准备主题如实呈现：可开始（startable），但不是「已找到原文」。
+    assert status["status"] == "ready"
+    assert status["progress"]["ready"] == len(DEFAULT_MONITORING_PROTOCOL_TOPICS)
+    for topic in status["topics"]:
+        assert topic["status"] == "ready"
+        assert topic["execution_status"] == "not_prepared"
+        assert topic["reason_code"] == "not_prepared"
+        assert topic["source_span_count"] is None
+        assert topic["job"] is None
+        assert topic["candidates"] == []
+
+    # start写路径仍执行准备：检索发生在显式动作里。
+    service.start(
+        project_id=PROJECT_ID,
+        protocol_version_id=version.protocol_version_id,
+    )
+    assert len(resolver.search_calls) == len(DEFAULT_MONITORING_PROTOCOL_TOPICS)

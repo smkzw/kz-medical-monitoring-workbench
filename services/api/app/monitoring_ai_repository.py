@@ -1067,6 +1067,34 @@ class MonitoringAiRepository:
                     queued_count - 1
                 ) * self.queue_dwell_seconds_per_queued_job
                 cutoff = _iso(now - timedelta(seconds=threshold))
+                # R42轮（R42-01）：队列在本视界内有过「完成」即真实排空中，
+                # 不收割——双cohort盲核侧是独立单worker串行池（identity
+                # bound、parallelism=1），重思考分片单耗时可达5-30+分钟；
+                # 而视界随在队数下降逐轮收缩、dwell基线却固定在入队时刻，
+                # 只要单分片耗时超过180s/分片预算，排空速度必然追不上视界
+                # 收缩速度，健康队列的队尾分片被确定性误收割（R42B实测：
+                # 10个verifier分片8个attempt_count=0被queue_dwell_timeout，
+                # 字段映射确认链8连败、用户只剩知情降级旁路）。收割语义
+                # 指向「滞留」（失败→重试→再排队循环，视界内零完成），
+                # 指向不了正在推进的慢队列；「最近一次完成时间落入当前
+                # 视界」即证明队列在排空，本轮跳过。视界内零完成的滞留
+                # 场景（R29-01循环、R31饥饿）不受影响。
+                last_completion = connection.execute(
+                    """
+                    SELECT MAX(updated_at) FROM monitoring_ai_jobs
+                    WHERE project_id = ? AND status = ?
+                    """,
+                    (
+                        str(row["project_id"]),
+                        MonitoringAiJobStatus.COMPLETED.value,
+                    ),
+                ).fetchone()
+                if (
+                    last_completion is not None
+                    and last_completion[0]
+                    and str(last_completion[0]) >= cutoff
+                ):
+                    continue
                 # 存量行（本列加入前的旧queued作业）无dwell_since，按
                 # created_at兜底计时，避免升级后旧僵尸作业永不被收割。
                 dwell_clause = (

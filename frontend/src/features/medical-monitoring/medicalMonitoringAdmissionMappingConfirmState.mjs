@@ -704,9 +704,14 @@ export function admissionMappingConfirmReducer(state, action) {
         phase: "confirmed",
         revision: action.payload,
         // R36轮（R36-01）：降级确认的回执如实区分，不冒充双盲复核已
-        // 收敛的常规确认。
+        // 收敛的常规确认。R42轮（R42-01）：事后补偿（盲核分片重新排队
+        // 补跑）有回执时如实并入文案——复核缺口不再静默受限。
         message: action.degraded
-          ? "已按您的选择在不等待复核的情况下确认字段对应关系（降级确认已留痕）。可用于监查的数据尚未生成，需在后续步骤单独生成。"
+          ? `已按您的选择在不等待复核的情况下确认字段对应关系（降级确认已留痕）。${
+            Number(action.compensation?.requeued_count) > 0
+              ? `系统已把未完成的复核分片重新排队补跑（${Number(action.compensation.requeued_count)}个），补跑在后台进行，无需等待。`
+              : "可用于监查的数据尚未生成，需在后续步骤单独生成。"
+          }`
           : "字段对应关系已确认。可用于监查的数据尚未生成，需在后续步骤单独生成。",
         error: null,
       };

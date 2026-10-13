@@ -737,6 +737,11 @@ def _public_mapping_projection(
             "draft_id",
             "version",
             "status",
+            # R36轮（R36-01）/R42轮（R42-01）：降级确认的知情留痕与
+            # 事后补偿回执（盲核分片重新排队补跑的聚合计数，无作业
+            # 身份）——公开投影如实透出，用户可见复核缺口已有自动出口。
+            "dual_review_degraded",
+            "dual_review_compensation",
         )
         if key in payload
     }
