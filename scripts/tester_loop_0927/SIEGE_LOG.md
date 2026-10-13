@@ -4,6 +4,176 @@
 
 ---
 
+## R43 攻坚·第 1 次（2026-10-14，攻坚工程师-R43-第1次）
+
+### 0. 结论先行
+
+**墙未复发：R42 修复员五条修复（650fc587：R42-01/02/04/05+R40-02——
+R42-01 映射确认链收割器进度守卫+降级确认补偿、R42-02 方案准备状态读取
+恒有界、R42-04 工作条查看本次结果双通路、R42-05 新运行完成自动接管
+「本次」、R40-02 研究文件核对失败态单一口径——均不触运行链与结果投影）
++ 轮次归档（f2121129）之后，8911 pid 59573 于 2026-10-14 04:32 拉起、
+5178 vite 同刻（IPv6 监听），本轮两遍全新幂等键全链全绿，零阻断、
+零代码修复、零重启、零跳门，两遍壁钟共 41s（全暖带）。** 常驻项目
+「MX循开考-CSU」（proj_user_6ef58ac151e1）以两个全新幂等键
+（r43s-fresh-b14ca14d46ad=registry seq 75 / r43s-fresh-c81e5ca46b8e
+=seq 76）各走完 run-setup/options → workspace/bootstrap（留证）→
+prepare-and-start → progress completed（15s，各 2 轮询）→ publication
+available → result-entry → overview 可读（两遍均 1,244,007B/
+60 发现/16 受试者，缓存探针二读字节相等）。**附一项投影确定性归因
+（零代码修复，钉行如实录）**：与 R42 基线（r42s_overview_p1.json）比，
+findings 60=60、risks 389=389 逐字段零漂移、overview 字节三份相等
+（1,244,007），唯 projection.content_hash 逐运行变化（cdd6b405…→
+3e0243ea…→7430c247…）——全量叶子枚举钉死：两遍间 610 个差异叶子
+=60 个 query_draft_id + 541 个 drafts 数组排序错位伪影 + 9 个运行
+身份/派生摘要叶，按 finding_id 键控后**内容零差异**；根因=
+`_query_draft_id` 把 `run_id` 烧进草稿 id
+（`packages/medical_monitoring/reports/mode_output_core.py:1092,1153`，
+经 `drafts.sort(key=query_draft_id)` :1308 放大为逐运行排序/摘要漂移）
+——属 W01-R26 A12 草稿自持 ID 设计（自 f0d608a3 2026-09-02 在役），
+非回归、非本链阻断项。
+
+### 1. 环境前置（复现前，未重启任何服务）
+
+- 8911（pid 59573，2026-10-14 04:32 拉起，127.0.0.1 IPv4 监听）
+  `/api/runtime-readiness` 200 ready=true、
+  backend_build_id=**api-616662809274f9f0**（650fc587 提交说明
+  ISO_ENV_LOG 条目同指纹）；`/api/health` 200（integrity ok,
+  schema v16）。
+- 5178（vite node pid 59764，[::1] IPv6 监听；127.0.0.1 拒连为
+  IPv4/IPv6 监听面事实，经 localhost 实测 200）runtime-build.json
+  expectedBackendBuildId=api-616662809274f9f0 与后端**配对一致**。
+- 加载面实证：`git diff HEAD --stat -- packages services
+  frontend/src` 为空；`find packages services frontend/src
+  -newermt "2026-10-14 04:32:00"` 为空——磁盘==HEAD（f2121129，
+  含 650fc587 五条修复）==进程加载面。
+- 复现前磁盘基线：launch_registry 74 条全部 completed+
+  result_available=1、**waiting_start=0**（指纹族=68ba60ad… siege 族
+  +96ce6187… UI 向导族）；execution_profiles `global_default|*|1`
+  在位；admission_events 6 行。
+- 后端进程 CPU 102%：
+  `/api/health` 连测 3 次 200（0.58/0.66/0.76s）——非 R7-01 事件循环
+  独占签名（端点全部秒级响应），判定为在役后台作业负载，未重启。
+- 复现前同刻双侧实测（p1 前置）：mapping-candidates 200
+  （candidates_ready，60 候选）、facts 200（ready）、project/open 200
+  （current）、protocol-versions 200——预置台与运行门无口径差。
+
+### 2. 复现（任务①）——两遍全链（驱动 `r43s_siege_repro.py`，证据
+`r43s_siege_evidence.jsonl` 56 行，两遍链路壁钟 41s 全暖）
+
+忠实界面路径（不先 workspace/bootstrap；bootstrap 仅按任务书列名留证实测）。
+
+**第一遍（key=r43s-fresh-b14ca14d46ad，seq 75）**：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线双侧 | mapping-candidates 200（230ms，candidates_ready/60 候选）、facts 200（110ms，ready）、project/open 200（127ms，current）、protocol-versions 200（61ms）——无口径差 |
+| run-setup/options | 200，289ms，snapshot:ef8692acfbab4d2a9846916f（与 R34–R42 同快照） |
+| workspace/bootstrap（留证） | 200，135ms，replayed=true revision=1 |
+| prepare-and-start | **200，551ms**，run:1b976d3748008c3400ae395a |
+| progress | completed，percent=100.0，polls=2，run_seconds=15（首轮 result_available=false 沿 R20 §4 投影时序） |
+| publication | POST 200 → **available**（859ms，首击即 available） |
+| result-entry | 200，467ms，rct=result-context:d6c12a189d79495b926bfb4f8024e711 |
+| results/{rct}/overview | 200，440ms，**1,244,007B、60 发现/16 受试者**；缓存探针二读 223ms 字节相等 |
+
+**第二遍=重验（任务③，key=r43s-fresh-c81e5ca46b8e，seq 76）**：全绿
+同型全暖——options 200（299ms，同快照）→ bootstrap 200 replayed
+（133ms）→ prepare-and-start **200**（554ms，
+run:f43b1dfcdbc3eee1bc137cae）→ progress completed（polls=2，15s）→
+publication **available**（946ms）→ entry 200（556ms，
+rct=result-context:136874ccb189427d991dbf02dd4abcea）→ overview 200
+（426ms，1,244,007B/60/16；缓存探针 216ms 字节相等）。
+
+终态磁盘：sequence 1-76 全部 completed+result_available=1（新增 75/76
+两行），**waiting_start=0**、admission_events 6 行=6 行（零新增接入
+事件）、global_default|*|1 稳定、指纹族不变（68ba60ad…/96ce6187…）。
+
+### 3. 投影确定性归因（本轮实测，对照 r42s_overview_p1.json 基线）
+
+650fc587 不触运行链投影，本轮预期零漂移；实测 findings/risks/字节
+全等，唯 content_hash 逐运行变——逐层钉死：
+
+1. **零内容漂移（键控证明）**：r43 两遍按 finding_id 键控，60 条
+   query_findings 逐字段零漂移、389 条 current_risks 逐字段零漂移、
+   60 条 query_drafts 除 query_draft_id 外**全部字段零漂移**（键控
+   非 query_draft_id 字段差异数=0）；三份 overview（r42p1/r43p1/
+   r43p2）序列化字节完全相等（1,244,007B）。
+2. **content_hash 逐运行变化的完备枚举**：r43p1 vs r43p2 全量叶子
+   差异共 **610** 个 = 60 个 `query_drafts[].query_draft_id` +
+   541 个 drafts 数组内排序错位伪影（数组按 query_draft_id 排序，
+   id 变则位次变，键控后无差异）+ 9 个身份/派生叶
+   （identity.public_run_token、result_context_token、
+   response_digest、projection.content_hash、
+   center_map.content_hash、replay_content_identity×2、
+   query_findings_meta.artifact/content_sha256）。集合之外零差异。
+3. **根因钉行（设计行为，非缺陷）**：
+   `packages/medical_monitoring/reports/mode_output_core.py:1086-1106`
+   `_query_draft_id` 的哈希入参含 `"run_id"`（:1092 字段表、:1153
+   id_payload）——草稿 id 为**运行域身份**（W01-R26 A12：payload
+   携带平行冻结 findings 数组、QueryDraft 保留自身 ID 以 finding_id
+   引用，:1269-1271 注释），每次运行 run_id 必变 → 60 个
+   query_draft_id 必变 → `drafts.sort(key=query_draft_id)`（:1308）
+   逐运行重排 + 引用 drafts 的派生摘要（meta.artifact/content_sha256、
+   projection.content_hash、center_map.*）逐运行变化。该行为自
+   f0d608a3（2026-09-02「split mode output authority」）在役，历经
+   R26→R42 各轮结果口径核对未拦链路（历轮比对口径为 findings/risks
+   集合与字段，非 content_hash 等值）。
+4. **对 R42 §3 记录的补充**：R42 将 content_hash 6502e046→cdd6b405
+   归因于 R39-04① +84B 定位符漂移——该归因在字节层面成立（本轮
+   证实字节可全等），但**必要性不成立**：content_hash 因 run-scoped
+   query_draft_id 本就逐运行变化，content_hash 等值不可用作跨运行
+   零漂移判据；跨运行零漂移判据应为「findings/risks/drafts 键控
+   逐字段等 + 字节等」。本轮据此如实记录，不改产品码。
+5. 650fc587 各修复面（R42-01/02/04/05、R40-02）不触运行链与结果
+   投影——本轮 prepare-and-start 两遍首击即 200（551/554ms）、
+   publication 首击即 available、overview 冻结包缓存二读字节相等，
+   在役无回归，与其回归套件（§5）互证。
+
+### 4. 修复（任务②）
+
+**无需新修复，本轮零代码改动、零重启。** 运行链上无任何一道门拒绝：
+接入管线侧 candidates_ready/ready/current 与运行门无口径差；
+prepare-and-start 两遍首击即 200（全暖 551/554ms），无 waiting_start
+残留、无 in_flight_conflict、无 global_default_missing
+（profile_layer_versions 稳定 `global_default|*|1`）；publication
+首击即 available；result-entry/overview 冻结包会话缓存（R34-09/
+R32-07）持续在役（两遍二读字节相等）。§3 的 content_hash 逐运行
+变化经完备枚举钉为 run-scoped 草稿身份的设计行为（钉行见 §3-3），
+不属运行启动死锁墙判据（该墙以「运行能否真正完成+发布+可读」为判据，
+本轮两遍皆绿）。
+
+### 5. 在役回归（本轮实跑，.venv/bin/pytest）
+
+- 全量：`pytest tests/test_medical_monitoring_r7_product_router.py -q`
+  → **96 passed / 1 failed**（43.60s）。唯一失败
+  `test_late_project_dispatchers_keep_two_actual_api_results_isolated`：
+  本轮单独重跑确认签名 `409 {"code":"result_context_unavailable",
+  "message":"本次结果暂不可查看，请返回进度页"}` @
+  tests/test_medical_monitoring_r7_product_router.py:2844——与
+  R39/R40/R41/R42 留痕逐字同签名（历轮 stash 对照已证 HEAD 既有）。
+  属双项目晚接入派发隔离场景，非常驻项目运行链墙（本轮两遍全链绿+
+  该套件 96 过直接证明）；继续挂修复员排期。
+
+### 6. 遗留与边界
+
+- 后端进程 CPU 102%（非 R7-01：端点秒级响应）：疑为在役后台作业
+  负载，未深挖未归因到代码行；如后续轮复现伴随端点劣化，按 R7-01
+  家族上报。
+- 5178 仅 IPv6 监听（127.0.0.1 拒连、localhost/[::1] 200）：历轮同型
+  （R42 已录），非本轮新增，不拦链路。
+- `content_hash` 跨运行不可作等值判据（§3-4）：若后续轮/测试者以
+  content_hash 等值作回归断言将误报，建议投影确定性断言一律用
+  键控字段比对（本轮已实测可行）。
+- progress 首轮询 `result_available=false`（R20 §4 投影时序）：本轮
+  两遍同型，发布后一致，不拦。
+- 浏览器像素级全链回归未在本攻坚内执行（工程验证身份以 API 驱动+
+  状态机代码核验为口径；界面全量回归归测试轮）。
+
+留痕文件：`r43s_siege_repro.py`、`r43s_siege_evidence.jsonl`、
+`r43s_overview_p1.json`、`r43s_overview_p2.json`、本日志节。
+
+---
+
 ## R42 攻坚·第 1 次（2026-10-14，攻坚工程师-R42-第1次）
 
 ### 0. 结论先行
