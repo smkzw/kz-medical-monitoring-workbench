@@ -1258,9 +1258,12 @@ def test_project_mismatch_stops_before_user_decision_is_persisted(
     workflow.repository = SimpleNamespace()
     workflow._candidate_root = lambda workspace_dir: workspace_dir
     workflow._load_batch = lambda _root, _batch_id: batch
-    workflow._job = lambda _project_id, _task_type, key: SimpleNamespace(
+    # R40轮（R40-01）：advance改用_optional_job定位分析作业（缺失时就地
+    # 重建）；本测试关注「身份不匹配停在裁决持久化之前」，桩保持同语义。
+    workflow._optional_job = lambda _project_id, _task_type, key: SimpleNamespace(
         job_id=key
     )
+    workflow._shared_runtime_identity = lambda: False
     workflow._recover_failed_once = lambda _jobs: False
     workflow._pending_state = lambda _jobs, _state: None
 

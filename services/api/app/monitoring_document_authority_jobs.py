@@ -169,6 +169,7 @@ def submit_document_authority_review_pair(
     candidate_batch: Mapping[str, Any],
     primary_analysis_job_id: str,
     verifier_analysis_job_id: str,
+    allow_shared_runtime_identity: bool = False,
 ) -> tuple[dict[str, Any], "MonitoringAiJob", "MonitoringAiJob"]:
     repository = primary_service.repository
     if verifier_service.repository is not repository:
@@ -191,7 +192,10 @@ def submit_document_authority_review_pair(
     if input_revision.revision_sha256 != primary_run.job_input_revision_sha256:
         raise DocumentAuthorityError("document_authority_input_revision_mismatch")
     packet = build_anonymous_conflict_packet(
-        candidate_batch, primary_run, verifier_run
+        candidate_batch,
+        primary_run,
+        verifier_run,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     bindings = [
         {
@@ -228,6 +232,7 @@ def submit_document_authority_adjudication_pair(
     verifier_analysis_job_id: str,
     primary_review_job_id: str,
     verifier_review_job_id: str,
+    allow_shared_runtime_identity: bool = False,
 ) -> tuple[dict[str, Any], "MonitoringAiJob", "MonitoringAiJob"]:
     repository = primary_service.repository
     if verifier_service.repository is not repository:
@@ -248,7 +253,10 @@ def submit_document_authority_adjudication_pair(
         role="verifier",
     )
     packet = build_anonymous_conflict_packet(
-        candidate_batch, primary_analysis, verifier_analysis
+        candidate_batch,
+        primary_analysis,
+        verifier_analysis,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     primary_review = load_document_authority_review_run(
         repository,
@@ -313,6 +321,7 @@ def submit_document_authority_critique_pair(
     verifier_review_job_id: str,
     primary_adjudication_job_id: str,
     verifier_adjudication_job_id: str,
+    allow_shared_runtime_identity: bool = False,
 ) -> tuple[dict[str, Any], "MonitoringAiJob", "MonitoringAiJob"]:
     repository = primary_service.repository
     if verifier_service.repository is not repository:
@@ -327,7 +336,10 @@ def submit_document_authority_critique_pair(
         candidate_batch=candidate_batch, role="verifier",
     )
     packet = build_anonymous_conflict_packet(
-        candidate_batch, primary_analysis, verifier_analysis
+        candidate_batch,
+        primary_analysis,
+        verifier_analysis,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     primary_review = load_document_authority_review_run(
         repository, project_id=project_id, job_id=primary_review_job_id,
@@ -682,6 +694,9 @@ def resolve_document_authority_from_jobs(
     primary_critique_job_id: str = "",
     verifier_critique_job_id: str = "",
     user_role_selections: Any = (),
+    # R40轮（R40-01）：运维同绑定（双盲两群组同通道同模型）的知情降级
+    # 放行开关，由workflow层按实时角色绑定计算；默认False保持严格。
+    allow_shared_runtime_identity: bool = False,
 ) -> dict[str, Any]:
     primary_analysis = load_document_authority_analysis_run(
         repository,
@@ -698,7 +713,10 @@ def resolve_document_authority_from_jobs(
         role="verifier",
     )
     reconciliation = reconcile_document_authority(
-        candidate_batch, primary_analysis, verifier_analysis
+        candidate_batch,
+        primary_analysis,
+        verifier_analysis,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     if reconciliation["state"] == "resolved":
         return {
@@ -718,7 +736,10 @@ def resolve_document_authority_from_jobs(
     if not primary_review_job_id or not verifier_review_job_id:
         raise DocumentAuthorityError("document_authority_review_jobs_required")
     expected_packet = build_anonymous_conflict_packet(
-        candidate_batch, primary_analysis, verifier_analysis
+        candidate_batch,
+        primary_analysis,
+        verifier_analysis,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     if conflict_packet is not None and conflict_packet != expected_packet:
         raise DocumentAuthorityError("document_authority_conflict_packet_tampered")
@@ -745,6 +766,7 @@ def resolve_document_authority_from_jobs(
         expected_packet,
         primary_review,
         verifier_review,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     identity_decisions = {
         decision.role: decision for decision in primary_review.review.decisions
@@ -808,6 +830,7 @@ def resolve_document_authority_from_jobs(
             adjudication_context,
             primary_adjudication,
             verifier_adjudication,
+            allow_shared_runtime_identity=allow_shared_runtime_identity,
         )
         identity_decisions.update({
             decision.role: decision
@@ -864,6 +887,7 @@ def resolve_document_authority_from_jobs(
                 critique_context,
                 primary_critique,
                 verifier_critique,
+                allow_shared_runtime_identity=allow_shared_runtime_identity,
             )
             identity_decisions.update({
                 decision.role: decision
@@ -921,6 +945,8 @@ def promote_document_authority_from_jobs(
     verifier_critique_job_id: str = "",
     user_role_selections: Any = (),
     decision_record: Mapping[str, Any] | None = None,
+    # R40轮（R40-01）：同resolve——运维同绑定的知情降级放行开关。
+    allow_shared_runtime_identity: bool = False,
 ) -> dict[str, Any]:
     candidate_root = Path(candidate_root)
     frozen_batch = _load_json(
@@ -943,6 +969,7 @@ def promote_document_authority_from_jobs(
         primary_critique_job_id=primary_critique_job_id,
         verifier_critique_job_id=verifier_critique_job_id,
         user_role_selections=user_role_selections,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     if resolution["state"] != "resolved":
         return {
@@ -1372,6 +1399,9 @@ def verify_document_authority_promotion_receipt(
                 critique_by_role["verifier"].job_id if critique_by_role else ""
             ),
             user_role_selections=frozen_selections,
+            # R40轮（R40-01）：回放接受冻结证据形成时的运行身份形态——
+            # 同身份对只可能经运维知情绑定产生；内容与哈希校验全部照旧。
+            allow_shared_runtime_identity=True,
         )
         candidates = {
             str(item["candidate_id"]): item

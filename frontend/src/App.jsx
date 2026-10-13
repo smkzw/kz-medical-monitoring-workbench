@@ -1859,7 +1859,7 @@ function conciseEditorBlockerReason(value) {
   return compactLabel(withoutInternalPrefix, 72);
 }
 
-function OverviewPage({ projectId, dashboard, dashboardError, workbenchInbox, workbenchInboxError, setActivePage, setSelectedSubject, aiGatewayStatus, setAiGatewayStatus, aiRuns, aiRunsError, refreshWorkbenchInbox }) {
+function OverviewPage({ projectId, dashboard, dashboardError, workbenchInbox, workbenchInboxError, setActivePage, setSelectedSubject, aiGatewayStatus, setAiGatewayStatus, aiRuns, aiRunsError, refreshWorkbenchInbox, onOpenMonitoringRisk }) {
   const [actionError, setActionError] = useState("");
   // R25轮（R25-07/R25-08）：正在后台标记已读的事项id——防连点重复
   // 记账，并为「处理最高优先级」按钮提供进行中反馈。
@@ -1908,7 +1908,27 @@ function OverviewPage({ projectId, dashboard, dashboardError, workbenchInbox, wo
     if (item.module === "medical_monitoring" && item.target_id) {
       setSelectedSubject?.(item.target_id);
     }
-    setActivePage(item.target_page || moduleToPage[item.module] || "overview");
+    // R40轮（R38-02）：监查风险事项携带发现身份（risk_key/risk_instance_id）
+    // 深链进监查结果视图的对应发现卡——事项文案承诺「进入结果视图复核该
+    // 发现」，不再落在监查首页让用户自行在清单中找回。锚点机制与安全/PV
+    // 模块的onOpenMonitoringRisk同源（App层组合project_ref/subject/risk身份）；
+    // 身份不全时回退既有监查页导航，不阻断打开动作。
+    if (
+      item.module === "medical_monitoring"
+      && (item.risk_instance_id || item.risk_key)
+      && typeof onOpenMonitoringRisk === "function"
+    ) {
+      const navigated = onOpenMonitoringRisk({
+        riskKey: item.risk_key || "",
+        riskId: item.risk_instance_id || "",
+        subject: item.target_id || "",
+      });
+      if (!navigated) {
+        setActivePage(item.target_page || moduleToPage[item.module] || "overview");
+      }
+    } else {
+      setActivePage(item.target_page || moduleToPage[item.module] || "overview");
+    }
     if (!item.unread) return;
     setOpeningItemId(item.item_id);
     try {
@@ -14134,6 +14154,25 @@ export function App() {
           aiRuns={aiRuns}
           aiRunsError={aiRunsReadError}
           refreshWorkbenchInbox={refreshWorkbenchInbox}
+          onOpenMonitoringRisk={(risk) => {
+            // R40轮（R38-02）：收件箱监查事项深链——与安全/PV模块的
+            // onOpenMonitoringRisk同一锚点机制：结果视图按发现身份定位。
+            // 返回是否真实导航；身份不全（如清单未就绪）时由调用方回退
+            // 既有监查页导航，不让点击无响应。
+            const riskRef = risk.riskKey || risk.riskRef || "";
+            const riskInstanceRef = risk.riskId || risk.riskInstanceRef || risk.id || "";
+            if (!monitoringRouteProjectId || !riskRef || !riskInstanceRef) return false;
+            if (risk.subject && risk.subject !== "-") setSelectedSubject(risk.subject);
+            requestMedicalMonitoringProductRouteChange({
+              project_ref: monitoringRouteProjectId,
+              view: "overview",
+              risk_ref: riskRef,
+              risk_instance_ref: riskInstanceRef,
+              subject_ref: risk.subject && risk.subject !== "-" ? risk.subject : "",
+              return_context_key: `workbench-inbox:${riskInstanceRef}`,
+            });
+            return true;
+          }}
         />
       );
     }

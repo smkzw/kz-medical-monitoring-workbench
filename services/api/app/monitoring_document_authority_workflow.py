@@ -30,6 +30,7 @@ from .monitoring_ai_repository import (
     MonitoringAiRepository,
     MonitoringAiStateConflictError,
 )
+from .monitoring_ai_service import MonitoringAiServiceError
 from .monitoring_document_authority_jobs import (
     load_document_authority_analysis_run,
     promote_document_authority_from_jobs,
@@ -155,18 +156,27 @@ class MonitoringDocumentAuthorityWorkflow:
                    if hasattr(getattr(existing_primary, "status", ""), "value")
                    else getattr(existing_primary, "status", "")) == "completed"
         )
-        self.primary_service.submit_document_authority_analysis(
-            project_id=project_id,
-            input_revision=revision,
-            candidate_batch=batch,
-            role="primary",
-        )
-        self.verifier_service.submit_document_authority_analysis(
-            project_id=project_id,
-            input_revision=revision,
-            candidate_batch=batch,
-            role="verifier",
-        )
+        try:
+            self.primary_service.submit_document_authority_analysis(
+                project_id=project_id,
+                input_revision=revision,
+                candidate_batch=batch,
+                role="primary",
+            )
+            self.verifier_service.submit_document_authority_analysis(
+                project_id=project_id,
+                input_revision=revision,
+                candidate_batch=batch,
+                role="verifier",
+            )
+        except MonitoringAiServiceError as exc:
+            # R40轮（R40-01）：提交失败不得把批次清单留在「已上传，核对中」
+            # 的假象里（此前批次清单已落盘、作业未建，重传同文件永远复现
+            # 同一死局）。转成带明确诊断码的DocumentAuthorityError，由路由
+            # 给出「不是文件问题」的如实指引。
+            raise DocumentAuthorityError(
+                "document_authority_submit_unavailable"
+            ) from exc
         # R27轮（R27-03）：重新上传是用户的显式重核动作。作业指纹随内容
         # 确定——同组文件的create_or_get只会原样取回既有作业行，不会重排
         # 已落终态失败的作业；此前卡死诊断横幅承诺「重新上传会触发完整
@@ -195,6 +205,10 @@ class MonitoringDocumentAuthorityWorkflow:
                 continue
         self.worker_wake()
         result = {"state": "analyzing", "batch_id": batch["batch_id"]}
+        if self._shared_runtime_identity():
+            # R40轮（R40-01）：运维同绑定（盲核与主分析同通道同模型）时
+            # 如实披露知情降级，路由把它并入用户可见指引。
+            result["shared_runtime_identity"] = True
         if previously_analyzed:
             # 仅在确为重复内容且已有完成结论时附带该事实，保持既有
             # 返回契约不变。
@@ -219,16 +233,53 @@ class MonitoringDocumentAuthorityWorkflow:
     ) -> dict[str, Any]:
         candidate_root = self._candidate_root(workspace_dir)
         batch = self._load_batch(candidate_root, batch_id)
-        primary_job = self._job(
-            project_id,
-            MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
-            f"document-authority-analysis:primary:{_ANALYSIS_GENERATION}:{batch_id}",
+        shared_runtime = self._shared_runtime_identity()
+        primary_key = (
+            f"document-authority-analysis:primary:{_ANALYSIS_GENERATION}:{batch_id}"
         )
-        verifier_job = self._job(
-            project_id,
-            MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS,
-            f"document-authority-analysis:verifier:{_ANALYSIS_GENERATION}:{batch_id}",
+        verifier_key = (
+            f"document-authority-analysis:verifier:{_ANALYSIS_GENERATION}:{batch_id}"
         )
+        primary_job = self._optional_job(
+            project_id, MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS, primary_key
+        )
+        verifier_job = self._optional_job(
+            project_id, MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS, verifier_key
+        )
+        if primary_job is None or verifier_job is None:
+            # R40轮（R40-01）：批次清单在库但分析作业缺失（历史提交在创建
+            # 作业前失败，或创建后存储异常）——「重新核对研究文件」与轮询
+            # 就地按批次清单重建缺失作业（create_or_get幂等，不重排既有
+            # 作业），不再让document_authority_job_missing成为无出口死局。
+            revision = self._input_revision(project_id, batch)
+            try:
+                if primary_job is None:
+                    primary_job = (
+                        self.primary_service.submit_document_authority_analysis(
+                            project_id=project_id,
+                            input_revision=revision,
+                            candidate_batch=batch,
+                            role="primary",
+                        )
+                    )
+                if verifier_job is None:
+                    verifier_job = (
+                        self.verifier_service.submit_document_authority_analysis(
+                            project_id=project_id,
+                            input_revision=revision,
+                            candidate_batch=batch,
+                            role="verifier",
+                        )
+                    )
+            except MonitoringAiServiceError as exc:
+                raise DocumentAuthorityError(
+                    "document_authority_submit_unavailable"
+                ) from exc
+            self.worker_wake()
+            result = {"state": "analyzing", "batch_id": batch_id}
+            if shared_runtime:
+                result["shared_runtime_identity"] = True
+            return result
         recovered = (
             self._recover_failed_once(
                 (primary_job, verifier_job), explicit=True
@@ -244,7 +295,10 @@ class MonitoringDocumentAuthorityWorkflow:
             }
         pending = self._pending_state((primary_job, verifier_job), "analyzing")
         if pending is not None:
-            return {**pending, "batch_id": batch_id}
+            result = {**pending, "batch_id": batch_id}
+            if shared_runtime:
+                result["shared_runtime_identity"] = True
+            return result
 
         primary_run = load_document_authority_analysis_run(
             self.repository,
@@ -264,6 +318,7 @@ class MonitoringDocumentAuthorityWorkflow:
             batch,
             primary_run,
             verifier_run,
+            allow_shared_runtime_identity=shared_runtime,
         )
         if identity["status"] != "aligned" and identity["status"] != "not_assessed":
             # R1测试循环第1轮：身份门默认fail-closed（防串项目），但必须
@@ -333,6 +388,7 @@ class MonitoringDocumentAuthorityWorkflow:
             batch,
             primary_run,
             verifier_run,
+            allow_shared_runtime_identity=shared_runtime,
         )
         if reconciliation["state"] == "resolved":
             return promote_document_authority_from_jobs(
@@ -344,9 +400,15 @@ class MonitoringDocumentAuthorityWorkflow:
                 primary_analysis_job_id=primary_job.job_id,
                 verifier_analysis_job_id=verifier_job.job_id,
                 decision_record=decision_record,
+                allow_shared_runtime_identity=shared_runtime,
             )
 
-        packet = build_anonymous_conflict_packet(batch, primary_run, verifier_run)
+        packet = build_anonymous_conflict_packet(
+            batch,
+            primary_run,
+            verifier_run,
+            allow_shared_runtime_identity=shared_runtime,
+        )
         packet_sha256 = str(packet["conflict_packet_sha256"])
         primary_review = self._optional_job(
             project_id,
@@ -367,6 +429,7 @@ class MonitoringDocumentAuthorityWorkflow:
                 candidate_batch=batch,
                 primary_analysis_job_id=primary_job.job_id,
                 verifier_analysis_job_id=verifier_job.job_id,
+                allow_shared_runtime_identity=shared_runtime,
             )
             self.worker_wake()
             return {"state": "reviewing", "batch_id": batch_id}
@@ -391,6 +454,7 @@ class MonitoringDocumentAuthorityWorkflow:
             primary_review_job_id=primary_review.job_id,
             verifier_review_job_id=verifier_review.job_id,
             user_role_selections=user_role_selections,
+            allow_shared_runtime_identity=shared_runtime,
         )
         if review_resolution["state"] == "resolved":
             return promote_document_authority_from_jobs(
@@ -405,6 +469,7 @@ class MonitoringDocumentAuthorityWorkflow:
                 verifier_review_job_id=verifier_review.job_id,
                 user_role_selections=user_role_selections,
                 decision_record=decision_record,
+                allow_shared_runtime_identity=shared_runtime,
             )
 
         primary_adjudication = self._optional_job(
@@ -429,6 +494,7 @@ class MonitoringDocumentAuthorityWorkflow:
                     verifier_analysis_job_id=verifier_job.job_id,
                     primary_review_job_id=primary_review.job_id,
                     verifier_review_job_id=verifier_review.job_id,
+                    allow_shared_runtime_identity=shared_runtime,
                 )
             )
             self.worker_wake()
@@ -456,6 +522,7 @@ class MonitoringDocumentAuthorityWorkflow:
             primary_adjudication_job_id=primary_adjudication.job_id,
             verifier_adjudication_job_id=verifier_adjudication.job_id,
             user_role_selections=user_role_selections,
+            allow_shared_runtime_identity=shared_runtime,
         )
         if adjudication_resolution["state"] == "resolved":
             return promote_document_authority_from_jobs(
@@ -472,6 +539,7 @@ class MonitoringDocumentAuthorityWorkflow:
                 verifier_adjudication_job_id=verifier_adjudication.job_id,
                 user_role_selections=user_role_selections,
                 decision_record=decision_record,
+                allow_shared_runtime_identity=shared_runtime,
             )
 
         primary_critique = self._optional_job(
@@ -498,6 +566,7 @@ class MonitoringDocumentAuthorityWorkflow:
                     verifier_review_job_id=verifier_review.job_id,
                     primary_adjudication_job_id=primary_adjudication.job_id,
                     verifier_adjudication_job_id=verifier_adjudication.job_id,
+                    allow_shared_runtime_identity=shared_runtime,
                 )
             )
             self.worker_wake()
@@ -529,6 +598,7 @@ class MonitoringDocumentAuthorityWorkflow:
             verifier_critique_job_id=verifier_critique.job_id,
             user_role_selections=user_role_selections,
             decision_record=decision_record,
+            allow_shared_runtime_identity=shared_runtime,
         )
 
     @classmethod
@@ -1026,6 +1096,28 @@ class MonitoringDocumentAuthorityWorkflow:
             expected_decision_version=expected_decision_version,
         )
         return selections
+
+    def _shared_runtime_identity(self) -> bool:
+        """R40轮（R40-01）：盲核与主分析是否被运维绑定为同一运行身份。
+
+        2026-10-13 Ollama额度耗尽，用户指令把盲核角色与主分析一并绑定到
+        cms-router/glm-5.3-flash——双模型独立性客观不成立，属用户知情
+        的临时同绑定架构。此时放行同身份双通道复诵（两角色提示词、队列
+        与业务键仍互异，人工归属确认照旧），并在响应中如实披露；任一
+        角色恢复独立身份后本开关自动失效，fail-closed恢复原状。
+        """
+
+        try:
+            primary = self.primary_service.runtime_resolver()
+            verifier = self.verifier_service.runtime_resolver()
+        except Exception:
+            return False
+        return bool(
+            getattr(primary, "available", False)
+            and getattr(verifier, "available", False)
+            and (primary.provider, primary.model)
+            == (verifier.provider, verifier.model)
+        )
 
     @staticmethod
     def _input_revision(

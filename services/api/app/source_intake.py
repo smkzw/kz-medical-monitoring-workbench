@@ -1454,9 +1454,38 @@ class SourceRegistryService:
             ]
             current_entry_id = entry.entry_id
         if not current_candidates:
+            # R38轮（R38-03）：候选存在但全部不可用时（最常见：登记后项目
+            # 登记信息变更使内容一致性校验的expected_context_hash过期），
+            # 不再直出英文内部诊断误导排障；如实归因并指向真实恢复路径
+            # （重新核对会重新登记并刷新校验——promotion重登记时按内容
+            # 幂等复用同一entry并重跑assess）。
+            stale_peers = [
+                item
+                for item in entries
+                if item.module == entry.module
+                and (
+                    _monitoring_logical_role(item.source_kind)
+                    if entry.module == "medical_monitoring"
+                    else item.source_kind
+                )
+                == (
+                    _monitoring_logical_role(entry.source_kind)
+                    if entry.module == "medical_monitoring"
+                    else entry.source_kind
+                )
+                and _monitoring_authority_main_entry_id(item) == item.entry_id
+            ]
+            if stale_peers:
+                raise ValueError(
+                    "该研究文件的登记记录存在，但其内容一致性校验已不能代表"
+                    "当前项目登记信息（登记信息在文件登记后发生变更），"
+                    "暂不能用于证据检索。请在数据接入向导第3步点击"
+                    "「重新核对研究文件」（系统会重新登记并刷新校验），"
+                    "或重新上传同一组研究文件后再试。"
+                )
             raise ValueError(
-                "registered document authority is incomplete for evidence search: "
-                f"{entry.entry_id}"
+                "尚未登记可用于证据检索的研究文件：请先在数据接入向导"
+                "完成研究文件上传与核对。"
             )
         current = max(
             current_candidates,
@@ -1464,8 +1493,8 @@ class SourceRegistryService:
         )
         if current.entry_id != current_entry_id:
             raise ValueError(
-                "superseded registered document is not allowed for "
-                f"medical-monitoring evidence search: {entry.entry_id}"
+                "该证据引用指向已被新版本取代的旧登记文件，暂不能用于"
+                "证据检索。请重新核对研究文件（重新登记最新版本）后重试。"
             )
 
         spans_by_id: Dict[str, SourceRegistrySpan] = {}
@@ -1636,8 +1665,9 @@ class SourceRegistryService:
                 continue
             if validation.validator_version != VALIDATOR_VERSION:
                 raise ValueError(
-                    "registered source validation is stale and must be refreshed before AI use: "
-                    f"{entry_id}/{validation.validator_version}"
+                    "该来源的一致性校验由旧版校验器生成，需刷新后才能用于AI："
+                    "请在数据接入向导重新核对研究文件（重新登记会刷新校验），"
+                    f"或重新上传同一文件。来源：{entry_id}"
                 )
             if self.expected_context_resolver is not None:
                 expected = self.expected_context_resolver(project_id, entry.module, entry.source_kind)
@@ -1652,8 +1682,14 @@ class SourceRegistryService:
                         ),
                     )
                 if validation.expected_context_hash != expected.context_hash:
+                    # R38轮（R38-03）：登记后项目登记信息变更（如补登记方案
+                    # 编号）使旧校验过期——如实归因并指向真实刷新路径，不再
+                    # 直出英文内部诊断。
                     raise ValueError(
-                        "registered source project context changed and must be refreshed before AI use: "
+                        "该来源登记后的项目登记信息已变更（如补登记方案编号），"
+                        "其内容一致性校验需刷新后才能用于AI：请在数据接入向导"
+                        "第3步点击「重新核对研究文件」（重新登记会刷新校验），"
+                        "或重新上传同一文件。来源："
                         f"{entry_id}"
                     )
             if entry.module in operational_modules:

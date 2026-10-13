@@ -924,10 +924,18 @@ def reconcile_document_authority(
     batch: Mapping[str, Any],
     primary: DocumentAuthorityRunEnvelope,
     verifier: DocumentAuthorityRunEnvelope,
+    *,
+    allow_shared_runtime_identity: bool = False,
 ) -> dict[str, Any]:
     candidate_ids, locators, eligible_candidate_ids = _validate_batch(batch)
     input_sha256 = _digest(batch)
-    _validate_run_pair(primary, verifier, input_sha256, stage="analysis")
+    _validate_run_pair(
+        primary,
+        verifier,
+        input_sha256,
+        stage="analysis",
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
+    )
     for run in (primary, verifier):
         _validate_analysis(
             run.analysis,
@@ -996,6 +1004,8 @@ def resolve_document_authority_project_identity(
     batch: Mapping[str, Any],
     primary: DocumentAuthorityRunEnvelope,
     verifier: DocumentAuthorityRunEnvelope,
+    *,
+    allow_shared_runtime_identity: bool = False,
 ) -> dict[str, Any]:
     """Fail closed before role adjudication when uploaded studies do not align."""
 
@@ -1003,7 +1013,13 @@ def resolve_document_authority_project_identity(
         return {"status": "not_assessed", "attention_candidate_ids": []}
     candidate_ids, locators, eligible_candidate_ids = _validate_batch(batch)
     input_sha256 = _digest(batch)
-    _validate_run_pair(primary, verifier, input_sha256, stage="analysis")
+    _validate_run_pair(
+        primary,
+        verifier,
+        input_sha256,
+        stage="analysis",
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
+    )
     for run in (primary, verifier):
         _validate_analysis(
             run.analysis,
@@ -1035,9 +1051,16 @@ def build_anonymous_conflict_packet(
     batch: Mapping[str, Any],
     primary: DocumentAuthorityRunEnvelope,
     verifier: DocumentAuthorityRunEnvelope,
+    *,
+    allow_shared_runtime_identity: bool = False,
 ) -> dict[str, Any]:
     candidate_ids, _locators, _eligible_candidate_ids = _validate_batch(batch)
-    reconciliation = reconcile_document_authority(batch, primary, verifier)
+    reconciliation = reconcile_document_authority(
+        batch,
+        primary,
+        verifier,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
+    )
     conflict_rows = list(reconciliation.get("conflicts") or ())
     conflict_roles = sorted(str(item.get("role") or "") for item in conflict_rows)
     if not conflict_roles:
@@ -1189,6 +1212,8 @@ def resolve_document_authority_conflicts(
     conflict_packet: Mapping[str, Any],
     primary: DocumentAuthorityConflictRunEnvelope,
     verifier: DocumentAuthorityConflictRunEnvelope,
+    *,
+    allow_shared_runtime_identity: bool = False,
 ) -> dict[str, Any]:
     if len({
         analysis_primary.job_input_revision_sha256,
@@ -1198,15 +1223,27 @@ def resolve_document_authority_conflicts(
     }) != 1:
         raise DocumentAuthorityError("document_authority_input_revision_mismatch")
     reconciliation = reconcile_document_authority(
-        batch, analysis_primary, analysis_verifier
+        batch,
+        analysis_primary,
+        analysis_verifier,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     expected_packet = build_anonymous_conflict_packet(
-        batch, analysis_primary, analysis_verifier
+        batch,
+        analysis_primary,
+        analysis_verifier,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     if conflict_packet != expected_packet:
         raise DocumentAuthorityError("document_authority_conflict_packet_tampered")
     expected_hash = str(conflict_packet["conflict_packet_sha256"])
-    _validate_run_pair(primary, verifier, expected_hash, stage="review")
+    _validate_run_pair(
+        primary,
+        verifier,
+        expected_hash,
+        stage="review",
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
+    )
     roles = tuple(str(value) for value in conflict_packet["conflict_roles"])
     left = _review_index(primary.review, roles)
     right = _review_index(verifier.review, roles)
@@ -1259,6 +1296,8 @@ def resolve_document_authority_adjudication(
     adjudication_context: Mapping[str, Any],
     adjudication_primary: DocumentAuthorityConflictRunEnvelope,
     adjudication_verifier: DocumentAuthorityConflictRunEnvelope,
+    *,
+    allow_shared_runtime_identity: bool = False,
 ) -> dict[str, Any]:
     if len({
         analysis_primary.job_input_revision_sha256,
@@ -1300,6 +1339,7 @@ def resolve_document_authority_adjudication(
             if prompt_pair in REPLAY_ADJUDICATION_PROMPT_PAIRS
             else "adjudication"
         ),
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     for run in (adjudication_primary, adjudication_verifier):
         validate_document_authority_adjudication_review(
@@ -1403,6 +1443,8 @@ def resolve_document_authority_critique(
     critique_context: Mapping[str, Any],
     critique_primary: DocumentAuthorityConflictRunEnvelope,
     critique_verifier: DocumentAuthorityConflictRunEnvelope,
+    *,
+    allow_shared_runtime_identity: bool = False,
 ) -> dict[str, Any]:
     initial = resolve_document_authority_adjudication(
         batch,
@@ -1414,6 +1456,7 @@ def resolve_document_authority_critique(
         adjudication_context,
         adjudication_primary,
         adjudication_verifier,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     expected_context = build_anonymous_critique_context(
         batch,
@@ -1430,7 +1473,11 @@ def resolve_document_authority_critique(
         raise DocumentAuthorityError("document_authority_critique_context_tampered")
     packet_hash = str(conflict_packet["conflict_packet_sha256"])
     _validate_run_pair(
-        critique_primary, critique_verifier, packet_hash, stage="critique"
+        critique_primary,
+        critique_verifier,
+        packet_hash,
+        stage="critique",
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     for run in (critique_primary, critique_verifier):
         validate_document_authority_adjudication_review(
@@ -1845,6 +1892,13 @@ def _validate_run_pair(
         "previous_adjudication",
         "legacy_adjudication",
     ],
+    # R40轮（R40-01）：运维经角色绑定把双盲核对两群组指到同通道同模型
+    # （2026-10-13 Ollama额度耗尽的临时同绑定）时，双模型独立性客观
+    # 不成立。经用户显式绑定的配置视为知情降级：由调用方（workflow层
+    # 实时解析两个角色的当前绑定、仅当两者可用且同一 (provider, model)
+    # 时为True）传入本开关放行同身份对；run/job必须仍互异，角色提示词、
+    # 输入修订与全部内容校验照旧严格。默认False保持既有fail-closed。
+    allow_shared_runtime_identity: bool = False,
 ) -> None:
     if left.run_id == right.run_id or left.job_id == right.job_id:
         raise DocumentAuthorityError("document_authority_runs_not_independent")
@@ -1925,7 +1979,10 @@ def _validate_run_pair(
         )
         if not identity_ok or bound_hash != input_hash:
             raise DocumentAuthorityError("document_authority_run_identity_invalid")
-    if (left.provider, left.model) == (right.provider, right.model):
+    if (
+        (left.provider, left.model) == (right.provider, right.model)
+        and not allow_shared_runtime_identity
+    ):
         raise DocumentAuthorityError("document_authority_runs_not_independent")
 
 

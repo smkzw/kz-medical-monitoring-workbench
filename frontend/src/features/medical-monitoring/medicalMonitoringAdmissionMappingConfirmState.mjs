@@ -77,6 +77,46 @@ export function adjudicationStalledMs(state, now = Date.now()) {
   return Math.max(0, now - since);
 }
 
+// R40轮（R38-01）：字段识别全程进度文本——识别分片已完成X/Y、正在
+// 识别的表名、累计耗时与按当前速度的预估剩余。线性外推只是参考值，
+// 如实标注「约」；已完成0片或无分片计数时 respective 项缺省不编造。
+// 与R36-08（研究文件核对阶段预期）、R34-03（复核等待进度）同一长任务
+// 进度反馈语义。
+export function mappingGenerationProgressText(state, now = Date.now()) {
+  const payload = state?.payload;
+  if (!payload) return "";
+  const generating = payload.state === "generating"
+    || payload.confirmationStatus === "generating";
+  if (!generating) return "";
+  const shards = payload.shardProgress || null;
+  const parts = [];
+  if (shards && shards.total > 0) {
+    parts.push(`识别分片已完成 ${shards.completed}/${shards.total}`);
+    if (shards.inflightTables.length) {
+      const more = shards.inflightTableCount > shards.inflightTables.length
+        ? ` 等${shards.inflightTableCount}张表`
+        : "";
+      parts.push(`正在识别：${shards.inflightTables.join("、")}${more}`);
+    }
+  }
+  const startedAt = Number(state?.progress?.startedAt) || 0;
+  const elapsedMs = startedAt ? Math.max(0, now - startedAt) : 0;
+  if (elapsedMs >= 60000) {
+    parts.push(`已等待约 ${Math.floor(elapsedMs / 60000)} 分钟`);
+  }
+  if (
+    shards
+    && shards.total > 0
+    && shards.completed > 0
+    && shards.completed < shards.total
+    && elapsedMs > 0
+  ) {
+    const remainingMs = (elapsedMs / shards.completed) * (shards.total - shards.completed);
+    parts.push(`按当前速度预计还需约 ${Math.max(1, Math.round(remainingMs / 60000))} 分钟`);
+  }
+  return parts.join("；");
+}
+
 export function confidencePercent(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "-";
@@ -306,6 +346,30 @@ export function projectMappingCandidates(payload) {
         maxAttempts: Number(chunk?.max_attempts || 0),
       })) : [],
     }));
+  // R40轮（R38-01）：识别分片全程进度——后端生成态载荷本就携带
+  // summary.job_count（总分片数）与summary.completed_job_count（已完成
+  // 分片）以及jobs[].table_name/status（R32-04），此前前端只显示已产出
+  // 字段数与距最近进展时间（A位实测35分钟仅见字段数爬升，无法判断
+  // 剩余工作量、也无法区分缓慢与停滞）。此处投影为组件可直接消费的
+  // 全程进度；正在识别的表名取自非终态分片（去重、截断防刷屏）。
+  const jobRows = Array.isArray(payload?.jobs) ? payload.jobs : [];
+  const totalShards = summaryCount(summary.job_count, jobRows.length);
+  const completedShards = summaryCount(summary.completed_job_count);
+  const inflightTables = [];
+  for (const row of jobRows) {
+    const status = String(row?.status || "");
+    if (status === "completed" || status === "failed" || status === "blocked" || status === "stale_input" || status === "cancelled") continue;
+    const tableName = String(row?.table_name || "").trim();
+    if (tableName && !inflightTables.includes(tableName)) inflightTables.push(tableName);
+  }
+  const shardProgress = totalShards > 0
+    ? {
+        total: totalShards,
+        completed: Math.min(completedShards, totalShards),
+        inflightTables: inflightTables.slice(0, 4),
+        inflightTableCount: inflightTables.length,
+      }
+    : null;
   return {
     state: String(payload?.state || ""),
     confirmationStatus: String(payload?.confirmation_status || "pending_confirmation"),
@@ -313,6 +377,7 @@ export function projectMappingCandidates(payload) {
     fieldCount,
     questionCount,
     failedTables,
+    shardProgress,
     headline: mappingHeadline({
       fieldCount,
       questionCount,
@@ -496,6 +561,9 @@ export function admissionMappingConfirmReducer(state, action) {
         const payload = projectMappingCandidates(action.payload);
         // R25轮（R25-01）：generating期间记录最近一次字段数变化时间——
         // 字段数前进即重置计时；不变则保留原计时（停滞时长跨轮询累计）。
+        // R40轮（R38-01）：startedAt记录本轮识别的累计起点（首次观察到
+        // generating起持续保留），供全程耗时与预估剩余计算；识别结束
+        // （非generating）才清零。
         const generating = payload.state === "generating"
           || payload.confirmationStatus === "generating";
         const previousCount = state.progress?.fieldCount ?? null;
@@ -504,9 +572,13 @@ export function admissionMappingConfirmReducer(state, action) {
           && Boolean(state.progress?.since);
         const progress = generating
           ? (unchanged
-            ? state.progress
-            : { fieldCount: payload.fieldCount, since: Date.now() })
-          : { fieldCount: null, since: 0 };
+            ? { ...state.progress, startedAt: state.progress?.startedAt || Date.now() }
+            : {
+              fieldCount: payload.fieldCount,
+              since: Date.now(),
+              startedAt: state.progress?.startedAt || Date.now(),
+            })
+          : { fieldCount: null, since: 0, startedAt: 0 };
         const loaded = {
         ...state,
         phase: "ready",

@@ -26,6 +26,7 @@ import {
   mappingCandidateKey,
   mappingConfirmationReason,
   mappingConfirmationFailureAction,
+  mappingGenerationProgressText,
   mappingHeadline,
   mappingQuestionCards,
   mappingStalledMs,
@@ -578,6 +579,13 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
         { stalledMs },
       )
       : payload?.headline || "正在读取系统识别结果…";
+  // R40轮（R38-01）：字段识别全程进度——分片完成数/总数、正在识别的
+  // 表名、累计耗时与按当前速度的预估剩余（A位实测35分钟只见字段数
+  // 爬升，无法判断剩余工作量、难以区分缓慢与停滞）。与复核等待的
+  // adjudicationProgressText同一长任务进度反馈语义。
+  const generationProgressText = mappingState.phase === "ready"
+    ? mappingGenerationProgressText(mappingState)
+    : "";
   const tables = payload?.tableSummaries || [];
   const questionTableCount = tables.filter((table) => table.questionCount > 0).length;
   const visibleCandidates = candidates.slice(0, fieldBatch);
@@ -587,6 +595,11 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
   return (
     <div className="monitoring-admission-confirm monitoring-admission-mapping">
       <p className="monitoring-admission-big monitoring-admission-summary">{headline}</p>
+      {generationProgressText ? (
+        <p className="monitoring-admission-minor" role="status" data-monitoring-mapping-generation-progress style={{ margin: "2px 0 8px" }}>
+          {generationProgressText}——分片完成数前进即识别在推进，页面自动刷新，无需操作。
+        </p>
+      ) : null}
       {/* R34轮（R33-B-F1）：复核等待给出事实性时长反馈；超过无出口阈值
           后如实报告停滞并指向主按钮位的「重新加载识别结果」自救入口，
           不再让busy文案无限占据按钮位（R33B实测20分钟零变化零控件）。 */}

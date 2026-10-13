@@ -2157,6 +2157,53 @@ export function EvidenceView({ payload, route, onBack }) {
   );
 }
 
+// R40轮（R36-13）：查询工作区汇总导出——请核实事项清单此前只能在页面
+// 逐卡阅读，监查员无法把74条待核对事项带离屏幕分派/归档。导出即所见：
+// 与「请核实事项」卡片同字段同顺序的CSV（UTF-8 BOM，Excel直接打开不
+// 乱码）；零事项时按钮禁用而非导出空表冒充成果。
+const QUERY_WORKSPACE_CSV_HEADERS = Object.freeze([
+  "受试者",
+  "中心",
+  "严重程度",
+  "风险类型",
+  "日期",
+  "依据",
+  "发现",
+  "请核实事项",
+  "风险实例引用",
+]);
+
+const QUERY_WORKSPACE_SEVERITY_LABELS = Object.freeze({
+  critical: "紧急",
+  high: "高",
+  medium: "中",
+  low: "低",
+});
+
+function queryWorkspaceCsvCellValue(value) {
+  const raw = value === null || value === undefined ? "" : String(value);
+  return `"${raw.replace(/"/g, '""')}"`;
+}
+
+export function buildQueryWorkspaceCsv(risks) {
+  const lines = [QUERY_WORKSPACE_CSV_HEADERS.map(queryWorkspaceCsvCellValue).join(",")];
+  for (const risk of risks) {
+    const evidence = risk.evidenceSummary || {};
+    lines.push([
+      text(risk.subjectLabel, risk.subjectRef),
+      risk.siteLabel,
+      QUERY_WORKSPACE_SEVERITY_LABELS[risk.severity] || risk.severity,
+      risk.riskType,
+      risk.dateLabel,
+      text(evidence.basis, "依据当前项目监查规则及已绑定记录。"),
+      text(evidence.finding, `发现${text(risk.subjectLabel, risk.subjectRef)}存在“${risk.riskType}”相关记录。`),
+      text(evidence.query_draft || evidence.action_item, "请核对原始记录、研究方案与数据录入情况，并确认是否需要发出数据核查问题。"),
+      risk.riskInstanceRef || risk.riskRef || "",
+    ].map(queryWorkspaceCsvCellValue).join(","));
+  }
+  return `\ufeff${lines.join("\r\n")}\r\n`;
+}
+
 export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, onFindingSelect, onBack }) {
   const projection = payload.projection;
   const subjectsByRef = new Map((projection.subjects || []).map((subject) => [subject.subject_ref || subject.subject_id, subject]));
@@ -2384,7 +2431,32 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
         </section>
       ) : null}
       <section className="monitoring-panel monitoring-panel-wide">
-        <div className="monitoring-section-heading"><span className="monitoring-eyebrow">查询工作区</span><h2>请核实事项（{risks.length} 项待核对 · 全量锚点 {numberText(totalCount)}）</h2></div>
+        <div className="monitoring-section-heading monitoring-query-export-heading">
+          <div>
+            <span className="monitoring-eyebrow">查询工作区</span><h2>请核实事项（{risks.length} 项待核对 · 全量锚点 {numberText(totalCount)}）</h2>
+          </div>
+          {risks.length ? (
+            <button
+              type="button"
+              className="monitoring-back-button"
+              data-monitoring-query-export
+              onClick={() => {
+                const blob = new Blob([buildQueryWorkspaceCsv(risks)], { type: "text/csv;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement("a");
+                anchor.href = url;
+                anchor.download = `query-workspace-${text(route?.project_ref, "project")}-${new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+                URL.revokeObjectURL(url);
+              }}
+              title={`导出全部 ${risks.length} 条请核实事项为CSV（与页面卡片同字段，可离线分派/归档）`}
+            >
+              导出CSV（{risks.length} 条）
+            </button>
+          ) : null}
+        </div>
         <p className="monitoring-query-intro">以下每张卡片按「依据 — 发现 — 请核实事项」三段呈现：先看数据依据，再看医学发现，最后由您核对原始记录后决定是否发出数据核查问题。AI 只定位证据和风险，医学判断由您终审。</p>
         {risks.length === 0 ? (
           <div className="monitoring-empty-inline">当前范围内没有待核实的查询事项。</div>

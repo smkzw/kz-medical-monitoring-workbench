@@ -452,7 +452,8 @@ class SourceRegistryTests(unittest.TestCase):
             )
 
             with patch("services.api.app.source_intake.VALIDATOR_VERSION", "future_validator_v3"):
-                with self.assertRaisesRegex(ValueError, "validation is stale"):
+                # R38轮（R38-03）：陈旧校验拒绝语义不变，错误信息本地化。
+                with self.assertRaisesRegex(ValueError, "一致性校验由旧版校验器生成"):
                     service.ai_task_request_from_registry(
                         "proj_mgk10_sar_demo",
                         AiTaskFromRegistryRequest(

@@ -67,6 +67,12 @@
 
 .monitoring-admission-body {
   margin-top: 12px;
+  /* R40轮（R36-10）：吸底操作栏（约57px高）在矮视口悬浮时会遮住内容
+     区底部约一个栏高的点击目标（内容确认按钮/上传label/表结构展开），
+     A 1920×900与B 1728×649两位测试位同因。给内容区加≥栏高的尾部
+     空隙，让页面底部的交互元素在最大滚动位时停在吸底栏上方，不再
+     需要「手动多滚一屏」规避。 */
+  padding-bottom: 72px;
 }
 
 .monitoring-admission-field {

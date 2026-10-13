@@ -15,6 +15,7 @@ import {
   mappingConfirmationReason,
   mappingConfirmationFailureAction,
   mappingEvidenceText,
+  mappingGenerationProgressText,
   mappingHeadline,
   mappingQuestionCards,
   mappingStalledMs,
@@ -689,4 +690,94 @@ test("degraded confirm receipt states the downgrade honestly", () => {
     payload: { mapping_revision: "monmaprev-2" },
   });
   assert.doesNotMatch(normal.message, /降级/);
+});
+
+// R40轮（R38-01）：字段识别全程进度——分片完成数/正在识别表名/累计
+// 耗时/预估剩余，全部可从生成态载荷与progress.startedAt推得。
+test("generation progress text reports shard counts, tables, elapsed and eta", () => {
+  const generatingPayload = {
+    state: "generating",
+    confirmation_status: "pending_confirmation",
+    summary: { job_count: 59, completed_job_count: 5, candidate_count: 31, field_count: 31 },
+    jobs: [
+      { table_name: "AE", status: "completed" },
+      { table_name: "MH", status: "running" },
+      { table_name: "VS", status: "running" },
+      { table_name: "CM", status: "queued" },
+      { table_name: "EX", status: "queued" },
+      { table_name: "LB", status: "queued" },
+    ],
+    candidates: [],
+  };
+  const projected = projectMappingCandidates(generatingPayload);
+  assert.deepEqual(projected.shardProgress, {
+    total: 59,
+    completed: 5,
+    inflightTables: ["MH", "VS", "CM", "EX"],
+    inflightTableCount: 5,
+  });
+
+  let state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "load-ready",
+    payload: generatingPayload,
+  });
+  const startedAt = state.progress.startedAt;
+  assert.ok(Number.isFinite(startedAt) && startedAt > 0);
+  // 进展跨轮询保留起点；字段数前进只重置停滞计时，不重置累计起点。
+  const advanced = {
+    ...generatingPayload,
+    summary: { ...generatingPayload.summary, completed_job_count: 6, candidate_count: 40, field_count: 40 },
+  };
+  state = admissionMappingConfirmReducer(state, { type: "load-ready", payload: advanced });
+  assert.equal(state.progress.startedAt, startedAt);
+
+  const tenMinutes = 10 * 60_000;
+  const progressText = mappingGenerationProgressText(state, startedAt + tenMinutes);
+  assert.match(progressText, /识别分片已完成 6\/59/);
+  assert.match(progressText, /正在识别：MH、VS、CM、EX 等5张表/);
+  assert.match(progressText, /已等待约 10 分钟/);
+  // 线性外推：10分钟完成6片，剩53片 ≈ 88分钟。
+  assert.match(progressText, /预计还需约 88 分钟/);
+
+  // 零完成分片：不编造ETA，其余进度照实。
+  const zeroCompleted = projectMappingCandidates({
+    ...generatingPayload,
+    summary: { ...generatingPayload.summary, completed_job_count: 0, candidate_count: 0, field_count: 0 },
+  });
+  assert.equal(zeroCompleted.shardProgress.completed, 0);
+  const zeroState = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "load-ready",
+    payload: {
+      ...generatingPayload,
+      summary: { ...generatingPayload.summary, completed_job_count: 0, candidate_count: 0, field_count: 0 },
+    },
+  });
+  const zeroText = mappingGenerationProgressText(zeroState, zeroState.progress.startedAt + tenMinutes);
+  assert.match(zeroText, /识别分片已完成 0\/59/);
+  assert.doesNotMatch(zeroText, /预计还需/);
+
+  // 非生成态：无进度文本。
+  assert.equal(mappingGenerationProgressText({
+    phase: "ready",
+    payload: { state: "candidates_ready", confirmationStatus: "pending_confirmation" },
+  }), "");
+});
+
+// R40轮（R38-01）：无分片计数（空summary+空jobs）时不虚构进度对象。
+test("generation progress stays absent without shard counts", () => {
+  const projected = projectMappingCandidates({ state: "generating", summary: {}, jobs: [] });
+  assert.equal(projected.shardProgress, null);
+  const state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "load-ready",
+    payload: { state: "generating", summary: {}, jobs: [] },
+  });
+  // 无分片计数也有累计耗时反馈（0片产出+已等待N分钟），不虚构分片数。
+  assert.match(
+    mappingGenerationProgressText(state, state.progress.startedAt + 10 * 60_000),
+    /已等待约 10 分钟/,
+  );
+  assert.doesNotMatch(
+    mappingGenerationProgressText(state, state.progress.startedAt + 10 * 60_000),
+    /识别分片/,
+  );
 });

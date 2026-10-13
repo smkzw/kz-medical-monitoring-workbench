@@ -119,10 +119,6 @@ from packages.medical_monitoring.admission.document_authority import (
     validate_document_authority_conflict_review,
 )
 from packages.medical_monitoring.admission.mapping_gate import (
-    DOC_AUTH_PRIMARY_MODEL,
-    DOC_AUTH_PRIMARY_PROVIDER,
-    DOC_AUTH_VERIFIER_MODEL,
-    DOC_AUTH_VERIFIER_PROVIDER,
     MONITORING_C3_GLM_VERIFIER_MODEL,
     MONITORING_C3_GLM_VERIFIER_PROVIDER,
     is_monitoring_primary_runtime,
@@ -1683,20 +1679,19 @@ class MonitoringAiService:
             if role == "primary"
             else DOCUMENT_AUTHORITY_VERIFIER_PROMPT_VERSION
         )
-        from packages.medical_monitoring.admission.mapping_gate import (
-            DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL,
-            DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL,
-        )
-        expected_identity = (
-            (DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL)
-            if role == "primary"
-            else (DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL)
-        )
+        # R40轮（R40-01）：文档权威的运行身份以持久化角色绑定为准——
+        # mapping_gate常量按其自身注释只是「新安装的种子默认」，运维经
+        # 设置界面改绑角色（如2026-10-13 Ollama额度耗尽把盲核切到
+        # cms-router/glm-5.3-flash）不应要求改源码；这与字段映射链
+        # AdmissionMappingPipeline(bind_runtime_from_services=True)的
+        # 「持久化角色配置即权威」契约一致。角色区分由角色提示词、队列
+        # 命名空间与业务键保证，回执完整性由response_model==requested
+        # 校验兜底。这里只保留可用性门：角色被禁用/未配置时如实拒绝。
         runtime = self.runtime_resolver()
-        if (runtime.provider, runtime.model) != expected_identity:
+        if not runtime.available:
             raise MonitoringAiRuntimeUnavailableError(
-                "document authority runtime identity does not match its role: "
-                f"expected {expected_identity}, got ({runtime.provider}, {runtime.model})"
+                f"document authority {role} runtime is not available: "
+                f"{runtime.diagnostic}"
             )
         input_payload = {
             "document_authority_batch": deepcopy(candidate_batch),
@@ -1773,15 +1768,13 @@ class MonitoringAiService:
             if role == "primary"
             else DOCUMENT_AUTHORITY_VERIFIER_REVIEW_PROMPT_VERSION
         )
-        expected_identity = (
-            (DOC_AUTH_PRIMARY_PROVIDER, DOC_AUTH_PRIMARY_MODEL)
-            if role == "primary"
-            else (DOC_AUTH_VERIFIER_PROVIDER, DOC_AUTH_VERIFIER_MODEL)
-        )
+        # R40轮（R40-01）：同submit_document_authority_analysis——身份以
+        # 持久化角色绑定为准，这里只保留可用性门，不再比对种子常量。
         runtime = self.runtime_resolver()
-        if (runtime.provider, runtime.model) != expected_identity:
+        if not runtime.available:
             raise MonitoringAiRuntimeUnavailableError(
-                "document authority review runtime identity does not match its role"
+                f"document authority {role} review runtime is not available: "
+                f"{runtime.diagnostic}"
             )
         input_payload = {
             "document_authority_conflict_packet": deepcopy(conflict_packet),

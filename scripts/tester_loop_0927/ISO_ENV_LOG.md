@@ -656,3 +656,12 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
 - 自检3 build id 配对：runtime-build.json expectedBackendBuildId=api-71272c9b18ef5f5d == 8911 backend_build_id → 一致；frontendBuildId=web-02219adfb901b542（R39前端改动面新指纹）
 - 测试留痕：后端相关族 761 passed（mapping_confirmation/admission/wizard/document_authority/monitoring_ai_service，--ignore=test_medical_writing_dynamic_section_matrix.py=HEAD既有收集期ImportError）+ 48 passed（r7_data_admission/R38 carryover/treatment_emergent）+ 100 passed/1 failed（r7_product_router，失败=test_late_project_dispatchers 409 result_context_unavailable，经git stash对照证实HEAD既有与R39改动无关）+ 文档权威族112 passed；前端 node --test 95/95 + vite build 绿
+2026-10-13 14:04 R40修复员标准重启（R40-01/02/03+R37-03/04/05之外的R40清单六条修复面：services/api/app/{monitoring_ai_service,monitoring_document_authority_workflow,monitoring_document_authority_jobs,source_intake}.py + packages/medical_monitoring/admission/{document_authority,mapping_gate无关}.py + mapping_candidate_routes.py + 前端App.jsx收件箱深链/AdmissionWizard.jsx+mappingConfirmState.mjs字段识别进度/Workspace.jsx Query导出/两个css）：
+- API 重启：lsof -ti:8911 kill → 标准命令拉起（pid 34096，14:03:50）
+- vite 重启：lsof -ti:5178 kill → 标准命令拉起（pid 34136，14:03:58）
+- 自检1 runtime-readiness：ready:true，backend_build_id=api-233b2b43102a315b（本轮改动新指纹）
+- 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
+- 自检3 build id 配对：runtime-build.json expectedBackendBuildId=api-233b2b43102a315b == 8911 backend_build_id → 一致；frontendBuildId=web-544f152559b59671（R40前端改动面新指纹）
+- 端口纪律：仅触碰8911/5178；8910/5177未执行任何操作（自检时点未在监听，与本次重启无关）
+- 测试留痕：文档权威族159 passed（含新增test_mm_r40_document_authority_shared_runtime.py 5项：同身份提交建作业/advance作业缺失就地重建/同绑定推进到review/reconcile默认fail-closed/start包装submit失败）；r7_data_admission+offload_r32+source_content_validation+R35 67 passed；source_registry+source_content_validation+document_evidence 90 passed（1处旧英文文案断言随R38-03本地化同步更新，拒绝语义不变）；inbox+mapping_confirmation+gate 80 passed；monitoring_ai_service 493 passed；document_candidates+evidence_roles 36 passed；前端 node --test 97/97（新增R38-01生成进度2项+R38-03/R40-01回归）+ vite build 绿
+- 注意：R40-01根因=用户指令Ollama切换（d6013072）后运行身份与mapping_gate种子常量失配致作业创建前抛错（ISE→job_missing死局）；R39-01注入修法非根因（其契约环节因作业未建从未执行到）。常驻项目现走「同通道同模型知情降级」路径，盲核独立性弱于常态已在202响应与轮询载荷中披露，恢复独立绑定后自动回到fail-closed。

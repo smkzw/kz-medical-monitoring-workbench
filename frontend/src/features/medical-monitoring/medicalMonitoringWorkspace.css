@@ -315,6 +315,20 @@
   margin-bottom: 14px;
 }
 
+/* R40轮（R36-13）：查询工作区标题行右侧放「导出CSV」——标题与操作
+   同行右对齐，窄屏自动换行不挤压标题。 */
+.monitoring-section-heading.monitoring-query-export-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.monitoring-section-heading.monitoring-query-export-heading > div {
+  min-width: 0;
+}
+
 .monitoring-section-heading h2,
 .monitoring-axis-heading h2 {
   font-size: 20px;

@@ -123,6 +123,9 @@ _MAPPING_STATUS_CODES = {
     "mapping_document_registration_unavailable": 503,
     "mapping_document_registration_invalid": 422,
     "mapping_document_authority_unavailable": 503,
+    # R40轮（R40-01）：核对作业创建失败（AI角色不可用等）——上游/配置类
+    # 故障，不是文件内容问题，不得落入422「无法识别所选研究文件」误导重传。
+    "mapping_document_authority_submit_unavailable": 503,
     "mapping_document_authority_incomplete": 409,
     "mapping_document_batch_required": 409,
     "mapping_document_selection_pending": 409,
@@ -237,6 +240,12 @@ _MAPPING_MESSAGES = {    "mapping_admission_not_found": "未找到对应的数�
     ),
     "mapping_document_authority_unavailable": (
         "研究文件自动核对服务暂不可用，请稍后重试。"
+    ),
+    # R40轮（R40-01）：核对作业创建失败的如实归因——不是文件问题。
+    "mapping_document_authority_submit_unavailable": (
+        "研究文件核对任务未能创建：AI核对角色当前不可用或未配置。"
+        "这不是文件内容问题，重新上传文件也无法解决；已上传的文件已保留。"
+        "请联系管理员检查AI服务绑定后，再点「重新核对研究文件」。"
     ),
     "mapping_document_authority_incomplete": (
         "研究文件核对未能完成，请重新选择完整研究文件；无需逐项确认。"
@@ -994,6 +1003,17 @@ def register_mapping_candidate_routes(
                 "headline": "系统正在独立识别并交叉核对研究文件",
                 "guidance": "当前无需逐项确认，完成后会自动更新研究文件状态。",
             }
+            if result.get("shared_runtime_identity"):
+                # R40轮（R40-01）：运维同绑定（盲核与主分析同通道同模型）
+                # 的知情降级——在用户可见指引中如实披露独立性受限。
+                response["shared_runtime_identity"] = True
+                response["guidance"] = (
+                    str(response["guidance"])
+                    + "注：当前盲核与主分析由运维绑定为同一通道同一模型"
+                    "（如额度所限的临时安排），本次核对以「双通道复诵＋您的"
+                    "人工归属确认」推进，模型间独立性弱于常态；恢复独立盲核"
+                    "通道后可重新核对。"
+                )
             if result.get("previously_analyzed"):
                 response["previously_analyzed"] = True
                 response["guidance"] = (
@@ -1005,6 +1025,12 @@ def register_mapping_candidate_routes(
         except DocumentAuthorityError as exc:
             if str(exc) == "document_authority_evidence_incomplete":
                 return _mapping_error("mapping_document_evidence_incomplete")
+            if str(exc) == "document_authority_submit_unavailable":
+                # R40轮（R40-01）：核对作业创建失败（AI角色不可用等）不是
+                # 文件问题——不得再伪装成「无法识别所选研究文件」误导重传。
+                return _mapping_error(
+                    "mapping_document_authority_submit_unavailable"
+                )
             return _mapping_error("mapping_document_registration_invalid")
         except ValueError:
             return _mapping_error("mapping_document_registration_invalid")
@@ -1278,6 +1304,16 @@ def register_mapping_candidate_routes(
                     )
                 if result.get("pending_since"):
                     response_payload["pending_since"] = str(result["pending_since"])
+                if result.get("shared_runtime_identity"):
+                    # R40轮（R40-01）：运维同绑定的知情降级在轮询响应中
+                    # 持续如实披露。
+                    response_payload["shared_runtime_identity"] = True
+                    response_payload["guidance"] = (
+                        str(response_payload.get("guidance") or "")
+                        + "（当前盲核与主分析为同通道同模型的运维绑定："
+                        "以双通道复诵＋人工归属确认推进，模型间独立性"
+                        "弱于常态。）"
+                    )
                 if result.get("decision_version") is not None:
                     response_payload["decision_version"] = int(
                         result["decision_version"]
@@ -1365,6 +1401,24 @@ def register_mapping_candidate_routes(
                     "该文件内容无法完整读取（如扫描版PDF），不能作为"
                     "权威研究文件。请改为选择「该角色缺失」，或上传可"
                     "读取的文件版本。"
+                )
+            elif diagnostic == "document_authority_submit_unavailable":
+                # R40轮（R40-01）：核对任务创建失败是上游/配置类故障，
+                # 不是文件问题——如实指认，不给「重新上传」的假出路。
+                guidance_text = (
+                    "核对任务创建失败：AI核对角色当前不可用或未配置。"
+                    "这不是文件内容问题，重新上传文件也无法解决；已上传的"
+                    "文件与您的确认均已保留。请联系管理员检查AI服务绑定后，"
+                    "再点「重新核对研究文件」。"
+                )
+            elif diagnostic == "document_authority_job_missing":
+                # R40轮（R40-01）：批次在库而作业缺失（历史故障残留）——
+                # 真实出路是重传同一组文件触发重建（analyze会按批次清单
+                # 幂等重建缺失作业），而不是笼统的「稍后重试」。
+                guidance_text = (
+                    "该批次的核对任务记录缺失（多为先前一次系统故障所致）。"
+                    "请重新上传同一组研究文件——相同文件即可：系统会重建"
+                    "核对任务并自动继续，无需更换文件版本。"
                 )
             else:
                 guidance_text = "请稍后重试，或重新上传研究文件。"
