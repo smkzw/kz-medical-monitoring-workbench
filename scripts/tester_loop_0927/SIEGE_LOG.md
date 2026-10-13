@@ -4,6 +4,175 @@
 
 ---
 
+## R42 攻坚·第 1 次（2026-10-14，攻坚工程师-R42-第1次）
+
+### 0. 结论先行
+
+**墙未复发：R41 修复员六条修复（c2fe80ab：R41-01/02+R39-04+R35-05+
+R34-08/11——R41-01 字段映射确认死锁根因修复/G-ROLE-002 处置载荷按需
+下发+闭合目录候选+保持未映射出口、R41-02 结果视图两处失败分支进退避
+调度、R39-04 证据断链三处收口①AE化验矛盾风险行新增化验行定位②泳道
+事件标签③定位符直读、R35-05 准备核对 45s 上限+向导前置链如实声明、
+R34-08 verifier 候选轻量模式、R34-11 UAS7 量表跨周归并）+ 轮次归档
+（a43ee323）之后，8911 pid 8770 于 2026-10-13 23:42:03 拉起、5178
+pid 8818（ISO_ENV_LOG 23:42 标准条目），本轮两遍全新幂等键全链全绿，
+零阻断、零代码修复、零重启、零跳门。** 常驻项目「MX循开考-CSU」
+（proj_user_6ef58ac151e1）以两个全新幂等键（r42s-fresh-23f5f586fc3c
+=registry seq 72 / r42s-fresh-2ea0e186c951=seq 73）各走完
+run-setup/options → workspace/bootstrap（留证）→ prepare-and-start →
+progress completed（25s/16s，各 2 轮询）→ publication available →
+result-entry → overview 可读（两遍均 1,244,007B/60 发现/16 受试者）。
+**c2fe80ab 对结果投影的预期影响逐项实测钉死**：overview 1,243,923→
+1,244,007（+84B）、projection content_hash 6502e046→cdd6b405，全差
+=R39-04① 一处——riski-AE-000039 的 source_locator_refs 新增被引用
+化验行定位 loc-LB_HEM-000016/000018/000020/000022（提交说明声明的
+「化验矛盾绑定4条LB行定位」逐字对应）；finding 60=60、risk 389=389
+集合全等、其余逐字段零漂移、零未解释漂移。R41 修复员「fingerprint 将
+按新投影漂移」的预报实测**未发生**：request_fingerprint 属输入派生，
+同输入 siege 运行逐位保持 68ba60ad…/manifest f58ccf16…（与 R34–R41
+同）；投影内容变化落在 content_hash/overview 字节，不动
+request_fingerprint（见 §3）。
+
+### 1. 环境前置（复现前，未重启任何服务）
+
+- 8911（pid 8770，2026-10-13 23:42:03 拉起，127.0.0.1 IPv4 监听）
+  `/api/runtime-readiness` 200 ready=true、
+  backend_build_id=**api-321647a3bee8499d**（c2fe80ab 提交说明
+  ISO_ENV_LOG 条目同指纹）；`/api/health` 200（integrity ok,
+  schema v16）。
+- 5178（vite node pid 8818，[::1] IPv6 监听）
+  runtime-build.json expectedBackendBuildId=api-321647a3bee8499d
+  与后端**配对一致**（frontendBuildId=web-1a17ccb8197fa9d9）。
+- 加载面实证：`git diff HEAD --stat -- packages services
+  frontend/src` 为空；`find services/api/app packages frontend/src
+  -newermt "2026-10-13 23:42:00"` 为空——磁盘==HEAD（a43ee323，含
+  c2fe80ab 六条修复）==进程加载面。
+- 复现前磁盘基线：launch_registry 71 条全部 completed+
+  result_available=1、**waiting_start=0**（seq 69/70=R41 攻坚两键、
+  seq 71=UI 向导路径运行 monitoring_ae2c12e1…，12:47:02Z 创建、
+  正常 completed+result_available=1，但指纹族不同，见 §3-3）；
+  execution_profiles `global_default|*|1` 在位；admission_events
+  6 行。
+- 复用就绪预验（同日 00:20 R42D 节在案）：mapping confirmed
+  （draft monmapdraft_73abe5c6c9561a v80）/ facts ready / project/open
+  current；本轮 p1 前置同刻实测 candidates_ready/confirmed/60 候选、
+  facts ready、project current——预置台与运行门无口径差。
+- **慢带如实记录**：第一遍各请求首击 3–14.1s（projects 9.7s、runs
+  11.1s、run-setup 12.1s、prepare-and-start 14.1s），第二遍全暖
+  0.2–1.2s——与 R42D 已录「23:42 重启后冷缓存」同型，全部 200 零错
+  零拒，非阻断非口径差（R42D 亦报同带）。
+
+### 2. 复现（任务①）——两遍全链（驱动 `r42s_siege_repro.py`，证据
+`r42s_siege_evidence.jsonl` 60 行、0 阻断，两遍链路壁钟 158s）
+
+忠实界面路径（不先 workspace/bootstrap；bootstrap 仅按任务书列名留证实测）。
+
+**第一遍（16:26Z 起，key=r42s-fresh-23f5f586fc3c，seq 72）**：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线双侧 | mapping-candidates 200（6.1s，candidates_ready/confirmed/60 候选）、facts 200（3.1s，state=ready）、project/open 200（7.1s，current）、protocol-versions 200（1.2s）——预置台与运行门无口径差 |
+| run-setup/options | 200，12.1s，snapshot:ef8692acfbab4d2a9846916f（与 R34–R41 同快照） |
+| workspace/bootstrap（留证） | 200，3.8s，replayed=true revision=1 |
+| prepare-and-start | **200，14.1s**，run:12d7ca6bef16dce9df1298da |
+| progress | completed，percent=100.0，polls=2，run_seconds=25（首轮 result_available=false 沿 R20 §4 投影时序） |
+| publication | POST 200 → **available**（11.2s） |
+| result-entry | 200，10.1s，rct=result-context:f050853e51754ec5905cbbc92559236c |
+| results/{rct}/overview | 200，5.2s，**1,244,007B、60 发现/16 受试者**；缓存探针二读字节相等 |
+
+**第二遍=重验（任务③，key=r42s-fresh-2ea0e186c951，seq 73）**：全绿
+同型且全暖——options 200（450ms，同快照）→ bootstrap 200 replayed
+（206ms）→ prepare-and-start **200**（807ms，run:c17ff2928c84495ef03eca30）
+→ progress completed（polls=2，16s）→ publication **available**
+（1.2s）→ entry 200（615ms，rct=result-context:78af1e0598544b74a6cdc871df773406）
+→ overview 200（562ms，1,244,007B/60/16，chain_ok=True；缓存探针
+301ms 字节相等）。
+
+终态磁盘：sequence 1-73 全部 completed+result_available=1（新增 72/73
+两行 request_fingerprint 均 68ba60ad574c326b…=与 R34–R41 siege 同输入
+逐位同指纹、manifest_digest 均 f58ccf16c4f3）、**waiting_start=0**、
+admission_events 6 行=6 行（零新增接入事件）、global_default|*|1 三次
+采样稳定。
+
+### 3. 基线归因（本轮实测，对照 r41s_overview_p1.json 基线）
+
+1. **R39-04① 预期漂移逐位钉死**：两遍 baseline_compare 一致——
+   finding 60=60 集合全等且逐字段零漂移（剔除派生 query_draft_id）；
+   risk 389=389 集合全等；逐 risk 逐字段恰 **1 行漂移**：
+   riski-AE-000039 的 source_locator_refs 新增
+   loc-LB_HEM-000016/000018/000020/000022 四条化验行定位——与
+   c2fe80ab 提交说明「AE化验矛盾绑定4条LB行定位」逐字对应；
+   unexplained_risk_drift=空、risks/findings 集合双向无增删。
+   overview 字节差 +84B（1,243,923→1,244,007）、projection
+   content_hash 6502e046…→cdd6b405… 与该 4 条定位符串完全自洽。
+2. **R34-11 不触 overview 投影面（实测）**：两份基线
+   projection.measures 均为空对象（0 字节 UAS7 引用）——量表跨周归并
+   的消费面是 `_indicator_payloads`
+   （packages/medical_monitoring/projections/product_projection_helpers.py:341，
+   经 product_adapter.py:508 组装 indicators）服务的查询工作区指标面，
+   不在运行链 overview 上；本轮 overview 零 UAS7 漂移符合结构事实。
+3. **fingerprint 预报 vs 实测**：c2fe80ab 预报「常驻项目下次发布的
+   request_fingerprint 将按新投影漂移」——实测**未发生**：seq 72/73
+   与 R34–R41 siege 同输入逐位同指纹 68ba60ad…、同 manifest 族
+   f58ccf16…。即 request_fingerprint/manifest_digest 由运行输入
+   （快照+模式+参数）派生，投影内容变化体现在 content_hash 与冻结包
+   字节，不回灌指纹。唯一指纹族差异是 seq 71（UI 向导路径
+   monitoring_ae2c12e1…，12:47:02Z，指纹 96ce6187…/manifest
+   e49f95084811，正常 completed+result_available=1）——其输入与本轮
+   siege 键族不同属事实，具体入参差异无法从 registry 行反证（该运行
+   在 R41 测试轮窗口内、非本轮发起），不构成口径差证据，仅如实录。
+4. c2fe80ab 其余修复面（R41-01 映射确认/R41-02 结果重试/R35-05/
+   R34-08/R38-01）不触运行链与结果投影——本轮 prepare-and-start 首击
+   即 200、overview 冻结包缓存二读字节相等，在役无回归，与其回归套件
+   （§5）互证。
+
+### 4. 修复（任务②）
+
+**无需新修复，本轮零代码改动、零重启。** 运行链上无任何一道门拒绝：
+接入管线侧 candidates_ready/confirmed/ready/current 与运行门无口径差；
+prepare-and-start 两遍首击即 200（14.1s 冷带/807ms 暖带），无
+waiting_start 残留、无 in_flight_conflict、无 global_default_missing
+（profile_layer_versions 稳定 `global_default|*|1`）；publication 首击
+即 available；result-entry/overview 冻结包会话缓存（R34-09/R32-07）
+持续在役（两遍二读字节相等）。
+
+### 5. 在役回归（本轮实跑，.venv/bin/pytest）
+
+- 全量：`pytest tests/test_medical_monitoring_r7_product_router.py -q`
+  → **96 passed / 1 failed**（65.31s）。唯一失败
+  `test_late_project_dispatchers_keep_two_actual_api_results_isolated`：
+  本轮单独重跑 2.85s 确定性复现，签名 `409 {"code":
+  "result_context_unavailable","message":"本次结果暂不可查看，请返回
+  进度页"}` @ tests/test_medical_monitoring_r7_product_router.py:2844
+  ——与 R39/R40/R41 留痕逐字同签名（历轮 stash 对照已证 HEAD 既有）。
+  属双项目晚接入派发隔离场景，非常驻项目运行链墙（本轮两遍全链绿+
+  该套件 96 过直接证明）；继续挂修复员排期。
+- c2fe80ab 新代码面在役证据：本轮实链（§2）+ R41 修复员提交说明回归
+  留痕（r5_product_adapter+semantic_quality+draft_repo 168 passed 等，
+  ISO_ENV_LOG 23:42 条目），本轮未重复全量。
+
+### 6. 遗留与边界
+
+- 慢带（重启后首击 3–14.1s，二遍暖 0.2–1.2s）：与 R42D 同型冷缓存
+  现象，全部 200 零错，未归因到具体代码行（非本链阻断项）；如后续轮
+  复现常态化，建议挂分诊。
+- seq 71（R41 测试轮 UI 向导运行）指纹族 96ce6187…/e49f95084811 与
+  siege 族不同的具体入参差异：registry 行不含请求体，无法反证；该
+  运行终态正常（completed+result_available=1），不拦链路。
+- progress 首轮询 `result_available=false`（completed 即刻发布尚未
+  完成时的投影时序，R20 §4 在案）：本轮两遍同型，发布后一致，不拦。
+- 附带发现（非运行链）：仓库内存在误生成的嵌套未跟踪路径
+  `implementation/workbench/implementation/workbench/scripts/
+  tester_loop_0927/`（round_33–36 归档误写入双层路径，git status 报
+  `??`）；本轮未触碰未清理，留台账处置。
+- 浏览器像素级全链回归未在本攻坚内执行（工程验证身份以 API 驱动+
+  状态机代码核验为口径；界面全量回归归测试轮）。
+
+留痕文件：`r42s_siege_repro.py`、`r42s_siege_evidence.jsonl`、
+`r42s_overview_p1.json`、`r42s_overview_p2.json`、本日志节。
+
+---
+
 ## R41 攻坚·第 1 次（2026-10-13，攻坚工程师-R41-第1次）
 
 ### 0. 结论先行
