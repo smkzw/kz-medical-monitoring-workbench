@@ -4,6 +4,131 @@
 
 ---
 
+## R39 攻坚·第 1 次（2026-10-13，攻坚工程师-R39-第1次）
+
+### 0. 结论先行
+
+**墙未复发：R38 修复员五条修复（7c9d8f03：R36-03/05/06/08/09）与 R38 轮次
+归档（9c63bd6d）之后，8911 于 2026-10-13 06:26:06 重启、5178 于 06:26:50
+重启（ISO_ENV_LOG 06:43 标准条目），本轮两遍全新幂等键全链全绿，零阻断、
+零代码修复、零重启、零跳门。** 常驻项目「MX循开考-CSU」（proj_user_6ef58ac151e1）
+以两个全新幂等键（r39s-fresh-60e279f8ee0d=registry seq 63 /
+r39s-fresh-def9f57d2361=seq 64）各走完 run-setup/options →
+workspace/bootstrap（留证）→ prepare-and-start → progress completed
+（15s/2 轮询）→ publication available → result-entry → overview 可读
+（两遍均为 1,243,923B/60 发现/16 受试者/389 现行风险）。主投影
+query_findings 与 R38 基线 60 条逐条**零漂移**；current_risks 389 条中
+**恰 2 条**新增 R36-05 治疗 emergent 时间矛盾提示（risk-AE-000011
+2026-03-13 早于首次给药 2026-03-16——即 7c9d8f03 提交说明点名的命中场景；
+risk-AE-000014 2026-03-18 早于 2026-03-30），字节数 1,242,681→1,243,923
+（+1,242B）逐字段归因为 R36-05 设计内输出，content_hash/
+replay_content_identity 变化系其下游哈希，非内容损坏。
+
+### 1. 环境前置（复现前，未重启任何服务）
+
+- 8911（pid 38899，2026-10-13 06:26:06 拉起，127.0.0.1 IPv4 监听）
+  `/api/runtime-readiness` 200 status=ready、
+  backend_build_id=**api-34f525073da51f3e**（7c9d8f03 提交说明
+  ISO_ENV_LOG 条目同指纹）；`/api/health` 200（integrity ok, schema v16）。
+- 5178（vite node pid 39039，06:26:50 拉起）**仅监听 [::1]:5178（IPv6）**
+  ——`curl 127.0.0.1:5178` 连接拒绝（000）而
+  `http://localhost:5178/monitoring` 200，与 R24/R25 记录的监听布局同型；
+  runtime-build.json expectedBackendBuildId=api-34f525073da51f3e 与后端
+  **配对一致**（frontendBuildId=web-fc1973818c3b7897，与 R38 归档留痕同）。
+- 加载面实证：`git rev-parse --show-toplevel`=implementation/workbench、
+  `git diff HEAD --stat -- packages services frontend/src` 为空——
+  磁盘==HEAD==进程加载面（HEAD=9c63bd6d，含 7c9d8f03 五条修复；工作区仅
+  R5_SEEDED_PROJECT.md/STATE_V2.json 留痕文件改动，源码零改动）。
+- 复现前磁盘基线：launch_registry 62 条全部 completed+result_available=1、
+  **waiting_start=0**（尾 4 条：seq 59 monitoring_fb491a46 e49f95084811、
+  seq 60/61 r38s 攻坚两键 f58ccf16c4f3、seq 62 monitoring_dc93df88
+  e49f95084811=UI 键家族）；execution_profiles `global_default|*|1` 在位；
+  admission_events 6 行。
+
+### 2. 复现（任务①）——两遍全链（驱动 `r39s_siege_repro.py`，证据
+`r39s_siege_evidence.jsonl` 54 行、0 阻断）
+
+忠实界面路径（不先 workspace/bootstrap；bootstrap 仅按任务书列名留证实测）。
+
+**第一遍（00:23:35Z 起，key=r39s-fresh-60e279f8ee0d，链路壁钟 39s
+含两遍）**：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线双侧 | mapping-candidates 200（236ms，confirmation_status=confirmed/draft v80 confirmed/60 候选）、facts 200（91ms，state=ready）、project/open 200（102ms，current/edit/canEdit）、protocol-versions 200（47ms）——预置台与运行门无口径差 |
+| run-setup/options | 200，225ms，snapshot:ef8692acfbab4d2a9846916f（与 R34–R38 同快照） |
+| workspace/bootstrap（留证） | 200，100ms，replayed=true revision=1 |
+| prepare-and-start | **200，433ms**，run:c04ef12cfe44e8a211b439e9（registry seq 63） |
+| progress | completed，percent=100.0，polls=2，run_seconds=15（result_available 投影时序沿 R20 §4：发布后才置 1） |
+| publication | POST 200 → **available**（753ms） |
+| result-entry | 200，371ms，rct=result-context:77f44baa10d14815992c3aea0fe8cf14 |
+| results/{rct}/overview | 200，403ms，**1,243,923B、60 发现/16 受试者**；缓存探针二读 218ms 字节相等 |
+
+**第二遍=重验（任务③，key=r39s-fresh-def9f57d2361）**：全绿同型——
+options 200（228ms，同快照）→ bootstrap 200 replayed → prepare-and-start
+**200**（427ms，run:b9cbf9b3776fa5e287fe806d，seq 64）→ progress completed
+（polls=2，15s）→ publication **available**（695ms）→ entry 200
+（rct=result-context:97290e3eb76343508dca4ec5aa5df7d4）→ overview 200
+（404ms，1,243,923B/60/16，chain_ok=True；缓存探针 184ms 字节相等）。
+
+终态磁盘：sequence 1-64 全部 completed+result_available=1（新增 63/64 两行
+mdig 均为 f58ccf16c4f3 主指纹家族；seq 59/62 的 e49f95084811 为 UI 键
+rule_tokens_json 输入差，R38 攻坚已归因非缺陷）、**waiting_start=0**、
+admission_events 6 行=6 行（零新增接入事件）、global_default|*|1 三次
+采样稳定。
+
+### 3. 修复（任务②）与交接回归项核验
+
+**无需新修复，本轮零代码改动、零重启。** 两侧口径在本轮无分叉：预置台
+（mapping confirmed / facts ready / project current）与运行启动门
+（run-setup/options 200 + prepare-and-start 200×2）读数一致；任务书装备的
+`backend_truth()` 同刻对照在两遍 b3 前均实测（0 阻断未触发归因路径）。
+
+**交接回归警报核验（PAUSE_HANDOFF_20261013：新 build 使 study-documents
+ready 退化、新生成字段映射会被 422 拒——恢复后 R39 验证）**：
+
+- 复现前实测：GET study-documents → 200（11,950ms，首读慢调用家族），
+  **ready=false、state=analyzing**、headline「已上传研究文件的核对尚未得出
+  结论」、analysis_token=mmbatch_06432a73d31b1d87094f90fd——该批次文件
+  mtime=2026-10-06 03:04、authority_status=not_adjudicated（两候选
+  not_promoted/not_assessed），是**陈旧未晋级批次**经
+  `mapping_candidate_routes.py:917-938`（_latest_unpromoted_batch_brief
+  附带，R25-02 语义）附着于未就绪投影，并非在途 AI 作业。
+- **该状态不拦运行链**：本轮两遍 prepare-and-start 均 200 + 全链绿为直接
+  证明；映射生成 422 门
+  （`document_evidence.py:491-509` validate_document_evidence_packet →
+  `mapping_document_evidence_roles_unmet`，经 `mapping_bridge.py:425`
+  消费）只作用于**新生成字段映射**输入，对已确认映射（draft v80/60 候选）
+  的运行启动不生效。与 R38-03 台账项（「方案事实与规则发布」准备核对面板
+  `registered document authority is incomplete`，status=待修复）同子系统、
+  相互印证：**该回归在当前 build（api-34f525073da51f3e）仍在场，属 R38-03
+  修复员排期项，非本轮运行链墙**。
+- 「新生成字段映射会被 422 拒」本轮**未实测**：触发映射再生成会改写常驻
+  项目已确认映射夹具（破坏性、超出运行链验证边界），留待测试者轮按
+  strategyNote 以独立脚本核验。
+
+### 4. 在役回归（本轮亲测）
+
+- `pytest tests/test_medical_monitoring_r7_product_router.py -k r19_siege -q`
+  → **2 passed**（1.03s，R19 global_default 补种两用例）。
+- 全量：`pytest tests/test_medical_monitoring_r7_product_router.py -q` →
+  **97 passed**（41.77s；与 R27 全绿同数，R38 修复员记录的
+  late_project_dispatchers 409 未复现）。
+
+### 5. 遗留与边界（转台账，不属本轮墙判据）
+
+- study-documents ready=false/R38-03 准备核对面板失联：见 §3，待修复员
+  沿 authority 注册记录（src_proj_user_6ef58ac151e1_protocol_docx_b6e1bceb269c）
+  定位；本轮证据（陈旧批次附着路径+422 门代码行）可直接复用。
+- study-documents 首读 11,950ms：沿 R25 §7 偶发慢调用家族观察，未拦链路。
+- 浏览器像素级全链回归未执行（工程验证身份以 API 驱动+状态机代码核验为
+  口径，沿 R25-R38 历轮边界）。
+
+留痕文件：`r39s_siege_repro.py`、`r39s_siege_evidence.jsonl`、
+`r39s_overview_p1.json`、`r39s_overview_p2.json`、本日志节。
+
+---
+
 ## R38 攻坚·第 1 次（2026-10-13，攻坚工程师-R38-第1次）
 
 ### 0. 结论先行
