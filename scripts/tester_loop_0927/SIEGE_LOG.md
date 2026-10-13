@@ -4,6 +4,146 @@
 
 ---
 
+## R41 攻坚·第 1 次（2026-10-13，攻坚工程师-R41-第1次）
+
+### 0. 结论先行
+
+**墙未复发：R40 修复员六条修复（c1f15993：R40-01/02/03+R36-10/13+R38-01
+——R40-01 研究文件核对作业创建死局根因修复（提交身份门改按持久化角色
+绑定+同通道知情降级 allow_shared_runtime_identity+advance 作业缺失就地
+重建 create_or_get 幂等）/R38-03 证据检索英文诊断本地化+hash 失配如实
+归因/R36-10 向导吸底栏 padding/R36-13 查询工作区 CSV 导出/R38-01 字段
+识别全程进度）+ 轮次归档（6ffe49c8）之后，8911 pid 34096 于 2026-10-13
+14:03:50 拉起、5178 pid 34159 拉起（ISO_ENV_LOG 14:04 标准条目），本轮
+两遍全新幂等键全链全绿，零阻断、零代码修复、零重启、零跳门。** 常驻
+项目「MX循开考-CSU」（proj_user_6ef58ac151e1）以两个全新幂等键
+（r41s-fresh-9ad9c59a4571=registry seq 69 / r41s-fresh-176e3aec0b06=
+seq 70）各走完 run-setup/options → workspace/bootstrap（留证）→
+prepare-and-start → progress completed（15s/2 轮询）→ publication
+available → result-entry → overview 可读（两遍均 1,243,923B/60 发现/
+16 受试者/389 现行风险，与 R40 基线字节数逐位一致）。主投影 60 条
+finding 逐字段（剔除每轮派生 query_draft_id）与 R40 基线**零漂移**、
+389 条 risk_instance_ref 逐字段**零差异**（两遍 baseline_compare 全过）
+——c1f15993 六条修复（文档权威作业链/证据检索诊断/前端三面）对映射/
+结果面零影响，符合预期（该提交不触结果投影管线）。
+
+### 1. 环境前置（复现前，未重启任何服务）
+
+- 8911（pid 34096，2026-10-13 14:03:50 拉起，127.0.0.1 IPv4 监听）
+  `/api/runtime-readiness` 200 ready=true、
+  backend_build_id=**api-233b2b43102a315b**（c1f15993 提交说明
+  ISO_ENV_LOG 条目同指纹）；`/api/health` 200（integrity ok, schema v16）。
+- 5178（vite node pid 34159，[::1] IPv6 监听，历轮已知布局）
+  `http://localhost:5178/monitoring` 200（3ms）；runtime-build.json
+  expectedBackendBuildId=api-233b2b43102a315b 与后端**配对一致**
+  （frontendBuildId=web-544f152559b59671，与 c1f15993 留痕同）。
+- 加载面实证：`git diff HEAD --stat -- packages services frontend/src`
+  为空；`find services/api/app packages frontend/src -newermt
+  "Tue Oct 13 14:03:50 2026"` 为空（全部源码 mtime 早于进程启动）——
+  磁盘==HEAD==进程加载面（HEAD=6ffe49c8，含 c1f15993 六条修复）。
+- 复现前磁盘基线：launch_registry 68 条全部 completed+result_available=1、
+  **waiting_start=0**（seq 66/67=R40 攻坚两键、seq 68=monitoring_81a81b4d…
+  系 R40 测试者轮 UI 回归运行 03:33:06Z，同 f58ccf16c4f3 主指纹家族，
+  rfp 68ba60ad574c326b 与 siege 同输入逐位同）；execution_profiles
+  `global_default|*|1` 在位；admission_events 6 行。
+- 复用就绪预验（同日 20:19 R41D 节在案）：mapping confirmed（draft
+  monmapdraft_73abe5c6c9561a v80）/ facts ready / project/open current。
+
+### 2. 复现（任务①）——两遍全链（驱动 `r41s_siege_repro.py`，证据
+`r41s_siege_evidence.jsonl` 56 行、0 阻断，两遍链路壁钟 38s）
+
+忠实界面路径（不先 workspace/bootstrap；bootstrap 仅按任务书列名留证实测）。
+
+**第一遍（12:31:02Z 起，key=r41s-fresh-9ad9c59a4571，seq 69）**：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线双侧 | mapping-candidates 200（208ms，confirmed/draft v80/60 候选本轮 live 复核）、facts 200（92ms，state=ready 10表/591行/3038值全核验）、project/open 200（102ms）、protocol-versions 200（51ms）——预置台与运行门无口径差 |
+| run-setup/options | 200，233ms，snapshot:ef8692acfbab4d2a9846916f（与 R34–R40 同快照） |
+| workspace/bootstrap（留证） | 200，108ms，replayed=true revision=1 |
+| prepare-and-start | **200，446ms**，run:b3bfa958cae33a67562d222b |
+| progress | completed，percent=100.0，polls=2，run_seconds=15（result_available 投影时序沿 R20 §4：发布后才置 1） |
+| publication | POST 200 → **available**（719ms） |
+| result-entry | 200，349ms，rct=result-context:63880057134e4d54923bfe5259a3b902 |
+| results/{rct}/overview | 200，406ms，**1,243,923B、60 发现/16 受试者/389 现行风险**；缓存探针二读 185ms 字节相等 |
+
+**第二遍=重验（任务③，key=r41s-fresh-176e3aec0b06，seq 70）**：全绿同型
+——options 200（243ms，同快照）→ bootstrap 200 replayed →
+prepare-and-start **200**（510ms，run:7b625f7b1de53188349a57ba）→
+progress completed（polls=2，15s）→ publication **available**（690ms）→
+entry 200（370ms，rct=result-context:925ecb34a7534acfa86fa344966ed5a0）→
+overview 200（478ms，1,243,923B/60/16，chain_ok=True；缓存探针 190ms
+字节相等）。
+
+终态磁盘：sequence 1-70 全部 completed+result_available=1（新增 69/70 两行
+request_fingerprint 均为 68ba60ad574c326b=与 R34–R40 各轮 siege 同输入
+运行逐位同指纹）、**waiting_start=0**、admission_events 6 行=6 行（零新增
+接入事件）、global_default|*|1 三次采样稳定。
+
+### 3. 基线归因（本轮实测）
+
+- **主投影零漂移**：R41p1/R41p2 与 R40 基线（r40s_overview_p1.json）
+  三方 60 个 finding_id 集合全等、389 个 risk_instance_ref 集合全等；
+  逐 finding 逐字段比对（剔除每轮派生 query_draft_id 后）**零差异**，
+  逐 risk 逐字段**零差异**（两遍 `*_baseline_compare` ok=True、
+  n_findings_field_drift=0、n_risks_field_drift=0）——c1f15993 六条修复
+  （R40-01 作业创建/R38-03 检索诊断/前端三面）不触结果投影管线，符合
+  预期。
+- 字节数 1,243,923 与 R39/R40 完全一致；R36-05 的 2 条治疗 emergent 提示
+  （R39 归因）含于 389 条内在位不新增。
+- R40 修复员修复的 R40-01（研究文件核对作业创建死局）属文档权威子系统，
+  不在运行链门上；本轮全链绿与其回归套件（§5 39 passed）互证——新代码面
+  在役无运行链回归。
+
+### 4. 修复（任务②）
+
+**无需新修复，本轮零代码改动、零重启。** 运行链上无任何一道门拒绝：
+接入管线侧 confirmed/ready/current 与运行门无口径差；prepare-and-start
+首击即 200（446/510ms），无 waiting_start 残留、无 in_flight_conflict、
+无 global_default_missing（profile_layer_versions 稳定
+`global_default|*|1`）；publication 首击即 available；result-entry/
+overview 冻结包会话缓存（R34-09/R32-07）持续在役（二读 185/190ms vs
+首读 406/478ms）。
+
+### 5. 在役回归（本轮实跑，.venv/bin/pytest）
+
+- 全量：`pytest tests/test_medical_monitoring_r7_product_router.py -q` →
+  **96 passed / 1 failed**（39.84s）。唯一失败
+  `test_late_project_dispatchers_keep_two_actual_api_results_isolated`：
+  本轮单独重跑 2.37s 确定性复现，签名 `409 {"code":
+  "result_context_unavailable","message":"本次结果暂不可查看，请返回进度页"}`
+  ——与 R40 §5/81e1ce14 留痕逐字同签名（stash 对照已证 HEAD 既有）。
+  属双项目晚接入派发隔离场景，非常驻项目运行链墙（本轮两遍全链绿+该套件
+  96 过直接证明）；继续挂修复员排期。
+- R40/R39/R38-03 新代码面：`pytest
+  tests/test_mm_r40_document_authority_shared_runtime.py
+  tests/test_mm_r38_03_evidence_search_stale_validation.py
+  tests/test_mm_r39_document_authority_identity_injection.py
+  tests/test_monitoring_document_authority_jobs.py -q` → **39 passed**
+  （4.58s：R40 同身份降级 5 + R38-03 过期校验 1 + R39 身份注入 6 +
+  monitoring jobs 27，c1f15993 改动面在役）。
+
+### 6. 遗留与边界（转台账，不属本轮墙判据）
+
+- test_late_project_dispatchers 409 result_context_unavailable：见 §5，
+  本轮第四次独立复现（R39 stash 对照 + R40 + R41 + ISO_ENV_LOG），留
+  修复员沿双项目 late-dispatcher 隔离场景定位。
+- study-documents ready=false/R38-03 台账项：R41D 节实测第四个 build
+  （api-233b2b43）仍 analyzing/ready=false（protocol/ecrf=需要重新识别，
+  静态态、46 条 AI 台账全终态）；c1f15993 已修其英文诊断归因+重登记刷新
+  路径可达性（R40-01 作业重建），「重新核对研究文件」重登记刷新本轮未
+  实测（会改写常驻项目登记夹具属破坏性，留测试者轮）；不拦运行链（本轮
+  两遍全链绿直接证明）。
+- 浏览器像素级全链回归未执行（工程验证身份以 API 驱动+状态机代码核验为
+  口径，沿 R25-R40 历轮边界；本轮仅只读探测 /monitoring 200）。
+- 常驻项目 registry 现 70 条全 completed；后续轮次开考直接走「开始运行
+  监查」即可。
+
+留痕文件：`r41s_siege_repro.py`、`r41s_siege_evidence.jsonl`、
+`r41s_overview_p1.json`、`r41s_overview_p2.json`、本日志节。
+
+---
+
 ## R40 攻坚·第 1 次（2026-10-13，攻坚工程师-R40-第1次）
 
 ### 0. 结论先行
