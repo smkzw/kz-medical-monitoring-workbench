@@ -2190,6 +2190,31 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
   const aiAccepted = aiFindings.filter((item) => item.state === "accepted").length;
   const aiEscalated = aiFindings.filter((item) => item.state === "escalated").length;
   const aiGaps = aiFindings.filter((item) => item.state === "unverifiable_gap" || item.state === "coverage_gap").length;
+  // R39轮（R39-03）：「发现」与「请核实事项」是两条不同管道的清单——
+  // 发现=AI双模型发现管道产出的Finding卡；请核实事项=全部中高风险
+  // 锚点（current_risks按critical/high/medium过滤）。R39-D实测
+  // （MX循开考-CSU）：74项锚点中仅60项有发现卡，缺席的恰为全部
+  // AE·高风险（含SAE）——监查员若以「发现」为工作清单会漏掉全部
+  // 高风险。此处按risk实例引用实际覆盖计算差异并在「发现」区如实
+  // 标注，不虚构两列表同源，也不替用户合并清单。
+  const findingRiskRefs = new Set(
+    findingCards.map((item) => item.riskId).filter(Boolean),
+  );
+  // Finding DTO的risk_id是锚点引用（risk-格式）；风险行的引用有三种
+  // 形态——实例引用riski-、锚点引用risk_ref（risk-）、规范化的
+  // riskRef（normalizeRisk优先取risk_key=域:键格式）。三种都参与匹配，
+  // 只按其中一种会把已覆盖锚点误判为「无发现卡」（实测：仅按实例引用
+  // 匹配时60项已覆盖被误报为74项全缺席）。
+  const risksWithoutFindingCard = risks.filter((risk) => {
+    const refs = [risk.riskInstanceRef, risk.riskRef, risk.risk_ref];
+    return !refs.some((ref) => ref && findingRiskRefs.has(ref));
+  });
+  const criticalHighWithoutFindingCard = risksWithoutFindingCard.filter(
+    (risk) => ["critical", "high"].includes(risk.severity),
+  ).length;
+  const findingsCoverageNote = risksWithoutFindingCard.length
+    ? `本轮有 ${risksWithoutFindingCard.length} 项待核对风险（其中 ${criticalHighWithoutFindingCard} 项紧急/高风险）没有对应发现卡；完整工作清单以下方「请核实事项」为准。`
+    : "本轮全部待核对风险均有对应发现卡。";
   return (
     <div className="monitoring-view-stack monitoring-query-workspace" data-monitoring-query-count={risks.length}>
       {aiFindings.length ? (
@@ -2260,6 +2285,11 @@ export function QueryWorkspaceView({ payload, route, onSubjectSelect, onSource, 
               开发态调试词汇，不再出现在页面标题；载荷形态差异仅在旧版
               draft形态的说明行如实呈现。 */}
           <div className="monitoring-section-heading"><span className="monitoring-eyebrow">真实发现</span><h2>发现（{findingCards.length} 条）</h2></div>
+          {/* R39轮（R39-03）：两列表覆盖差异按数据实际计算后如实标注——
+              「发现」不是完整工作清单，缺席项（含高风险）在「请核实事项」。 */}
+          <p className="monitoring-query-intro" data-monitoring-findings-coverage-note>
+            本列表来自AI双模型发现管道，与下方「请核实事项」（全部中高风险锚点，{risks.length} 项）不同源。{findingsCoverageNote}
+          </p>
           {findingCards.length ? (
             <ul className="monitoring-query-card-list">
               {findingCards.map((item) => {

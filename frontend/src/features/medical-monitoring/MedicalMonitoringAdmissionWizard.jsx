@@ -203,7 +203,7 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
             {pendingJobCount > 0
               ? `${pendingJobsText(payload)}（最早入队 ${String(payload.pending_since || "").replace("T", " ").slice(0, 19) || "时间未知"}）。`
               : "核对作业可能仍在排队等待系统资源。"}
-            长时间无进展时，可点击「重新核对研究文件」重试；若持续无进展，重新上传研究文件（相同或新版本均可）会重新发起完整核对。已上传的文件与您的确认不会被丢失。
+            长时间无进展时，可点击「重新核对研究文件」重试（该按钮会真实重排核对作业）。注意：重新上传完全相同的文件不会重新核对——系统会直接复用已有的核对结论；如需换文件重核，请更换新版本后上传。已上传的文件与您的确认不会被丢失。
           </span>
           <button type="button" className="monitoring-admission-secondary" onClick={onRetry}>
             重新核对研究文件
@@ -231,6 +231,15 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
           </li>
         ))}
       </ul>
+      {/* R39轮（R37-05）：四个文档状态条目此前只是状态行，但白底描边卡
+          样式让测试者当作可点按钮（点击「研究方案」8秒无文件选择器）。
+          此处显式声明这是状态清单，与真正的上传入口（下方「选择文件」
+          按钮）区分，并说明角色自动认领规则——上传不分角色的原生控件
+          曾无任何角色指引。 */}
+      <p className="monitoring-admission-minor" style={{ margin: 0, fontSize: 12, color: "var(--monitoring-muted, #64727d)" }} data-monitoring-doc-roles-hint>
+        以上是各文档角色的当前状态（不可点击）；无需按角色分别上传——
+        在下方选择文件后，系统会按文件内容自动认领它是方案、eCRF 还是其他角色。
+      </p>
       {payload.last_check_note && !payload.ready ? (
         <p className="monitoring-admission-warning" role="status">
           {payload.last_check_note}
@@ -437,6 +446,10 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
               multiple
               accept=".docx,.pdf,.xlsx"
               disabled={processing}
+              /* R39轮（R37-05）：原生file控件此前无可访问名称（CSS视觉
+                  隐藏+仅包裹label），读屏与自动化都只能见到无名控件；
+                  显式命名并声明角色自动认领，与R25-16同族收口。 */
+              aria-label="选择研究文件上传（可多选；系统按文件内容自动认领文档角色）"
               onChange={(event) => {
                 // R26轮（R26-03）：①先取数组再清空input.value——浏览器
                 // 对「重选同一组文件」不触发change（值未变化），曾致
@@ -454,7 +467,7 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
                 ? "重新上传研究文件并再次核对"
                 : state.phase === "needs_user_input"
                   ? "如仍有文件遗漏，可继续补充上传"
-                  : "选择研究文件（方案 / eCRF，可多选）"}
+                  : "选择文件上传（方案 / eCRF，可多选）"}
           </label>
         </div>
       ) : null}
@@ -2369,7 +2382,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         },
       );
       if (mappingRequestGeneration.current !== generation) return;
-      mappingDispatch({ type: "answer-ready", key: card.key, payload: draft });
+      // R39轮（R37-04）：回执携带本次口径说明， reducer回显已保存内容。
+      mappingDispatch({ type: "answer-ready", key: card.key, payload: draft, note: note || "" });
     } catch (error) {
       if (mappingRequestGeneration.current !== generation) return;
       mappingDispatch({
@@ -2416,7 +2430,13 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         },
       );
       if (mappingRequestGeneration.current !== generation) return;
-      mappingDispatch({ type: "answer-ready", key: `role:${domain}.${sourceField}`, payload: draft });
+      // R39轮（R37-04）：回执如实回显本次修订内容（与问题作答回执同源）。
+      mappingDispatch({
+        type: "answer-ready",
+        key: `role:${domain}.${sourceField}`,
+        payload: draft,
+        note: `已将「${sourceField}」的字段角色修订为「${role}」`,
+      });
       // 修订落库后主动推进复核，质量报告（阻断组）即时刷新。
       await advanceAdjudication(draft, generation);
     } catch (error) {

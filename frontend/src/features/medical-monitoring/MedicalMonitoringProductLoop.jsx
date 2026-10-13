@@ -842,6 +842,12 @@ export function MedicalMonitoringProductLoop({
   const [history, setHistory] = useState(null);
   const [setupHistoryLoading, setSetupHistoryLoading] = useState(true);
   const [setupHistoryError, setSetupHistoryError] = useState(null);
+  // R39轮（R39-02）：setup/history读取失败的自动重试进度（与结果读取
+  // 的R36-04同口径）。失败预算计数存ref——effect按epoch整体重跑，
+  // 局部计数会在重跑时清零，预算限制会失真。
+  const [setupRetryAttempt, setSetupRetryAttempt] = useState(0);
+  const setupReadFailuresRef = useRef(0);
+  const setupReadProjectRef = useRef("");
   const [refreshEpoch, setRefreshEpoch] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -899,8 +905,15 @@ export function MedicalMonitoringProductLoop({
       setSetupHistoryError({ text: "当前项目无法确认，请返回项目概览。" });
       return undefined;
     }
+    // R39轮（R39-02）：切换项目时重置自动重试预算；同项目的epoch重跑
+    // （自动重试/手动刷新）沿用既有计数。
+    if (setupReadProjectRef.current !== normalizedProjectId) {
+      setupReadProjectRef.current = normalizedProjectId;
+      setupReadFailuresRef.current = 0;
+    }
     const controller = new AbortController();
     let cancelled = false;
+    let retryTimer = null;
     setSetup(null);
     setHistory(null);
     setSetupHistoryLoading(true);
@@ -921,6 +934,8 @@ export function MedicalMonitoringProductLoop({
         workItemCount: setupPayload?.work_item_count ?? rawCurrentData.work_item_count ?? setupPayload?.total_work_units ?? rawCurrentData.total_work_units ?? null,
       };
       const nextSetup = { ...projectedSetup, serverSummary };
+      setupReadFailuresRef.current = 0;
+      setSetupRetryAttempt(0);
       setSetup(nextSetup);
       setHistory(nextHistory);
       setSetupHistoryLoading(false);
@@ -931,10 +946,30 @@ export function MedicalMonitoringProductLoop({
       setHistory(code === "run_data_not_ready" ? { kind: "history", rows: [] } : null);
       setSetupHistoryLoading(false);
       setSetupHistoryError({ text: publicErrorText(error, "监查范围暂不可用，请稍后重试。"), code });
+      // R39轮（R39-02）：真实失败按与结果读取相同的退避自动重试——
+      // 旧实现该路径完全无重试调度，「监查范围暂不可用」只能手动
+      // 「重新读取」自救（report_D:37-41 旅程页每次进入都需人工干预）。
+      // run_data_not_ready是确定性的「先完成数据接入」业务态而非故障，
+      // 自动重试无法恢复，照旧不调度。
+      if (code !== "run_data_not_ready") {
+        setupReadFailuresRef.current += 1;
+        const attempt = setupReadFailuresRef.current;
+        if (attempt <= RESULT_READ_AUTO_RETRY_LIMIT) {
+          setSetupRetryAttempt(attempt);
+          retryTimer = setTimeout(() => {
+            if (cancelled) return;
+            setSetupHistoryLoading(true);
+            setRefreshEpoch((value) => value + 1);
+          }, monitoringRefreshBackoffMs(attempt));
+        } else {
+          setSetupRetryAttempt(-1);
+        }
+      }
     });
     return () => {
       cancelled = true;
       controller.abort();
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, [api, normalizedProjectId, refreshEpoch]);
 
@@ -956,6 +991,27 @@ export function MedicalMonitoringProductLoop({
     setResultError(null);
     setResultRetryAttempt(0);
     const expectedView = projectionView(routeView);
+    // R39轮（R39-02）：退避调度提取为两条失败路径（网络失败/投影校验
+    // 失败）共用——旧实现投影失败分支只设错误态不调度重试，面板却照样
+    // 渲染「首次自动重试即将开始」（resultRetryAttempt恒0），D位实测
+    // 等待90/35秒零重试动作，手动「重新读取」后5-8秒即恢复
+    // （report_D:37-41）。同步抛出的public_result_target_incomplete
+    // 仍不重试（确定性缺定位，R37-06文案口径不变）。
+    const scheduleRetryAfterFailure = () => {
+      if (failures <= RESULT_READ_AUTO_RETRY_LIMIT) {
+        const backoff = monitoringRefreshBackoffMs(failures);
+        setResultRetryAttempt(failures);
+        retryTimer = setTimeout(() => {
+          if (cancelled) return;
+          setResultLoading(true);
+          startRead();
+        }, backoff);
+      } else {
+        // R36轮（R36-04）：重试预算用尽也要如实说——不再让面板停留在
+        // 「正在第N次自动重试」的进行时表述。
+        setResultRetryAttempt(-1);
+      }
+    };
 
     const startRead = () => {
       let request;
@@ -1007,8 +1063,13 @@ export function MedicalMonitoringProductLoop({
           view: expectedView,
         });
         if (projected.kind === "invalid") {
-          setResultError(projectMonitoringPublicResultError({ code: projected.code, message: projected.error }));
+          // R39轮（R39-02）：投影校验失败同样进入退避自动重试——D位实测
+          // 旅程进入场景的「暂不可用」多卡在此分支（请求本身成功），
+          // 旧实现不调度重试却承诺「首次自动重试即将开始」。
+          failures += 1;
           setResultLoading(false);
+          setResultError(projectMonitoringPublicResultError({ code: projected.code, message: projected.error }));
+          scheduleRetryAfterFailure();
           return;
         }
         // R32-06：读取成功即复位自动重试计数。
@@ -1032,19 +1093,7 @@ export function MedicalMonitoringProductLoop({
         failures += 1;
         setResultLoading(false);
         setResultError(projectMonitoringPublicResultError(error));
-        if (failures <= RESULT_READ_AUTO_RETRY_LIMIT) {
-          const backoff = monitoringRefreshBackoffMs(failures);
-          setResultRetryAttempt(failures);
-          retryTimer = setTimeout(() => {
-            if (cancelled) return;
-            setResultLoading(true);
-            startRead();
-          }, backoff);
-        } else {
-          // R36轮（R36-04）：重试预算用尽也要如实说——不再让面板停留在
-          // 「正在第N次自动重试」的进行时表述。
-          setResultRetryAttempt(-1);
-        }
+        scheduleRetryAfterFailure();
       });
     };
 
@@ -1176,7 +1225,13 @@ export function MedicalMonitoringProductLoop({
     };
   }, [api, normalizedProjectId, publicRunToken, resultToken]);
 
-  const refreshAll = useCallback(() => setRefreshEpoch((value) => value + 1), []);
+  const refreshAll = useCallback(() => {
+    // R39轮（R39-02）：用户显式刷新时重置setup读取的自动重试预算——
+    // 手动动作不应被此前自动重试的消耗挤占。
+    setupReadFailuresRef.current = 0;
+    setSetupRetryAttempt(0);
+    setRefreshEpoch((value) => value + 1);
+  }, []);
   const navigate = useCallback((view, patch = {}) => {
     const next = routeStateForMedicalMonitoringWorkspaceView(route, view, patch);
     onRouteChange?.(next);
@@ -1654,6 +1709,10 @@ export function MedicalMonitoringProductLoop({
   const resultRetryPromiseText = resultError?.code === "public_result_target_incomplete"
     ? "本次入口缺少必需的定位信息（请从结果概览的风险卡重新进入该旅程）；此错误自动重试无法恢复，请点击「返回结果概览」。"
     : `系统会自动重试（最多${RESULT_READ_AUTO_RETRY_LIMIT}次，间隔递增、约每半分钟一次）；${resultRetryAttempt > 0 ? `正在第 ${resultRetryAttempt}/${RESULT_READ_AUTO_RETRY_LIMIT} 次自动重试…` : resultRetryAttempt < 0 ? `自动重试已用完（${RESULT_READ_AUTO_RETRY_LIMIT}次）` : "首次自动重试即将开始"}；`;
+  // R39轮（R39-02）：setup/history读取失败路径补齐同款退避重试后，
+  // 面板对这条路径同样如实显示重试进度（旧实现该路径无重试也不承诺，
+  // 只能手动自救）。
+  const setupRetryPromiseText = `系统会自动重试（最多${RESULT_READ_AUTO_RETRY_LIMIT}次，间隔递增、约每半分钟一次）；${setupRetryAttempt > 0 ? `正在第 ${setupRetryAttempt}/${RESULT_READ_AUTO_RETRY_LIMIT} 次自动重试…` : setupRetryAttempt < 0 ? `自动重试已用完（${RESULT_READ_AUTO_RETRY_LIMIT}次），请点击「重新读取」` : "首次自动重试即将开始"}；`;
   return (
     <main className="monitoring-page monitoring-product-page" data-monitoring-view={routeView} data-monitoring-product-state={productStatus} data-monitoring-product-view={routeView}>
       <header className="monitoring-page-header monitoring-product-header">
@@ -1680,7 +1739,7 @@ export function MedicalMonitoringProductLoop({
           </div>
         </section>
       ) : null}
-      {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><span>{resultError ? `${resultRetryPromiseText}请点击「重新读取」或返回进度页。` : ""}</span><div className="monitoring-product-state-panel-actions"><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button>{resultError?.code === "public_result_target_incomplete" && resultToken ? <button type="button" className="monitoring-product-button is-small" onClick={() => navigate("overview", { subject_ref: "", site_ref: "", spine_ref: "", window_start: "", window_end: "", risk_instance_ref: "", risk_anchor_ref: "", event_ref: "", visit_ref: "" })}>返回结果概览</button> : null}</div></section> : null}
+      {!loadingBody && (resultError || (setupHistoryError && !admissionOnly)) ? <section className="monitoring-product-state-panel is-unavailable" role="alert"><strong>当前内容暂不可用</strong><span>{unavailableText}</span><span>{resultError ? `${resultRetryPromiseText}请点击「重新读取」或返回进度页。` : setupHistoryError && !admissionOnly ? `${setupRetryPromiseText}也可点击「重新读取」立即重试。` : ""}</span><div className="monitoring-product-state-panel-actions"><button type="button" className="monitoring-product-button is-small" onClick={retryPage}>重新读取</button>{resultError?.code === "public_result_target_incomplete" && resultToken ? <button type="button" className="monitoring-product-button is-small" onClick={() => navigate("overview", { subject_ref: "", site_ref: "", spine_ref: "", window_start: "", window_end: "", risk_instance_ref: "", risk_anchor_ref: "", event_ref: "", visit_ref: "" })}>返回结果概览</button> : null}</div></section> : null}
       {!loadingBody && !resultError && !setupHistoryError && publicRunToken && !resultToken ? <MonitoringPublicProgressSurface progress={progress} error={progressError} loading={progressLoading} onRefresh={() => setRefreshEpoch((value) => value + 1)} onBack={() => navigate("overview", { public_run_token: "" })} onOpenResult={() => openResult(publicRunToken)} /> : null}
       {!loadingBody && !resultError && !setupHistoryError && resultLoaded ? (
         <div className="monitoring-product-result-body">

@@ -446,6 +446,15 @@ def test_document_authority_gets_one_schema_only_repair(tmp_path) -> None:
 
 
 def test_document_authority_repair_uses_frozen_batch_identity(tmp_path) -> None:
+    """R39轮（R39-01）更新：身份回显错误由服务端注入即时纠正。
+
+    修复前本用例断言「回显错→触发repair_contract修复轮（第2次调用）」；
+    R39B实测deepseek-v4.1-flash对input_sha256逐字复制确定性失败
+    （string_pattern_mismatch，4/4次同错）→fail-closed全链不可达。
+    现契约：服务端在内容校验前注入自有身份字段，一次调用即完成，
+    不再消耗修复轮；模型分析内容照旧全量校验。
+    """
+
     batch = _batch()
     repository = MonitoringAiRepository(tmp_path / "monitoring-ai.sqlite")
     runtime = _runtime(
@@ -484,10 +493,39 @@ def test_document_authority_repair_uses_frozen_batch_identity(tmp_path) -> None:
     result = service.run_next("synthetic-worker", claim_identity=service.claim_identity())
 
     assert result.job is not None and result.job.status.value == "completed"
-    assert len(provider.envelopes) == 2
-    repair = provider.envelopes[1].payload["repair_contract"]["instruction"]
-    assert "document_authority_batch_sha256" in repair
-    assert "绝不能使用外层input_revision_sha256" in repair
+    # 一次调用即完成：身份字段不再交给模型复制/修复轮纠正
+    assert len(provider.envelopes) == 1
+    # 入库候选的身份字段是服务端冻结批次摘要，不是模型回显的
+    # input_revision_sha256
+    from services.api.app.monitoring_document_authority_jobs import (
+        load_document_authority_analysis_run,
+    )
+
+    batch_sha256 = document_authority_batch_sha256(batch)
+    run = load_document_authority_analysis_run(
+        repository,
+        project_id=revision.project_id,
+        job_id=result.job.job_id,
+        candidate_batch=batch,
+        role="primary",
+    )
+    assert run.analysis.input_sha256 == batch_sha256
+    # 注入动作在server_normalizations留痕
+    attempts = repository.attempts(revision.project_id, result.job.job_id)
+    successful = [
+        attempt for attempt in attempts
+        if attempt["outcome"] in {"success", "success_repaired"}
+    ]
+    assert len(successful) == 1
+    normalizations = successful[0]["response"].get(
+        "server_normalizations", []
+    )
+    assert any(
+        note.get("normalization")
+        == "document_authority_identity_field_server_injected"
+        and note.get("field") == "input_sha256"
+        for note in normalizations
+    )
 
 
 def test_loader_rejects_role_swap(tmp_path) -> None:

@@ -142,8 +142,8 @@ check(
 check(renders.documentsMissing.includes("当前研究方案"), "protocol uses a medical-facing label");
 check(renders.documentsMissing.includes("当前 eCRF"), "eCRF uses a recognizable label");
 check(
-  renders.documentsMissing.split(">选择研究文件（方案 / eCRF，可多选）</").length - 1 === 1,
-  "one batch picker replaces per-role confirmation work",
+  renders.documentsMissing.split(">选择文件上传（方案 / eCRF，可多选）</").length - 1 === 1,
+  "one batch picker replaces per-role confirmation work (R37-05: entry names the upload act)",
 );
 check(
   renders.documentsMissing.includes('multiple=""'),

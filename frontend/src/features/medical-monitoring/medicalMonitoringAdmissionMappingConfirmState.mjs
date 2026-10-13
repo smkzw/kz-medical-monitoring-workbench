@@ -184,7 +184,7 @@ function questionText(item) {
   return `请确认「${field}」这一列的识别结果是否符合实际。`;
 }
 
-export function mappingHeadline(payload, { stalledMs = 0, blockedGroupCount = 0 } = {}) {
+export function mappingHeadline(payload, { stalledMs = 0, blockedGroupCount = 0, userAnsweredCount = 0 } = {}) {
   if (!payload) return "正在读取系统识别结果…";
   // R2循环：识别未完成（generating）或尚未识别到任何字段时，禁止
   // 「全部对应关系清晰/无需您补充判断」类定论表述——0字段阶段给出
@@ -229,6 +229,14 @@ export function mappingHeadline(payload, { stalledMs = 0, blockedGroupCount = 0 
   // 口径，与阻断横幅、按钮态同源。
   if (blockedGroupCount > 0) {
     return `系统已自动识别 ${payload.fieldCount} 个字段；字段质量核对仍有 ${blockedGroupCount} 组字段关系待处理，处理前不能确认`;
+  }
+  // R39轮（R37-04）：定论必须与医学问题应答同一计数源——用户逐条确认过
+  // （draft.fields仍记录「用户已确认/用户已核对」决定）时，不得渲染
+  // 「无需您补充判断」：已答条目被当作从未需要判断，答案是否被采用无从
+  // 核验（report_B.md F6，EX·EXTRT医学问询保存成功后0/1不更新、重进
+  // 显示「全部对应关系清晰」）。
+  if (userAnsweredCount > 0) {
+    return `系统已自动识别 ${payload.fieldCount} 个字段；其中 ${userAnsweredCount} 项已由您逐条确认（口径说明已记录），全部对应关系清晰`;
   }
   return `系统已自动识别 ${payload.fieldCount} 个字段，全部对应关系清晰，无需您补充判断`;
 }
@@ -350,9 +358,37 @@ function draftQuestionCards(draft) {
   }));
 }
 
+// R39轮（R37-04）：服务端决定记录的键集合——与后端
+// mapping_confirmation._decision_recorded同一判据（user_action以
+// 「用户已确认：/用户已核对：」开头即视为该字段的医学问题已决）。
+// 数据源是draft.fields（PATCH回执与重进读取都携带），不是界面本地态。
+export function mappingRecordedDecisionKeys(draft) {
+  const keys = new Set();
+  for (const field of Array.isArray(draft?.fields) ? draft.fields : []) {
+    const action = String(field?.user_action || "").trim();
+    if (action.startsWith("用户已确认：") || action.startsWith("用户已核对：")) {
+      keys.add(mappingCandidateKey(field));
+    }
+  }
+  return keys;
+}
+
+// R39轮（R37-04）：draft.fields中记录的用户决定数——定论表述的计数源。
+export function mappingRecordedDecisionCount(draft) {
+  return mappingRecordedDecisionKeys(draft).size;
+}
+
 export function mappingUnansweredCount(mappingState) {
   const answered = mappingState?.answeredKeys || {};
-  return mappingQuestionCards(mappingState).filter((card) => !answered[card.key]).length;
+  // R39轮（R37-04）：服务端决定已记录（draft.fields同键user_action为
+  // 用户决定）但问题仍挂列表的条目按已答计数——保存成功后「已完成
+  // 0/1」不再因服务端重列问题而回退；真实的数据更新重确认（证据代际
+  // 变化会清除user_action、仅保留prior_user_action）不受影响，仍如实
+  // 计为待确认。
+  const recorded = mappingRecordedDecisionKeys(mappingState?.draft);
+  return mappingQuestionCards(mappingState).filter(
+    (card) => !answered[card.key] && !recorded.has(card.key),
+  ).length;
 }
 
 // R32-02：阻断确认的「待处理字段关系」组（标题/摘要/涉及字段当前角色）。
@@ -388,6 +424,10 @@ function projectDraftState(state, draft, message = "") {
   // 时会渲染「全部对应关系清晰」与同屏阻断横幅/禁用按钮互相矛盾。
   const blockedGroupCount = Number(draft?.semantic_quality?.global_blocker_count)
     || semanticQualityBlockedGroups(draft?.semantic_quality).length;
+  // R39轮（R37-04）：医学问题应答纳入定论计数源——用户已逐条确认的
+  // 字段数与问题卡数/阻断组数同一来源（draft），「全部对应关系清晰」
+  // 类定论必须如实反映用户已作出的判断。
+  const userAnsweredCount = mappingRecordedDecisionCount(draft);
   const payload = questions === null ? state.payload : {
     ...state.payload,
     questionCount: questions.length,
@@ -395,7 +435,7 @@ function projectDraftState(state, draft, message = "") {
     headline: mappingHeadline({
       fieldCount: state.payload?.fieldCount || 0,
       questionCount: questions.length,
-    }, { blockedGroupCount }),
+    }, { blockedGroupCount, userAnsweredCount }),
     questions,
     tableSummaries: (state.payload?.tableSummaries || []).map((table) => ({
       ...table,
@@ -570,14 +610,20 @@ export function admissionMappingConfirmReducer(state, action) {
         "系统没有足够依据继续自动判断，仅保留确实需要核对的问题。",
       );
     case "answer-ready":
-      return {
-        ...state,
-        phase: "drafting",
-        draft: action.payload,
-        answeredKeys: { ...state.answeredKeys, [action.key]: true },
-        message: "已记录您的确认。",
-        error: null,
-      };
+      {
+        // R39轮（R37-04）：保存回执回显已保存内容——「已记录您的确认。」
+        // 不回显口径说明，医学经理无从核对落库的是否为自己所写的内容
+        // （report_B.md F6）。回执文本以本次提交的note为准。
+        const note = String(action.note || "").trim();
+        return {
+          ...state,
+          phase: "drafting",
+          draft: action.payload,
+          answeredKeys: { ...state.answeredKeys, [action.key]: true },
+          message: note ? `已记录：${note}` : "已记录：采用系统判断，无需修改。",
+          error: null,
+        };
+      }
     case "confirm-start":
       return { ...state, phase: "confirming", error: null, message: "正在确认字段对应关系…" };
     case "confirm-ready":

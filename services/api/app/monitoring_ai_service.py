@@ -2558,7 +2558,11 @@ class MonitoringAiService:
                 return payload
 
             initial_output = self._normalize_document_authority_provider_output(
-                job, initial_output, normalization_notes
+                job, initial_output, normalization_notes,
+                # R39轮（R39-01）：携带input_payload以注入服务端自有身份
+                # 字段（input_sha256/conflict_packet_sha256），模型不再因
+                # 复制摘要失败而全链fail-closed。
+                input_payload=input_payload,
             )
             initial_output = self._normalize_cross_table_provider_output(
                 job, initial_output, input_payload
@@ -2643,7 +2647,8 @@ class MonitoringAiService:
                     raw_outputs.append(repaired_output)
                 repaired_output = (
                     self._normalize_document_authority_provider_output(
-                        job, repaired_output, normalization_notes
+                        job, repaired_output, normalization_notes,
+                        input_payload=input_payload,
                     )
                 )
                 repaired_output = self._normalize_cross_table_provider_output(
@@ -8624,6 +8629,8 @@ class MonitoringAiService:
         job: MonitoringAiJob,
         output: Any,
         normalization_notes: Optional[List[Dict[str, Any]]] = None,
+        *,
+        input_payload: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """Rewrap a bare document-authority payload into the task envelope.
 
@@ -8648,6 +8655,17 @@ class MonitoringAiService:
         fail-closed）。归并后下游全部内容校验（validate_document_
         authority_analysis、覆盖率契约、身份绑定）不变，模型内容逐字
         保留。
+
+        R39轮（R39-01）：服务端自有身份字段注入。input_sha256 /
+        conflict_packet_sha256是服务端对冻结输入自行计算的摘要，契约却
+        要求模型逐字复制——R39B实测4次确定性失败（deepseek-v4.1-flash
+        返回非64位hex：string_pattern_mismatch @input_sha256），fail-
+        closed拒绝后第3步全链不可达。该字段的完整性由服务端在
+        validate_document_authority_analysis / conflict_review中重新计
+        算比对保证，模型回显本身不提供任何额外完整性；注入发生在任何
+        内容校验之前（含R37-02归并的逐候选解析），模型自己的分析内容
+        （候选评估、角色选择、证据引用）逐字保留、照旧全部校验。注入
+        动作写入server_normalizations留痕。
         """
 
         if job.task_type not in (
@@ -8655,6 +8673,13 @@ class MonitoringAiService:
             MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW,
         ) or not isinstance(output, Mapping):
             return output
+        if input_payload is not None:
+            output = MonitoringAiService._inject_document_authority_identity_fields(
+                job,
+                output,
+                input_payload,
+                normalization_notes,
+            )
         if "candidates" in output:
             merged = MonitoringAiService._merge_document_authority_candidates(
                 job,
@@ -8670,6 +8695,30 @@ class MonitoringAiService:
         marker = "candidate_assessments" if is_analysis else "decisions"
         if marker not in output:
             return output
+        structured_payload = dict(output)
+        if input_payload is not None:
+            # R39轮（R39-01）：裸载荷信封路径同样注入服务端自有身份字段，
+            # 与候选路径同一口径（改写发生在dict副本上，原始输出不动）。
+            identity_field, identity_value = (
+                MonitoringAiService._document_authority_identity_field_and_value(
+                    job, input_payload
+                )
+            )
+            if identity_field and structured_payload.get(identity_field) != identity_value:
+                structured_payload[identity_field] = identity_value
+                if normalization_notes is not None:
+                    normalization_notes.append(
+                        {
+                            "normalization": (
+                                "document_authority_identity_field_server_injected"
+                            ),
+                            "field": identity_field,
+                            "provider_value": str(
+                                output.get(identity_field) or ""
+                            )[:80],
+                            "shape": "bare_payload_envelope",
+                        }
+                    )
         return {
             "schema_version": MONITORING_AI_SCHEMA_VERSION,
             "task_id": job.job_id,
@@ -8683,10 +8732,87 @@ class MonitoringAiService:
                         if is_analysis
                         else "文档权威独立复核"
                     ),
-                    "structured_payload": dict(output),
+                    "structured_payload": structured_payload,
                 }
             ],
         }
+
+    @staticmethod
+    def _document_authority_identity_field_and_value(
+        job: MonitoringAiJob,
+        input_payload: Mapping[str, Any],
+    ) -> Tuple[str, str]:
+        """R39轮（R39-01）：服务端自有输出身份字段与其已知值。
+
+        该字段（分析=input_sha256，复核/裁决=conflict_packet_sha256）
+        是服务端对冻结输入自行计算的摘要（R39-01修复前要求模型逐字
+        复制）；服务端在校验层重新计算比对，模型回显不提供额外完整性。
+        """
+
+        if job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS:
+            value = str(input_payload.get("document_authority_batch_sha256") or "")
+            if value:
+                return "input_sha256", value
+        elif job.task_type == MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW:
+            value = str(
+                input_payload.get("document_authority_conflict_packet_sha256") or ""
+            )
+            if value:
+                return "conflict_packet_sha256", value
+        return "", ""
+
+    @staticmethod
+    def _inject_document_authority_identity_fields(
+        job: MonitoringAiJob,
+        output: Mapping[str, Any],
+        input_payload: Mapping[str, Any],
+        normalization_notes: Optional[List[Dict[str, Any]]] = None,
+    ) -> Mapping[str, Any]:
+        """R39轮（R39-01）：把服务端自有身份字段注入每个候选的载荷副本。
+
+        只重写该身份字段（input_sha256 / conflict_packet_sha256）为服务
+        端已知值；候选的其余内容（评估、选择、证据）逐字保留。身份值
+        缺失（如输入载荷未带摘要）时不动输出，照旧由内容校验fail-closed。
+        调用方持有的原始输出对象不被就地改写。
+        """
+
+        identity_field, identity_value = (
+            MonitoringAiService._document_authority_identity_field_and_value(
+                job, input_payload
+            )
+        )
+        if not identity_field:
+            return output
+        candidates = output.get("candidates")
+        if not isinstance(candidates, list):
+            return output
+        normalized_candidates: List[Any] = []
+        changed = False
+        for item in candidates:
+            if (
+                isinstance(item, Mapping)
+                and isinstance(item.get("structured_payload"), Mapping)
+                and item["structured_payload"].get(identity_field) != identity_value
+            ):
+                structured = deepcopy(item["structured_payload"])
+                provider_value = str(structured.get(identity_field) or "")
+                structured[identity_field] = identity_value
+                item = {**item, "structured_payload": structured}
+                changed = True
+                if normalization_notes is not None:
+                    normalization_notes.append(
+                        {
+                            "normalization": (
+                                "document_authority_identity_field_server_injected"
+                            ),
+                            "field": identity_field,
+                            "provider_value": provider_value[:80],
+                        }
+                    )
+            normalized_candidates.append(item)
+        if not changed:
+            return output
+        return {**output, "candidates": normalized_candidates}
 
     @staticmethod
     def _merge_document_authority_candidates(

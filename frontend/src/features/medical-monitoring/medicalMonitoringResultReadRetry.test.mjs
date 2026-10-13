@@ -115,4 +115,46 @@ const needle = (text) => compact(text);
   );
 }
 
+// --- R39轮（R39-02）：两条读取失败路径都必须真实调度退避重试 ---
+// D位实测（report_D:37-41）：旅程页「暂不可用」等待90/35秒零自动重试，
+// 文案停在「首次自动重试即将开始」；手动「重新读取」5-8秒恢复。
+// ①投影校验失败分支（请求成功但kind=invalid）旧实现只设错误态不调度
+//   重试——承诺与行为脱节的主场景；
+// ②setup/history读取失败路径旧实现完全无重试调度。
+// 契约：两条路径共用同一退避调度，面板文案对两条路径都如实显示进度。
+{
+  check(
+    src.includes(needle(`const scheduleRetryAfterFailure = () => {`)),
+    "result read failures share one backoff scheduler",
+  );
+  check(
+    src.includes(needle(`failures += 1;\n          setResultLoading(false);\n          setResultError(projectMonitoringPublicResultError({ code: projected.code, message: projected.error }));\n          scheduleRetryAfterFailure();`)),
+    "projection-invalid failures enter the same auto-retry schedule",
+  );
+  check(
+    src.includes(needle(`setResultError(projectMonitoringPublicResultError(error));\n        scheduleRetryAfterFailure();`)),
+    "network failures enter the same auto-retry schedule",
+  );
+  check(
+    src.includes(needle(`if (code !== "run_data_not_ready") {\n        setupReadFailuresRef.current += 1;`)),
+    "setup/history real failures schedule auto-retry (business-ready state excluded)",
+  );
+  check(
+    src.includes(needle(`setRefreshEpoch((value) => value + 1);\n          }, monitoringRefreshBackoffMs(attempt));`)),
+    "setup retry re-enters the same read with the shared backoff",
+  );
+  check(
+    src.includes(needle(`const setupRetryPromiseText = `)),
+    "setup/history failure panel renders its own live retry progress copy",
+  );
+  check(
+    src.includes(needle(`setupRetryPromiseText}也可点击「重新读取」立即重试。`)),
+    "setup/history unavailable panel states the retry promise honestly",
+  );
+  check(
+    src.includes(needle(`setupReadFailuresRef.current = 0;\n    setSetupRetryAttempt(0);`)),
+    "explicit refresh resets the setup retry budget",
+  );
+}
+
 console.log(`medicalMonitoringResultReadRetry: ${passed} passed`);
