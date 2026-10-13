@@ -1039,7 +1039,13 @@ def test_product_workflow_retries_one_terminal_failure_once() -> None:
         input_revision_sha256="a" * 64,
     )
 
-    assert workflow._recover_failed_once((failed, complete)) is True
+    # R43轮（R43-02）：返回值从bool升级为「实际重排的作业列表」
+    # （truthy语义不变），回执据此向用户列明重排了哪些作业。
+    requeued = workflow._recover_failed_once((failed, complete))
+    # 桩retry_terminal只回status命名空间——按「恰好重排1个且已回queued」断言。
+    assert len(requeued) == 1
+    assert requeued[0].status == MonitoringAiJobStatus.QUEUED
+    assert requeued
     assert retries == [
         ("project", "failed-job", "a" * 64, workflow._AUTOMATIC_RECOVERY_LIMIT)
     ]
@@ -1052,7 +1058,7 @@ def test_product_workflow_retries_one_terminal_failure_once() -> None:
             status=MonitoringAiJobStatus.FAILED,
         )
     ))
-    assert workflow._recover_failed_once((failed, complete)) is False
+    assert workflow._recover_failed_once((failed, complete)) == []
     assert wakes == [True]
 
     # R28轮（R28-03/R28-04）：explicit=True（「重新核对研究文件」按钮）
@@ -1071,7 +1077,11 @@ def test_product_workflow_retries_one_terminal_failure_once() -> None:
     workflow.repository = SimpleNamespace(
         retry_terminal=explicit_fake_retry_terminal
     )
-    assert workflow._recover_failed_once((failed, complete), explicit=True) is True
+    explicit_requeued = workflow._recover_failed_once(
+        (failed, complete), explicit=True
+    )
+    assert len(explicit_requeued) == 1
+    assert explicit_requeued[0].status == MonitoringAiJobStatus.QUEUED
     assert explicit_retries == [None]
     assert wakes == [True, True]
 
@@ -1141,7 +1151,9 @@ def test_recover_failed_once_requeues_only_within_automatic_budget(
     for _ in range(4):
         job = resting_failed_job()
         assert job.failure_code == "provider_runtime_error"
-        outcomes.append({"recovered": workflow._recover_failed_once((job,))})
+        outcomes.append(
+            {"recovered": bool(workflow._recover_failed_once((job,)))}
+        )
     assert outcomes == [
         {"recovered": True},
         {"recovered": True},
@@ -1223,10 +1235,10 @@ def test_reupload_requeues_terminal_failed_jobs_for_full_recheck(
     for round_index in range(3):
         drain_to_resting_failure(f"reupload-auto-{round_index}")
         job_pair = tuple(repository.list_jobs(project_id))
-        assert workflow._recover_failed_once(job_pair) is True
+        assert workflow._recover_failed_once(job_pair)
     drain_to_resting_failure("reupload-final")
     job_pair = tuple(repository.list_jobs(project_id))
-    assert workflow._recover_failed_once(job_pair) is False
+    assert workflow._recover_failed_once(job_pair) == []
     assert {job.status for job in job_pair} == {MonitoringAiJobStatus.FAILED}
 
     # 用户显式动作：重新上传同组文件——终态失败作业必须重新入队。

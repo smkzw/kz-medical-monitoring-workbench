@@ -280,6 +280,9 @@ class MonitoringDocumentAuthorityWorkflow:
             if shared_runtime:
                 result["shared_runtime_identity"] = True
             return result
+        # R43轮（R43-02）：显式重试在四个阶段都带受理回执；轮询路径
+        # （explicit_retry=False）响应不含回执键，契约不变。
+        analysis_receipt: dict[str, Any] = {}
         recovered = (
             self._recover_failed_once(
                 (primary_job, verifier_job), explicit=True
@@ -287,15 +290,24 @@ class MonitoringDocumentAuthorityWorkflow:
             if explicit_retry
             else self._recover_failed_once((primary_job, verifier_job))
         )
+        if explicit_retry:
+            analysis_receipt = self._explicit_retry_receipt(
+                (primary_job, verifier_job), list(recovered)
+            )
         if recovered:
-            return {
+            result = {
                 "state": "analyzing",
                 "authority_status": "not_promoted",
                 "batch_id": batch_id,
             }
+            if analysis_receipt:
+                result["explicit_retry_receipt"] = analysis_receipt
+            return result
         pending = self._pending_state((primary_job, verifier_job), "analyzing")
         if pending is not None:
             result = {**pending, "batch_id": batch_id}
+            if analysis_receipt:
+                result["explicit_retry_receipt"] = analysis_receipt
             if shared_runtime:
                 result["shared_runtime_identity"] = True
             return result
@@ -433,18 +445,38 @@ class MonitoringDocumentAuthorityWorkflow:
             )
             self.worker_wake()
             return {"state": "reviewing", "batch_id": batch_id}
-        if self._recover_failed_once((primary_review, verifier_review)):
-            return {
+        # R43轮（R43-02）：review阶段的显式重试此前连explicit=True都不传
+        # （预算约束住了用户显式动作），也不带回执。
+        review_receipt: dict[str, Any] = {}
+        review_requeued = (
+            self._recover_failed_once(
+                (primary_review, verifier_review), explicit=True
+            )
+            if explicit_retry
+            else self._recover_failed_once((primary_review, verifier_review))
+        )
+        if explicit_retry:
+            review_receipt = self._explicit_retry_receipt(
+                (primary_review, verifier_review), list(review_requeued)
+            )
+        if review_requeued:
+            result = {
                 "state": "reviewing",
                 "authority_status": "not_promoted",
                 "batch_id": batch_id,
             }
+            if review_receipt:
+                result["explicit_retry_receipt"] = review_receipt
+            return result
         pending = self._pending_state(
             (primary_review, verifier_review),
             "reviewing",
         )
         if pending is not None:
-            return {**pending, "batch_id": batch_id}
+            result = {**pending, "batch_id": batch_id}
+            if review_receipt:
+                result["explicit_retry_receipt"] = review_receipt
+            return result
         review_resolution = resolve_document_authority_from_jobs(
             self.repository,
             project_id=project_id,
@@ -499,18 +531,41 @@ class MonitoringDocumentAuthorityWorkflow:
             )
             self.worker_wake()
             return {"state": "adjudicating", "batch_id": batch_id}
-        if self._recover_failed_once((primary_adjudication, verifier_adjudication)):
-            return {
+        # R43轮（R43-02）：adjudication/critique阶段同review——显式重试
+        # 传explicit并携带受理回执。
+        adjudication_receipt: dict[str, Any] = {}
+        adjudication_requeued = (
+            self._recover_failed_once(
+                (primary_adjudication, verifier_adjudication), explicit=True
+            )
+            if explicit_retry
+            else self._recover_failed_once(
+                (primary_adjudication, verifier_adjudication)
+            )
+        )
+        if explicit_retry:
+            adjudication_receipt = self._explicit_retry_receipt(
+                (primary_adjudication, verifier_adjudication),
+                list(adjudication_requeued),
+            )
+        if adjudication_requeued:
+            result = {
                 "state": "adjudicating",
                 "authority_status": "not_promoted",
                 "batch_id": batch_id,
             }
+            if adjudication_receipt:
+                result["explicit_retry_receipt"] = adjudication_receipt
+            return result
         pending = self._pending_state(
             (primary_adjudication, verifier_adjudication),
             "adjudicating",
         )
         if pending is not None:
-            return {**pending, "batch_id": batch_id}
+            result = {**pending, "batch_id": batch_id}
+            if adjudication_receipt:
+                result["explicit_retry_receipt"] = adjudication_receipt
+            return result
         adjudication_resolution = resolve_document_authority_from_jobs(
             self.repository,
             project_id=project_id,
@@ -571,17 +626,35 @@ class MonitoringDocumentAuthorityWorkflow:
             )
             self.worker_wake()
             return {"state": "cross_checking", "batch_id": batch_id}
-        if self._recover_failed_once((primary_critique, verifier_critique)):
-            return {
+        critique_receipt: dict[str, Any] = {}
+        critique_requeued = (
+            self._recover_failed_once(
+                (primary_critique, verifier_critique), explicit=True
+            )
+            if explicit_retry
+            else self._recover_failed_once((primary_critique, verifier_critique))
+        )
+        if explicit_retry:
+            critique_receipt = self._explicit_retry_receipt(
+                (primary_critique, verifier_critique), list(critique_requeued)
+            )
+        if critique_requeued:
+            result = {
                 "state": "cross_checking",
                 "authority_status": "not_promoted",
                 "batch_id": batch_id,
             }
+            if critique_receipt:
+                result["explicit_retry_receipt"] = critique_receipt
+            return result
         pending = self._pending_state(
             (primary_critique, verifier_critique), "cross_checking"
         )
         if pending is not None:
-            return {**pending, "batch_id": batch_id}
+            result = {**pending, "batch_id": batch_id}
+            if critique_receipt:
+                result["explicit_retry_receipt"] = critique_receipt
+            return result
         return promote_document_authority_from_jobs(
             self.repository,
             project_id=project_id,
@@ -1274,7 +1347,13 @@ class MonitoringDocumentAuthorityWorkflow:
     def _is_infra_failure(cls, job: Any) -> bool:
         return str(getattr(job, "failure_code", "") or "") in cls._INFRA_FAILURE_CODES
 
-    def _recover_failed_once(self, jobs: tuple[Any, Any], *, explicit: bool = False) -> bool:
+    def _recover_failed_once(self, jobs: tuple[Any, Any], *, explicit: bool = False) -> list[Any]:
+        """R43轮（R43-02）：返回值从bool改为「实际重排的作业列表」。
+
+        布尔值只够驱动状态机，不够支撑显式重试的受理回执——用户点了
+        「重新核对研究文件」必须能看到哪些作业被重排。真值语义不变
+        （空列表=无重排），轮询路径调用方无需改动。
+        """
         retryable = []
         for job in jobs:
             if job.status not in {
@@ -1290,7 +1369,7 @@ class MonitoringDocumentAuthorityWorkflow:
             # 重新核对仍瞬间同409）。
             if self._is_infra_failure(job) or job.max_attempts <= 2:
                 retryable.append(job)
-        requeued = False
+        requeued: list[Any] = []
         for job in retryable:
             try:
                 retried = self.repository.retry_terminal(
@@ -1314,10 +1393,59 @@ class MonitoringDocumentAuthorityWorkflow:
                 MonitoringAiJobStatus.BLOCKED,
                 MonitoringAiJobStatus.STALE_INPUT,
             }:
-                requeued = True
+                requeued.append(retried)
         if requeued:
             self.worker_wake()
         return requeued
+
+    def _explicit_retry_receipt(
+        self,
+        jobs: tuple[Any, ...],
+        requeued_jobs: list[Any],
+    ) -> dict[str, Any]:
+        """R43轮（R43-02）：显式重核对的受理回执，随advance响应下发。
+
+        R43B实测：核对作业零执行滞留（queued）期间两次点击「重新核对研究
+        文件」，前后 [role=status] 文本逐字不变、最早入队时间不重置、等待
+        计数继续累加——按钮此前对queued作业是完全无操作（_recover_failed_once
+        只处理终态失败），用户无法区分已受理/静默失败/按钮无效。现在：
+        ①仍在排队的作业重置dwell基线真实重新计时（与显式重试经
+        retry_terminal的语义一致）；②回执列明「重排了哪些、重新计时了哪些」
+        与受理时刻，前端据此重置等待计数并回显确认；③两者皆空（作业在
+        执行中）时回执如实说明，不再静默。
+        """
+
+        if not jobs:
+            return {}
+        keyed_by_id = {str(job.job_id): str(job.business_key) for job in jobs}
+        requeued_ids = {str(job.job_id) for job in requeued_jobs}
+        queued_ids = [
+            str(job.job_id)
+            for job in jobs
+            if job.status == MonitoringAiJobStatus.QUEUED
+            and not job.contract_retirement_code
+            and str(job.job_id) not in requeued_ids
+        ]
+        dwell_reset_ids: tuple[str, ...] = ()
+        if queued_ids:
+            dwell_reset_ids = self.repository.reset_queued_jobs_dwell(
+                str(jobs[0].project_id), queued_ids
+            )
+            if dwell_reset_ids:
+                self.worker_wake()
+        return {
+            "accepted_at": datetime.now(timezone.utc).isoformat(),
+            "requeued_jobs": [
+                keyed_by_id[str(job.job_id)]
+                for job in requeued_jobs
+                if str(job.job_id) in keyed_by_id
+            ],
+            "dwell_reset_jobs": [
+                keyed_by_id[job_id]
+                for job_id in dwell_reset_ids
+                if job_id in keyed_by_id
+            ],
+        }
 
 
 __all__ = ["MonitoringDocumentAuthorityWorkflow"]

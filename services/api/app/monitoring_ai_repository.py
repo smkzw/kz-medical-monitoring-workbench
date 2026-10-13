@@ -811,6 +811,11 @@ class MonitoringAiRepository:
         run without any model — so a worker can never claim and fail the other
         cohort's jobs. Without identity arguments the historical unfiltered
         claim is preserved.
+
+        R43轮（R43-01）：同一身份内交互式研究文件核对作业
+        （document_authority_analysis/review，数据接入向导的用户阻塞闸门）
+        优先于批量分片（字段映射等）被认领——批量积压不得把交互闸门顶到
+        dwell收割之后。见认领排序处的完整证据注释。
         """
 
         owner = owner.strip()
@@ -858,8 +863,22 @@ class MonitoringAiRepository:
                     DETERMINISTIC_METADATA_PROVIDER,
                     DETERMINISTIC_METADATA_MODEL,
                 ))
-            # The ORDER BY lease-count subquery placeholders follow the
-            # optional identity clause, so its parameters must come last.
+            # The ORDER BY placeholders follow the optional identity clause
+            # in SQL text order: the R43-01 task-type priority CASE comes
+            # first, then the lease-count subquery.
+            # R43轮（R43-01）：研究文件核对（权威分析+冲突复核）是数据接入
+            # 向导的交互式卡点闸门——每批至多primary+verifier两个作业、单耗
+            # 时1-5分钟；盲核侧是与批量字段映射分片共享的单worker串行池。
+            # 纯created_at FIFO下，另一项目数小时前的70个映射分片积压即可
+            # 把刚入队的核对作业顶到数小时之后（R43A/R43B实测：核对作业
+            # 入队45-55分钟零认领、attempt_count=0，dwell收割后显式重试
+            # 依旧排同一队尾，全链阻断）。交互核对作业按任务类型插队认领：
+            # 批量分片吞吐顺序不变，仅让至多两个的用户阻塞作业先走；
+            # 在队计数、dwell视界与收割语义均不受本排序影响。
+            parameters.extend((
+                MonitoringAiTaskType.DOCUMENT_AUTHORITY_ANALYSIS.value,
+                MonitoringAiTaskType.DOCUMENT_AUTHORITY_REVIEW.value,
+            ))
             parameters.extend((
                 MonitoringAiJobStatus.RUNNING.value,
                 _iso(now),
@@ -882,7 +901,10 @@ class MonitoringAiRepository:
                       AND control.paused = 1
                 )
                 {identity_clause}
-                ORDER BY (
+                ORDER BY CASE
+                    WHEN candidate.task_type IN (?, ?) THEN 0 ELSE 1
+                END,
+                (
                     SELECT COUNT(*)
                     FROM monitoring_ai_jobs AS active
                     WHERE active.project_id = candidate.project_id
@@ -1166,6 +1188,51 @@ class MonitoringAiRepository:
                 tuple(parameters),
             ).fetchone()
         return str(row[0]) if row and row[0] else ""
+
+    def reset_queued_jobs_dwell(
+        self,
+        project_id: str,
+        job_ids: Iterable[str],
+    ) -> tuple[str, ...]:
+        """R43轮（R43-02）：显式重核对受理时重置queued作业的dwell基线。
+
+        「重新核对研究文件」此前只重排终态失败作业（retry_terminal）——
+        零执行的queued作业（R43-01的饥饿场景）点击后完全无操作、无回执，
+        用户无法区分重试已受理还是按钮无效。本方法给仍在排队的作业一个
+        真实动作：重置dwell_since重新计时（与retry_terminal的显式重试
+        语义一致），返回实际重置的job_id（只动queued行，running/终态行
+        原样跳过——不与认领/完成路径竞争）。
+        """
+
+        project_id = project_id.strip()
+        if not project_id:
+            raise ValueError("project is required")
+        ids = [str(job_id).strip() for job_id in job_ids if str(job_id).strip()]
+        if not ids:
+            return ()
+        now = _iso(self.clock())
+        reset: list[str] = []
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            for job_id in ids:
+                updated = connection.execute(
+                    """
+                    UPDATE monitoring_ai_jobs
+                    SET dwell_since = ?, updated_at = ?
+                    WHERE project_id = ? AND job_id = ? AND status = ?
+                    """,
+                    (
+                        now,
+                        now,
+                        project_id,
+                        job_id,
+                        MonitoringAiJobStatus.QUEUED.value,
+                    ),
+                )
+                if updated.rowcount == 1:
+                    reset.append(job_id)
+            connection.commit()
+        return tuple(reset)
 
     def heartbeat(self, project_id: str, job_id: str, owner: str) -> MonitoringAiJob:
         now = self.clock()

@@ -435,6 +435,101 @@ export const renders = {
       },
     },
   ),
+  // R43轮（R41-03收口）：文件已上传且识别、只剩内容差异确认——上传区
+  // 不得再宣称「还缺研究文件…唯一待办」（两套指令同屏矛盾）。
+  documentsContentDifferencePending: render(
+    readyWizardState(),
+    createAdmissionMappingConfirmState(),
+    null,
+    {
+      phase: "needs_user_input",
+      error: null,
+      payload: {
+        ready: false,
+        headline: "需要您核对文件内容",
+        guidance: "系统已列出当前项目信息与文件内容，请判断是否影响本次监查。",
+        files: ["研究方案V2.0.docx", "eCRF.pdf"],
+        roles: [
+          { role: "protocol", label: "当前研究方案", required_now: true, status: "current", status_text: "已识别" },
+          { role: "ecrf", label: "当前 eCRF", required_now: true, status: "current", status_text: "已识别" },
+        ],
+        content_confirmations: [{
+          role: "protocol",
+          source_entry_id: "source-1",
+          filename: "研究方案V2.0.docx",
+          summary: "文件中的研究编号与当前项目不一致。",
+          can_confirm: true,
+          acknowledged_check_codes: ["project_identity"],
+          checks: [{
+            label: "研究编号",
+            expected_value: "MG-K10-SAR-001",
+            observed_value: "MG-K10-SAR-01",
+            outcome: "mismatch",
+            overridable: true,
+            evidence_locators: ["封面"],
+          }],
+        }],
+      },
+    },
+  ),
+  // R43轮（R43-02）：显式重核对的受理回执——点击「重新核对研究文件」
+  // 后必须能看到系统受理了什么（受理时刻+重排/重新计时清单），不再
+  // 允许点击后零变化。
+  documentsRetryReceipt: render(
+    readyWizardState(),
+    createAdmissionMappingConfirmState(),
+    null,
+    {
+      phase: "analyzing",
+      error: null,
+      payload: {
+        ready: false,
+        state: "analyzing",
+        analysis_token: "mmbatch_retry",
+        headline: "系统仍在独立核对研究文件",
+        guidance: "当前无需逐项确认，请稍后查看结果。",
+        pending_job_count: 2,
+        pending_running_count: 0,
+        pending_queued_count: 2,
+        pending_since: "2026-10-13T21:31:11+00:00",
+        explicit_retry_receipt: {
+          accepted_at: new Date(Date.now() - 30 * 1000).toISOString(),
+          requeued_jobs: [],
+          dwell_reset_jobs: [
+            "document-authority-analysis:primary:v9:mmbatch_retry",
+            "document-authority-analysis:verifier:v9:mmbatch_retry",
+          ],
+        },
+        roles: [
+          { role: "protocol", label: "当前研究方案", required_now: true, status: "missing", status_text: "已上传，核对中" },
+          { role: "ecrf", label: "当前 eCRF", required_now: true, status: "missing", status_text: "已上传，核对中" },
+        ],
+      },
+    },
+  ),
+  // R43轮（R41-04收口）：接手项目时「需要重新识别」角色——同屏给出
+  // 过渡说明（成因+自动重核预期+立即刷新出口），不再让接手者在
+  // 「已就绪」与「校验失效」之间自行猜测。
+  documentsReidentification: render(
+    readyWizardState(),
+    createAdmissionMappingConfirmState(),
+    null,
+    {
+      phase: "analyzing",
+      error: null,
+      payload: {
+        ready: false,
+        state: "analyzing",
+        analysis_token: "mmbatch_reid",
+        headline: "系统正在按最新项目信息重新核对研究文件",
+        guidance: "核对完成前暂不能进入下一步。",
+        roles: [
+          { role: "protocol", label: "当前研究方案", required_now: true, status: "incomplete", status_text: "需要重新识别" },
+          { role: "ecrf", label: "当前 eCRF", required_now: true, status: "incomplete", status_text: "需要重新识别" },
+        ],
+      },
+    },
+  ),
   confirmDrafting: render(readyWizardState(), mappingFrom([
     { type: "load-ready", payload: candidatesPayload() },
     { type: "adopt-ready", payload: draftPayload },

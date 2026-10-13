@@ -295,6 +295,103 @@ def _cm_mh_consistency_note(
     return None
 
 
+# R43轮（R40-05）：MH→CM方向（有病史无对应用药）核对条件表——与上方
+# CM→MH方向（R29-07）对称的另一半。范围有意收窄到「替代治疗类」的
+# 一一对应关系（当前=甲状腺功能减退↔左甲状腺素及其常规品牌名）：
+# 甲状腺功能减退通常需要持续药物替代治疗，病史载明而用药全程缺席构成
+# 可核实的核实信号；高血压/糖尿病等慢病存在多种替代药物与生活方式
+# 控制路径，「病史无某一特定药」不构成核实信号，不制造发现（避免
+# 反向批量误报）。触发词不含「甲状腺」这类过宽别名（会命中甲状腺
+# 结节/甲状腺癌等无需左甲状腺素替代的情形）。
+_MH_CM_REPLACEMENT_THERAPY: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    # (病史触发词任一命中即视为该疾病, 用药侧可接受词任一命中即视为已覆盖)
+    (("甲状腺功能减退", "甲减"), ("左甲状腺素", "优甲乐", "雷替斯", "加衡", "甲状腺素")),
+)
+
+
+def _cm_subject_medication_text(
+    domains: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> dict[str, str]:
+    """R43轮（R40-05）：按受试者汇总CM域全部非管理列文本，供MH→CM
+    方向核对判定「用药侧是否已有对应治疗药物」。无CM行的受试者不入
+    字典（调用方以键存在性区分「无用药记录」与「有记录无对应药」）。"""
+
+    medication: dict[str, str] = {}
+    for table, rows in domains.items():
+        if not table.upper().startswith("CM"):
+            continue
+        for row in rows:
+            subject = _clean(row.get("SUBJID"))
+            if not subject or subject in _UK_TOKENS:
+                continue
+            pieces = [
+                _clean(value)
+                for key, value in row.items()
+                if key != "SUBJID" and _clean(value)
+            ]
+            if pieces:
+                medication[subject] = (
+                    medication.get(subject, "") + "；".join(pieces) + "；"
+                )
+    return medication
+
+
+def _mh_cm_missing_medication_note(
+    history_row_text: str,
+    medication_text: str,
+    has_medication_records: bool,
+) -> tuple[str, str, str] | None:
+    """R43轮（R40-05）：MH→CM方向一致性核对（与CM→MH方向对称）。
+
+    病史行文本载明替代治疗类疾病、而该受试者CM全文本无对应药物时，
+    返回 (医学依据注记, severity, 去重键)；一致或无法判定返回None
+    （不制造发现）。去重键取疾病组首个触发词（同一疾病的不同表述
+    ——如「甲状腺功能减退」/「甲减」——归并为同一去重键，逐受试者
+    只产出一条核实提示）。R43-D实测23003有甲减史但CM无左甲状腺素
+    未报，而反向24012（无甲减史却有用药）已报——两方向检查此前
+    不对称。
+    """
+
+    history = history_row_text or ""
+    if not history.strip():
+        return None
+    for triggers, medication_aliases in _MH_CM_REPLACEMENT_THERAPY:
+        trigger = next((t for t in triggers if t in history), "")
+        if not trigger:
+            continue
+        if any(
+            alias and alias in (medication_text or "")
+            for alias in medication_aliases
+        ):
+            return None
+        if has_medication_records:
+            basis = "该受试者合并用药（CM）记录未见对应治疗药物（如左甲状腺素等）"
+        else:
+            basis = "该受试者无任何合并用药（CM）记录"
+        note = (
+            f"病史与用药一致性待核实：本条病史记录载「{trigger}」，但{basis}。"
+            "该疾病通常需要持续药物替代治疗；系统按病史-用药对照提示核实，"
+            "非医学诊断——请核实用药是否漏登、已停用或另有未记录原因。"
+        )
+        return note, "medium", triggers[0]
+    return None
+
+
+def _mh_empty_term_note() -> tuple[str, str]:
+    """R43轮（R40-05）：既往病史记录缺诊断名称的数据质量发现。
+
+    R43-D实测24008的MH泳道存在仅显示「既往病史」而无诊断名的记录
+    （与合成数据植入的MH空术语违规形态一致），系统原样展示零提示。
+    空术语病史无法核对内容，至少应进入「待核实」类发现而非静默。
+    """
+
+    return (
+        "既往病史记录缺诊断名称：该条病史记录的术语列为空，病史内容无法"
+        "核对。请补齐诊断名称或核实原始记录（必要时向研究中心发Query）。",
+        "medium",
+    )
+
+
 def _is_roster_form_table(rows: Sequence[dict[str, Any]]) -> bool:
     """Generic roster/form-page exclusion.
 
@@ -1275,6 +1372,10 @@ class FactsPublicationAuthorityProvider:
         # R34轮（R29-07）：CM-MH一致性交叉核对数据源（按受试者汇总病史
         # 全文本），供下方CM行判定「合并用药适应症是否有病史记录」。
         cm_mh_history_by_subj = _cm_mh_subject_history_text(domains)
+        # R43轮（R40-05）：MH→CM方向核对数据源（按受试者汇总CM全文本）
+        # 与逐受试者去重集——此前只有CM→MH方向，两个方向检查不对称。
+        cm_medication_text_by_subj = _cm_subject_medication_text(domains)
+        mh_cm_emitted: set[tuple[str, str]] = set()
         # R35轮（R28-06）：AE-化验趋势矛盾交叉核对数据源（按受试者汇总
         # LB化验观测），供下方AE行判定「声明严重度与化验降幅是否矛盾」。
         ae_lab_observations_by_subj = _ae_lab_observations_by_subject(domains)
@@ -1414,6 +1515,33 @@ class FactsPublicationAuthorityProvider:
                     )
                     if consistency is not None:
                         cm_mh_note, cm_mh_severity_hint = consistency
+                elif domain == "mh":
+                    # R43轮（R40-05）：MH域此前零检查零发现——①空术语行
+                    # 静默展示（24008实测「既往病史」无诊断名零提示）；
+                    # ②病史→用药方向无人核对（23003有甲减史无左甲状腺素
+                    # 未报，反向24012已报，两方向不对称）。①空术语进
+                    # 「待核实」发现；②替代治疗类疾病（当前=甲减↔左甲状腺
+                    # 素）按受试者去重后提示核实。一致/无法判定不制造发现。
+                    row_history_text = "；".join(
+                        _clean(value)
+                        for key, value in row.items()
+                        if key != "SUBJID" and _clean(value)
+                    )
+                    if not _clean(term_value):
+                        cm_mh_note, cm_mh_severity_hint = _mh_empty_term_note()
+                    else:
+                        mh_cm = _mh_cm_missing_medication_note(
+                            row_history_text,
+                            cm_medication_text_by_subj.get(subj, ""),
+                            subj in cm_medication_text_by_subj,
+                        )
+                        if (
+                            mh_cm is not None
+                            and (subj, mh_cm[2]) not in mh_cm_emitted
+                        ):
+                            mh_cm_emitted.add((subj, mh_cm[2]))
+                            cm_mh_note = mh_cm[0]
+                            cm_mh_severity_hint = mh_cm[1]
                 _add_event(
                     table=table, index=index, subj=subj, subtype=subtype,
                     domain=domain, start_raw=start_raw, label=label,

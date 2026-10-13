@@ -1500,6 +1500,16 @@ function AppShell({
   const unavailableCount = workbenchInboxError ? "—" : null;
   const pendingApprovalCount = unavailableCount || decisionItems.filter((item) => item.item_type === "approval").length;
   const highRiskCount = unavailableCount || decisionItems.filter((item) => item.item_type === "risk" && ["critical", "high"].includes(item.priority)).length;
+  // R43轮（R40-04）：徽标（未读高风险事项数）与同屏「项目风险摘要」
+  // 卡（发现总数）双口径并列且无解释，读作数据对不上（R40-D实测被迫
+  // 对账半小时；消费一条未读后徽标11→10而摘要14不变，反证两口径）。
+  // 徽标补口径标注并同时显示发现总数，消除第一眼矛盾。
+  const severityCounts = hasActiveProject ? dashboard.risk_counts_by_severity || {} : {};
+  const criticalFindings = typeof severityCounts.critical === "number" ? severityCounts.critical : null;
+  const highFindings = typeof severityCounts.high === "number" ? severityCounts.high : null;
+  const highRiskCaliberNote = criticalFindings === null && highFindings === null
+    ? "口径：未读高风险事项数（处理即减）。项目风险摘要卡为发现总数口径，两者不同。"
+    : `口径：未读高风险事项数（处理即减）。「项目风险摘要」发现总数＝严重 ${criticalFindings ?? "—"} · 高 ${highFindings ?? "—"}。`;
   const handoffDecisionCount = unavailableCount || decisionItems.filter((item) => item.item_type === "handoff").length;
   return (
     <div className={`app ${activePage === "writing" ? "writing-active" : ""} ${activePage === "monitoringProduct" ? "monitoring-product-active" : ""}`}>
@@ -1637,7 +1647,13 @@ function AppShell({
           </div>
           <div className="top-actions">
             <Metric icon={Bell} label="未读决策" value={unavailableCount || decisionItems.length} tone="warning" />
-            <Metric icon={AlertTriangle} label="高风险开放" value={highRiskCount} tone="danger" />
+            <Metric
+              icon={AlertTriangle}
+              label="高风险开放（未读）"
+              value={highRiskCount}
+              tone="danger"
+              note={highRiskCaliberNote}
+            />
             <Metric icon={Sparkles} label="待交接" value={handoffDecisionCount} tone="info" />
             <Metric icon={FileCheck2} label="待审批" value={pendingApprovalCount} tone="success" />
             <button className="icon-button" aria-label="通知中心尚未开放" title="通知中心尚未开放" disabled>
@@ -1753,11 +1769,14 @@ function AppShell({
   );
 }
 
-function Metric({ icon: Icon, label, value, tone }) {
+function Metric({ icon: Icon, label, value, tone, note }) {
   return (
-    <div className={`metric ${tone}`}>
+    <div className={`metric ${tone}${note ? " metric--with-note" : ""}`} title={note || undefined}>
       <Icon size={17} />
-      <span>{label}</span>
+      <span>
+        {label}
+        {note ? <small className="metric-note">{note}</small> : null}
+      </span>
       <strong>{value}</strong>
     </div>
   );

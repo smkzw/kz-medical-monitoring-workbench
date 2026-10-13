@@ -698,3 +698,20 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 端口纪律：仅触碰8911/5178；8910/5177 lsof复核0监听未执行任何操作
 - 测试留痕：新增tests/test_mm_r42_mapping_bridge_convergence.py 3项（慢而真实排空的盲核队列不被收割/停滞队列带陈旧完成照旧收割/降级确认触发verifier事后补偿+补偿失败不回滚确认+非降级确认零补偿）；R42-02新增status零检索契约1项；r5 adapter新增概览投影确定性钉住1项；monitoring_ai_queue_dwell_timeout 5/5原契约不变；前端渲染/integration钉住断言随R42-04双通路与R40-02失败态单一权威口径同步更新（拒绝语义不变）。回归=repository+worker+doc_jobs+contracts 128 passed；mapping五族+R36+R42+dwell 154 passed/1 failed（migration_gate legacy_glm，本轮stash对照证实HEAD既有）；protocol_preparation 50 passed；r5 adapter+subject_flow+risk_bridge 95 passed/1 failed（subject_flow legacy packet pinned hash，本轮stash对照证实HEAD既有）；r7 router+data_admission 135 passed/1 failed（late_project_dispatchers 409 result_context_unavailable，与R39-R42留痕逐字同签名）；前端 node --test 97/97 + vite build 绿
 - R42-06说明：冻结读取链稳定性本轮线上实证——token 78af1e05两次读取字节相等（835221B×2、content_hash=d6707ea1…、74 medium+high行/方案符合性26/23003×3/24004×3），与测试者第二次读取口径一致；首渲染76/28/×4口径未能由任何现役发布载荷复现，未发现可修缺陷路径，投影确定性已加钉住测试；若复发请测试者附每次读取的content_hash
+
+## 2026-10-14 05:01 CST R43D 开考预置复验（只读复用常驻项目 MX循开考-CSU，零重复预置，未触 8910/5177）
+- 常驻复用语义第 25 次复验（第 6 个 build api-616662809274f9f0 上三条件首验）：三条件现场实测全过——mapping confirmed（draft monmapdraft_73abe5c6c9561a9e95eec2056991 v80）+ facts ready（10表/591行/3038值全核验）+ project/open current（canView/canEdit=true）；run-setup/options 200（snapshot_token 同值 snapshot:ef8692acfbab4d2a9846916f）、runs 50 条全 completed 零新增零启动（全程 GET 零 POST）。
+- 环境现态：build api-616662809274f9f0（R42修复员 04:32 CST 标准重启后现行进程，Python pid 59573 / node pid 59764 监听 [::1]:5178），runtime-readiness ready:true，前后端 build 配对一致（frontendBuildId=web-2dc16940535b5f3e）；8910/5177 lsof 复核 0 监听仅只读未触碰。
+- R5D marker 未复发：常驻项目 workspace launch_registry.sqlite3 只读直查 marker=v5、integrity ok（size 487424B/mtime 10-14 00:45:51 CST，本轮窗口前 R42 轮内他位写入，如实并录）。
+- ✅ R38D study-documents 回归的正向修复状态在第 6 个 build 保持：ready=true、protocol/ecrf 均 current/已识别；本员零修复零 POST 仅只读实测。
+- independent_ai=cms-router/glm-5.3-flash（沿 10-13 08:49 降级配置，本轮零 AI 作业零调用）；AI 台账 46 条全终态零新增。详见 R5_SEEDED_PROJECT.md R43D 节。
+
+## 2026-10-14 07:25 CST R43修复员标准重启（R43清单修复面：services/api/app/{monitoring_ai_repository,monitoring_document_authority_workflow}.py + packages/medical_monitoring/{api/r7_product/mapping_candidate_routes.py,projections/facts_publication.py} + 前端 App.jsx/AdmissionWizard/ProtocolPreparationPanel.jsx/styles.css + render fixture/pin + 新增tests/test_mm_r43_fixes.py）：
+- API 重启：lsof -ti:8911 kill → 标准命令拉起（pid 90569 于 07:22 CST 启动）
+- vite 重启：lsof -ti:5178 kill → 标准命令拉起（pid 90633/90628）
+- 自检1 runtime-readiness：curl http://127.0.0.1:8911/api/runtime-readiness → ready:true，backend_build_id=api-31cbdf421a25007a（本轮改动新指纹，较R42的api-616662809274f9f0已更新）；independent_ai=cms-router/glm-5.3-flash ready:true
+- 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
+- 自检3 build id 配对：runtime-build.json expectedBackendBuildId=api-31cbdf421a25007a == 8911 backend_build_id → 一致；frontendBuildId=web-f601e8914442d487（R43前端改动面新指纹）
+- 端口纪律：仅触碰8911/5178；8910/5177 lsof复核0监听未执行任何操作
+- R43-01现场注记：B位滞留核对作业（monai_51f2a26c，22:25:13显式重试后重新排队）在本轮重启前的旧代码面（纯FIFO）于23:10:26 UTC被dwell收割为queue_dwell_timeout（retryable=1，attempt_count=0从未执行）——与零执行死锁叙事一致；新代码面下该作业等失效核对作业经「重新核对研究文件」显式重试后按任务类型优先认领（只读诊断，未以任何API推进）
+- 测试留痕：新增tests/test_mm_r43_fixes.py 10/10（R43-01认领优先级×2/R43-02 dwell重置+受理回执×3/R40-05 MH空术语+MH→CM方向+品牌名负例+过宽触发词负例+逐受试者去重×5）；_recover_failed_once返回契约bool→重排列表同步更新4处断言（truthy语义不变）；回归=repository+worker+R42收敛+mm_c3 dual 103 passed；doc_jobs+r40共享运行时+facts_publication五族 52 passed；r7 data_admission 39 passed；r5 adapter+subject_flow+risk_bridge+facts五族 68 passed/1 failed（subject_flow legacy packet pinned hash，stash对照HEAD既有，与R41/R42留痕同签名）；mm_c3 bridge/cohort/confirmation/document_evidence/facts+digest 147 passed；protocol_preparation+R38-03+R42 54 passed；mapping执行策略族 58 passed；定向sweep（repository/worker/document_authority/facts_publication）267 passed；r7 router 101 passed/1 failed（late_project_dispatchers 409 result_context_unavailable，stash对照HEAD既有与R39-R43留痕逐字同签名）；前端 node --test 97/97（新增R43六项契约：差异确认挂起不宣称缺文件/主按钮指向差异确认卡/受理回执可见且不裸奔作业身份/重新计时口径/重新识别过渡说明）+ vite build 绿

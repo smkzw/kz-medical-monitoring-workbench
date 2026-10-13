@@ -1358,6 +1358,13 @@ def register_mapping_candidate_routes(
                     )
                 if result.get("pending_since"):
                     response_payload["pending_since"] = str(result["pending_since"])
+                if result.get("explicit_retry_receipt"):
+                    # R43轮（R43-02）：显式重核对受理回执透传（重排/重新计时
+                    # 的作业与受理时刻）——前端据此回显确认并重置等待计数，
+                    # 杜绝「点击后零变化无法区分受理与无效」。
+                    response_payload["explicit_retry_receipt"] = dict(
+                        result["explicit_retry_receipt"]
+                    )
                 if result.get("shared_runtime_identity"):
                     # R40轮（R40-01）：运维同绑定的知情降级在轮询响应中
                     # 持续如实披露。

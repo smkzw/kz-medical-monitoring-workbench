@@ -259,6 +259,46 @@ for (const internal of ["project_identity", "requires_confirmation", "mismatch",
   check(!renders.documentsContentDifference.includes(internal), `content decision hides internal value: ${internal}`);
 }
 
+// R43轮（R41-03收口）：文件已上传且识别、只剩内容差异确认——上传区
+// 不再宣称「还缺研究文件…唯一待办」，主按钮如实指向差异确认卡。
+check(
+  !renders.documentsContentDifferencePending.includes("还缺研究文件"),
+  "pending content confirmation never claims files are missing",
+);
+check(
+  renders.documentsContentDifferencePending.includes("当前唯一待办是完成上方「内容差异」的")
+    && renders.documentsContentDifferencePending.includes("无需重复上传"),
+  "pending content confirmation names the actual only to-do",
+);
+check(
+  renders.documentsContentDifferencePending.includes("请先完成上方内容差异确认"),
+  "primary button points at the content confirmation while it is pending",
+);
+
+// R43轮（R43-02）：显式重核对受理回执可见——受理时刻+重新计时清单。
+check(
+  renders.documentsRetryReceipt.includes("受理重新核对")
+    && renders.documentsRetryReceipt.includes("已重新计时"),
+  "explicit retry renders an acceptance receipt with re-timed jobs",
+);
+check(
+  renders.documentsRetryReceipt.includes("等待自受理时刻重新计算"),
+  "receipt states the wait counter restarts from acceptance",
+);
+check(
+  !renders.documentsRetryReceipt.includes("monai_")
+    && !renders.documentsRetryReceipt.includes("mmbatch_retry"),
+  "receipt shows counts in plain Chinese, not raw job identities",
+);
+
+// R43轮（R41-04收口）：「需要重新识别」同屏过渡说明——成因、自动重核
+// 预期与立即刷新出口，接手者不再在「已就绪/校验失效」间猜测。
+check(
+  renders.documentsReidentification.includes("需要重新识别」＝项目登记信息在这些文件登记后发生过变更")
+    && renders.documentsReidentification.includes("重新核对研究文件"),
+  "re-identification state explains cause and the immediate refresh path",
+);
+
 // Confirm step: plain summary leads, engineering field list stays collapsed.
 check(
   renders.confirm.includes("系统已自动识别 2 个字段，其中 1 个需要您确认"),

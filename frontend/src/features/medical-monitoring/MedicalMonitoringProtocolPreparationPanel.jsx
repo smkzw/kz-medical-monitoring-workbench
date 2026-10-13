@@ -1138,10 +1138,17 @@ function MedicalMonitoringProtocolPreparationPanelForProject({
             <section className="monitoring-protocol-prep-summary">
               <div>
                 <span>准备进度</span>
+                {/* R43轮（R41-04收口）：准备状态核对失败（如登记信息在文件
+                    登记后变更使内容一致性校验失效）时，同屏「方案原文已就绪，
+                    可一键准备」与上方失效警示直接矛盾（R43-D实测同屏，接手者
+                    无法判断该人工重做还是等系统自愈）。核对未完成时不宣称
+                    就绪，结论以失败原因为准，准备入口同步停用。 */}
                 <strong>
-                  {progress.submitted
-                    ? `${progress.completed}/${progress.total} 个主题已完成`
-                    : "方案原文已就绪，可一键准备"}
+                  {error
+                    ? "准备状态核对未完成——结论以本卡上方原因为准"
+                    : progress.submitted
+                      ? `${progress.completed}/${progress.total} 个主题已完成`
+                      : "方案原文已就绪，可一键准备"}
                 </strong>
               </div>
               <div className="monitoring-protocol-prep-actions">
@@ -1157,7 +1164,8 @@ function MedicalMonitoringProtocolPreparationPanelForProject({
                 <button
                   className="primary-button"
                   type="button"
-                  disabled={!canStart}
+                  disabled={!canStart || Boolean(error)}
+                  title={error ? "准备状态核对未完成（见上方原因），按原因恢复后可准备" : undefined}
                   onClick={startAllTopics}
                 >
                   {starting ? (

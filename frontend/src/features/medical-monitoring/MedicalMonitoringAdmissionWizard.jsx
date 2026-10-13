@@ -132,7 +132,33 @@ function pendingJobsText(payload) {
   return `系统有 ${total} 项核对作业在途${breakdown}`;
 }
 
-function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onContentConfirm, onIdentityConfirm, confirmingEntries = {}, confirmedEntries = {}, stageElapsedMs = 0 }) {
+// R43轮（R43-02）：显式重核对受理回执的确认文案——点击「重新核对研究
+// 文件」后必须给出可见生效证据（受理时刻+系统实际做了什么），不再
+// 允许「点击后零变化」。重排=终态失败作业重新排队；重新计时=排队中
+// 作业重置滞留基线；两者皆空时如实说明作业在执行中。
+function retryReceiptText(receipt) {
+  if (!receipt || typeof receipt !== "object") return "";
+  const requeued = Array.isArray(receipt.requeued_jobs)
+    ? receipt.requeued_jobs.length
+    : 0;
+  const reset = Array.isArray(receipt.dwell_reset_jobs)
+    ? receipt.dwell_reset_jobs.length
+    : 0;
+  const acceptedMs = Date.parse(String(receipt.accepted_at || ""));
+  const acceptedAt = Number.isFinite(acceptedMs)
+    ? new Date(acceptedMs).toLocaleTimeString("zh-CN", { hour12: false })
+    : "";
+  const actions = [];
+  if (requeued > 0) actions.push(`${requeued} 项核对作业已重新排队`);
+  if (reset > 0) actions.push(`${reset} 项排队作业已重新计时`);
+  const head = acceptedAt ? `已于 ${acceptedAt} 受理重新核对` : "已受理重新核对";
+  if (!actions.length) {
+    return `${head}：核对作业正在执行中，无需重排；等待自受理时刻重新计算。`;
+  }
+  return `${head}：${actions.join("，")}；等待自受理时刻重新计算。`;
+}
+
+function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onContentConfirm, onIdentityConfirm, confirmingEntries = {}, confirmedEntries = {}, stageElapsedMs = 0, retryAcceptedAt = "" }) {
   const [choices, setChoices] = useState({});
   const [contentReasons, setContentReasons] = useState({});
   const [identityNote, setIdentityNote] = useState("");
@@ -154,6 +180,12 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
   // 重传）；「自动推进/无需重新上传」的等待文案与「还缺文件」的缺件
   // 口径在失败态一律不再渲染。
   const failed = state.phase === "failed";
+  // R43轮（R41-03收口）：内容差异确认挂起=文件已上传已识别、唯一待办
+  // 是逐项确认——上传区不得再宣称「还缺研究文件」。已确认的条目
+  // （confirmedEntries）不再算挂起。
+  const contentConfirmationsPending = (payload.content_confirmations || [])
+    .some((entry) => entry?.can_confirm
+      && !confirmedEntries?.[String(entry.source_entry_id)]);
   // R25轮（R25-03）：核对在单一阶段停留超过阈值（R25C实测归属确认后
   // 45分钟零状态变化、无超时无提示无重试入口）时如实提示停滞并给出
   // 重试入口。核对作业本身有租约超时与尝试上限，worker侧收割（R25-01）
@@ -169,8 +201,25 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
   // 观察到的无状态变化时长，阶段键变化重置）。
   const stageMinutesThisSession = Math.max(0, Math.floor(stageElapsedMs / 60000));
   const pendingSinceMs = Date.parse(String(payload.pending_since || "").trim());
-  const roundElapsedMinutes = Number.isFinite(pendingSinceMs)
-    ? Math.max(0, Math.floor((Date.now() - pendingSinceMs) / 60000))
+  // R43轮（R43-02）：显式重核对受理后等待自「受理时刻」重新计算——
+  // 此前按钮点击后最早入队时间不重置、等待计数继续累加、无任何受理
+  // 反馈，用户无法区分重试已受理、静默失败还是按钮无效（R43B实测
+  // 两次点击前后 [role=status] 逐字不变）。后端现随重试响应下发受理
+  // 回执（重排/重新计时的作业与受理时刻）；有回执时等待基线切到受理
+  // 时刻，并回显确认。最早入队时间作为事实仍照旧展示。
+  const retryReceipt = payload.explicit_retry_receipt || null;
+  const retryAcceptedMs = retryReceipt
+    ? Date.parse(String(retryReceipt.accepted_at || ""))
+    : NaN;
+  // 跨轮询持久的受理时刻（父组件状态）优先——回执只随重试响应到达一次。
+  const acceptedPropMs = Date.parse(String(retryAcceptedAt || ""));
+  const waitBaselineMs = Number.isFinite(acceptedPropMs)
+    ? acceptedPropMs
+    : Number.isFinite(retryAcceptedMs)
+      ? retryAcceptedMs
+      : pendingSinceMs;
+  const roundElapsedMinutes = Number.isFinite(waitBaselineMs)
+    ? Math.max(0, Math.floor((Date.now() - waitBaselineMs) / 60000))
     : stageMinutesThisSession;
   const pendingJobCount = Number(payload.pending_job_count);
   const userChoices = Array.isArray(payload.user_choices) ? payload.user_choices : [];
@@ -230,6 +279,11 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
               : "核对作业可能仍在排队等待系统资源。"}
             长时间无进展时，可点击「重新核对研究文件」重试（该按钮会真实重排核对作业）。注意：重新上传完全相同的文件不会重新核对——系统会直接复用已有的核对结论；如需换文件重核，请更换新版本后上传。已上传的文件与您的确认不会被丢失。
           </span>
+          {retryReceipt ? (
+            <span role="status" style={{ fontWeight: 600 }}>
+              {retryReceiptText(retryReceipt)}
+            </span>
+          ) : null}
           <button type="button" className="monitoring-admission-secondary" onClick={onRetry}>
             重新核对研究文件
           </button>
@@ -247,6 +301,11 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
             : ""}
           。健康核对每个阶段通常在数分钟到20分钟内推进，同一阶段超过20分钟无变化会提示停滞；
           完成前无需任何操作，页面会自动更新核对结果。
+          {retryReceipt ? (
+            <span role="status" style={{ display: "block", marginTop: 4, fontWeight: 600 }}>
+              {retryReceiptText(retryReceipt)}
+            </span>
+          ) : null}
         </p>
       ) : null}
       <ul>
@@ -265,6 +324,21 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
           </li>
         ))}
       </ul>
+      {(payload.roles || []).some((item) => item.status === "incomplete") ? (
+        /* R43轮（R41-04收口）：接手项目时「需要重新识别」此前无任何
+           过渡说明——同屏别处却出现「已就绪」结论，且数分钟后状态自行
+           推进（R43-D实测3-7分钟），接手者无法判断要人工重做还是等系统。
+           这里如实说明成因（登记信息在文件登记后变更、历史核对结论失效）
+           与两条真实路径：向导推进链会按最新登记信息自动重核（通常几分钟
+           内更新），或点「重新核对研究文件」立即刷新；无需重新上传。 */
+        <p className="monitoring-admission-minor" role="status" style={{ margin: 0, fontSize: 12, color: "var(--monitoring-muted, #64727d)" }}>
+          「需要重新识别」＝项目登记信息在这些文件登记后发生过变更，此前的
+          核对结论已不能代表当前登记信息。系统会按最新登记信息重新核对
+          （通常几分钟内自动更新）；无需重新上传原文件，也可点击
+          「重新核对研究文件」立即刷新。重新核对完成前，其他界面的
+          「已就绪」结论暂不可用。
+        </p>
+      ) : null}
       {/* R39轮（R37-05）：四个文档状态条目此前只是状态行，但白底描边卡
           样式让测试者当作可点按钮（点击「研究方案」8秒无文件选择器）。
           此处显式声明这是状态清单，与真正的上传入口（下方「选择文件」
@@ -463,6 +537,11 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
               这是唯一待办」——两句话互相矛盾（R24-C实测一屏最多5种
               冲突引导）。处理中只陈述进行中事实；核对落定后才回到
               缺件待办口径。 */}
+          {/* R43轮（R41-03收口）：文件已上传且完成识别、只剩内容差异
+              确认时，不再同屏宣称「还缺研究文件……唯一待办是上传」
+              （R41A实测两套指令同屏，确认记录后缺件口径又滞留3-4分钟，
+              首次用户无法判断该确认现有文件还是重复上传）。待办口径
+              单一化：缺件才说缺件；差异确认挂起时如实指向确认卡。 */}
           {processing ? (
             <p style={{ margin: "0 0 6px", fontSize: 13, color: "var(--monitoring-muted, #6b7785)", fontWeight: 600 }} role="status">
               系统正在核对已上传的研究文件，请稍候——核对完成后此处会显示
@@ -476,6 +555,11 @@ function DocumentReadinessPanel({ state, onFiles, onRetry, onAdjudicate, onConte
               研究文件核对未完成：请点击下方「重新核对研究文件」就地重建核对；
               如需更换文件，可在下方重新上传新版本（重新上传完全相同的文件会
               直接复用既有结论，不会重新核对）。
+            </p>
+          ) : contentConfirmationsPending ? (
+            <p style={{ margin: "0 0 6px", fontSize: 13, color: "var(--monitoring-muted, #6b7785)", fontWeight: 600 }} role="status">
+              研究文件已上传并完成识别，当前唯一待办是完成上方「内容差异」的
+              逐项确认——无需重复上传；确认记录后系统会自动继续核对。
             </p>
           ) : (
             <p style={{ margin: "0 0 6px", fontSize: 13, color: "#b4480c", fontWeight: 600 }}>
@@ -1190,9 +1274,25 @@ export function MedicalMonitoringAdmissionWizardView({
   // 超过DOCUMENT_STAGE_STALL_MS时DocumentReadinessPanel给出停滞提示
   // 与重试入口（R25C实测归属确认后45分钟零状态变化无提示无重试）。
   const documentStageRef = useRef({ stage: "", since: 0 });
+  // R43轮（R43-02）：显式重核对的受理时刻跨轮询持久——回执只随重试响应
+  // 到达一次、下一次轮询会整体替换载荷，这里单独保存受理时刻（按批次
+  // 失效），等待与停滞计时自受理时刻重新计算，不再出现「重试后等待
+  // 计数继续从最早入队累加」的零反馈表象。
+  const [explicitRetryAccepted, setExplicitRetryAccepted] = useState({
+    batch: "",
+    at: "",
+  });
+  const documentBatchKey = String(
+    documentState?.payload?.batch_id
+      || documentState?.payload?.analysis_token
+      || "",
+  );
+  const retryAcceptedAt = explicitRetryAccepted.batch === documentBatchKey
+    ? explicitRetryAccepted.at
+    : "";
   const documentStageKey = String(
     documentState?.payload?.state || documentState?.phase || "",
-  );
+  ) + (retryAcceptedAt ? `|retry:${retryAcceptedAt}` : "");
   if (documentStageKey && documentStageRef.current.stage !== documentStageKey) {
     documentStageRef.current = { stage: documentStageKey, since: Date.now() };
   }
@@ -1239,10 +1339,28 @@ export function MedicalMonitoringAdmissionWizardView({
         // 的文件误述为「请先添加所需文件」——C位实测该文案与同屏裁决卡
         // （已上传方案却只剩缺失选项）互相矛盾，用户被指向重传。如实
         // 指向上方的裁决卡。
+        // R43轮（R41-03收口）：内容差异确认挂起且无角色裁决挂起时，主
+        // 按钮如实指向差异确认卡（R41A实测差异确认卡在上、按钮却指向
+        // 「文件角色确认」）；两者都挂起时先完成角色裁决（面板中裁决卡
+        // 在前）。
+        const payloadUserChoices = Array.isArray(documentState?.payload?.user_choices)
+          ? documentState.payload.user_choices
+          : [];
+        if (
+          (documentState?.payload?.content_confirmations || []).some(
+            (entry) => entry?.can_confirm,
+          )
+          && payloadUserChoices.length === 0
+        ) {
+          return {
+            key: "documents-content-confirm-required",
+            label: "请先完成上方内容差异确认",
+            disabled: true,
+          };
+        }
         if (
           documentPhase === "needs_user_input"
-          || (Array.isArray(documentState?.payload?.user_choices)
-            && documentState.payload.user_choices.length > 0)
+          || payloadUserChoices.length > 0
         ) {
           return {
             key: "documents-adjudication-required",
@@ -1491,6 +1609,7 @@ export function MedicalMonitoringAdmissionWizardView({
               confirmingEntries={confirmingEntries}
               confirmedEntries={confirmedEntries}
               stageElapsedMs={documentStageElapsedMs}
+              retryAcceptedAt={retryAcceptedAt}
             />
             {documentState?.payload?.ready ? (
               <MappingConfirmPanel
@@ -1823,6 +1942,14 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           payload,
           error: null,
         });
+        // R43轮（R41-03收口）：resolve的非promoted响应不携带ready/角色/
+        // 差异确认载荷（这些只随readiness快照下发）——确认记录后若只
+        // 停在resolve响应上，缺件口径与「请先完成…」主按钮会滞留到下
+        // 一次完整刷新（R41A实测滞留3-4分钟）。这里立即回读readiness，
+        // 让确认后的就绪状态在秒级呈现。
+        if (payload?.ready !== true) {
+          loadDocumentReadiness();
+        }
       }
     } catch (error) {
       const code = String(error?.detail?.code || error?.code || "");
@@ -1864,6 +1991,14 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           { explicitRetry: true },
         );
         if (documentRequestGeneration.current === generation) {
+          // R43轮（R43-02）：记录受理时刻——等待/停滞计时自受理起算，
+          // 跨后续轮询保持（回执载荷本身会被下一次轮询替换）。
+          if (payload?.explicit_retry_receipt?.accepted_at) {
+            setExplicitRetryAccepted({
+              batch: String(payload?.analysis_token || documentState.payload.analysis_token || ""),
+              at: String(payload.explicit_retry_receipt.accepted_at),
+            });
+          }
           setDocumentState({
             phase: documentPhaseFromPayload(payload),
             payload,

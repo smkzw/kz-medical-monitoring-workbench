@@ -327,6 +327,24 @@ button:disabled {
   font-size: 12px;
 }
 
+/* R43轮（R40-04）：徽标口径标注（如「高风险开放（未读）」+ 发现总数
+   对照）需要两行文本；带注释的徽标自适应高度，避免挤压。 */
+.metric.metric--with-note {
+  height: auto;
+  min-height: 44px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.metric .metric-note {
+  display: block;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--muted);
+  font-weight: 400;
+  margin-top: 1px;
+}
+
 .metric strong {
   font-size: 20px;
 }
