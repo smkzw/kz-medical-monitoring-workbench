@@ -19,6 +19,7 @@ from packages.medical_monitoring.admission.document_authority import (
     resolve_document_authority_project_identity,
 )
 
+from .monitoring_admission_stage_store import INFRA_FAILURE_CODES
 from .monitoring_ai_contracts import (
     MonitoringAiInputRevision,
     MonitoringAiJobStatus,
@@ -1319,19 +1320,10 @@ class MonitoringDocumentAuthorityWorkflow:
 
     # R11轮（R11-01）：基础设施/提供方类失败码——瞬时故障（代理503、
     # SSE中断、上游5xx）不是内容性判定，不得被指纹去重或重试预算固化为
-    # 终态结论；这类失败可自动重试。
-    _INFRA_FAILURE_CODES = frozenset({
-        "provider_runtime_error",
-        "provider_sse_error_event",
-        "provider_unavailable",
-        "provider_timeout",
-        "provider_rate_limited",
-        "provider_auth_error",
-        "provider_overloaded",
-        "ai_not_configured",
-        "network_error",
-        "proxy_error",
-    })
+    # 终态结论；这类失败可自动重试。状态机专项（02_DESIGN §5.1）：判据
+    # 上收为库层共享常量 INFRA_FAILURE_CODES（S6 create_or_get不缓存复用
+    # 失败态同用此集），此处别名保持原引用点不变。
+    _INFRA_FAILURE_CODES = INFRA_FAILURE_CODES
 
     # R27轮（R27-01）：infra类失败的自动重试预算。原实现「无限次自动
     # 重试」在上游持续限流（如glm-5.3-flash全credential 429冷却两小时）

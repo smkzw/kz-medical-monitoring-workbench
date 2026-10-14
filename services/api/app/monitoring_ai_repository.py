@@ -8,6 +8,16 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
+from .monitoring_admission_stage_store import (
+    STAGE_RECOGNITION,
+    STAGE_TABLES_DDL,
+    AdmissionStageStore,
+    EVENT_FAILURE_RECORDED,
+    EVENT_RECOVERY_ACTION,
+    EVENT_STATE_CHANGED,
+    failure_class_for,
+    recognition_attempt_id,
+)
 from .monitoring_ai_contracts import (
     MonitoringAiCandidate,
     MonitoringAiCandidateStatus,
@@ -337,6 +347,9 @@ class MonitoringAiRepository:
             queue_dwell_seconds_per_queued_job
         )
         self.clock = clock
+        # 状态机专项（02_DESIGN §2）：同库附加的阶段事件流/状态行存储；
+        # append/bump 接收外层事务 conn，与权威行同事务提交。
+        self.stage_store = AdmissionStageStore(self._connect, clock=clock)
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
@@ -533,6 +546,9 @@ class MonitoringAiRepository:
                 END;
                 """
             )
+            # 状态机专项（02_DESIGN §2）：入舱阶段事件流+阶段状态行，
+            # 纯附加表，权威schema零变更；DROP即完全回滚。
+            connection.executescript(STAGE_TABLES_DDL)
             attempt_columns = {
                 row["name"]
                 for row in connection.execute(
@@ -626,6 +642,43 @@ class MonitoringAiRepository:
             if result is None or result[0] != "ok":
                 raise RuntimeError("monitoring AI repository integrity check failed")
 
+    def _record_recognition_event(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        project_id: str,
+        business_key: str,
+        event_type: str,
+        from_state: str = "",
+        to_state: str = "",
+        reason_code: str = "",
+        actor: str = "system",
+        detail: Mapping[str, Any] | None = None,
+    ) -> None:
+        """识别链作业状态跨越→recognition阶段事件留痕（02_DESIGN §3.2）。
+
+        非识别链business_key（文档权威VLM等）不落recognition事件；
+        attempt_id自business_key前缀解析；与作业状态写同一事务（外层
+        conn，不自行提交）。detail只落摘要级计数，禁止作业身份/载荷。
+        """
+
+        attempt_id = recognition_attempt_id(business_key)
+        if not attempt_id:
+            return
+        self.stage_store.append_event(
+            connection,
+            project_id=str(project_id),
+            attempt_id=attempt_id,
+            stage=STAGE_RECOGNITION,
+            event_type=event_type,
+            from_state=from_state,
+            to_state=to_state,
+            reason_code=reason_code,
+            failure_class=failure_class_for(reason_code),
+            actor=actor,
+            detail=detail,
+        )
+
     def create_or_get(
         self,
         request: MonitoringAiJobCreate,
@@ -668,6 +721,16 @@ class MonitoringAiRepository:
                         _iso(now),
                         _iso(now),
                     ),
+                )
+                # 状态机专项（02_DESIGN §3.2）：cohort分片入队→事件留痕。
+                self._record_recognition_event(
+                    connection,
+                    project_id=request.project_id,
+                    business_key=request.business_key,
+                    event_type=EVENT_STATE_CHANGED,
+                    from_state="",
+                    to_state=MonitoringAiJobStatus.QUEUED.value,
+                    detail={"event": "recognition_shard_created"},
                 )
                 existing = connection.execute(
                     "SELECT * FROM monitoring_ai_jobs WHERE job_id = ?",
@@ -1142,6 +1205,16 @@ class MonitoringAiRepository:
                     cutoff,
                 ]
                 connection.execute("BEGIN IMMEDIATE")
+                # 状态机专项（02_DESIGN §3.2）：收割前先取命中行（同一
+                # IMMEDIATE事务内无竞态），收割后逐行补事件留痕。
+                reaped_rows = connection.execute(
+                    """
+                    SELECT project_id, business_key FROM monitoring_ai_jobs AS candidate
+                    WHERE
+                    """
+                    + " AND ".join(clauses),
+                    tuple(parameters),
+                ).fetchall()
                 updated = connection.execute(
                     """
                     UPDATE monitoring_ai_jobs AS candidate
@@ -1165,6 +1238,20 @@ class MonitoringAiRepository:
                         *parameters,
                     ),
                 )
+                for reaped in reaped_rows:
+                    # 状态机专项（02_DESIGN §3.2）：滞留收割→事件留痕，
+                    # 与收割同一事务（commit前追加）。queued侧无租约归属，
+                    # actor=system。
+                    self._record_recognition_event(
+                        connection,
+                        project_id=str(reaped["project_id"]),
+                        business_key=str(reaped["business_key"]),
+                        event_type=EVENT_FAILURE_RECORDED,
+                        from_state=MonitoringAiJobStatus.QUEUED.value,
+                        to_state=MonitoringAiJobStatus.FAILED.value,
+                        reason_code="queue_dwell_timeout",
+                        detail={"reaped_count": int(updated.rowcount)},
+                    )
                 connection.commit()
                 total_reaped += int(updated.rowcount)
         return total_reaped
@@ -2091,6 +2178,15 @@ class MonitoringAiRepository:
                 raise MonitoringAiStateConflictError(
                     "monitoring AI completion lost CAS"
                 )
+            # 状态机专项（02_DESIGN §3.2）：分片完成→事件留痕。
+            self._record_recognition_event(
+                connection,
+                project_id=job.project_id,
+                business_key=job.business_key,
+                event_type=EVENT_STATE_CHANGED,
+                from_state=MonitoringAiJobStatus.RUNNING.value,
+                to_state=MonitoringAiJobStatus.COMPLETED.value,
+            )
             connection.commit()
         return self.get(job.project_id, job.job_id)
 
@@ -2136,6 +2232,21 @@ class MonitoringAiRepository:
                 raise MonitoringAiStateConflictError(
                     "monitoring AI failure update lost CAS"
                 )
+            # 状态机专项（02_DESIGN §3.2）：分片失败→failure_recorded；
+            # 预算内可重试回落queued是state_changed，两者都带failure_code。
+            self._record_recognition_event(
+                connection,
+                project_id=job.project_id,
+                business_key=job.business_key,
+                event_type=(
+                    EVENT_FAILURE_RECORDED
+                    if next_status == MonitoringAiJobStatus.FAILED
+                    else EVENT_STATE_CHANGED
+                ),
+                from_state=MonitoringAiJobStatus.RUNNING.value,
+                to_state=next_status.value,
+                reason_code=failure_code,
+            )
         return self.get(job.project_id, job.job_id)
 
     def retire_unstarted_duplicate(
@@ -2211,7 +2322,8 @@ class MonitoringAiRepository:
             row = connection.execute(
                 """
                 SELECT status, input_revision_sha256, attempt_count, failure_code,
-                       contract_retirement_code, automatic_recovery_count
+                       contract_retirement_code, automatic_recovery_count,
+                       business_key
                 FROM monitoring_ai_jobs
                 WHERE project_id = ? AND job_id = ?
                 """,
@@ -2305,6 +2417,23 @@ class MonitoringAiRepository:
                 raise MonitoringAiStateConflictError(
                     "monitoring AI retry lost CAS"
                 )
+            # 状态机专项（02_DESIGN §3.2）：终态失败重排→recovery_action，
+            # 显式（actor=user，重置滞留基线）与自动预算（actor=system）
+            # 分别留痕。
+            self._record_recognition_event(
+                connection,
+                project_id=project_id,
+                business_key=str(row["business_key"]),
+                event_type=EVENT_RECOVERY_ACTION,
+                from_state=str(row["status"]),
+                to_state=(
+                    MonitoringAiJobStatus.COMPLETED.value
+                    if restore_completed
+                    else MonitoringAiJobStatus.QUEUED.value
+                ),
+                actor="user" if explicit_retry else "system",
+                detail={"automatic": automatic_recovery_limit is not None},
+            )
             if restore_completed:
                 connection.execute(
                     """
@@ -2366,6 +2495,16 @@ class MonitoringAiRepository:
                 raise MonitoringAiStateConflictError(
                     "monitoring AI stale-input update lost lease or CAS"
                 )
+            # 状态机专项（02_DESIGN §3.2）：输入过期终态→failure_recorded。
+            self._record_recognition_event(
+                connection,
+                project_id=job.project_id,
+                business_key=job.business_key,
+                event_type=EVENT_FAILURE_RECORDED,
+                from_state=MonitoringAiJobStatus.RUNNING.value,
+                to_state=MonitoringAiJobStatus.STALE_INPUT.value,
+                reason_code="stale_input_revision",
+            )
         return self.get(job.project_id, job.job_id)
 
     def mark_stale(
@@ -2407,6 +2546,18 @@ class MonitoringAiRepository:
                         _iso(self.clock()),
                         *job_ids,
                     ),
+                )
+                # 状态机专项（02_DESIGN §3.2）：输入过期→failure_recorded
+                # （stale_input是pipeline聚合口径中的失败终态）。
+                self._record_recognition_event(
+                    connection,
+                    project_id=project_id,
+                    business_key=business_key,
+                    event_type=EVENT_FAILURE_RECORDED,
+                    from_state="",
+                    to_state=MonitoringAiJobStatus.STALE_INPUT.value,
+                    reason_code="stale_input_revision",
+                    detail={"marked_stale_count": len(job_ids)},
                 )
                 connection.execute(
                     f"""
