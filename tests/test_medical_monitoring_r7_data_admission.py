@@ -813,6 +813,8 @@ def test_admission_registration_is_additive_and_r7_scoped(tmp_path: Path) -> Non
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft/field",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/mapping-draft/confirm",
         "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/profile",
+        # 状态机专项S7（02_DESIGN §5.4）：F5恢复的stage-state投影端点。
+        "/api/projects/{project_id}/modules/medical-monitoring/r7/data-admissions/{attempt_id}/stage-state",
     }
     assert all(
         path.startswith("/api/projects/{project_id}/modules/medical-monitoring/r7")

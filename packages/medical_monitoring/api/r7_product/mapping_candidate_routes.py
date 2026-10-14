@@ -7,14 +7,18 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Protocol
 
-from fastapi import APIRouter, File, Query, Request, UploadFile
+from fastapi import APIRouter, File, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from ...admission.mapping_confirmation import enrich_candidates
+from ...admission.admission_stage_view import AdmissionStageViewError
+from ...admission.mapping_pipeline import (
+    AdmissionMappingPipelineError,
+    RECOGNITION_INFLIGHT_STALL_SECONDS,
+)
 from ...admission.document_authority import DocumentAuthorityError
-from ...admission.mapping_pipeline import AdmissionMappingPipelineError
 from ...admission.pipeline import AdmissionPipelineError
 from ...runtime import project_backup as pb
 from .errors import _error_response, _run_entry_error_response
@@ -810,6 +814,155 @@ def _public_mapping_projection(
     if contains_forbidden_key(public):
         return _mapping_error("mapping_bridge_failed")
     return public
+
+
+def _assemble_stage_state(
+    *,
+    project_id: str,
+    attempt_id: str,
+    workspace_dir: Any,
+    pipeline: Any,
+    confirmation: Any,
+    build_stage_view: Any,
+    unresolved_question_counter: Any,
+    pace_estimator: Any,
+) -> dict[str, Any]:
+    """stage-state四阶段权威装配（02_DESIGN §5.4/§3.5）。
+
+    每阶段读各自权威：documents←document_readiness（A1/A3/A5投影）；
+    recognition←物化行（缺失回填，S2写点同源）；mapping_confirmation←
+    drafts权威行；facts←A4直查。轻量聚合，不取候选载荷。
+    """
+
+    documents_state = "not_started"
+    try:
+        document_payload = dict(
+            pipeline.document_readiness(
+                project_id=project_id,
+                attempt_id=attempt_id,
+                workspace_dir=workspace_dir,
+            )
+            or {}
+        )
+    except Exception:
+        document_payload = {}
+    if document_payload.get("ready"):
+        documents_state = "ready"
+    elif str(document_payload.get("state") or "") == "failed":
+        documents_state = "failed"
+    elif document_payload:
+        documents_state = "in_progress"
+
+    recognition_state = "not_started"
+    revision = 0
+    inflight = False
+    failed_shards = False
+    ai_repository = getattr(confirmation, "ai_repository", None)
+    if ai_repository is not None:
+        task_type = getattr(confirmation, "task_type", "") or getattr(
+            pipeline, "_task_type", ""
+        )
+        task_type = str(getattr(task_type, "value", task_type) or "")
+        jobs = list(
+            ai_repository.list_jobs(
+                project_id,
+                task_type=task_type,
+                business_key_prefix=f"listing-field-mapping:{attempt_id}:",
+            )
+        )
+        statuses = [
+            str(getattr(getattr(job, "status", ""), "value", getattr(job, "status", "")))
+            for job in jobs
+        ]
+        row_reader = getattr(confirmation, "_recognition_state_row", None)
+        row = None
+        if callable(row_reader):
+            row = row_reader(project_id=project_id, attempt_id=attempt_id)
+        if row is not None:
+            recognition_state = str(row["state"])
+            revision = int(row["revision"])
+        elif statuses:
+            from services.api.app.monitoring_admission_stage_store import (
+                aggregate_recognition_state,
+            )
+
+            recognition_state = aggregate_recognition_state(statuses)
+        failed_shards = any(
+            status in {"failed", "blocked", "stale_input", "cancelled"}
+            for status in statuses
+        )
+        completed = sum(status == "completed" for status in statuses)
+        pace = pace_estimator(jobs, total=len(statuses), completed=completed)
+        inflight = bool(
+            recognition_state == "generating"
+            and completed > 0
+            and pace is not None
+            and int(pace.get("last_completion_age_seconds") or 0)
+            > RECOGNITION_INFLIGHT_STALL_SECONDS
+        )
+
+    mapping_state = "no_draft"
+    blocked_group_count = 0
+    unresolved = 0
+    draft = None
+    mapping_repository = getattr(confirmation, "mapping_repository", None)
+    if mapping_repository is not None:
+        try:
+            draft = mapping_repository.find_draft_for_batch(project_id, attempt_id)
+        except Exception:
+            draft = None
+        if draft is not None:
+            status = getattr(getattr(draft, "status", ""), "value", getattr(draft, "status", ""))
+            mapping_state = "confirmed" if str(status) == "confirmed" else "draft_active"
+            if mapping_state == "draft_active":
+                try:
+                    fields = [
+                        field.model_dump(mode="json")
+                        if hasattr(field, "model_dump")
+                        else dict(field)
+                        for field in (draft.fields or ())
+                    ]
+                    unresolved = int(unresolved_question_counter(fields))
+                except Exception:
+                    unresolved = 0
+                try:
+                    quality = mapping_repository.semantic_quality(
+                        project_id, str(draft.draft_id)
+                    )
+                    payload = quality.as_payload()
+                    blocked_group_count = int(payload.get("global_blocker_count") or 0)
+                except Exception:
+                    blocked_group_count = 0
+
+    facts_state = "not_generated"
+    if confirmation is not None:
+        facts_reader = getattr(confirmation, "_facts_status", None)
+        if callable(facts_reader):
+            try:
+                facts_status = facts_reader(
+                    project_id=project_id,
+                    attempt_id=attempt_id,
+                    workspace_dir=workspace_dir,
+                )
+                facts_state = (
+                    "ready" if facts_status.get("facts_generated") else "not_generated"
+                )
+            except Exception:
+                facts_state = "not_generated"
+
+    return build_stage_view(
+        project_id=project_id,
+        attempt_id=attempt_id,
+        documents_state=documents_state,
+        recognition_state=recognition_state,
+        mapping_state=mapping_state,
+        facts_state=facts_state,
+        recognition_revision=revision,
+        inflight_adoption_available=inflight,
+        recognition_failed_shards=failed_shards,
+        blocked_group_count=blocked_group_count,
+        unresolved_question_count=unresolved,
+    )
 
 
 def _repo_error_code(exc: Exception) -> Optional[str]:
@@ -1686,6 +1839,79 @@ def register_mapping_candidate_routes(
             return _mapping_error(exc.code)
         except Exception:
             return _mapping_error("mapping_bridge_failed")
+
+    @router.get(
+        "/data-admissions/{attempt_id}/stage-state",
+    )
+    async def get_admission_stage_state(
+        project_id: str,
+        attempt_id: str,
+        request: Request,
+        response: Response,
+    ) -> Any:
+        """F5恢复=一次权威查询（02_DESIGN §5.4：stage-state投影端点）。
+
+        projection权限（READ_SOURCE_EVIDENCE，无写门）；返回四阶段
+        聚合视图供向导挂载恢复与轮询（If-None-Match: revision→304）。
+        """
+
+        canonical = context.resolve_project(project_id)
+        if isinstance(canonical, JSONResponse):
+            return canonical
+        auth = context.authorize(
+            request,
+            project_id=canonical,
+            action=context.monitoring_action.READ_SOURCE_EVIDENCE,
+        )
+        if isinstance(auth, JSONResponse):
+            return auth
+        validated_attempt = _validated_attempt_id(attempt_id)
+        if validated_attempt is None:
+            return _mapping_error("mapping_attempt_id_invalid")
+        pipeline = _pipeline_or_error()
+        if isinstance(pipeline, JSONResponse):
+            return pipeline
+        confirmation = context.admission_mapping_confirmation
+        workspace = context.workspace_dir(context.root, canonical)
+
+        def _assemble() -> dict[str, Any]:
+            from packages.medical_monitoring.admission.admission_stage_view import (
+                build_stage_view,
+            )
+            from packages.medical_monitoring.admission.mapping_confirmation import (
+                _unresolved_question_count,
+            )
+            from packages.medical_monitoring.admission.mapping_pipeline import (
+                _generation_pace,
+            )
+
+            return _assemble_stage_state(
+                project_id=canonical,
+                attempt_id=validated_attempt,
+                workspace_dir=workspace,
+                pipeline=pipeline,
+                confirmation=confirmation,
+                build_stage_view=build_stage_view,
+                unresolved_question_counter=_unresolved_question_count,
+                pace_estimator=_generation_pace,
+            )
+
+        try:
+            view = await run_in_threadpool(_assemble)
+        except AdmissionStageViewError:
+            return _mapping_error("mapping_bridge_failed")
+        except AdmissionMappingPipelineError as exc:
+            return _mapping_error(exc.code)
+        except Exception:
+            return _mapping_error("mapping_bridge_failed")
+        if response is not None:
+            etag = f'W/"{view.get("revision", 0)}"'
+            if request.headers.get("if-none-match") == etag:
+                from fastapi.responses import Response as FastResponse
+
+                return FastResponse(status_code=304, headers={"ETag": etag})
+            response.headers["ETag"] = etag
+        return {"project_id": canonical, **view}
 
     @router.post(
         "/data-admissions/{attempt_id}/mapping-candidates/retry-failed",

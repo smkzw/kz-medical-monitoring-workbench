@@ -229,6 +229,10 @@ export const MEDICAL_MONITORING_PRODUCT_PATHS = Object.freeze({
   dataAdmissionFacts: (projectId, attemptId) => (
     `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/facts`
   ),
+  // 状态机专项S7（02_DESIGN §5.4）：F5恢复=一次权威查询。
+  dataAdmissionStageState: (projectId, attemptId) => (
+    `${projectPath(projectId)}/data-admissions/${encodeSegment(attemptId, "attemptId")}/stage-state`
+  ),
   // Names used by the product layer; each delegates to the same path shape.
   runSetupOptions: (projectId, selector = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.setupOptions(projectId, selector),
   history: (projectId, options = {}) => MEDICAL_MONITORING_PRODUCT_PATHS.runs(projectId, options),
@@ -443,6 +447,15 @@ export function createMedicalMonitoringProductApi({
 
     getDataAdmissionDocumentReadiness(projectId, attemptId, { signal } = {}) {
       return get(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStudyDocuments(
+        requireId(projectId, "projectId"),
+        requireId(attemptId, "attemptId"),
+      ), { signal });
+    },
+
+    // 状态机专项S7（02_DESIGN §5.4）：F5恢复=一次权威查询。304由
+    // 调用方按空载荷处理（未变化）。
+    getDataAdmissionStageState(projectId, attemptId, { signal } = {}) {
+      return get(MEDICAL_MONITORING_PRODUCT_PATHS.dataAdmissionStageState(
         requireId(projectId, "projectId"),
         requireId(attemptId, "attemptId"),
       ), { signal });

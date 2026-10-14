@@ -211,3 +211,235 @@ def apply_single_source(
             candidates.append(item)
     projected["candidates"] = candidates
     return projected
+
+
+# §3.5动作键枚举（前端文案表只认key）。标注*者为设计枚举之外的最小
+# 扩展：no_draft/draft_active常态（无疑问/无阻断组）必须有可执行的
+# 常规动作键（§3.3变迁条件即采纳/确认），否则§5.3不变量在健康路径
+# 上必然500。
+STAGE_ACTION_KEYS = frozenset(
+    {
+        "upload_documents",
+        "retry_document_check",
+        "resolve_role_adjudication",
+        "confirm_identity",
+        "retry_recognition_failed",
+        "adopt_full",                # *常规全量采纳（no_draft常态）
+        "adopt_partial",
+        "adopt_inflight_degraded",
+        "answer_questions",
+        "resolve_blocked_groups",
+        "confirm_mapping",           # *常规确认（draft_active无疑问常态）
+        "confirm_mapping_degraded",
+        "generate_facts",
+        "retry_generate_facts",
+    }
+)
+
+# F5恢复的单向映射：current_stage→向导激活面板（02_DESIGN §5.4）。
+_STAGE_COMPLETION_STATES = {
+    "documents": {"ready"},
+    "recognition": {"candidates_ready"},
+    "mapping_confirmation": {"confirmed"},
+    "facts": {"ready"},
+}
+_STAGE_ORDER = ("documents", "recognition", "mapping_confirmation", "facts")
+
+
+def build_stage_view(
+    *,
+    project_id: str,
+    attempt_id: str,
+    documents_state: str,
+    recognition_state: str,
+    mapping_state: str,
+    facts_state: str,
+    recognition_revision: int = 0,
+    inflight_adoption_available: bool = False,
+    recognition_failed_shards: bool = False,
+    blocked_group_count: int = 0,
+    unresolved_question_count: int = 0,
+    facts_recent_failure: bool = False,
+) -> dict[str, Any]:
+    """跨阶段聚合出口（02_DESIGN §3.5）：stages/current_stage/blocking[]。
+
+    blocking[]不变量（§5.3根治点3）：**需要用户自救的形态**（failed/
+    needs_attention/未决疑问/阻断组/降级场景）必须携带≥1个
+    action_available=true的动作键，违反→500 fail-closed暴露缺陷而非
+    渲染死锁文案。等待态（in_progress/generating健康推进）如实给
+    action_available=false的等待条目——健康排队不是缺陷，不得误伤。
+    """
+
+    stages = {
+        "documents": str(documents_state or "not_started"),
+        "recognition": str(recognition_state or "not_started"),
+        "mapping_confirmation": str(mapping_state or "no_draft"),
+        "facts": str(facts_state or "not_generated"),
+    }
+    for stage, state in stages.items():
+        allowed = _STAGE_COMPLETION_STATES[stage] | {
+            "documents": {"not_started", "in_progress", "needs_user_input", "failed"},
+            "recognition": {"not_started", "generating", "needs_attention"},
+            "mapping_confirmation": {"no_draft", "draft_active"},
+            "facts": {"not_generated"},
+        }[stage]
+        if state not in allowed:
+            raise AdmissionStageViewError("mapping_bridge_failed")
+
+    blocking: list[dict[str, Any]] = []
+    if stages["documents"] != "ready":
+        blocking.append(_documents_blocking(stages["documents"]))
+    if stages["recognition"] != "candidates_ready":
+        blocking.append(
+            _recognition_blocking(
+                stages["recognition"],
+                inflight_adoption_available=inflight_adoption_available,
+                failed_shards=recognition_failed_shards,
+            )
+        )
+    if stages["mapping_confirmation"] != "confirmed":
+        blocking.append(
+            _mapping_blocking(
+                stages["mapping_confirmation"],
+                blocked_group_count=blocked_group_count,
+                unresolved_question_count=unresolved_question_count,
+                recognition_ready=(
+                    stages["recognition"] == "candidates_ready"
+                ),
+            )
+        )
+    if stages["facts"] != "ready":
+        # generate_facts仅在轮到facts（映射已确认）时可用——此前阶段
+        # 未完成时该动作不可执行，不得抢占primary_action_key。
+        blocking.append(
+            {
+                "stage": "facts",
+                "action_key": (
+                    "retry_generate_facts" if facts_recent_failure
+                    else "generate_facts"
+                ),
+                "action_available": (
+                    stages["mapping_confirmation"] == "confirmed"
+                ),
+            }
+        )
+
+    current_stage = "complete"
+    for stage in _STAGE_ORDER:
+        if stages[stage] not in _STAGE_COMPLETION_STATES[stage]:
+            current_stage = stage
+            break
+
+    # §5.3不变量：自救形态无可用动作键→fail-closed。自救形态=用户正
+    # 处于该阶段且状态本身要求用户动作（failed/needs_attention/
+    # needs_user_input/映射未确认）；健康等待态（in_progress/generating
+    # /尚轮到的阶段）不是缺陷，不误伤。
+    for entry in blocking:
+        state = stages[entry["stage"]]
+        escape_required = entry["stage"] == current_stage and (
+            state in {"failed", "needs_attention", "needs_user_input"}
+            or entry["stage"] == "mapping_confirmation"
+        )
+        if escape_required and not entry.get("action_available"):
+            raise AdmissionStageViewError("mapping_bridge_failed")
+    for entry in blocking:
+        if entry["action_key"] not in STAGE_ACTION_KEYS:
+            raise AdmissionStageViewError("mapping_bridge_failed")
+
+    actionable = [entry for entry in blocking if entry.get("action_available")]
+    primary_action_key = actionable[0]["action_key"] if actionable else ""
+    return {
+        "attempt_id": str(attempt_id),
+        "stages": stages,
+        "current_stage": current_stage,
+        "blocking": blocking,
+        "inflight_adoption_available": bool(inflight_adoption_available),
+        "primary_action_key": primary_action_key,
+        "revision": int(recognition_revision or 0),
+    }
+
+
+def _documents_blocking(state: str) -> dict[str, Any]:
+    if state == "failed":
+        return {
+            "stage": "documents",
+            "action_key": "retry_document_check",
+            "action_available": True,
+        }
+    if state == "needs_user_input":
+        # 角色/身份裁决挂起：两类入口都在文档面板（具体表单由
+        # study-documents载荷驱动），此处给可达键。
+        return {
+            "stage": "documents",
+            "action_key": "resolve_role_adjudication",
+            "action_available": True,
+        }
+    return {
+        "stage": "documents",
+        "action_key": "upload_documents",
+        "action_available": state == "not_started",
+    }
+
+
+def _recognition_blocking(
+    state: str,
+    *,
+    inflight_adoption_available: bool,
+    failed_shards: bool,
+) -> dict[str, Any]:
+    if state == "needs_attention":
+        return {
+            "stage": "recognition",
+            "action_key": "adopt_partial",
+            "action_available": True,
+        }
+    if state == "generating" and inflight_adoption_available:
+        return {
+            "stage": "recognition",
+            "action_key": "adopt_inflight_degraded",
+            "action_available": True,
+        }
+    if state == "generating" and failed_shards:
+        return {
+            "stage": "recognition",
+            "action_key": "retry_recognition_failed",
+            "action_available": True,
+        }
+    return {
+        "stage": "recognition",
+        "action_key": "retry_recognition_failed",
+        "action_available": False,
+    }
+
+
+def _mapping_blocking(
+    state: str,
+    *,
+    blocked_group_count: int,
+    unresolved_question_count: int,
+    recognition_ready: bool,
+) -> dict[str, Any]:
+    if blocked_group_count > 0:
+        return {
+            "stage": "mapping_confirmation",
+            "action_key": "resolve_blocked_groups",
+            "action_available": True,
+        }
+    if unresolved_question_count > 0:
+        return {
+            "stage": "mapping_confirmation",
+            "action_key": "answer_questions",
+            "action_available": True,
+        }
+    if state == "draft_active":
+        return {
+            "stage": "mapping_confirmation",
+            "action_key": "confirm_mapping",
+            "action_available": True,
+        }
+    # no_draft常态：识别尚未就绪时不可采纳（顺序未到），如实等待。
+    return {
+        "stage": "mapping_confirmation",
+        "action_key": "adopt_full",
+        "action_available": state == "no_draft" and recognition_ready,
+    }

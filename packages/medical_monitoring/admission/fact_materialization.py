@@ -9,7 +9,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
-from typing import Any, Mapping, Protocol
+from typing import Any, Callable, Mapping, Optional, Protocol
 
 from ..domain.execution import (
     ACCEPTANCE_CHAIN,
@@ -203,6 +203,11 @@ def _advance(store: Store, snapshot_id: str, target: SnapshotAcceptanceState) ->
 @dataclass(frozen=True)
 class FactMaterializationService:
     mapping_repository: ConfirmedMappingRepository
+    # 状态机专项S7（02_DESIGN §2.3/§3.4）：跨库best-effort状态回写——
+    # A4提交后维护stage_state.facts行+事件留痕（仅为stage-state端点
+    # 聚齐四行用；门与投影的facts判定永远直查A4）。签名
+    # (project_id, attempt_id, state, failure_code)，实现方自行吞错。
+    stage_recorder: Optional[Callable[..., None]] = None
 
     def _unverified_gap_pairs(
         self,
@@ -598,10 +603,30 @@ class FactMaterializationService:
                 "fact_set_ids": [item["fact_set_id"] for item in fact_set_manifests],
             }
             store.put_domain_object(FACT_MATERIALIZATION_KIND, attempt_id, summary)
+            if self.stage_recorder is not None:
+                try:
+                    self.stage_recorder(project_id, attempt_id, "ready", "")
+                except Exception:
+                    pass  # best-effort：留痕完整性<权威正确性（§2.3）
             return self._public(summary)
-        except FactMaterializationError:
+        except FactMaterializationError as exc:
+            if self.stage_recorder is not None:
+                try:
+                    self.stage_recorder(
+                        project_id, attempt_id, "not_generated", str(exc.code)
+                    )
+                except Exception:
+                    pass
             raise
         except Exception as exc:
+            if self.stage_recorder is not None:
+                try:
+                    self.stage_recorder(
+                        project_id, attempt_id, "not_generated",
+                        "facts_generation_failed",
+                    )
+                except Exception:
+                    pass
             raise FactMaterializationError("facts_generation_failed") from exc
         finally:
             store.close()

@@ -4329,8 +4329,52 @@ _r7_admission_mapping_confirmation = AdmissionMappingConfirmationService(
         lambda **kwargs: _r7_admission_fact_materializer.status(**kwargs)
     ),
 )
+def _record_facts_stage_state(
+    project_id: str, attempt_id: str, state: str, failure_code: str
+) -> None:
+    """状态机专项S7（02_DESIGN §2.3/§3.4）：facts跨库best-effort回写。
+
+    A4提交是权威；此函数只维护stage_state.facts行+事件留痕（同库
+    medical_monitoring_ai.sqlite3，独立事务）。任何故障静默吞掉——
+    门与投影的facts判定永远直查A4，此行只影响端点聚合展示。
+    """
+
+    try:
+        with monitoring_ai_repository._connect() as connection:
+            if state == "ready":
+                monitoring_ai_repository.stage_store.bump_stage(
+                    connection,
+                    project_id=project_id,
+                    attempt_id=attempt_id,
+                    stage="facts",
+                    state="ready",
+                )
+                monitoring_ai_repository.stage_store.append_event(
+                    connection,
+                    project_id=project_id,
+                    attempt_id=attempt_id,
+                    stage="facts",
+                    event_type="state_changed",
+                    to_state="ready",
+                )
+            elif str(failure_code or "").strip():
+                monitoring_ai_repository.stage_store.append_event(
+                    connection,
+                    project_id=project_id,
+                    attempt_id=attempt_id,
+                    stage="facts",
+                    event_type="failure_recorded",
+                    reason_code=str(failure_code),
+                    failure_class="content",
+                )
+            connection.commit()
+    except Exception:
+        pass
+
+
 _r7_admission_fact_materializer = FactMaterializationService(
     mapping_repository=monitoring_mapping_draft_repository,
+    stage_recorder=_record_facts_stage_state,
 )
 
 

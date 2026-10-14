@@ -2259,37 +2259,32 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     };
   }, [api, state.phase, state.attemptId, state.projectId]);
 
-  // R5冲刺（R1-12）：向导步骤位置记忆——进入第3步后写入，回退到第2步
-  // 清除；刷新/关标签重进时恢复到用户上次所在步骤，不再总是从第2步
-  // （数据摘要）重新开始。
-  useEffect(() => {
-    if (!state.attemptId) return undefined;
-    const key = `admission-step:${state.projectId}:${state.attemptId}`;
-    try {
-      if (state.stepIndex === 2 && state.phase !== "done") {
-        globalThis.localStorage?.setItem(key, "2");
-      } else if (state.stepIndex === 1) {
-        globalThis.localStorage?.removeItem(key);
-      }
-    } catch { /* storage unavailable — step just won't be remembered */ }
-    return undefined;
-  }, [state.attemptId, state.phase, state.projectId, state.stepIndex]);
-
+  // 状态机专项S7（02_DESIGN §5.4）：F5恢复=一次权威查询——C2
+  // localStorage步骤记忆（原:2262-2292两段useEffect）删除，恢复改为
+  // 挂载时读取stage-state：current_stage越过documents即恢复到第3步
+  // （映射面板），此后由各面板既有load-ready派生接管。本地步骤记忆
+  // 与服务端载荷失步（R9-02形态）自结构上消除。
   useEffect(() => {
     if (state.phase !== "ready" || state.stepIndex !== 1 || !state.attemptId) return undefined;
     let cancelled = false;
-    try {
-      const remembered = globalThis.localStorage?.getItem(
-        `admission-step:${state.projectId}:${state.attemptId}`,
-      );
-      if (remembered === "2" && !cancelled) {
-        dispatch({ type: "advance" });
-      }
-    } catch { /* ignore */ }
+    api.getDataAdmissionStageState(state.projectId, state.attemptId)
+      .then((payload) => {
+        if (cancelled) return;
+        const stage = String(payload?.current_stage || "");
+        if (
+          stage === "recognition"
+          || stage === "mapping_confirmation"
+          || stage === "facts"
+          || stage === "complete"
+        ) {
+          dispatch({ type: "advance" });
+        }
+      })
+      .catch(() => { /* 恢复失败=从第3步文档面板开始，权威可再查 */ });
     return () => {
       cancelled = true;
     };
-  }, [state.attemptId, state.phase, state.projectId, state.stepIndex]);
+  }, [api, state.attemptId, state.phase, state.projectId, state.stepIndex]);
 
   useEffect(() => {
     if (state.phase !== "ready" || state.stepIndex !== 2) return undefined;
@@ -2464,6 +2459,12 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         && Date.now() - confirmInFlight.current.startedAt < CONFIRM_STALE_MS
       )
     ) return;
+    if (confirmInFlight.current) {
+      // 状态机专项S7（02_DESIGN §6.3 C6）：删除「超时本地翻转语义」——
+      // 超时先重读权威投影（确认状态以服务端为准对账），再放行重试；
+      // 放行本身保留为纯UI防重入职责（请求代际计数不变）。
+      loadMappingCandidates();
+    }
     const generation = mappingRequestGeneration.current + 1;
     mappingRequestGeneration.current = generation;
     confirmInFlight.current = { generation, startedAt: Date.now() };
@@ -2505,7 +2506,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     } finally {
       if (confirmInFlight.current?.generation === generation) confirmInFlight.current = false;
     }
-  }, [api, mappingState, state.attemptId, state.projectId]);
+  }, [api, loadMappingCandidates, mappingState, state.attemptId, state.projectId]);
 
   const generateFacts = useCallback(async () => {
     if (!state.projectId || !state.attemptId || factsInFlight.current) return;
