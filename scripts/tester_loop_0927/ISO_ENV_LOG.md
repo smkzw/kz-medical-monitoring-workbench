@@ -723,3 +723,4 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - ✅ R38D study-documents 回归的正向修复状态在第 7 个 build 保持：ready=true、protocol/ecrf 均 current/已识别；本员零修复零 POST 仅只读实测。
 - independent_ai=cms-router/glm-5.3-flash（沿 10-13 08:49 降级配置，本轮零 AI 作业零调用）；AI 台账 46 条全终态零新增，queue enabled/in_flight=0；monai_51f2a26c（R43修复员现场注记的滞留作业）实测不在本项目 ai/jobs 台账，如实记录不强行归类。详见 R5_SEEDED_PROJECT.md R44D 节。
 2026-10-14 11:57 轮中无损暂停（用户指令：当前节点后停，最多20分钟）：run dwfrun-51ae15d6守候B位测试者20分钟未收卷，按时限停机（B位ask恢复重做，169步零损失；A/C/D报告在盘）。8911/5178保持运行。恢复=ResumeWorkflowRun同run_id，详见PAUSE_HANDOFF_20261014.md
+2026-10-14 20:04 恢复执行（用户指令：跑完本轮+40轮深度复盘+handoff）：暂停期间环境掉线已按预案复活（ready:True）；Resume dwfrun-51ae15d6（R44的B位重派→分诊→修复→复盘→落盘）
