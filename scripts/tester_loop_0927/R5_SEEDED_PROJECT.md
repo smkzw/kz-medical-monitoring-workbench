@@ -1579,3 +1579,160 @@ AI 台账：本轮 **0 作业 0 调用**（复用即结论，无任何新 AI 质
 ## 留痕文件（同目录）
 
 - 本轮无新驱动脚本/状态文件（复用即结论）；证据为本节表内各 curl/grep/sqlite/shasum/ps/lsof/文件只读实测值；项目状态源文件 `r19d_seed_state.json`（confirmed/facts_materialized，与现场实测一致）。
+
+# R41D 开考位预置结果 — 复用常驻项目 MX循开考-CSU（2026-10-13T12:19-12:2xZ，零重复预置；study-documents 回归跨第四个 build 仍未修复，四次如实上报）
+
+> **本轮动作：查存量 → 三条件现场实测全过 → 直接复用，零新建、零 AI 作业、零代码修复、零重启、零启动运行、零 POST。**（常驻复用语义第 23 次复验，沿 R40D 口径 +1：R19D 新建、R20D 两验、R21D-R40D 历验、R41D 本验）
+
+隔离环境：API `http://127.0.0.1:8911`（build **api-233b2b43102a315b**——R40D 记录 api-71272c9b18ef5f5d，本轮之前 R40 修复员 14:04 CST 标准重启（ISO_ENV_LOG 同日条目，6 条修复面），现行 Python pid **34096**（lstart 2026-10-13 14:03:50 CST）、5178 node pid **34159** 监听 [::1]:5178；本 D 节即该最新 build 上三条件首验），全程未触碰 8910/5177。
+操作者：开考预置守护员-R41（D位）。时点：2026-10-13T12:19:29Z 起（单次只读复验，无推进动作；时间戳一律 UTC，宿主机现时区 CST/UTC+8）。
+
+## 存量检查（ask 步骤0，全部现场 curl/grep/sqlite/shasum/ps/lsof/文件只读实测）
+
+| 条件 | 实测结果 | 证据 |
+|---|---|---|
+| 项目存在且 active（常驻名） | ✅ | `GET /api/projects` → HTTP 200（2.36s），全实例仅 1 项目 `proj_user_6ef58ac151e1 / MX循开考-CSU / 慢性自发性荨麻疹 / MG-K10 / status=active`，modules 含 medical_monitoring（另有 dashboard/medical_writing/approvals） |
+| 字段映射 confirmed | ✅ | `GET …/modules/medical-monitoring/r7/data-admissions/stg-cd69899943ba42618f589ba07a134a59/mapping-candidates?focus=all` → HTTP 200（0.29s），state=candidates_ready，confirmation_status=**confirmed**，draft monmapdraft_73abe5c6c9561a9e95eec2056991 **v80 status=confirmed**，draft.user_questions=0 项，candidate_count=60/field_count=60（与 R19D-R40D 同版零漂移，换 build 后零漂移；顶层 facts_generated=False、summary pending_confirmation_count=60/user_question_count=1 为 R21D 起已留痕的投影怪癖，本轮同值非新现象） |
+| facts 物化 ready | ✅ | `GET …/r7/data-admissions/{att}/facts` → HTTP 200（0.14s），state=**ready**，facts_generated=true，summary **tables=10/rows=591/values=3038/source_values_verified=3038 全核验**，message「可用于监查的数据已生成，可以开始监查。」（与 R19D 终态零漂移） |
+| project/open current | ✅ | `GET …/r7/project/open` → HTTP 200（0.14s），state=**current**/openMode=edit/dataCoverage=complete/canView=true/canEdit=true「项目格式正常，可以继续使用。」 |
+| 界面可开始运行监查 | ✅ | `GET …/r7/run-setup/options` → **HTTP 200**（0.35s；modes=[daily,pre_lock,post_lock_pre_cfdi] 全 available/recommended_mode=daily，current_data.snapshot_token=**snapshot:ef8692acfbab4d2a9846916f** 与 R29D-R40D 同值，顶层 data_batches 列表 1 条在位，current_data.scope_description 明示「10表/591行/3038值100%往返校验」、row_count=16 为受试者级计数）；5178（node pid 34159 监听 [::1]:5178）`/monitoring`=200（0.007s）且 `/runtime-build.json` expectedBackendBuildId=**api-233b2b43102a315b** 与 8911 backend_build_id 配对一致（frontendBuildId=**web-544f152559b59671**，与 ISO_ENV_LOG 14:04 R40修复员条目「R40前端改动面新指纹」同值；R40D 为 web-02219adfb901b542） |
+| 未启动监查（本轮零启动） | ✅ | `GET …/r7/runs` → HTTP 200（0.16s）**50 条全部 run_state=completed、result_available=true**（与 R35D-R40D 历轮 50 条持平，零新增）；本轮全部 API 调用均为 GET（**零 POST**），运行启动留给随后的攻坚验证 |
+| R5D marker 缺陷未复发 | ✅ | 修复代码在位（grep 直查）：`services/api/app/main.py:5151`（`SCHEMA_VERSION as _LAUNCH_REGISTRY_SCHEMA_VERSION` 导入）+ `main.py:5161`（launch_registry.sqlite3 种子 marker 取该常量，行号与 R38D-R40D 记录一致）；`packages/medical_monitoring/runtime/launch_registry_contracts.py:54` `SCHEMA_VERSION = SCHEMA_VERSION_V5`；本项目 workspace `…/runtime/medical_monitoring_r7/proj_user_6ef58ac151e1/launch_registry.sqlite3` Python sqlite3 只读直查（uri mode=ro）→ `('schema_version','mm-r7-w01r26-launch-registry-v5')`（v5），integrity_check=ok，size=450560B；文件 mtime=Oct 13 11:33 CST（本轮窗口前被现行进程触碰，沿 R27D 起同类观察） |
+| 材料三件套在盘 | ✅ | `tester_staging_0927/synth_csu/` 三件齐备，sha256 前缀实测 listing(xlsx) **4be08e9e**… / 方案 **73024713**… / eCRF **8109d25a**…（与 R13D 起历轮逐字节一致口径）；本轮复用零上传 |
+| 8910/5177 未触碰 | ✅ | lsof 只读复核：8910/5177 均 0 监听（exit 1，沿 R11 起记录）；本轮仅 curl(GET)/grep/sqlite(只读)/shasum/ps/lsof/文件只读 + 本文档追加 |
+| runtime 就绪 | ✅ | 8911 `/api/runtime-readiness` → ready=true（0.017s），backend_build_id=api-233b2b43102a315b，runtime_schema_version=16，runtime_store_ready=true，missing_capabilities=[] |
+
+## ⚠️ 遗留回归四次上报（R38D 发现、R39D/R40D 二三报，跨第四个 build 仍未修复，如实上报，未修复未绕过）
+
+**study-documents 读路径在最新 build api-233b2b43102a315b 上仍为 analyzing/ready=false（历经 api-5b547c38 → api-34f52507 → api-71272c9b → api-233b2b43 四个 build 未修复）。**
+
+- 本轮实测：`GET …/r7/data-admissions/{attempt_id}/study-documents` → HTTP 200（9.96s）但 `state=analyzing, ready=false`，headline「已上传研究文件的核对尚未得出结论」，roles 中 **protocol 与 ecrf 均 status=incomplete、status_text=「需要重新识别」**（IB/SAP 仍 missing=可稍后添加沿历轮），analysis_token 仍为 R19D 原批次 **mmbatch_06432a73d31b1d87094f90fd** 未变。
+- 静态态实证：本项目 AI 台账 `GET /api/projects/{pid}/modules/medical-monitoring/ai/jobs` → **46 条全部终态**（44 completed/2 failed，与 R19D 终态零变化），non-terminal=0，最新作业 updated_at=2026-10-05T20:39Z——「系统会继续推进」文案与台账零在队/在跑矛盾，确认静态 analyzing 非真实处理中。
+- 影响面判定沿 R38D-R40D 代码复核结论（本轮未重复改码复核，判定沿用）：运行启动直连门不现场重解析 study-documents 读路径；`mapping_document_evidence_roles_unmet` 仅在**新生成字段映射**时触发。**本轮判定：不阻断三条件复用就绪，按 ask 直接返回就绪**；提请 R41 攻坚验证与修复员注意：① 运行向导/运行链路若任一点位读取实时 document readiness，该回归将在开考时浮出；② 任何新生成字段映射的请求会被 422 拒绝，直至重新裁决。本轮未做任何修复动作（无 POST、无重传、无重新裁决），不跳门、不伪造状态。
+
+## 本轮观察（如实记录，非阻断）
+
+- **换 build 存量考验第 6 次**（R35 api-4ee144cc → R38D api-5b547c38 → R39D api-34f52507 → R40D api-71272c9b → 本轮 api-233b2b43）：三条件与数据版本零漂移（draft v80 / facts 10表/591行/3038值 / snapshot_token 同值）——常驻项目核心状态跨 build 持久成立；唯一回归面仍为 study-documents 读路径（见上节，四个 build 未修复）。
+- **independent_ai 档案再变（本轮之前他位动作，本轮零 AI 作业故非阻断）**：`/api/runtime-readiness` independent_ai 现报 provider=**cms-router / model=glm-5.3-flash**（R40D 记录 ollama-cloud/deepseek-v4.1-flash）。对应 ISO_ENV_LOG 2026-10-13 08:49「Ollama Cloud 额度耗尽切换」（文档权威盲核/监查盲核/独立核对三角色改绑 cms_router_glm53flash）与 14:04 R40修复员条目「常驻项目现走同通道同模型知情降级路径」两条留痕。本轮零 AI 调用，不影响三条件与监查就绪判定；如实记录，提请随后的攻坚验证：现行配置下盲核与主分析同通道同模型，盲核独立性弱于常态（产品已在响应载荷披露该降级）。
+- **AI 台账探查路径笔误更正（沿 R22D/R23D/R29D 先例，如实记录，非产品缺陷）**：本员首查按 `…/r7/ai/jobs` 得 404，核对 `/openapi.json`（371 路由）后确认 jobs 路由挂 `/api/projects/{pid}/modules/medical-monitoring/ai/jobs`（**无 `/r7` 段**，与 R38D-R40D 台账写法一致），修正后 200。未修码、未重启（无缺陷可修）。
+- ISO_ENV_LOG 14:04 条目将 vite 记为 pid 34136，本员 lsof 实测监听 [::1]:5178 的进程为 **node pid 34159**——两值如实并录（npx 包装进程与实际 node 监听进程之别），非判据非缺陷。
+- current_data 键集本轮=[can_compare/data_cutoff/imported_at/row_count/scope_description/snapshot_token]（无 summary 键，与 R37D 第二节记录同形）；row_count=16 为受试者级计数，权威计数以 facts 端点 10表/591行/3038值 为准，非阻断仅记录。
+- 本轮 0 AI 作业 0 调用（复用即结论，无可跳之门可伪造之状态）；已确认终态为 R19D 当轮全链自然通过（46作业）的持久状态。项目状态源文件 `scripts/tester_loop_0927/r19d_seed_state.json` 实测 confirmed=true/facts_materialized=true/updated_at=2026-10-05T20:44:16Z/create_key=r19d-seed-20261005T190452Z-5f59e580/attempt_id=stg-cd69899943ba42618f589ba07a134a59，与现场实测一致；本轮复用无新幂等键。
+- 本轮 API 其余端点全程响应正常（0.14-2.36s，唯 /api/projects 首查 2.36s、study-documents 9.96s 回到 R31D 起慢带），无 R25/R26 记录的启动期挂起波动复发。
+
+## 留痕文件（同目录）
+
+- 本轮无新驱动脚本/状态文件（复用即结论）；证据为本节表内各 curl/grep/sqlite/shasum/ps/lsof/文件只读实测值 + `ISO_ENV_LOG.md`（R41D 复用条目）；项目状态源文件 `r19d_seed_state.json`（confirmed/facts_materialized，与现场实测一致）。
+
+# R42D 开考位预置结果 — 复用常驻项目 MX循开考-CSU（2026-10-13T16:14-16:20Z，零重复预置；**换第 5 个 build 后首验，R38D study-documents 回归在本 build 实测已修复，五报转正向结案观察**）
+
+> **本轮动作：查存量 → 三条件现场实测全过 → 直接复用，零新建、零 AI 作业、零代码修复、零重启、零启动运行、零 POST。**（常驻复用语义第 24 次复验，沿 R41D 口径 +1：R19D 新建、R20D 两验、R21D-R41D 历验、R42D 本验）
+
+隔离环境：API `http://127.0.0.1:8911`（build **api-321647a3bee8499d**——R41修复员 2026-10-13 23:42 CST 标准重启（ISO_ENV_LOG 同日条目，六条修复面：mapping_candidate_routes/publication_routes/mapping_pipeline/facts_publication/product_adapter/product_projection_helpers/monitoring_mapping_semantic_quality + 前端九文件），现行 Python pid **8770**（lstart 2026-10-13 23:42:03 CST，lsof+ps 实测）、5178 node pid **8818** 监听 [::1]:5178；本 D 节即该第 5 个 build 上三条件首验），全程未触碰 8910/5177。
+操作者：开考预置守护员-R42（D位）。时点：2026-10-13T16:14:14Z 起（单次只读复验，无推进动作；时间戳一律 UTC，宿主机现时区 CST/UTC+8）。
+
+## 存量检查（ask 步骤0，全部现场 curl/grep/sqlite只读/shasum/ps/lsof/文件只读实测）
+
+| 条件 | 实测结果 | 证据 |
+|---|---|---|
+| 项目存在且 active（常驻名） | ✅ | `GET /api/projects` → HTTP 200（首查 931B，全实例仅 1 项目 `proj_user_6ef58ac151e1 / MX循开考-CSU / 慢性自发性荨麻疹 / status=active`） |
+| 字段映射 confirmed | ✅ | `GET …/modules/medical-monitoring/r7/data-admissions/stg-cd69899943ba42618f589ba07a134a59/mapping-candidates?focus=all` → HTTP 200（10.69s），state=candidates_ready，confirmation_status=**confirmed**，draft monmapdraft_73abe5c6c9561a9e95eec2056991 **v80 status=confirmed**，draft.user_questions=0 项，candidate_count=60/field_count=60（与 R19D-R41D 同版零漂移，换第 5 个 build 后零漂移；顶层 facts_generated=False、summary pending_confirmation_count=60/user_question_count=1 为 R21D 起已留痕的投影怪癖，本轮同值非新现象） |
+| facts 物化 ready | ✅ | `GET …/r7/data-admissions/{att}/facts` → HTTP 200（1.69s），state=**ready**，facts_generated=true，summary **tables=10/rows=591/values=3038/source_values_verified=3038 全核验**，message「可用于监查的数据已生成，可以开始监查。」（与 R19D 终态零漂移） |
+| project/open current | ✅ | `GET …/r7/project/open` → HTTP 200（5.84s），state=**current**/openMode=edit/dataCoverage=complete/canView=true/canEdit=true「项目格式正常，可以继续使用。」 |
+| 界面可开始运行监查 | ✅ | `GET …/r7/run-setup/options` → **HTTP 200**（17.61s；modes=[daily,pre_lock,post_lock_pre_cfdi] 全 available/recommended_mode=daily，current_data.snapshot_token=**snapshot:ef8692acfbab4d2a9846916f** 与 R29D-R41D 同值，顶层 data_batches 1 条在位，current_data.scope_description 明示「10表/591行/3038值100%往返校验」、row_count=16 为受试者级计数）；5178（node pid 8818 监听 [::1]:5178）`/monitoring`=200（0.004s）且 `/runtime-build.json` expectedBackendBuildId=**api-321647a3bee8499d** 与 8911 backend_build_id 配对一致（frontendBuildId=**web-1a17ccb8197fa9d9**，与 ISO_ENV_LOG 23:42 R41修复员条目「R41前端改动面新指纹」同值；R41D 为 web-544f152559b59671） |
+| 未启动监查（本轮零启动） | ✅ | `GET …/r7/runs` → HTTP 200（12.91s）**50 条全部 run_state=completed、result_available=true**（与 R35D-R41D 历轮 50 条持平，零新增）；本轮全部 API 调用均为 GET（**零 POST**），运行启动留给随后的攻坚验证 |
+| R5D marker 缺陷未复发 | ✅ | 修复代码在位（sed/grep 直查，行号与 R38D-R41D 记录一致）：`services/api/app/main.py:5151`（`SCHEMA_VERSION as _LAUNCH_REGISTRY_SCHEMA_VERSION` 导入）+ `packages/medical_monitoring/runtime/launch_registry_contracts.py:54` `SCHEMA_VERSION = SCHEMA_VERSION_V5`；RUNTIME_DIR 经 `main.py:591-592` 读 `WORKBENCH_RUNTIME_DIR` env（ps eww 实测指向 `runs/tester_loop_iso_20260928/runtime`），本项目 workspace 真实路径 `…/runs/tester_loop_iso_20260928/runtime/medical_monitoring_r7/proj_user_6ef58ac151e1/launch_registry.sqlite3` Python sqlite3 只读直查（uri mode=ro）→ `('schema_version','mm-r7-w01r26-launch-registry-v5')`（v5），integrity_check=ok，size=471040B、mtime=Oct 13 20:47:25 CST（本轮窗口前被现行进程/他位触碰，沿 R27D 起同类观察） |
+| 材料三件套在盘 | ✅ | `tester_staging_0927/synth_csu/` 三件齐备，sha256 前缀实测 listing(xlsx) **4be08e9e**… / 方案 **73024713**… / eCRF **8109d25a**…（与 R13D 起历轮逐字节一致口径）；本轮复用零上传 |
+| 8910/5177 未触碰 | ✅ | lsof 只读复核：8910/5177 均 0 监听（exit 1，沿 R11 起记录）；本轮仅 curl(GET)/grep/sed/sqlite(只读)/shasum/ps/ps eww/lsof/文件只读 + 本文档与 ISO_ENV_LOG 追加 |
+| runtime 就绪 | ✅ | 8911 `/api/runtime-readiness` → ready=true（0.82s），backend_build_id=api-321647a3bee8499d，runtime_schema_version=16，runtime_store_ready=true，missing_capabilities=[]，independent_ai=**cms-router/glm-5.3-flash**（与 R41D 记录的现行降级配置同值，本轮零 AI 调用） |
+
+## ✅ 遗留回归五报转正向：R38D study-documents 回归在第 5 个 build 上实测已修复（如实记录，非本员修复——R41 修复员 23:42 CST 六条修复面在先）
+
+- 本轮实测：`GET …/r7/data-admissions/{att}/study-documents` → HTTP 200（**69.33s，历轮最慢单点，见下观察**），**ready=true**，headline「研究文件已准备好」，guidance「系统会自动完成字段理解和两次独立核对，无需逐项确认。」；roles 中 **protocol=status=current/已识别、ecrf=status=current/已识别**（R38D-R41D 四个 build 上均为 incomplete/「需要重新识别」），IB/SAP 仍 missing=「可稍后添加」沿历轮正常。响应顶层键集本轮=[guidance,headline,project_id,ready,roles]（无 state/analysis_token 键，与 R41D 记录的响应形状不同，按本员实测如实记录形状差异）。R38D 发现、R39D/R40D/R41D 三次续报的回归在第 5 个 build api-321647a3bee8499d 上未复现，判定与 ISO_ENV_LOG 23:42 R41修复员六条修复面吻合；本员未做任何修复动作（零改码零重启），仅只读实测记入。
+- 静态态佐证：AI 台账 `GET /api/projects/{pid}/modules/medical-monitoring/ai/jobs` → HTTP 200（1.10s，响应顶层键=[items,project_id]），**items 46 条全部终态**（44 completed/2 failed，与 R19D 终态零变化），最新作业 updated_at=2026-10-05T20:39:43Z——与 R41D「46 条全终态」记录一致，本轮零新增零在跑。
+
+## 本轮观察（如实记录，非阻断）
+
+- **换 build 存量考验第 7 次、第 5 个 build 三条件首验**（R35 api-4ee144cc → R38D api-5b547c38 → R39D api-34f52507 → R40D api-71272c9b → R41D api-233b2b43 → 本轮 api-321647a3be）：三条件与数据版本零漂移（draft v80 / facts 10表/591行/3038值 / snapshot_token 同值）——常驻项目核心状态跨第 5 个 build 持久成立；且 study-documents 读路径在本 build 转为 ready=true（见上节）。
+- **本轮 API 慢带明显**（如实记录）：除 runtime-readiness 0.82s 与 ai/jobs 1.10s 外，project/open 5.84s、mapping-candidates 10.69s、runs 12.91s、run-setup/options 17.61s、study-documents **69.33s**——显著慢于 R41D 的 0.14-2.36s 带（study-documents 当时 9.96s）。本轮时点在 R41修复员 23:42 CST 重启后约 32 分钟，疑新进程冷缓存/首轮全量装配所致，非挂起（全部请求均正常返回且结果零漂移）；不对症下判，提请随后的攻坚验证留意运行向导首开时延。
+- **launch_registry.sqlite3 size/mtime 在本轮窗口前变化**（他位动作，非阻断）：size 450560B（R41D 记录）→ **471040B**（+20480B），mtime Oct 13 11:33 → **20:47:25 CST**——位于 R41修复员 23:42 重启之前、R41D 复验（12:19Z≈20:19 CST）之后，属 R41 轮内攻坚/修复位写入；schema_version 仍 v5、integrity ok，无回归信号。
+- r19d_seed_state.json 与现场实测一致：confirmed=true/facts_materialized=true/updated_at=2026-10-05T20:44:16Z/create_key=r19d-seed-20261005T190452Z-5f59e580/attempt_id=stg-cd69899943ba42618f589ba07a134a59；本轮复用无新幂等键、零 AI 作业零调用（复用即结论，无可跳之门可伪造之状态），已确认终态为 R19D 当轮全链自然通过（46 作业）的持久状态。
+- 项目 detail 端点 `GET /api/projects/{pid}` 在本 build 为 405 Method Not Allowed（openapi 仅登记 DELETE），项目存在性以 `GET /api/projects` 列表为准——沿本员首轮探查实录，非缺陷。
+
+## 留痕文件（同目录）
+
+- 本轮无新驱动脚本/状态文件（复用即结论）；证据为本节表内各 curl/grep/sed/sqlite/shasum/ps/ps eww/lsof/文件只读实测值 + `ISO_ENV_LOG.md`（R42D 复用条目）；项目状态源文件 `r19d_seed_state.json`（confirmed/facts_materialized，与现场实测一致）。
+
+# R43D 开考位预置结果 — 复用常驻项目 MX循开考-CSU（2026-10-13T20:44-21:01Z，零重复预置；**换第 6 个 build 后首验，R38D study-documents 修复正向状态在新 build 保持**）
+
+> **本轮动作：查存量 → 三条件现场实测全过 → 直接复用，零新建、零 AI 作业、零代码修复、零重启、零启动运行、零 POST。**（常驻复用语义第 25 次复验，沿 R42D 口径 +1：R19D 新建、R20D 两验、R21D-R42D 历验、R43D 本验）
+
+隔离环境：API `http://127.0.0.1:8911`（build **api-616662809274f9f0**——R42修复员 2026-10-14 04:32 CST 标准重启（ISO_ENV_LOG 同日条目，修复面：monitoring_ai_repository/mapping_confirmation/mapping_candidate_routes/monitoring_protocol_preparation_service + 前端三组件与 pin），现行 Python pid **59573**（lstart 2026-10-14 04:32:33 CST，ps 实测）、5178 node pid **59764** 监听 [::1]:5178；本 D 节即该第 6 个 build 上三条件首验），全程未触碰 8910/5177。
+操作者：开考预置守护员-R43（D位）。时点：2026-10-13T20:44:00Z 起（单次只读复验，无推进动作；时间戳一律 UTC，宿主机现时区 CST/UTC+8）。
+
+## 存量检查（ask 步骤0，全部现场 curl/python/sqlite只读/shasum/ps/lsof/文件只读实测）
+
+| 条件 | 实测结果 | 证据 |
+|---|---|---|
+| 项目存在且 active（常驻名） | ✅ | `GET /api/projects` → HTTP 200（2.43s），全实例仅 1 项目 `proj_user_6ef58ac151e1 / MX循开考-CSU / 慢性自发性荨麻疹 / MG-K10 / status=active`，modules 含 medical_monitoring（另有 dashboard/medical_writing/approvals） |
+| 字段映射 confirmed | ✅ | `GET …/modules/medical-monitoring/r7/data-admissions/stg-cd69899943ba42618f589ba07a134a59/mapping-candidates?focus=all` → HTTP 200（0.26s），state=candidates_ready，confirmation_status=**confirmed**，draft monmapdraft_73abe5c6c9561a9e95eec2056991 **v80 status=confirmed**，draft.user_questions=[]（0 项），candidate_count=60（与 R19D-R42D 同版零漂移，换第 6 个 build 后零漂移；顶层 facts_generated=False、summary pending_confirmation_count=60/user_question_count=1 为 R21D 起已留痕的投影怪癖，本轮同值非新现象） |
+| facts 物化 ready | ✅ | `GET …/r7/data-admissions/{att}/facts` → HTTP 200（0.12s），state=**ready**，facts_generated=true，summary **tables=10/rows=591/values=3038/source_values_verified=3038 全核验**，message「可用于监查的数据已生成，可以开始监查。」（与 R19D 终态零漂移） |
+| project/open current | ✅ | `GET …/r7/project/open` → HTTP 200（0.13s），state=**current**/openMode=edit/dataCoverage=complete/canView=true/canEdit=true「项目格式正常，可以继续使用。」 |
+| 界面可开始运行监查 | ✅ | `GET …/r7/run-setup/options` → **HTTP 200**（3.48s；modes=[daily,pre_lock,post_lock_pre_cfdi] 全 available/recommended_mode=daily，current_data.snapshot_token=**snapshot:ef8692acfbab4d2a9846916f** 与 R29D-R42D 同值，顶层 data_batches 1 条在位，current_data.scope_description 明示「10表/591行/3038值100%往返校验」、row_count=16 为受试者级计数）；5178（node pid 59764 监听 [::1]:5178）`/monitoring`=200（0.002s）且 `/runtime-build.json` expectedBackendBuildId=**api-616662809274f9f0** 与 8911 backend_build_id 配对一致（frontendBuildId=**web-2dc16940535b5f3e**，较 R42D 记录 web-1a17ccb8197fa9d9 已更新，与 R42修复员前端改动面吻合） |
+| 研究文件 ready | ✅ | `GET …/r7/data-admissions/{att}/study-documents` → HTTP 200（42.45s），**ready=true**，headline「研究文件已准备好」；roles（本 build 为 list 形状）：protocol=current/已识别、ecrf=current/已识别、IB/SAP missing=「可稍后添加」沿历轮正常——R42D 记录的正向修复状态在第 6 个 build 保持 |
+| 未启动监查（本轮零启动） | ✅ | `GET …/r7/runs` → HTTP 200（4.13s）**50 条全部 run_state=completed、result_available=true**（与 R35D-R42D 历轮 50 条持平，零新增）；本轮全部 API 调用均为 GET（**零 POST**），运行启动留给随后的攻坚验证 |
+| R5D marker 缺陷未复发 | ✅ | 本项目 workspace `…/runs/tester_loop_iso_20260928/runtime/medical_monitoring_r7/proj_user_6ef58ac151e1/launch_registry.sqlite3` Python sqlite3 只读直查（uri mode=ro）→ `schema_version='mm-r7-w01r26-launch-registry-v5'`（v5），integrity_check=ok，size=**487424B**、mtime=**2026-10-14 00:45:51 CST**（R42D 记录 471040B/10-13 20:47:25 → 本轮前 +16384B 再变化，位于 R42D 复验之后、R42修复员 04:32 重启之前，属 R42 轮内他位写入，如实并录；v5+integrity ok 无回归信号） |
+| 材料三件套在盘 | ✅ | `tester_staging_0927/synth_csu/` 三件齐备，sha256 全值实测 listing(xlsx) **4be08e9e…b27968** / 方案 **73024713…9a504199** / eCRF **8109d25a…ede15289**（与 R13D 起历轮逐字节一致口径）；本轮复用零上传 |
+| 8910/5177 未触碰 | ✅ | lsof 只读复核：8910/5177 均 0 监听（exit 1，沿 R11 起记录）；本轮仅 curl(GET)/python/sqlite(只读)/shasum/ps/lsof/文件只读 + 本文档与 ISO_ENV_LOG 追加 |
+| runtime 就绪 | ✅ | 8911 `/api/runtime-readiness` → ready=true（0.007s），backend_build_id=api-616662809274f9f0，runtime_schema_version=16，runtime_store_ready=true，missing_capabilities=[]，independent_ai=**cms-router/glm-5.3-flash**（与 R41D/R42D 记录的现行降级配置同值，本轮零 AI 调用） |
+| AI 台账零新增 | ✅ | `GET /api/projects/{pid}/modules/medical-monitoring/ai/jobs` → HTTP 200（0.06s），**46 条全部终态**（44 completed/2 failed，与 R19D 终态零变化），non_terminal=0，最新作业 updated_at=2026-10-05T20:39:43Z——本轮零新增零在跑 |
+
+## 本轮观察（如实记录，非阻断）
+
+- **换 build 存量考验第 8 次、第 6 个 build 三条件首验**（R35 api-4ee144cc → R38D api-5b547c38 → R39D api-34f52507 → R40D api-71272c9b → R41D api-233b2b43 → R42D api-321647a3be → 本轮 api-6166628092）：三条件与数据版本零漂移（draft v80 / facts 10表/591行/3038值 / snapshot_token 同值）——常驻项目核心状态跨第 6 个 build 持久成立；R38D study-documents 回归的正向修复状态（R42D 五报转正向）在本 build 亦保持 ready=true。
+- **API 时延带**：本轮多数端点快于 R42D 冷缓存带（project/open 0.13s、mapping-candidates 0.26s、facts 0.12s、runs 4.13s、run-setup 3.48s），唯 study-documents 42.45s 仍为最慢单点（R42D 69.33s、R41D 9.96s，同端点跨轮波动带内），全部请求正常返回零漂移，非挂起。
+- **launch_registry.sqlite3 size/mtime 再变**（他位动作，非阻断）：487424B（较 R42D 记录 +16384B）、mtime 2026-10-14 00:45:51 CST——本轮窗口（20:44Z≈04:44 CST 起）之前的 R42 轮内写入；schema_version 仍 v5、integrity ok。
+- r19d_seed_state.json 与现场实测一致：confirmed=true/facts_materialized=true/updated_at=2026-10-05T20:44:16Z/create_key=r19d-seed-20261005T190452Z-5f59e580/attempt_id=stg-cd69899943ba42618f589ba07a134a59；本轮复用无新幂等键、零 AI 作业零调用（复用即结论，无可跳之门可伪造之状态），已确认终态为 R19D 当轮全链自然通过（46 作业）的持久状态。
+- ask 步骤1（新建）本轮**不适用**：常驻项目三条件俱在，按步骤0语义直接复用，未创建任何项目、未触发任何 AI 链路（文档权威/映射/裁决卡/facts 均为 R19D 当轮自然完成的持久态）。
+
+## 留痕文件（同目录）
+
+- 本轮无新驱动脚本/状态文件（复用即结论）；证据为本节表内各 curl/python/sqlite/shasum/ps/lsof/文件只读实测值 + `ISO_ENV_LOG.md`（R43D 复用条目）；项目状态源文件 `r19d_seed_state.json`（confirmed/facts_materialized，与现场实测一致）。
+
+# R44D 开考位预置结果 — 复用常驻项目 MX循开考-CSU（2026-10-13T23:53-23:57Z，零重复预置；**换第 7 个 build 后首验，R38D study-documents 修复正向状态在新 build 保持**）
+
+> **本轮动作：查存量 → 三条件现场实测全过 → 直接复用，零新建、零 AI 作业、零代码修复、零重启、零启动运行、零 POST。**（常驻复用语义第 26 次复验，沿 R43D 口径 +1：R19D 新建、R20D 两验、R21D-R43D 历验、R44D 本验）
+
+隔离环境：API `http://127.0.0.1:8911`（build **api-31cbdf421a25007a**——R43修复员 2026-10-14 07:25 CST 标准重启（ISO_ENV_LOG 同日条目，修复面：monitoring_ai_repository/monitoring_document_authority_workflow/mapping_candidate_routes/facts_publication + 前端 App.jsx/AdmissionWizard/ProtocolPreparationPanel/styles.css + 新增tests/test_mm_r43_fixes.py），现行 Python pid **90569**（lstart 7:23AM，ps+lsof 实测监听 127.0.0.1:8911）、5178 node pid **90655** 监听 [::1]:5178（ISO_ENV_LOG 修复员条目记 90633/90628，以 lsof 现场实测 90655 为准）；本 D 节即该第 7 个 build 上三条件首验），全程未触碰 8910/5177。
+操作者：开考预置守护员-R44（D位）。时点：2026-10-13T23:53:33Z 起（单次只读复验，无推进动作；时间戳一律 UTC，宿主机现时区 CST/UTC+8）。
+
+## 存量检查（ask 步骤0，全部现场 curl/python/sqlite只读/shasum/ps/lsof/sed/文件只读实测）
+
+| 条件 | 实测结果 | 证据 |
+|---|---|---|
+| 项目存在且 active（常驻名） | ✅ | `GET /api/projects` → HTTP 200（8.80s，重启后约 28 分钟冷缓存带），全实例仅 1 项目 `proj_user_6ef58ac151e1 / MX循开考-CSU / 慢性自发性荨麻疹 / MG-K10 / status=active`，modules 含 medical_monitoring（另有 dashboard/medical_writing/approvals） |
+| 字段映射 confirmed | ✅ | `GET …/modules/medical-monitoring/r7/data-admissions/stg-cd69899943ba42618f589ba07a134a59/mapping-candidates?focus=all` → HTTP 200（0.49s），state=candidates_ready，confirmation_status=**confirmed**，draft monmapdraft_73abe5c6c9561a9e95eec2056991 **v80 status=confirmed**，draft.user_questions=[]（0 项），summary candidate_count=**60**/field_count=**60**/displayed_count=60/system_adopted_count=59（与 R19D-R43D 同版零漂移，换第 7 个 build 后零漂移；顶层 facts_generated=False、summary pending_confirmation_count=60/user_question_count=1 为 R21D 起已留痕的投影怪癖，本轮同值非新现象） |
+| facts 物化 ready | ✅ | `GET …/r7/data-admissions/{att}/facts` → HTTP 200（0.14s），state=**ready**，facts_generated=true，summary **tables=10/rows=591/values=3038/source_values_verified=3038 全核验**，message「可用于监查的数据已生成，可以开始监查。」（与 R19D 终态零漂移） |
+| project/open current | ✅ | `GET …/r7/project/open` → HTTP 200（0.15s），state=**current**/openMode=edit/dataCoverage=complete/canView=true/canEdit=true「项目格式正常，可以继续使用。」 |
+| 界面可开始运行监查 | ✅ | `GET …/r7/run-setup/options` → **HTTP 200**（0.39s；modes=[daily,pre_lock,post_lock_pre_cfdi] 全 available/recommended_mode=daily，current_data.snapshot_token=**snapshot:ef8692acfbab4d2a9846916f** 与 R29D-R43D 同值，顶层 data_batches 1 条在位，current_data.scope_description 明示「10表/591行/3038值100%往返校验」、row_count=16 为受试者级计数）；5178（node pid 90655 监听 [::1]:5178）`/monitoring`=200（0.004s）且 `/runtime-build.json` expectedBackendBuildId=**api-31cbdf421a25007a** 与 8911 backend_build_id 配对一致（frontendBuildId=**web-f601e8914442d487**，与 ISO_ENV_LOG 07:25 R43修复员条目「R43前端改动面新指纹」同值；R43D 为 web-2dc16940535b5f3e） |
+| 研究文件 ready | ✅ | `GET …/r7/data-admissions/{att}/study-documents` → HTTP 200（20.35s），**ready=true**，headline「研究文件已准备好」；roles（list 形状，与 R42D/R43D 同）：protocol=current/已识别、ecrf=current/已识别、IB/SAP missing=「可稍后添加」沿历轮正常——R42D 五报转正向的修复状态在第 7 个 build 保持 |
+| 未启动监查（本轮零启动） | ✅ | `GET …/r7/runs` → HTTP 200（0.21s）**50 条全部 run_state=completed、result_available=true**（与 R35D-R43D 历轮 50 条持平，零新增）；本轮全部 API 调用均为 GET（**零 POST**），运行启动留给随后的攻坚验证 |
+| R5D marker 缺陷未复发 | ✅ | 本项目 workspace `…/runs/tester_loop_iso_20260928/runtime/medical_monitoring_r7/proj_user_6ef58ac151e1/launch_registry.sqlite3` Python sqlite3 只读直查（uri mode=ro）→ `r7_launch_registry_meta` 行 `schema_version='mm-r7-w01r26-launch-registry-v5'`（v5），integrity_check=ok，r7_launch_registry 77 行，size=**499712B**、mtime=**2026-10-14 05:21:50 CST**（R43D 记录 487424B/00:45:51 → 本轮前 +12288B 再变化，位于 R43D 复验窗口（≈05:01 CST）之后、R43修复员 07:22 CST 重启之前，属 R43 轮内他位写入，如实并录；v5+integrity ok 无回归信号）；静态 marker 在位（sed 实测）：`services/api/app/main.py:5151`（`SCHEMA_VERSION as _LAUNCH_REGISTRY_SCHEMA_VERSION`）+ `packages/medical_monitoring/runtime/launch_registry_contracts.py:54`（`SCHEMA_VERSION = SCHEMA_VERSION_V5`） |
+| 材料三件套在盘 | ✅ | `tester_staging_0927/synth_csu/` 三件齐备，sha256 全值实测 listing(xlsx) **4be08e9e…b27968** / 方案 **73024713…9a504199** / eCRF **8109d25a…ede15289**（与 R13D 起历轮逐字节一致口径）；本轮复用零上传 |
+| 8910/5177 未触碰 | ✅ | lsof 只读复核：8910/5177 均 0 监听（exit 1，沿 R11 起记录）；本轮仅 curl(GET)/python/sqlite(只读)/shasum/ps/lsof/sed/文件只读 + 本文档与 ISO_ENV_LOG 追加 |
+| runtime 就绪 | ✅ | 8911 `/api/runtime-readiness` → ready=true（0.19s），backend_build_id=api-31cbdf421a25007a，runtime_schema_version=16，runtime_store_ready=true，missing_capabilities=[]，independent_ai=**cms-router/glm-5.3-flash**（沿 10-13 08:49 降级配置，本轮零 AI 调用） |
+| AI 台账零新增 | ✅ | `GET /api/projects/{pid}/modules/medical-monitoring/ai/jobs` → HTTP 200（0.06s），**46 条全部终态**（44 completed/2 failed，与 R19D 终态零变化），non_terminal=0，最新作业 updated_at=2026-10-05T20:39:43Z；`GET …/ai/queue` → state=enabled/pause_requested=false/in_flight_count=0——本轮零新增零在跑 |
+
+## 本轮观察（如实记录，非阻断）
+
+- **换 build 存量考验第 9 次、第 7 个 build 三条件首验**（R35 api-4ee144cc → R38D api-5b547c38 → R39D api-34f52507 → R40D api-71272c9b → R41D api-233b2b43 → R42D api-321647a3be → R43D api-6166628092 → 本轮 api-31cbdf421a）：三条件与数据版本零漂移（draft v80 / facts 10表/591行/3038值 / snapshot_token 同值）——常驻项目核心状态跨第 7 个 build 持久成立；R38D study-documents 回归的正向修复状态（R42D 五报转正向）在本 build 亦保持 ready=true。
+- **API 时延带**：本轮时点在 R43修复员 07:25 CST 重启后约 28 分钟，仅 `/api/projects` 首查 8.80s 略慢（冷缓存），其余端点均快带（project/open 0.15s、mapping-candidates 0.49s、facts 0.14s、runs 0.21s、run-setup 0.39s、ai/jobs 0.06s），唯 study-documents 20.35s 仍为最慢单点（R42D 69.33s、R43D 42.45s，同端点跨轮波动带内），全部请求正常返回零漂移，非挂起。
+- **launch_registry.sqlite3 size/mtime 再变**（他位动作，非阻断）：499712B（较 R43D 记录 +12288B）、mtime 2026-10-14 05:21:50 CST——本轮窗口（23:53Z≈07:53 CST 起）之前的 R43 轮内写入；schema_version 仍 v5、integrity ok。
+- **monai_51f2a26c 不在本项目 AI 台账**（如实记录）：R43修复员 07:25 CST 现场注记的 B位滞留核对作业（旧代码面 23:10:26 UTC 被 dwell 收割为 queue_dwell_timeout、retryable=1/attempt_count=0）在本轮 ai/jobs 46 条中 0 命中——该作业身份存在于收割侧注记/队列机制，非本台账行项目；台账本身零新增、queue enabled/in_flight=0，不做强行归类，后续如需跟进由修复/攻坚位按 R43 注记口径处理。
+- **WORKBENCH_RUNTIME_DIR env 实测为绝对路径**：ps eww 90569 → `/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/runs/tester_loop_iso_20260928/runtime`（与历轮记录的相对值 `runs/tester_loop_iso_20260928/runtime` 指向同一目录；本轮首次按绝对值直查，路径拼接教训如实记录：不可再叠加 workbench 前缀）。
+- r19d_seed_state.json 与现场实测一致：confirmed=true/facts_materialized=true/updated_at=2026-10-05T20:44:16Z/create_key=r19d-seed-20261005T190452Z-5f59e580/attempt_id=stg-cd69899943ba42618f589ba07a134a59；本轮复用无新幂等键、零 AI 作业零调用（复用即结论，无可跳之门可伪造之状态），已确认终态为 R19D 当轮全链自然通过（46 作业）的持久状态。
+- ask 步骤1（新建）本轮**不适用**：常驻项目三条件俱在，按步骤0语义直接复用，未创建任何项目、未触发任何 AI 链路（文档权威/映射/裁决卡/facts 均为 R19D 当轮自然完成的持久态）。
+
+## 留痕文件（同目录）
+
+- 本轮无新驱动脚本/状态文件（复用即结论）；证据为本节表内各 curl/python/sqlite/shasum/ps/lsof/sed/文件只读实测值 + `ISO_ENV_LOG.md`（R44D 复用条目）；项目状态源文件 `r19d_seed_state.json`（confirmed/facts_materialized，与现场实测一致）。
