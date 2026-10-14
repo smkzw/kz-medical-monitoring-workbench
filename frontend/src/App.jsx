@@ -13543,6 +13543,10 @@ export function App() {
   const [projectsLoadError, setProjectsLoadError] = useState("");
   const [monitoringProjectRouteError, setMonitoringProjectRouteError] = useState("");
   const [projectsRequestNonce, setProjectsRequestNonce] = useState(0);
+  // R42轮（R42-10）：项目列表跨模块缓存——effect需要读取「是否已加载」
+  // 与「nonce是否真的变化」而不把它们列为依赖（会引发重跑循环）。
+  const projectsLoadedRef = useRef(false);
+  const lastProjectsNonceRef = useRef(-1);
   // 子系统优先建项（用户 2026-10-06）：子系统页上的配置面板交接与创建横幅。
   const [pendingNewProject, setPendingNewProject] = useState(null);
   const [projectCreatedNotice, setProjectCreatedNotice] = useState("");
@@ -13771,12 +13775,24 @@ export function App() {
   }, [activePage, pendingNewProject, requestActivePage]);
 
   useEffect(() => {
-    if (isMedicalMonitoringProductRoute) {
-      setProjects([]);
-      setProjectsLoaded(true);
+    // R42轮（R42-10）：模块切换不再清空/重读全局项目列表。旧实现进入
+    // 医学监查即 setProjects([])，切出即整表重读——「正在加载项目」
+    // 闪7秒~2分钟、计数归零、期间一次「读取失败」（R42实测多模块工作
+    // 流实际不可用）。现在列表跨模块缓存复用：仅首次加载或显式重读
+    // （nonce变化，含失败退避自动重拉）才发起/api/projects；进出监查
+    // 只同步项目选择，不动列表数据，接口失败时旧数据本就保留。
+    const nonceChanged = lastProjectsNonceRef.current !== projectsRequestNonce;
+    lastProjectsNonceRef.current = projectsRequestNonce;
+    if (isMedicalMonitoringProductRoute && !nonceChanged) {
       setProjectsLoadError("");
       setMonitoringProjectRouteError("");
       setActiveProjectId((current) => medicalMonitoringProductRouteState?.canonical?.project_ref || current);
+      return undefined;
+    }
+    if (!isMedicalMonitoringProductRoute && !nonceChanged && projectsLoadedRef.current) {
+      // 从监查切回其他模块：缓存复用，恢复进入监查前的项目选择。
+      setMonitoringProjectRouteError("");
+      setActiveProjectId((current) => rememberedProjectIdRef.current || current);
       return undefined;
     }
     let cancelled = false;
@@ -13841,6 +13857,7 @@ export function App() {
           }
           return resolved.projectId;
         });
+        projectsLoadedRef.current = true;
         setProjectsLoaded(true);
       })
       .catch(() => {
@@ -13871,6 +13888,7 @@ export function App() {
           setProjectsLoadError(
             `项目列表加载失败或超时（超过20秒未返回）。${Math.round(backoffMs / 1000)}秒后自动重试（第${failedAttempt + 1}/3次）；也可立即点击「重新读取」。`,
           );
+          projectsLoadedRef.current = true;
           setProjectsLoaded(true);
           // 卸载/重发时由 effect 清理函数置 cancelled，定时器回调自查。
           setTimeout(() => {
@@ -13880,6 +13898,7 @@ export function App() {
         }
         projectsFailureRetriesRef.current = 0;
         setProjectsLoadError("项目列表加载失败或超时（超过20秒未返回）。请点击重试；若持续失败请检查服务状态。");
+        projectsLoadedRef.current = true;
         setProjectsLoaded(true);
       });
     return () => {

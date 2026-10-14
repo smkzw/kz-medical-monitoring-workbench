@@ -261,6 +261,28 @@ check(
   passed += 6;
 }
 
+// --- R42-03修复契约：归属确认与显式重核不再与后台轮询抢在途互斥 ---
+// R42B实测「首次点确认未生效，重核后同一确认页再现，需二次点击」：
+// 确认/重试的resolve不占用documentResolveInFlight时，乐观analyzing态
+// 拉起的轮询（无确认载荷）抢先拿到后端在途互斥，确认请求吃409被当
+// 失败处理、陈旧归属卡弹回。钉住三段控制流。
+{
+  check(
+    wizardSrc.includes(needle(`documentRequestGeneration.current = generation;\n    setDocumentState((current) => ({ ...current, phase: "analyzing", error: null }));\n    documentResolveInFlight.current = true;\n    try {\n      const payload = await api.resolveStudyDocuments(\n        state.projectId,\n        state.attemptId,\n        documentState.payload?.analysis_token,\n        { identityConfirmation: confirmation },\n      );`)),
+    "identity confirmation holds the in-flight guard so the poller yields (R42-03)",
+  );
+  check(
+    wizardSrc.includes(needle(`if (\n        error?.detail?.code === "document_resolve_in_progress"\n        && attempt < 3\n      ) {\n        setDocumentState((current) => ({ ...current, error: null }));\n        setTimeout(() => {\n          if (documentRequestGeneration.current === generation) {\n            submitIdentityConfirmation(confirmation, attempt + 1);\n          }\n        }, 3000);\n        return;\n      }`)),
+    "identity confirmation retries on in-flight 409 instead of restoring the stale card (R42-03)",
+  );
+  check(
+    wizardSrc.includes(needle(`documentResolveInFlight.current = true;\n      try {\n        const payload = await api.resolveStudyDocuments(\n          state.projectId,\n          state.attemptId,\n          documentState.payload.analysis_token,\n          { explicitRetry: true },\n        );`))
+      && wizardSrc.includes(needle(`if (error?.detail?.code === "document_resolve_in_progress") {\n            // 通道被占（他页在推进同一批次）：如实保留等待态并回读，\n            // 不冒充「重试失败」。\n            setDocumentState((current) => ({ ...current, error: null }));\n            loadDocumentReadiness();\n            return;\n          }`)),
+    "explicit retry holds the in-flight guard and treats 409 as occupied-channel (R42-03)",
+  );
+  passed += 3;
+}
+
 // --- card CSS follows the product visual system ---
 const css = fs.readFileSync(path.join(here, "medicalMonitoringProductLoop.css"), "utf8");
 check(css.includes(".monitoring-admission-card"), "admission card ships product-loop CSS");

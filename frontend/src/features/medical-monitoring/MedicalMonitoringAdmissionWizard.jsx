@@ -1983,6 +1983,10 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       const generation = documentRequestGeneration.current + 1;
       documentRequestGeneration.current = generation;
       setDocumentState((current) => ({ ...current, phase: "analyzing", error: null }));
+      // R42-03修复：与归属确认同源——显式重试期间占用在途guard，防止
+      // 乐观analyzing态拉起的轮询与本重试抢后端在途互斥（409被误报为
+      // 「刚刚点击重新核对仍失败」）。
+      documentResolveInFlight.current = true;
       try {
         const payload = await api.resolveStudyDocuments(
           state.projectId,
@@ -2008,6 +2012,13 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         return;
       } catch (error) {
         if (documentRequestGeneration.current === generation) {
+          if (error?.detail?.code === "document_resolve_in_progress") {
+            // 通道被占（他页在推进同一批次）：如实保留等待态并回读，
+            // 不冒充「重试失败」。
+            setDocumentState((current) => ({ ...current, error: null }));
+            loadDocumentReadiness();
+            return;
+          }
           setDocumentState((current) => ({
             ...current,
             phase: "failed",
@@ -2015,17 +2026,30 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
           }));
         }
         return;
+      } finally {
+        documentResolveInFlight.current = false;
       }
     }
     await loadDocumentReadiness();
   }, [api, documentState.payload?.analysis_token, loadDocumentReadiness, state.attemptId, state.projectId]);
 
-  const submitIdentityConfirmation = useCallback(async (confirmation) => {
+  // R42-03修复：归属确认的resolve与后台轮询共用后端项目级在途互斥
+  // （document_resolve_in_progress 409）。此前①确认请求不占用在途
+  // guard，乐观「识别中」态1.5秒后拉起的轮询会与本确认请求抢锁——
+  // 轮询（无确认载荷）拿到锁先行返回mismatch口径、确认请求吃409被
+  // 当失败处理，陈旧归属卡被弹回（R42B实测「首次点击未生效，重核后
+  // 同一确认页再现，需二次点击」）；②409在途冲突被当确认失败处理。
+  // 现在：用户动作期间占用在途guard（轮询让行，同页不再自竞争）；
+  // 409按「通道占用」退避自动重试同一确认（后端按CAS幂等落盘，重试
+  // 无副作用）；其余失败先回读readiness再呈现错误——若确认实际已
+  // 落盘，界面直接呈现最新状态而非陈旧归属卡。
+  const submitIdentityConfirmation = useCallback(async (confirmation, attempt = 0) => {
     if (!state.projectId || !state.attemptId) return;
     if (confirmation?.confirmed !== true) return;
     const generation = documentRequestGeneration.current + 1;
     documentRequestGeneration.current = generation;
     setDocumentState((current) => ({ ...current, phase: "analyzing", error: null }));
+    documentResolveInFlight.current = true;
     try {
       const payload = await api.resolveStudyDocuments(
         state.projectId,
@@ -2041,15 +2065,29 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
         });
       }
     } catch (error) {
-      if (documentRequestGeneration.current === generation) {
-        setDocumentState((current) => ({
-          ...current,
-          phase: current.payload?.state || "failed",
-          error: error?.detail?.message || error?.message || "归属确认提交失败，请重试。",
-        }));
+      if (documentRequestGeneration.current !== generation) return;
+      if (
+        error?.detail?.code === "document_resolve_in_progress"
+        && attempt < 3
+      ) {
+        setDocumentState((current) => ({ ...current, error: null }));
+        setTimeout(() => {
+          if (documentRequestGeneration.current === generation) {
+            submitIdentityConfirmation(confirmation, attempt + 1);
+          }
+        }, 3000);
+        return;
       }
+      loadDocumentReadiness();
+      setDocumentState((current) => ({
+        ...current,
+        phase: current.payload?.state || "failed",
+        error: error?.detail?.message || error?.message || "归属确认提交失败，请重试。",
+      }));
+    } finally {
+      documentResolveInFlight.current = false;
     }
-  }, [api, documentState.payload?.analysis_token, state.attemptId, state.projectId]);
+  }, [api, documentState.payload?.analysis_token, loadDocumentReadiness, state.attemptId, state.projectId]);
 
   const analyzeDocuments = useCallback(async (files) => {
     if (

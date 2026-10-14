@@ -26,6 +26,14 @@ export const MONITORING_PRODUCT_HISTORY_FIELDS = Object.freeze([
   "main_action",
   "status_text",
 ]);
+// R42轮（R42-07）/R8-02：随行可选注入键（后端按状态附加，不恒在）——
+// shape门按「必带字段齐全+无未知键」校验；可选键缺席合法。
+// 注：blocked_reason（R8-02）此前被必带字段计数门误拒（9键行整抽屉
+// invalid_history），本次一并修正为可选键口径。
+export const MONITORING_HISTORY_OPTIONAL_FIELD_SET = Object.freeze(new Set([
+  "blocked_reason",
+  "rule_pack_text",
+]));
 
 export const MONITORING_PUBLIC_RESULT_VIEWS = Object.freeze([
   "overview",
@@ -402,7 +410,10 @@ function normalizeHistoryRow(value, index) {
     throw projectionError("invalid_history", `第 ${index + 1} 条历史记录格式异常，暂不展示历史。`);
   }
   const keys = Object.keys(value);
-  if (keys.length !== MONITORING_PRODUCT_HISTORY_FIELDS.length || keys.some((key) => !MONITORING_HISTORY_FIELD_SET.has(key))) {
+  if (
+    keys.some((key) => !MONITORING_HISTORY_FIELD_SET.has(key) && !MONITORING_HISTORY_OPTIONAL_FIELD_SET.has(key))
+    || MONITORING_PRODUCT_HISTORY_FIELDS.some((key) => !(key in value))
+  ) {
     throw projectionError("invalid_history", "历史记录字段不完整，暂不展示历史。", `runs[${index}]`);
   }
   const publicRunToken = requiredText(value.public_run_token, `runs[${index}].public_run_token`, "invalid_history");
@@ -427,6 +438,9 @@ function normalizeHistoryRow(value, index) {
     // R19轮（R19-08）：运行token尾号——同截止日期的多次运行据此区分，
     // 卡片不再完全同形无法辨认新旧。
     runTokenTail: String(publicRunToken).slice(-8),
+    // R42轮（R42-07）：本次运行绑定的规则修订短标识——同数据两次运行
+    // 发现构成不同时可对账差异来源（规则 vs 数据）；缺席留空不编造。
+    rulePackText: typeof value.rule_pack_text === "string" ? value.rule_pack_text : "",
   });
 }
 

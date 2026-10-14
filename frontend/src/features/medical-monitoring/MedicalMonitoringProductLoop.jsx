@@ -644,6 +644,11 @@ export function MonitoringHistoryDrawer({ history, selectedPublicRunToken = "", 
               <p>{row.dataCutoffText}</p>
               <p>{row.comparisonRangeText}</p>
               <p className="monitoring-history-status">{row.statusText}{row.runTokenTail ? ` · 运行 ${row.runTokenTail}` : ""}</p>
+              {/* R42轮（R42-07）：逐行规则修订标注——同数据两次运行发现构成
+                  不同时可对账差异来源（规则版本 vs 数据），缺席不占位。 */}
+              {row.rulePackText ? (
+                <p className="monitoring-history-status monitoring-product-muted" data-monitoring-history-rule-pack>{row.rulePackText}</p>
+              ) : null}
               {/* R8轮（R8-02）：停滞运行的阻断原因在历史行直接可见，
                   不再藏在需20秒加载的抽屉里。 */}
               {row.blockedReason ? (

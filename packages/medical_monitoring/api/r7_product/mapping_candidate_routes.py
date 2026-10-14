@@ -1054,7 +1054,9 @@ def register_mapping_candidate_routes(
                 "project_id": canonical,
                 "state": str(result["state"]),
                 "analysis_token": str(result["batch_id"]),
-                "headline": "系统正在独立识别并交叉核对研究文件",
+                # R42-09：标题不预设「独立」——独立性状态由运维绑定披露
+                # （shared_runtime_identity附注）如实表达，标题只描述阶段。
+                "headline": "系统正在识别并交叉核对研究文件",
                 "guidance": "当前无需逐项确认，完成后会自动更新研究文件状态。",
             }
             if result.get("shared_runtime_identity"):
@@ -1310,7 +1312,7 @@ def register_mapping_candidate_routes(
                         # 是需要用户指认文件角色或补充上传。
                         headline = "需要您确认文件角色"
                         guidance = (
-                            "系统两次独立核对后仍有文件角色无法自动判定。"
+                            "系统两轮核对后仍有文件角色无法自动判定。"
                             "请对下列每个角色选择对应文件，或标记缺失。"
                         )
                         state = "needs_user_input"
@@ -1321,12 +1323,16 @@ def register_mapping_candidate_routes(
                         )
                 elif state == "cross_checking":
                     headline = "系统正在复核最后几个分歧"
-                    guidance = "无需操作，系统会独立核对并自行处理差异。"
+                    guidance = "无需操作，系统会自行核对并处理差异。"
                 elif state == "adjudicating":
                     headline = "系统正在完成最后一次核对"
                     guidance = "无需操作，系统会自行处理两次判断中的差异。"
                 else:
-                    headline = "系统仍在独立核对研究文件"
+                    # R42-09：原「系统仍在独立核对研究文件」与同屏降级
+                    # 说明（同通道同模型绑定）自相矛盾——稽查/培训只引用
+                    # 标题会夸大模型独立性。标题只陈述阶段；独立性状态以
+                    # 降级附注如实表达。
+                    headline = "研究文件核对中"
                     guidance = "当前无需逐项确认，请稍后查看结果。"
                 response_payload = {
                     "project_id": canonical,
@@ -1480,6 +1486,18 @@ def register_mapping_candidate_routes(
                     "该批次的核对任务记录缺失（多为先前一次系统故障所致）。"
                     "请重新上传同一组研究文件——相同文件即可：系统会重建"
                     "核对任务并自动继续，无需更换文件版本。"
+                )
+            elif diagnostic == "document_authority_runs_not_independent":
+                # R44轮（R44-01）：独立性问题不是文件内容问题——重传与
+                # 空等都无法自行恢复。如实指认「双通道同身份」成因并点名
+                # 运维出路，不再笼统建议「稍后重试，或重新上传研究文件」。
+                guidance_text = (
+                    "两次独立核对的AI通道身份未通过独立性校验（盲核与主"
+                    "分析当前被绑定到同一通道同一模型，且未经知情降级"
+                    "确认）。这不是文件内容问题，重新上传或继续等待都无法"
+                    "解决；已上传的文件与您的确认均已保留。请联系管理员"
+                    "把盲核与主分析恢复为相互独立的AI通道（或确认运维同"
+                    "绑定降级已生效）后，再点「重新核对研究文件」。"
                 )
             else:
                 guidance_text = "请稍后重试，或重新上传研究文件。"

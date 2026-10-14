@@ -212,7 +212,7 @@ check(
 // 区间（健康单阶段数分钟到20分钟，超20分钟无变化提示停滞）。
 check(
   renders.documentsProcessingProgress.includes("本轮已等待约")
-    && renders.documentsProcessingProgress.includes("当前阶段「系统仍在独立核对研究文件」")
+    && renders.documentsProcessingProgress.includes("当前阶段「研究文件核对中」")
     && renders.documentsProcessingProgress.includes("2 项核对作业在途")
     && renders.documentsProcessingProgress.includes("执行中 1 项、排队中 1 项")
     && renders.documentsProcessingProgress.includes("数分钟到20分钟内推进")

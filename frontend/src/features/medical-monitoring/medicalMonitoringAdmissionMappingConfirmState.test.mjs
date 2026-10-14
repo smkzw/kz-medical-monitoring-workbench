@@ -736,8 +736,9 @@ test("generation progress text reports shard counts, tables, elapsed and eta", (
   assert.match(progressText, /识别分片已完成 6\/59/);
   assert.match(progressText, /正在识别：MH、VS、CM、EX 等5张表/);
   assert.match(progressText, /已等待约 10 分钟/);
-  // 线性外推：10分钟完成6片，剩53片 ≈ 88分钟。
-  assert.match(progressText, /预计还需约 88 分钟/);
+  // R44轮（R44-02）：无服务端pace（旧载荷）时回退会话线性外推：
+  // 10分钟完成6片，剩53片 ≈ 88分钟；措辞如实标注「本页会话速度」。
+  assert.match(progressText, /按本页会话速度预计还需约 88 分钟/);
 
   // 零完成分片：不编造ETA，其余进度照实。
   const zeroCompleted = projectMappingCandidates({
@@ -761,6 +762,87 @@ test("generation progress text reports shard counts, tables, elapsed and eta", (
     phase: "ready",
     payload: { state: "candidates_ready", confirmationStatus: "pending_confirmation" },
   }), "");
+});
+
+// R44轮（R44-02）：服务端滚动速度存在时优先消费——跨刷新稳定，不再用
+// 会话外推凑数；≥90分钟以小时呈现。
+test("generation progress prefers server pace and formats hours", () => {
+  const payload = {
+    state: "generating",
+    confirmation_status: "pending_confirmation",
+    summary: { job_count: 177, completed_job_count: 74, candidate_count: 0, field_count: 0 },
+    jobs: [{ table_name: "AE", status: "running" }],
+    candidates: [],
+    pace: {
+      window_shards: 12,
+      window_seconds: 2160,
+      shards_per_minute: 0.306,
+      remaining_shards: 103,
+      eta_seconds: 12600,
+      last_completion_age_seconds: 45,
+    },
+  };
+  const state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "load-ready",
+    payload,
+  });
+  const text = mappingGenerationProgressText(state, state.progress.startedAt + 5 * 60_000);
+  assert.match(text, /识别分片已完成 74\/177/);
+  // 201600s = 3.5小时 → 小时表述；且不再出现会话外推口径。
+  assert.match(text, /按最近实际速度预计还需约 3\.5 小时/);
+  assert.doesNotMatch(text, /本页会话速度/);
+});
+
+// R44轮（R44-02）：服务端窗口失真（末次完成已超20分钟）时如实缺省——
+// 速度已不能代表当前状态，宁可不给预估。
+test("generation progress omits eta when server pace is stale", () => {
+  const payload = {
+    state: "generating",
+    confirmation_status: "pending_confirmation",
+    summary: { job_count: 177, completed_job_count: 74, candidate_count: 0, field_count: 0 },
+    jobs: [{ table_name: "AE", status: "running" }],
+    candidates: [],
+    pace: {
+      window_shards: 12,
+      window_seconds: 2160,
+      shards_per_minute: 0.306,
+      remaining_shards: 103,
+      eta_seconds: 201600,
+      last_completion_age_seconds: 8 * 60 * 60,
+    },
+  };
+  const state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "load-ready",
+    payload,
+  });
+  const text = mappingGenerationProgressText(state, state.progress.startedAt + 5 * 60_000);
+  assert.match(text, /识别分片已完成 74\/177/);
+  assert.doesNotMatch(text, /预计还需/);
+});
+
+// R44轮（R44-02）：服务端明确返回pace但不可估（null，样本不足）时，
+// 不拿会话线性外推凑数。
+test("generation progress omits eta when server pace present but not estimable", () => {
+  const payload = {
+    state: "generating",
+    confirmation_status: "pending_confirmation",
+    summary: { job_count: 177, completed_job_count: 1, candidate_count: 0, field_count: 0 },
+    jobs: [{ table_name: "AE", status: "running" }],
+    candidates: [],
+    pace: null,
+  };
+  const projected = projectMappingCandidates(payload);
+  assert.equal(projected.pace, null);
+  const state = admissionMappingConfirmReducer(createAdmissionMappingConfirmState(), {
+    type: "load-ready",
+    payload,
+  });
+  const text = mappingGenerationProgressText(
+    { ...state, payload: projected },
+    state.progress.startedAt + 5 * 60_000,
+  );
+  assert.match(text, /识别分片已完成 1\/177/);
+  assert.doesNotMatch(text, /预计还需/);
 });
 
 // R40轮（R38-01）：无分片计数（空summary+空jobs）时不虚构进度对象。

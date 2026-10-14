@@ -1095,6 +1095,11 @@ def build_anonymous_adjudication_context(
     review_verifier: DocumentAuthorityConflictRunEnvelope,
     *,
     legacy_v1: bool = False,
+    # R44轮（R44-01）：adjudication/critique上下文链此前漏穿R40放行开关
+    # ——reconcile在共享运行时绑定下把同身份分析对fail-closed拒之门外
+    # （document_authority_runs_not_independent），运维同绑定项目在复核
+    # 有分歧、进入裁决提交时被无出口阻断（R44A实测46分钟无恢复）。
+    allow_shared_runtime_identity: bool = False,
 ) -> dict[str, Any]:
     resolution = resolve_document_authority_conflicts(
         batch,
@@ -1103,6 +1108,7 @@ def build_anonymous_adjudication_context(
         conflict_packet,
         review_primary,
         review_verifier,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     unresolved = tuple(resolution["unresolved_roles"])
     if not unresolved:
@@ -1154,6 +1160,10 @@ def build_anonymous_critique_context(
     adjudication_context: Mapping[str, Any],
     adjudication_primary: DocumentAuthorityConflictRunEnvelope,
     adjudication_verifier: DocumentAuthorityConflictRunEnvelope,
+    *,
+    # R44轮（R44-01）：同build_anonymous_adjudication_context——放行开关
+    # 必须穿到内部裁决解析，否则同身份对在critique提交时同样死锁。
+    allow_shared_runtime_identity: bool = False,
 ) -> dict[str, Any]:
     resolution = resolve_document_authority_adjudication(
         batch,
@@ -1165,6 +1175,7 @@ def build_anonymous_critique_context(
         adjudication_context,
         adjudication_primary,
         adjudication_verifier,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     roles = tuple(str(value) for value in resolution["unresolved_roles"])
     if not roles:
@@ -1319,6 +1330,7 @@ def resolve_document_authority_adjudication(
             adjudication_context.get("schema_version")
             == "monitoring-document-authority-adjudication-v1"
         ),
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     if adjudication_context != expected_context:
         raise DocumentAuthorityError("document_authority_adjudication_context_tampered")
@@ -1356,6 +1368,7 @@ def resolve_document_authority_adjudication(
         conflict_packet,
         review_primary,
         review_verifier,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     full_role_replay_pair = (
         prompt_pair in FULL_ROLE_REPLAY_ADJUDICATION_PROMPT_PAIRS
@@ -1468,6 +1481,7 @@ def resolve_document_authority_critique(
         adjudication_context,
         adjudication_primary,
         adjudication_verifier,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     if critique_context != expected_context:
         raise DocumentAuthorityError("document_authority_critique_context_tampered")

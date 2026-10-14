@@ -134,6 +134,20 @@ check(
   "history rejects internal run identity",
 );
 check(MONITORING_PRODUCT_HISTORY_FIELDS.length === 8, "history field registry is exactly eight fields");
+// R42轮（R42-07）：规则修订标注为可选键——缺席合法、出现即透传；
+// 未知键依旧fail-closed。
+check(
+  projectMonitoringHistory({ runs: [{ ...historyRow, rule_pack_text: "rule-revision:abc123def456" }] }, { projectId: "project-a" }).rows[0].rulePackText === "rule-revision:abc123def456",
+  "history carries the per-run rule revision label when present",
+);
+check(
+  projectMonitoringHistory({ runs: [historyRow] }, { projectId: "project-a" }).rows[0].rulePackText === "",
+  "history rows without a rule label stay empty instead of fabricating one",
+);
+check(
+  projectMonitoringHistory({ runs: [{ ...historyRow, blocked_reason: "来源未就绪" }] }, { projectId: "project-a" }).kind === "history",
+  "blocked_reason is an accepted optional history key (R8-02 no longer rejected)",
+);
 const resultEntry = projectMonitoringResultEntry({
   project_ref: "project-a",
   public_run_token: "run:001",

@@ -82,6 +82,24 @@ export function adjudicationStalledMs(state, now = Date.now()) {
 // 如实标注「约」；已完成0片或无分片计数时 respective 项缺省不编造。
 // 与R36-08（研究文件核对阶段预期）、R34-03（复核等待进度）同一长任务
 // 进度反馈语义。
+// R44轮（R44-02）：剩余预估优先消费服务端滚动速度（payload.pace——
+// 按最近真实完成时刻计算，跨刷新稳定）；仅当服务端预估缺席（旧载荷
+// 或样本不足）时才回退本页会话线性外推，并保留「会话内」口径措辞。
+// 预估≥90分钟以小时表述（「约480分钟」不可读，R44B实测8小时级全量
+// 识别必须以小时呈现才符合直觉）；服务端窗口末次完成超过20分钟时
+// 如实不报预估（速度已失真，宁可缺省）。
+const PACE_LAST_COMPLETION_STALE_MS = 20 * 60 * 1000;
+
+export function remainingDurationText(etaSeconds) {
+  const seconds = Number(etaSeconds);
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+  const minutes = seconds / 60;
+  if (minutes >= 90) {
+    return `按最近实际速度预计还需约 ${(minutes / 60).toFixed(1)} 小时`;
+  }
+  return `按最近实际速度预计还需约 ${Math.max(1, Math.round(minutes))} 分钟`;
+}
+
 export function mappingGenerationProgressText(state, now = Date.now()) {
   const payload = state?.payload;
   if (!payload) return "";
@@ -104,15 +122,26 @@ export function mappingGenerationProgressText(state, now = Date.now()) {
   if (elapsedMs >= 60000) {
     parts.push(`已等待约 ${Math.floor(elapsedMs / 60000)} 分钟`);
   }
-  if (
-    shards
-    && shards.total > 0
-    && shards.completed > 0
-    && shards.completed < shards.total
-    && elapsedMs > 0
-  ) {
-    const remainingMs = (elapsedMs / shards.completed) * (shards.total - shards.completed);
-    parts.push(`按当前速度预计还需约 ${Math.max(1, Math.round(remainingMs / 60000))} 分钟`);
+  const pace = payload.pace || null;
+  const paceReported = payload.paceReported === true;
+  const paceEta = Number(pace?.eta_seconds);
+  const paceStale = Number(pace?.last_completion_age_seconds) * 1000
+    >= PACE_LAST_COMPLETION_STALE_MS;
+  if (shards && shards.total > 0 && shards.completed > 0 && shards.completed < shards.total) {
+    if (Number.isFinite(paceEta) && paceEta > 0 && !paceStale) {
+      const serverText = remainingDurationText(paceEta);
+      if (serverText) parts.push(serverText);
+    } else if (!paceReported && elapsedMs > 0) {
+      // 旧载荷（从未带pace键）才回退会话线性外推；服务端已报告但当前
+      // 不可估（样本不足/已失真）时如实缺省，不拿会话外推凑数。
+      const remainingMs = (elapsedMs / shards.completed) * (shards.total - shards.completed);
+      const minutes = remainingMs / 60000;
+      parts.push(
+        minutes >= 90
+          ? `按本页会话速度预计还需约 ${(minutes / 60).toFixed(1)} 小时`
+          : `按本页会话速度预计还需约 ${Math.max(1, Math.round(minutes))} 分钟`,
+      );
+    }
   }
   return parts.join("；");
 }
@@ -370,6 +399,15 @@ export function projectMappingCandidates(payload) {
         inflightTableCount: inflightTables.length,
       }
     : null;
+  // R44轮（R44-02）：服务端按真实完成时刻计算的滚动速度/剩余预估——
+  // 跨页面刷新稳定（此前前端只有会话线性外推，刷新/重连后起点归零，
+  // R44B实测同一识别过程ETA在439↔144分钟间反复跳变）。paceReported
+  // 区分「载荷带pace键但不可估（null，如实缺省）」与「旧载荷无此键
+  // （回退会话外推）」两种情形。
+  const hasPaceKey = payload != null
+    && Object.prototype.hasOwnProperty.call(payload, "pace");
+  const rawPace = hasPaceKey ? payload.pace : undefined;
+  const pace = rawPace && typeof rawPace === "object" ? rawPace : null;
   return {
     state: String(payload?.state || ""),
     confirmationStatus: String(payload?.confirmation_status || "pending_confirmation"),
@@ -378,6 +416,8 @@ export function projectMappingCandidates(payload) {
     questionCount,
     failedTables,
     shardProgress,
+    pace,
+    paceReported: hasPaceKey,
     headline: mappingHeadline({
       fieldCount,
       questionCount,

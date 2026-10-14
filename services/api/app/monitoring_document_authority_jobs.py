@@ -281,6 +281,10 @@ def submit_document_authority_adjudication_pair(
         packet,
         primary_review,
         verifier_review,
+        # R44轮（R44-01）：放行开关此前漏穿adjudication上下文构建——
+        # 运维同绑定的同身份分析对在此被fail-closed拒收，裁决提交
+        # 成为无出口死局（R44A实测）。
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     bindings = [
         {
@@ -352,6 +356,8 @@ def submit_document_authority_critique_pair(
     adjudication_context = build_anonymous_adjudication_context(
         candidate_batch, primary_analysis, verifier_analysis, packet,
         primary_review, verifier_review,
+        # R44轮（R44-01）：放行开关穿入，同submit_adjudication_pair。
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     primary_adjudication = load_document_authority_review_run(
         repository, project_id=project_id, job_id=primary_adjudication_job_id,
@@ -367,6 +373,7 @@ def submit_document_authority_critique_pair(
         candidate_batch, primary_analysis, verifier_analysis, packet,
         primary_review, verifier_review, adjudication_context,
         primary_adjudication, verifier_adjudication,
+        allow_shared_runtime_identity=allow_shared_runtime_identity,
     )
     bindings = [{
         "candidate_id": str(item["candidate_id"]),
@@ -800,6 +807,8 @@ def resolve_document_authority_from_jobs(
             primary_review,
             verifier_review,
             legacy_v1=legacy_v1,
+            # R44轮（R44-01）：放行开关穿入，同submit_adjudication_pair。
+            allow_shared_runtime_identity=allow_shared_runtime_identity,
         )
         primary_adjudication = load_document_authority_review_run(
             repository,
@@ -854,6 +863,7 @@ def resolve_document_authority_from_jobs(
                 adjudication_context,
                 primary_adjudication,
                 verifier_adjudication,
+                allow_shared_runtime_identity=allow_shared_runtime_identity,
             )
             primary_critique = load_document_authority_review_run(
                 repository,

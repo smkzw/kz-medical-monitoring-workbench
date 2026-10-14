@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -2205,6 +2206,7 @@ class AdmissionMappingPipeline:
             and any(value in _FAILED for value in states)
             else "generating"
         )
+        completed_count = sum(value == "completed" for value in states)
         return {
             "attempt_id": attempt_id,
             "cohort": cohort,
@@ -2212,10 +2214,17 @@ class AdmissionMappingPipeline:
             "confirmation_status": "pending_confirmation",
             "summary": {
                 "job_count": len(job_rows),
-                "completed_job_count": sum(value == "completed" for value in states),
+                "completed_job_count": completed_count,
                 "candidate_count": len(mappings),
                 "pending_confirmation_count": len(mappings),
             },
+            # R44轮（R44-02）：服务端按真实完成时间戳计算滚动速度与剩余
+            # 预估——此前前端只能用「本页会话耗时/已完成片数」线性外推，
+            # 页面刷新/挂起重连后起点归零，同一识别过程ETA在439↔144分钟
+            # 间反复跳变（R44B实测），失去参考意义。窗口取最近12片完成
+            # 时刻；少于2片或窗口无时间跨度时如实缺省（宁可不给预估，
+            # 不给假预估）。前端仅在服务端预估缺席时回退旧会话外推。
+            "pace": _generation_pace(jobs, total=len(states), completed=completed_count),
             "execution": {
                 "providers": sorted({item["provider"] for item in job_rows}),
                 "requested_models": sorted(
@@ -2225,6 +2234,52 @@ class AdmissionMappingPipeline:
             "jobs": job_rows,
             "candidates": mappings,
         }
+
+
+def _generation_pace(
+    jobs: Sequence[Any],
+    *,
+    total: int,
+    completed: int,
+) -> Optional[dict[str, Any]]:
+    """R44轮（R44-02）：按真实完成时刻估算剩余时间的最小口径。
+
+    窗口=最近12片completed作业的updated_at（完成即更新，是该行的最后
+    状态变更时刻）；速率=窗口内单位时间完成片数（天然反映实际并发度，
+    并发调大速率即上升，无需另行建模）。不可估时返回None，调用方如实
+    缺省——宁可不给预估，不给假预估。
+    """
+
+    if total <= 0 or completed <= 0 or completed >= total:
+        return None
+    completed_times = sorted(
+        getattr(job, "updated_at", None)
+        for job in jobs
+        if str(_value(getattr(job, "status", ""))) == "completed"
+        and getattr(job, "updated_at", None) is not None
+    )
+    if len(completed_times) < 2:
+        return None
+    # 历史行可能带naive时间戳——与aware的now相减会TypeError，宁可缺省。
+    if any(item.tzinfo is None for item in completed_times):
+        return None
+    window = completed_times[-12:]
+    span_seconds = (window[-1] - window[0]).total_seconds()
+    if span_seconds <= 0:
+        return None
+    rate_per_second = (len(window) - 1) / span_seconds
+    remaining = total - completed
+    now = datetime.now(timezone.utc)
+    return {
+        "window_shards": len(window),
+        "window_seconds": round(span_seconds),
+        "shards_per_minute": round(rate_per_second * 60, 3),
+        "remaining_shards": remaining,
+        "eta_seconds": round(remaining / rate_per_second),
+        "last_completion_age_seconds": round(
+            max(0.0, (now - window[-1]).total_seconds())
+        ),
+    }
 
 
 def current_admission_mapping_revision(

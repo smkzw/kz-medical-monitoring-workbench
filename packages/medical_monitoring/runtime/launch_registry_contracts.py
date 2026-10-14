@@ -800,6 +800,24 @@ class LaunchRecord:
     def status_text(self) -> str:
         return _run_status_text(self.run_state, bool(self.result_available))
 
+    @property
+    def rule_pack_text(self) -> str:
+        """R42轮（R42-07）：本次运行绑定规则修订的用户可见版本标注。
+
+        同数据两次运行发现构成不同时，界面此前无任何规则版本信息，
+        无法向QA解释差异来自规则还是数据。规则修订令牌形如
+        ``rule-revision:<24hex>``，对账只需可比较的短标识：取首项前
+        12位；多项时附计数。空（record_applicability或未绑定）如实
+        留空，不编造版本号。
+        """
+
+        if not self.rule_tokens:
+            return ""
+        first = str(self.rule_tokens[0]).split(":", 1)[-1][:12]
+        if len(self.rule_tokens) == 1:
+            return f"rule-revision:{first}"
+        return f"rule-revision:{first} 等{len(self.rule_tokens)}项规则修订"
+
     def public_projection(self) -> dict[str, Any]:
         """Return exactly the bounded public history shape."""
         return {
@@ -811,6 +829,7 @@ class LaunchRecord:
             "result_available": bool(self.result_available),
             "main_action": self.main_action,
             "status_text": self.status_text,
+            "rule_pack_text": self.rule_pack_text,
         }
 
     def as_public_dict(self) -> dict[str, Any]:

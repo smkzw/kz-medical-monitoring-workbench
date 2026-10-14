@@ -3814,6 +3814,7 @@ def test_slice07c4_prepare_and_start_blocks_second_in_flight_run_and_public_prog
     history = client.get(f"{_base(PROJECT_A)}/runs")
     assert history.status_code == 200, history.text
     assert len(history.json()["runs"]) == 1
+    # R42轮（R42-07）：历史行新增逐运行规则修订标注（rule_pack_text）。
     assert set(history.json()["runs"][0]) == {
         "public_run_token",
         "mode_text",
@@ -3823,7 +3824,10 @@ def test_slice07c4_prepare_and_start_blocks_second_in_flight_run_and_public_prog
         "result_available",
         "main_action",
         "status_text",
+        "rule_pack_text",
     }
+    # 本用例运行未绑定规则修订 → 如实留空（绑定后为 rule-revision:<12hex>）。
+    assert history.json()["runs"][0]["rule_pack_text"] == ""
 
 
 # ---------------------------------------------------------------------------
