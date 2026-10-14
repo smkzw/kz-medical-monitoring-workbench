@@ -71,15 +71,15 @@ const PYTEST_GATE = "cd " + WBABS + " && .venv/bin/python -m pytest tests/medica
 
 // ===== 开局：环境门 =====
 phase("开局：隔离环境就绪门");
-const apiProbe = await world.run(PY, ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + ISOAPI + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
-const feProbe = await world.run(PY, ["-c", "import urllib.request\nr=urllib.request.urlopen('" + ISOFE + "',timeout=10)\nprint(r.status)"]);
+const apiProbe = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + ISOAPI + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
+const feProbe = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request\nr=urllib.request.urlopen('" + ISOFE + "',timeout=10)\nprint(r.status)"]);
 let envOk = apiProbe.exitCode === 0 && apiProbe.stdout.includes("READY") && feProbe.exitCode === 0;
 if (!envOk) {
   await world.run("bash", ["-c", ISO_RESTART_API]);
   await world.run("bash", ["-c", ISO_RESTART_VITE]);
   await world.run("bash", ["-c", "sleep 20"]);
-  const reApi = await world.run(PY, ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + ISOAPI + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
-  const reFe = await world.run(PY, ["-c", "import urllib.request\nr=urllib.request.urlopen('" + ISOFE + "',timeout=10)\nprint(r.status)"]);
+  const reApi = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request,json\nr=urllib.request.urlopen('" + ISOAPI + "',timeout=10)\nd=json.load(r)\nprint('READY' if d.get('ready') else 'NOTREADY')"]);
+  const reFe = await world.run("/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/implementation/workbench/.venv/bin/python", ["-c", "import urllib.request\nr=urllib.request.urlopen('" + ISOFE + "',timeout=10)\nprint(r.status)"]);
   envOk = reApi.exitCode === 0 && reApi.stdout.includes("READY") && reFe.exitCode === 0;
   if (!envOk) {
     return {
@@ -139,12 +139,13 @@ const implementer = agent("实施工程师", {
     "需要重启服务时只动隔离对8911/5178（重启命令找设计文档或ISO_ENV_LOG），严禁碰8910/5177。测试永远以用户视角经界面进行。" + HONESTY,
 });
 let impl: ImplResult | null = null;
+let implFeedback = "";
 let gateOk = false;
 for (let attempt = 1; attempt <= 3 && !gateOk; attempt++) {
   impl = await implementer.ask<ImplResult>(
     (attempt === 1
       ? "第1次：按 " + SPEC + "/02_DESIGN.md 全量实施（分步走，每步验证后提交）。"
-      : "第" + attempt + "次：上次回归门未过或验收未过，按下方反馈修复后重验。反馈：" + JSON.stringify(implFeedback)) + "\n" +
+      : "第" + attempt + "次：上次回归门未过或验收未过，按下方反馈修复后重验。反馈：" + implFeedback) + "\n" +
     "完成后：\n" +
     "1. 跑回归门：" + PYTEST_GATE + "（存量基线0失败，只拦新增）；\n" +
     "2. 用界面冒烟自检：经 http://localhost:5178 界面（不是API）验证常驻项目「MX循开考-CSU」仍可开始运行监查；\n" +
@@ -152,8 +153,7 @@ for (let attempt = 1; attempt <= 3 && !gateOk; attempt++) {
   );
   gateOk = impl.gatePassed;
 }
-let implFeedback = "";
-if (!gateOk) {
+if (!gateOk || !impl) {
   return {
     conclusion: "专项中止于实施阶段：三次尝试回归门未过。考古/设计/实施记录都在 " + SPEC + "/，供人工决策。已提交的代码在git（未push）。",
     findings: [], verified: ["三次回归门实跑"], notCovered: ["E2E验收", "复测套件"],
@@ -239,7 +239,7 @@ await world.run("bash", ["-c",
 ]);
 
 return {
-  conclusion: "专项A+B完成：第3步单一权威状态源落地（提交" + impl.commitHash + "），从零路径E2E三连过（44轮首次稳定走通），复测套件建成并回放" + suite.retested + "条（关闭" + suite.closed + "条）。常规轮可恢复，建议配额切P0/P1清零优先（方案C）。全部证据在 " + SPEC + "/。",
+  conclusion: "专项A+B完成：第3步单一权威状态源落地（提交" + (impl ? impl.commitHash : "n/a") + "），从零路径E2E三连过（44轮首次稳定走通），复测套件建成并回放" + suite.retested + "条（关闭" + suite.closed + "条）。常规轮可恢复，建议配额切P0/P1清零优先（方案C）。全部证据在 " + SPEC + "/。",
   findings: suite.stillFailing.map((id) => ({
     where: SPEC + "/05_SUITE.md",
     what: "复测仍失败：" + id,
