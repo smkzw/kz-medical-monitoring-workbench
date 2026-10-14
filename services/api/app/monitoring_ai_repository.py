@@ -9,6 +9,7 @@ from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
 from .monitoring_admission_stage_store import (
+    INFRA_FAILURE_CODES,
     STAGE_RECOGNITION,
     STAGE_TABLES_DDL,
     AdmissionStageStore,
@@ -723,12 +724,67 @@ class MonitoringAiRepository:
         )
         return state
 
+    def _infra_failure_requeue_enabled(self) -> bool:
+        """S6灰度开关（02_DESIGN §5.1：env默认off，调用点核实后可开）。
+
+        调用点核实（实施时逐一遍历）：AI作业提交唯一漏斗=
+        monitoring_ai_service.MonitoringAiService._create_job
+        （monitoring_ai_service.py:1819），识别/文档/其余task_type全部
+        经它入队；重排只对「终态失败+infra失败码+无契约退役」行生效，
+        content/contract/退役/输入变化边界一律不重排。
+        """
+
+        import os
+
+        return str(os.environ.get("WORKBENCH_MONITORING_AI_INFRA_RETRY", "")).strip() in {
+            "1", "true", "yes", "on",
+        }
+
+    def _is_requeueable_infra_failure(self, row: sqlite3.Row) -> bool:
+        """R11判据下沉为库层不变量（02_DESIGN §5.1根治点1）。
+
+        仅「终态失败（failed/blocked/stale_input）+失败码∈INFRA_
+        FAILURE_CODES+无契约退役」可按显式重试语义重排；同一job_id
+        隐含输入指纹全等（stable_job_id），revision变化行天然不会命中。
+        """
+
+        if str(row["status"]) not in {
+            MonitoringAiJobStatus.FAILED.value,
+            MonitoringAiJobStatus.BLOCKED.value,
+            MonitoringAiJobStatus.STALE_INPUT.value,
+        }:
+            return False
+        if str(row["contract_retirement_code"] or "").strip():
+            return False
+        return str(row["failure_code"] or "").strip() in INFRA_FAILURE_CODES
+
     def create_or_get(
         self,
         request: MonitoringAiJobCreate,
     ) -> MonitoringAiJob:
         now = self.clock()
         job_id = stable_job_id(request)
+        # 状态机专项S6（02_DESIGN §5.1）：失败态永不缓存复用——命中行
+        # 为infra终态失败时按显式重试语义重排后返回（R28-03先例：用户
+        # 同请求重发=显式动作，不受自动预算约束）。retry_terminal自带
+        # IMMEDIATE事务与recovery_action留痕（actor=user）；竞态下CAS
+        # 冲突则回落常规路径（行已非可重排失败态，fail-safe）。
+        if self._infra_failure_requeue_enabled():
+            probed = None
+            with self._connect() as connection:
+                probed = connection.execute(
+                    "SELECT * FROM monitoring_ai_jobs WHERE job_id = ?",
+                    (job_id,),
+                ).fetchone()
+            if probed is not None and self._is_requeueable_infra_failure(probed):
+                try:
+                    return self.retry_terminal(
+                        request.project_id,
+                        job_id,
+                        current_input_revision_sha256=request.input_revision_sha256,
+                    )
+                except MonitoringAiStateConflictError:
+                    pass
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
