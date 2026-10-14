@@ -4,6 +4,139 @@
 
 ---
 
+## R44 攻坚·第 1 次（2026-10-14，攻坚工程师-R44-第1次）
+
+### 0. 结论先行
+
+**墙未复发：R43 修复员六条修复（6cc49583：R43-01 研究文件核对作业队列
+任务类型插队认领、R43-02 重新核对 dwell 重置+受理回执、R41-03 内容差异
+确认挂起文案、R41-04 准备状态矛盾口径、R40-04 总看板双口径标注、
+R40-05 MH 域空术语+MH→CM 方向新发现行——**唯 R40-05 触运行链投影**
+（facts_publication.py +128 行））+ 轮次归档（1c916a9b）之后，8911
+pid 90569 于 2026-10-14 07:23:55 拉起、5178 vite 同刻（[::1] 监听），
+本轮两遍全新幂等键全链全绿，零阻断、零代码修复、零重启、零跳门，
+两遍壁钟共 41s（全暖带）。** 常驻项目「MX循开考-CSU」
+（proj_user_6ef58ac151e1）以两个全新幂等键（r44s-fresh-ea2a1bbe2106
+=registry seq 78 / r44s-fresh-0704346d6e66=seq 79）各走完
+run-setup/options → workspace/bootstrap（留证）→ prepare-and-start →
+progress completed（15s，各 2 轮询）→ publication available →
+result-entry → overview 可读（两遍均 1,263,204B / 65 发现 / 16 受试者，
+缓存探针二读字节相等）。**附投影漂移逐项归因（零代码修复，钉行如实
+录）**：与 R43 基线（r43s_overview_p1.json）比，findings 60→65
+（+5 全落 `facts-finding-event-MH` 族=4×甲减缺药 22002/23003/22010/
+23011 + 1×空术语 24008，注记文本与
+`facts_publication.py` 的 `_mh_cm_missing_medication_note`/
+`_mh_empty_term_note`（6cc49583 R40-05）逐字一致）、5 条 MH 风险行
+（riski-MH-000002/000003/000017/000019/000032，与 5 新发现一一同受试
+者）medical_note null→R40-05 注记、severity 低→中（同一
+`cm_mh_note`/`cm_mh_severity_hint` 富化通道表达于既有风险行）；
+risks 集合 389=389 不变、共有 60 findings 键控逐字段零漂移、零消失；
+content_hash 3e0243ea→fd095c27/eaf1dbb1（新内容+R43 §3 已钉的
+query_draft_id 逐运行设计漂移）——**全部属 6cc49583 提交说明预告的
+修复预期行为，非回归、非本链阻断项。**
+
+### 1. 环境前置（复现前，未重启任何服务）
+
+- 8911（pid 90569，2026-10-14 07:23:55 拉起，127.0.0.1 IPv4 监听）
+  `/api/runtime-readiness` 200 ready=true、
+  backend_build_id=**api-31cbdf421a25007a**（6cc49583 提交说明
+  ISO_ENV_LOG 条目同指纹）；`/api/health` 200（0.276s）。
+- 5178（vite node pid 90655，[::1] IPv6 监听）runtime-build.json
+  expectedBackendBuildId=api-31cbdf421a25007a 与后端**配对一致**。
+- 加载面实证：`git diff HEAD --stat -- packages services frontend/src`
+  为空；`find packages services frontend/src -newermt
+  "2026-10-14 07:23:55" -type f` 为空——磁盘==HEAD（1c916a9b，含
+  6cc49583 六条修复）==进程加载面。
+- 复现前磁盘基线：launch_registry 77 条全部 completed+
+  result_available=1、**waiting_start=0**（指纹族=68ba60ad… siege 族
+  +96ce6187… UI 向导族）；execution_profiles `global_default|*|1`
+  在位；admission_events 6 行。
+- 复现前同刻双侧实测（p1 前置）：mapping-candidates 200
+  （candidates_ready）、facts 200（ready）、project/open 200
+  （current）、protocol-versions 200——预置台与运行门无口径差。
+
+### 2. 复现（任务①）——两遍全链（驱动 `r44s_siege_repro.py`，证据
+`r44s_siege_evidence.jsonl` 56 行，两遍链路壁钟 41s 全暖）
+
+忠实界面路径（不先 workspace/bootstrap；bootstrap 仅按任务书列名留证实测）。
+
+**第一遍（key=r44s-fresh-ea2a1bbe2106，seq 78）**：
+
+| 步骤 | 实测 |
+| --- | --- |
+| 基线双侧 | mapping-candidates 200（270ms，candidates_ready）、facts 200（126ms，ready）、project/open 200（148ms，current）、protocol-versions 200（66ms）——无口径差 |
+| run-setup/options | 200，322ms，snapshot:ef8692acfbab4d2a9846916f（与 R34–R43 同快照） |
+| workspace/bootstrap（留证） | 200，146ms，replayed=true revision=1 |
+| prepare-and-start | **200，606ms**，run:d7e49e728b2a58f2a2b1ca60 |
+| progress | completed，percent=100.0，polls=2，run_seconds=15（首轮 result_available=false 沿 R20 §4 投影时序） |
+| publication | POST 200 → **available**（931ms，首击即 available） |
+| result-entry | 200，510ms，rct=result-context:ff22eb869dd7410a80866133c3a3846b |
+| results/{rct}/overview | 200，567ms，**1,263,204B、65 发现/16 受试者**；缓存探针二读 288ms 字节相等 |
+
+**第二遍=重验（任务③，key=r44s-fresh-0704346d6e66，seq 79）**：全绿
+同型全暖——options 200（393ms，同快照）→ bootstrap 200 replayed
+（161ms）→ prepare-and-start **200**（710ms，
+run:4744f69441080db4a0479a0f）→ progress completed（polls=2，15s）→
+publication **available**（1190ms）→ entry 200（546ms，
+rct=result-context:ad8fa39f30ee43e48cab230c483bfdfa）→ overview 200
+（568ms，1,263,204B/65/16；缓存探针 324ms 字节相等）。
+
+终态磁盘：sequence 1-79 全部 completed+result_available=1（新增 78/79
+两行），**waiting_start=0**、admission_events 6 行=6 行（零新增接入
+事件）、global_default|*|1 稳定、指纹族不变（68ba60ad…/96ce6187…）。
+AI 台账：R44 运行窗口（≥00:03:00Z）**零作业创建**（monitoring_ai_jobs
+max(created_at)=2026-10-13T21:34:15Z，早于本轮）；CSU 项目台账 46 条
+全终态（44 completed+2 failed）——运行链为规则驱动，零 AI 依赖。
+
+### 3. 投影漂移逐项归因（本轮实测，对照 r43s_overview_p1.json 基线）
+
+6cc49583 唯一触投影面的是 R40-05（facts_publication.py），提交说明
+原句预告「下次发布投影与 content_hash 将按新投影漂移，属修复预期
+行为」；本轮实测逐项对上：
+
+1. **新增 5 条发现全落 MH 族（预期）**：
+   facts-finding-event-MH-000002/000003/000017/000019（subjects
+   22002/23003/22010/23011，注记「病史与用药一致性待核实：本条病史
+   记录载『甲状腺功能减退』，但该受试者合并用药（CM）记录未见对应
+   治疗药物（如左甲状腺素等）……非医学诊断」——与
+   `_mh_cm_missing_medication_note` 逐字一致）+
+   MH-000032（subject 24008，空术语行「既往病史」缺诊断名——与
+   `_mh_empty_term_note` 一致）。23003/24008 正是 R40-05 自述实测
+   受试者。**零非 MH 族新发现、零发现消失。**
+2. **既有 5 条 MH 风险行同源富化（预期）**：riski-MH-000002/000003/
+   000017/000019/000032 与 5 新发现一一同受试者，medical_note
+   null→R40-05 注记、severity 低→中——R40-05 经 `cm_mh_note`/
+   `cm_mh_severity_hint` 通道同时表达于发现与既有风险行，risks
+   **集合**389=389 不变。
+3. **共有 60 findings 键控逐字段零漂移（预期）**：除 query_draft_id
+   外全字段零差异。
+4. **content_hash 变化（预期，两层叠加）**：新 5 行内容 +
+   R43 §3 已完备钉死的设计漂移（`_query_draft_id` 把 run_id 烧进
+   草稿 id，`packages/medical_monitoring/reports/mode_output_core.py:1092,1153`，
+   经 `drafts.sort(key=query_draft_id)` :1308 放大）——本轮 p1
+   fd095c27… / p2 eaf1dbb1… 互异而 overview 字节相等
+   （1,263,204×2），与 R43 归因同型。
+5. **修复行为测试背书**：`pytest tests/test_mm_r43_fixes.py` →
+   **10 passed**（1.14s；含 MH 空术语/MH→CM 检出/品牌名覆盖负例/
+   过宽触发词负例/逐受试者去重）。
+
+### 4. 遗留与边界
+
+- 全量 r7 路由套件回归未在本轮重复执行（R43 修复员已在同一 HEAD
+  留痕 101 passed/1 failed——唯一失败
+  test_late_project_dispatchers 409 result_context_unavailable 为
+  R39-R43 五轮 stash 对照证实的 HEAD 既有，非运行链墙；全量回归归
+  墙证明后的测试轮）。
+- R7-01 事件循环独占家族：本轮 `/api/health` 0.276s 秒级响应，无
+  自旋签名，未触发重启条件。
+- 常驻项目现已有 79 条 completed 运行；后续轮次开考直接走「开始
+  运行监查」即可。
+
+留痕文件：`r44s_siege_repro.py`、`r44s_siege_evidence.jsonl`、
+`r44s_overview_p1.json`、`r44s_overview_p2.json`、本日志节。
+
+---
+
 ## R43 攻坚·第 1 次（2026-10-14，攻坚工程师-R43-第1次）
 
 ### 0. 结论先行
