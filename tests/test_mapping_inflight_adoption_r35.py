@@ -138,12 +138,15 @@ def _seed_cohort_with_inflight_chunk(ai_repository: MonitoringAiRepository) -> N
 
 
 def _service(ai_repository, mapping_repository, state: str):
+    # 状态机专项S5：inflight采纳判定单源为投影inflight_adoption_available
+    # ——generating态且期望降级采纳通过的测试桩如实携带停滞标志。
     pipeline = SimpleNamespace(
         list_candidates=lambda **_kwargs: {
             "state": state,
             "confirmation_status": "pending_confirmation",
             "summary": {"candidate_count": 2},
             "candidates": [],
+            "inflight_adoption_available": state == "generating",
         },
         _task_type=MonitoringAiTaskType.LISTING_FIELD_MAPPING.value,
     )

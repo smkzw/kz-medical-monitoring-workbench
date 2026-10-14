@@ -736,6 +736,9 @@ def _public_mapping_projection(
             # （attempt键×project-latest键，superseded_by_newer_attempt等）。
             "confirmation_scope",
             "facts_generated",
+            # 状态机专项S5（02_DESIGN §5.2）：降级入口服务端化——前端
+            # 按钮渲染读本标志（停滞判定单源）。
+            "inflight_adoption_available",
             "next_action",
             "draft_id",
             "version",

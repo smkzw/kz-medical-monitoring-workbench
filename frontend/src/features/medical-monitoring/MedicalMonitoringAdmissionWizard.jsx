@@ -798,9 +798,14 @@ export function MappingConfirmPanel({ mappingState, onAnswerCard, onReviseFieldR
           全部作业落终态失败（needs_attention）后出现，大队列场景下
           终态最早也在数小时后，用户被夹在「不失败、不推进、无出路」
           死态（B位实测82分钟）。知情采纳：未完成分片的字段不在本批
-          结果中（后端物化为缺口记录，可重新识别补全）。 */}
+          结果中（后端物化为缺口记录，可重新识别补全）。
+          状态机专项S5（02_DESIGN §5.2）：入口出现判定服务端化——
+          停滞不再由本地计时决定按钮可用性，改为渲染后端
+          inflight_adoption_available标志（pace窗口单源）；本地停滞
+          计时仅作提示UI保留。点击仍携带include_incomplete，后端门
+          （服务端标志+显式标志）不放松，422走既有错误提示路径。 */}
       {payload?.state === "generating"
-        && stalledMs >= MAPPING_STALL_THRESHOLD_MS
+        && payload?.inflightAdoptionAvailable === true
         && Number(payload?.fieldCount) > 0
         && onAdoptPartial ? (
         <div className="monitoring-admission-alert" role="alert" style={{ margin: "8px 0" }}>

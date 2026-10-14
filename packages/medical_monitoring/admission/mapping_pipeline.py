@@ -57,6 +57,12 @@ class AdmissionMappingPipelineError(RuntimeError):
         super().__init__(self.code)
 
 
+# 状态机专项S5（02_DESIGN §5.2）：降级入口停滞阈值——自前端
+# MAPPING_STALL_THRESHOLD_MS（medicalMonitoringAdmissionMappingConfirmState
+# .mjs:17，30分钟）上收为服务端常量；窗口末次完成距今超过该值且已有候选
+# 时GET投影报inflight_adoption_available=true（R44 pace窗口复用）。
+RECOGNITION_INFLIGHT_STALL_SECONDS = 30 * 60
+
 MAPPING_ADJUDICATION_PROMPT_VERSION = (
     "monitoring-listing-field-mapping-adjudication-v5"
 )
@@ -2259,6 +2265,18 @@ class AdmissionMappingPipeline:
             derived_state=state,
         )
         completed_count = sum(value == "completed" for value in states)
+        pace = _generation_pace(jobs, total=len(states), completed=completed_count)
+        # 状态机专项S5（02_DESIGN §5.2）：降级入口停滞判定服务端化——
+        # 窗口末次完成距今>阈值且已有候选→inflight_adoption_available。
+        # 阈值常量自前端MAPPING_STALL_THRESHOLD_MS（30min）上收；前端只
+        # 渲染标志，adopt门（allow_inflight_adoption+本标志）不放松。
+        inflight_adoption_available = bool(
+            state == "generating"
+            and mappings
+            and pace is not None
+            and int(pace.get("last_completion_age_seconds") or 0)
+            > RECOGNITION_INFLIGHT_STALL_SECONDS
+        )
         return {
             "attempt_id": attempt_id,
             "cohort": cohort,
@@ -2274,7 +2292,8 @@ class AdmissionMappingPipeline:
             # 间反复跳变（R44B实测），失去参考意义。窗口取最近12片完成
             # 时刻；少于2片或窗口无时间跨度时如实缺省（宁可不给预估，
             # 不给假预估）。前端仅在服务端预估缺席时回退旧会话外推。
-            "pace": _generation_pace(jobs, total=len(states), completed=completed_count),
+            "pace": pace,
+            "inflight_adoption_available": inflight_adoption_available,
             "execution": {
                 "providers": sorted({item["provider"] for item in job_rows}),
                 "requested_models": sorted(

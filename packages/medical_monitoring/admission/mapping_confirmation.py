@@ -582,18 +582,21 @@ class AdmissionMappingConfirmationService:
         # 死锁（177任务约4小时吞吐下不可接受）。现允许对已完成任务
         # 的结果子集知情采纳；generating（仍在产出）依旧拒绝。
         # R35轮（R35-01）：唯一例外是界面的「知情降级采纳」——识别长
-        # 时间无新进展（前端停滞阈值30分钟）且已有已识别字段时，用户
-        # 可显式选择「采用已识别字段继续」，不再被「不失败、不推进、
-        # 无出路」夹住（B位实测54表大工作簿停滞82分钟无终态无入口；
-        # R34-07动态收割视界使大队列的终态失败最早也要数小时后到达）。
-        # 该入口要求显式标志，仅由前端降级按钮传入；未完成分片按部分
-        # 采纳同规约排除出草稿，其(域,槽位)一并豁免完整性门并物化为
-        # 缺口记录。识别仍在正常产出（未停滞）时generating照旧拒绝，
-        # R19-01的「未终态→一律generating→拒绝采纳」契约对默认路径
-        # 不变。
+        # 时间无新进展且已有已识别字段时，用户可显式选择「采用已识别
+        # 字段继续」，不再被「不失败、不推进、无出路」夹住（B位实测
+        # 54表大工作簿停滞82分钟无终态无入口；R34-07动态收割视界使大
+        # 队列的终态失败最早也要数小时后到达）。该入口要求显式标志，
+        # 仅由前端降级按钮传入；未完成分片按部分采纳同规约排除出草稿，
+        # 其(域,槽位)一并豁免完整性门并物化为缺口记录。
+        # 状态机专项S5（02_DESIGN §5.2）：停滞判定服务端化——入口出现
+        # 的判定单源为投影的inflight_adoption_available（R44 pace窗口，
+        # RECOGNITION_INFLIGHT_STALL_SECONDS）；前端标志与停滞竞态时
+        # 后端422仍兜底（门禁不放松），R19-01「未终态→一律generating→
+        # 拒绝采纳」契约对默认路径不变。
         inflight_adoption = (
             allow_inflight_adoption
             and payload.get("state") == "generating"
+            and payload.get("inflight_adoption_available") is True
         )
         if payload.get("state") == "generating" and not inflight_adoption:
             raise AdmissionMappingPipelineError("mapping_run_incomplete")

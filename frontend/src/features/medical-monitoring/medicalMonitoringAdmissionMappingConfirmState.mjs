@@ -412,6 +412,9 @@ export function projectMappingCandidates(payload) {
     state: String(payload?.state || ""),
     confirmationStatus: String(payload?.confirmation_status || "pending_confirmation"),
     factsGenerated: Boolean(payload?.facts_generated),
+    // 状态机专项S5（02_DESIGN §5.2）：降级入口服务端化——停滞判定由
+    // 后端pace窗口单源计算，按钮渲染读本标志；本地计时仅作提示UI。
+    inflightAdoptionAvailable: payload?.inflight_adoption_available === true,
     fieldCount,
     questionCount,
     failedTables,
