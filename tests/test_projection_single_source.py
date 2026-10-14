@@ -278,6 +278,7 @@ def test_list_for_review_single_source_end_to_end(tmp_path: Path) -> None:
     )
     mapping_repository = SimpleNamespace(
         find_draft_for_batch=lambda *_args: _confirmed_draft(),
+        latest_draft_for_project=lambda *_args: _confirmed_draft(),
     )
     service = AdmissionMappingConfirmationService(
         mapping_pipeline=pipeline,

@@ -4145,20 +4145,19 @@ def _r7_real_setup_inputs(canonical_project_id: str):
     imported_at = ""
     fact_summary: dict = {}
     try:
-        _admission_dir = workspace / "admissions"
-        attempts = [
-            _fm.load_attempt(_admission_dir, _attempt_id, verify_files=False)
-            for _attempt_id in _fm.list_attempt_ids(_admission_dir)
-        ]
-        if attempts:
-            _latest_attempt = max(
-                attempts, key=lambda item: (item.created_at, item.attempt_id)
+        # 状态机专项S4（02_DESIGN §6.2）：attempt归属收编为共享
+        # latest_attempt_id（与B6门同一函数，消除两处同逻辑重复）。
+        _latest_id = _fm.latest_attempt_id(canonical_project_id, workspace)
+        if _latest_id:
+            _admission_dir = workspace / "admissions"
+            _latest_attempt = _fm.load_attempt(
+                _admission_dir, _latest_id, verify_files=False
             )
             imported_at = str(_latest_attempt.created_at or "")
             _store = _fm._store(workspace)
             try:
                 _persisted = _store.get_domain_object(
-                    _fm.FACT_MATERIALIZATION_KIND, _latest_attempt.attempt_id
+                    _fm.FACT_MATERIALIZATION_KIND, _latest_id
                 )
             finally:
                 _store.close()

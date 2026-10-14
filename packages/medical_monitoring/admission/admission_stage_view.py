@@ -94,6 +94,48 @@ def pending_confirmation_count(
     )
 
 
+def confirmation_scope(
+    *,
+    draft: Any | None,
+    latest_draft: Any | None,
+) -> dict[str, Any]:
+    """§6.2查找键显式披露：attempt键×project-latest键不再暗中打架。
+
+    - latest为本attempt draft（或两侧皆无）→scope按draft状态正常
+      （confirmed|pending）；
+    - latest属于别的attempt（confirmed/未确认皆然）→scope=
+      superseded_by_newer_attempt：本attempt的confirmation_status仍按
+      其权威draft行如实展示，但显式披露「项目存在更新导入、项目级
+      映射确认尚未完成」——B5门按latest判定409的语义不变。
+    """
+
+    status = _draft_status(draft) if draft is not None else ""
+    latest_id = str(getattr(latest_draft, "batch_id", "") or "")
+    draft_id = str(getattr(draft, "draft_id", "") or "") if draft is not None else ""
+    latest_draft_id = (
+        str(getattr(latest_draft, "draft_id", "") or "")
+        if latest_draft is not None
+        else ""
+    )
+    scope = "confirmed" if status == "confirmed" else "pending"
+    payload: dict[str, Any] = {
+        "scope": scope,
+        "latest_draft_id": latest_draft_id,
+        "latest_draft_attempt_id": latest_id,
+    }
+    if (
+        scope == "confirmed"
+        and latest_draft is not None
+        and latest_draft_id != draft_id
+    ):
+        payload["scope"] = "superseded_by_newer_attempt"
+        payload["note"] = (
+            "本批次字段映射已确认，但项目存在更新导入，"
+            "最新批次的字段映射确认尚未完成。"
+        )
+    return payload
+
+
 def apply_single_source(
     payload: Mapping[str, Any],
     *,
@@ -102,12 +144,15 @@ def apply_single_source(
     recognition_state_row: Mapping[str, Any] | None = None,
     recognition_jobs_exist: bool = False,
     backfill: "None | Any" = None,
+    latest_draft: Any | None = None,
 ) -> dict[str, Any]:
     """冲突1四字段的唯一写点（02_DESIGN §6.1推导式表逐行实现）。
 
     ``recognition_state_row``=物化识别行（materialized模式读它）；
     ``backfill``=物化行缺失时的回填可调用（无参，由调用方绑定权威读+
     状态行写），回填后仍无行且cohort确有作业→fail-closed。
+    ``latest_draft``=latest_draft_for_project权威行（S4 confirmation_scope
+    查找键显式披露；缺省None时scope退化为attempt键自身）。
     """
 
     projected = dict(payload)
@@ -131,6 +176,10 @@ def apply_single_source(
     draft_status = _draft_status(draft) if draft is not None else ""
     projected["confirmation_status"] = (
         "confirmed" if draft_status == "confirmed" else "pending_confirmation"
+    )
+    # S4：查找键二义性显式披露（§6.2）。
+    projected["confirmation_scope"] = confirmation_scope(
+        draft=draft, latest_draft=latest_draft,
     )
 
     # 顶层 facts_generated：A4直查。

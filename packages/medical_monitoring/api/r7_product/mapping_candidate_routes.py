@@ -732,6 +732,9 @@ def _public_mapping_projection(
         for key in (
             "state",
             "confirmation_status",
+            # 状态机专项S4（02_DESIGN §6.2）：查找键二义性显式披露
+            # （attempt键×project-latest键，superseded_by_newer_attempt等）。
+            "confirmation_scope",
             "facts_generated",
             "next_action",
             "draft_id",

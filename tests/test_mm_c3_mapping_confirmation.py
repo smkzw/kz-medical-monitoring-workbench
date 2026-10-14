@@ -254,7 +254,11 @@ def test_list_for_review_resumes_a_confirmed_system_draft() -> None:
             }],
         }
     )
-    repo = SimpleNamespace(find_draft_for_batch=lambda *_args: draft)
+    repo = SimpleNamespace(
+        find_draft_for_batch=lambda *_args: draft,
+        # S4：投影同时取project-latest键做查找键显式披露（§6.2）。
+        latest_draft_for_project=lambda *_args: draft,
+    )
     service = AdmissionMappingConfirmationService(
         mapping_pipeline=pipeline,
         mapping_repository=repo,

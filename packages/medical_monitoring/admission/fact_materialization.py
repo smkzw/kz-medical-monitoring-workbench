@@ -646,21 +646,36 @@ class FactMaterializationService:
         }
 
 
+def latest_attempt_id(project_id: str, workspace_dir: Path) -> str:
+    """最新admission attempt归属函数（02_DESIGN §6.2：B6门与投影共享）。
+
+    归属口径=created_at最新（平局取attempt_id序），与
+    ``latest_fact_materialization_ready``既有语义逐字一致；原先
+    main.py与fact_materialization两处同逻辑重复收编至此。
+    无attempt→空串。
+    """
+
+    admission_dir = Path(workspace_dir) / "admissions"
+    attempts = [
+        load_attempt(admission_dir, attempt_id, verify_files=False)
+        for attempt_id in list_attempt_ids(admission_dir)
+    ]
+    if not attempts:
+        return ""
+    latest = max(attempts, key=lambda item: (item.created_at, item.attempt_id))
+    return str(latest.attempt_id)
+
+
 def latest_fact_materialization_ready(project_id: str, workspace_dir: Path) -> bool:
     """Return true only when the newest admitted attempt has a verified ready summary."""
     try:
-        admission_dir = Path(workspace_dir) / "admissions"
-        attempts = [
-            load_attempt(admission_dir, attempt_id, verify_files=False)
-            for attempt_id in list_attempt_ids(admission_dir)
-        ]
-        if not attempts:
+        latest_id = latest_attempt_id(project_id, workspace_dir)
+        if not latest_id:
             return False
-        latest = max(attempts, key=lambda item: (item.created_at, item.attempt_id))
         store = _store(workspace_dir)
         try:
             persisted = store.get_domain_object(
-                FACT_MATERIALIZATION_KIND, latest.attempt_id
+                FACT_MATERIALIZATION_KIND, latest_id
             )
             return bool(
                 persisted

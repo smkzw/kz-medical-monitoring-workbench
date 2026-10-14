@@ -554,6 +554,10 @@ class AdmissionMappingConfirmationService:
                 project_id=project_id,
                 attempt_id=attempt_id,
             ),
+            # 状态机专项S4（02_DESIGN §6.2）：project-latest键显式披露。
+            latest_draft=self.mapping_repository.latest_draft_for_project(
+                project_id
+            ),
         )
 
     def adopt_draft(
