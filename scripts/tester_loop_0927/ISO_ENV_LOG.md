@@ -724,3 +724,13 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - independent_ai=cms-router/glm-5.3-flash（沿 10-13 08:49 降级配置，本轮零 AI 作业零调用）；AI 台账 46 条全终态零新增，queue enabled/in_flight=0；monai_51f2a26c（R43修复员现场注记的滞留作业）实测不在本项目 ai/jobs 台账，如实记录不强行归类。详见 R5_SEEDED_PROJECT.md R44D 节。
 2026-10-14 11:57 轮中无损暂停（用户指令：当前节点后停，最多20分钟）：run dwfrun-51ae15d6守候B位测试者20分钟未收卷，按时限停机（B位ask恢复重做，169步零损失；A/C/D报告在盘）。8911/5178保持运行。恢复=ResumeWorkflowRun同run_id，详见PAUSE_HANDOFF_20261014.md
 2026-10-14 20:04 恢复执行（用户指令：跑完本轮+40轮深度复盘+handoff）：暂停期间环境掉线已按预案复活（ready:True）；Resume dwfrun-51ae15d6（R44的B位重派→分诊→修复→复盘→落盘）
+
+## 2026-10-14 22:05 CST R44修复员标准重启（R44清单修复面：packages/medical_monitoring/admission/{document_authority,mapping_pipeline}.py + packages/medical_monitoring/api/r7_product/mapping_candidate_routes.py + packages/medical_monitoring/runtime/launch_registry_contracts.py + services/api/app/monitoring_document_authority_jobs.py + 前端 App.jsx/AdmissionWizard/ProductLoop/ProductProjection/MappingConfirmState + 新增tests/test_mm_r44_mapping_generation_pace.py、test_mm_r42_rule_pack_label.py）：
+- API 重启：lsof -ti:8911 kill → 标准命令拉起（pid 99400 于 22:04 CST 启动）
+- vite 重启：lsof -ti:5178 kill → 标准命令拉起（pid 99442）
+- 自检1 runtime-readiness：curl http://127.0.0.1:8911/api/runtime-readiness → ready:true，backend_build_id=api-5f86f3eb6ec412e7（本轮改动新指纹，较R43的api-31cbdf421a25007a已更新）；independent_ai=cms-router/glm-5.3-flash ready:true
+- 自检2 monitoring：curl http://localhost:5178/monitoring → HTTP 200
+- 自检3 build id 配对：runtime-build.json expectedBackendBuildId=api-5f86f3eb6ec412e7 == 8911 backend_build_id → 一致；frontendBuildId=web-9d2645950d5cc182（R44前端改动面新指纹）
+- 端口纪律：仅触碰8911/5178；8910/5177 lsof复核0监听未执行任何操作
+- 测试留痕：R44-01共享运行时回归2项新增（advance同绑定直通adjudicating/submit_adjudication_pair显式放行，stash对照修复前红后绿）+test_mm_r44_mapping_generation_pace 5/5+test_mm_r42_rule_pack_label 3/3；回归=doc_jobs+R40共享运行时+pace+规则标注+R32重跑 47 passed；mapping五族102 passed；r7 router+freeze 106 passed/1 failed（late_project_dispatchers 409 result_context_unavailable，stash对照HEAD既有同签名）；data_admission+repository+worker 130 passed；protocol_preparation 54 passed；前端 .mjs 99/99+.jsx 11/11+vite build绿（medical-writing 3项vitest缺依赖失败为HEAD既有）
+- runs/tester_loop_iso_20260928/runtime/{ai_provider_settings,ai_role_bindings}.json 的tracked差异为07:23 API进程自身startup migration的格式化重写（值零变化），本轮未触碰该等运行时数据
