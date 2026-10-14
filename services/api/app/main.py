@@ -4324,6 +4324,11 @@ _r7_admission_mapping_confirmation = AdmissionMappingConfirmationService(
     ),
     primary_runtime_resolver=resolve_monitoring_ai_runtime,
     require_dual_reconciliation=True,
+    # 状态机专项S3（02_DESIGN §6.1）：facts_generated唯一来源=A4直查。
+    # 晚绑定lambda：materializer声明在本服务之后，调用时才解析全局名。
+    facts_status_resolver=(
+        lambda **kwargs: _r7_admission_fact_materializer.status(**kwargs)
+    ),
 )
 _r7_admission_fact_materializer = FactMaterializationService(
     mapping_repository=monitoring_mapping_draft_repository,

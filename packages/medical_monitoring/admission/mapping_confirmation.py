@@ -319,7 +319,8 @@ def enrich_candidates(
         "summary": summary,
         "user_questions": questions,
         "candidates": candidates,
-        "facts_generated": False,
+        # 状态机专项S3（02_DESIGN §6.1）：facts_generated硬编码False删除
+        # ——值由apply_single_source按A4直查唯一写点提供。
         "candidate_fact_boundary": "candidates_only",
     }
 
@@ -343,6 +344,11 @@ class AdmissionMappingConfirmationService:
     system_routes: tuple[tuple[str, str], ...] = ()
     primary_runtime_resolver: Optional[Callable[[], Any]] = None
     require_dual_reconciliation: bool = False
+    # 状态机专项S3（02_DESIGN §6.1）：A4直查可调用——签名同
+    # FactMaterializationService.status(project_id=, attempt_id=,
+    # workspace_dir=)，返回public facts载荷（state/facts_generated/...）。
+    # 缺省None时facts_generated维持既有False值（来源未接入，如实降级）。
+    facts_status_resolver: Optional[Callable[..., Mapping[str, Any]]] = None
 
     def __post_init__(self) -> None:
         self._system_route_set = {
@@ -422,6 +428,71 @@ class AdmissionMappingConfirmationService:
             "providers": sorted(providers),
         }
 
+    def _facts_status(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str,
+        workspace_dir: Any,
+    ) -> Mapping[str, Any]:
+        """A4直查（02_DESIGN §6.1：facts_generated唯一来源）。"""
+
+        if self.facts_status_resolver is None:
+            return {"state": "not_generated", "facts_generated": False}
+        try:
+            status = self.facts_status_resolver(
+                project_id=project_id,
+                attempt_id=attempt_id,
+                workspace_dir=workspace_dir,
+            )
+        except Exception:
+            # A4不可达时如实按未生成投影（facts门仍独立直查A4，不受此影响）。
+            return {"state": "not_generated", "facts_generated": False}
+        return status if isinstance(status, Mapping) else {}
+
+    def _recognition_state_row(self, *, project_id: str, attempt_id: str) -> Any:
+        """物化识别行（materialized模式）；缺失且有cohort作业→权威回填。"""
+
+        repository = self.ai_repository
+        store = getattr(repository, "stage_store", None)
+        if store is None:
+            return None
+        row = store.get_stage(project_id, attempt_id, "recognition")
+        if row is not None:
+            return row
+        try:
+            jobs = repository.list_jobs(
+                project_id,
+                task_type=str(_value(self.task_type)),
+                business_key_prefix=f"listing-field-mapping:{attempt_id}:",
+            )
+        except Exception:
+            return None
+        if not jobs:
+            return None
+        # 权威回填（S3历史数据自愈）：聚合函数与作业写点物化同源，
+        # 回填内容=权威行现场重算，非虚构。
+        from services.api.app.monitoring_admission_stage_store import (
+            aggregate_recognition_state,
+        )
+
+        state = aggregate_recognition_state(
+            [str(_value(getattr(job, "status", ""))) for job in jobs]
+        )
+        try:
+            with repository._connect() as connection:
+                store.bump_stage(
+                    connection,
+                    project_id=project_id,
+                    attempt_id=attempt_id,
+                    stage="recognition",
+                    state=state,
+                    detail={"backfill": "projection_read"},
+                )
+        except Exception:
+            return None
+        return store.get_stage(project_id, attempt_id, "recognition")
+
     def list_for_review(
         self,
         *,
@@ -451,18 +522,39 @@ class AdmissionMappingConfirmationService:
             project_id,
             attempt_id,
         )
-        if draft is None:
-            return projected
-        if str(_value(draft.status)) == "confirmed":
-            projected["confirmation_status"] = "confirmed"
-            projected["draft"] = {
-                "draft_id": draft.draft_id,
-                "version": draft.version,
-                "status": "confirmed",
-            }
-            return projected
-        projected["draft"] = self._draft_payload(draft)
-        return projected
+        if draft is not None:
+            if str(_value(draft.status)) == "confirmed":
+                projected["draft"] = {
+                    "draft_id": draft.draft_id,
+                    "version": draft.version,
+                    "status": "confirmed",
+                }
+            else:
+                projected["draft"] = self._draft_payload(draft)
+        # 状态机专项S3（02_DESIGN §6.1/§7）：冲突1四字段收编进单一视图
+        # 函数——顶层state（物化行）/confirmation_status（drafts权威行）/
+        # facts_generated（A4直查）/pending_confirmation_count与字段级
+        # confirmation_status的唯一写点（原B3 confirmed覆盖逻辑删除）。
+        from .admission_stage_view import apply_single_source
+
+        return apply_single_source(
+            projected,
+            draft=draft,
+            facts_status=self._facts_status(
+                project_id=project_id,
+                attempt_id=attempt_id,
+                workspace_dir=workspace_dir,
+            ),
+            recognition_state_row=self._recognition_state_row(
+                project_id=project_id,
+                attempt_id=attempt_id,
+            ),
+            recognition_jobs_exist=bool(payload.get("jobs")),
+            backfill=lambda: self._recognition_state_row(
+                project_id=project_id,
+                attempt_id=attempt_id,
+            ),
+        )
 
     def adopt_draft(
         self,
@@ -2138,7 +2230,15 @@ class AdmissionMappingConfirmationService:
         payload = revision.model_dump(mode="json")
         # Confirmation creates a durable mapping revision only. Canonical facts
         # remain a later deterministic step outside this product entry.
-        payload["facts_generated"] = False
+        # 状态机专项S3（02_DESIGN §6.1）：facts_generated改A4直查（值不变
+        # 来源变）——确认动作本身不物化facts，A4此attempt键下尚无ready行。
+        payload["facts_generated"] = bool(
+            self._facts_status(
+                project_id=project_id,
+                attempt_id=attempt_id,
+                workspace_dir=workspace_dir,
+            ).get("facts_generated")
+        )
         payload["next_action"] = "generate_facts_later"
         payload["confirmation_status"] = "confirmed"
         if degraded_note:
@@ -2360,7 +2460,6 @@ class AdmissionMappingConfirmationService:
             # Backward-compatible alias for pre-triage surfaces.
             "critical_count": question_count,
         }
-        payload["facts_generated"] = False
         payload["candidate_fact_boundary"] = "draft_only"
         return payload
 

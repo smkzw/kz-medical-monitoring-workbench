@@ -172,7 +172,9 @@ def test_enrich_candidates_projects_medical_questions_and_blocks_facts() -> None
         ],
     }
     critical = enrich_candidates(payload, focus="critical")
-    assert critical["facts_generated"] is False
+    # 状态机专项S3：facts_generated硬编码已删除——值由apply_single_source
+    # 按A4直查唯一写点提供，enrich阶段不再携带该键。
+    assert "facts_generated" not in critical
     assert critical["candidate_fact_boundary"] == "candidates_only"
     summary = critical["summary"]
     assert summary["field_count"] == 3
@@ -470,7 +472,8 @@ def test_draft_payload_keeps_medical_question_projection_after_adoption() -> Non
     adopted_field = payload["fields"][1]
     assert adopted_field["triage"] == "system_adopted"
     assert adopted_field["needs_attention"] is False
-    assert payload["facts_generated"] is False
+    # 状态机专项S3：draft载荷facts_generated硬编码已删除（A4直查唯一写点）。
+    assert "facts_generated" not in payload
     assert payload["candidate_fact_boundary"] == "draft_only"
 
 

@@ -13,6 +13,11 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 from ..domain.execution import StoreError
 from ..graph.store import Store
 from ..runtime.runtime_progress import ARTIFACT_DIR_NAME, RUNTIME_DB_NAME, RUNTIME_DIR_NAME
+# 状态机专项S3（02_DESIGN §6.1）：识别聚合态唯一推导函数（纯stdlib依赖，
+# 无循环导入）。与stage_state物化行、verification口径共用同一表达式。
+from services.api.app.monitoring_admission_stage_store import (
+    aggregate_recognition_state,
+)
 from .mapping_bridge import (
     MAPPING_BRIDGE_SCHEMA_VERSION,
     MappingBridgeError,
@@ -2236,7 +2241,6 @@ class AdmissionMappingPipeline:
                             candidate,
                             evidence_ids,
                         ),
-                        "confirmation_status": "pending_confirmation",
                     })
         states = [item["status"] for item in job_rows]
         # R19轮（R19-01契约统一）：needs_attention仅在「全部作业终态且
@@ -2244,18 +2248,10 @@ class AdmissionMappingPipeline:
         # 一门失败即报needs_attention，前端点亮「采用已识别的X个字段
         # 并继续」诱导提交，后端强校验跑70+秒后422拒收，重试100%死锁。
         # 现约定：任何作业未终态→一律generating（前端按钮态与后端
-        # 校验同源）。
-        _TERMINAL = {"completed", "failed", "blocked", "stale_input", "cancelled"}
-        _FAILED = {"failed", "blocked", "stale_input", "cancelled"}
-        state = (
-            "candidates_ready"
-            if states and all(value == "completed" for value in states)
-            else "needs_attention"
-            if states
-            and all(value in _TERMINAL for value in states)
-            and any(value in _FAILED for value in states)
-            else "generating"
-        )
+        # 校验同源）。状态机专项S3（02_DESIGN §6.1）：派生表达式收编为
+        # aggregate_recognition_state唯一函数——与物化行、verification
+        # 口径同一推导（原内联_TERMINAL/_FAILED集删除）。
+        state = aggregate_recognition_state(states)
         self._shadow_compare_recognition_state(
             jobs=jobs,
             attempt_id=attempt_id,
@@ -2267,12 +2263,10 @@ class AdmissionMappingPipeline:
             "attempt_id": attempt_id,
             "cohort": cohort,
             "state": state,
-            "confirmation_status": "pending_confirmation",
             "summary": {
                 "job_count": len(job_rows),
                 "completed_job_count": completed_count,
                 "candidate_count": len(mappings),
-                "pending_confirmation_count": len(mappings),
             },
             # R44轮（R44-02）：服务端按真实完成时间戳计算滚动速度与剩余
             # 预估——此前前端只能用「本页会话耗时/已完成片数」线性外推，
