@@ -2127,6 +2127,56 @@ class AdmissionMappingPipeline:
             "evidence_ids": sorted(evidence_ids),
         }
 
+    def _shadow_compare_recognition_state(
+        self,
+        *,
+        jobs: Any,
+        attempt_id: str,
+        cohort: str,
+        derived_state: str,
+    ) -> None:
+        """S2影子期（02_DESIGN §7）：派生state仍是对外契约，逐次与物化行比对。
+
+        不一致→stage_view_divergence事件留痕（物化行缺失=写点尚未落行，
+        不算漂移）。仅primary cohort参与比对——stage_state.recognition行
+        的聚合口径即primary cohort。STAGE_VIEW_MODE=materialized时跳过
+        （S3起投影直接读物化行）。影子比对自身故障绝不影响投影主路径。
+        """
+
+        import os
+
+        if cohort != MONITORING_MAPPING_COHORT_PRIMARY:
+            return
+        if os.environ.get("STAGE_VIEW_MODE", "derive") != "derive":
+            return
+        repository = self._repository
+        store = getattr(repository, "stage_store", None)
+        if store is None or not jobs:
+            return
+        project_id = str(getattr(jobs[0], "project_id", "") or "")
+        if not project_id:
+            return
+        try:
+            row = store.get_stage(project_id, attempt_id, "recognition")
+        except Exception:
+            return
+        if row is None or str(row["state"]) == derived_state:
+            return
+        try:
+            with repository._connect() as connection:
+                store.append_event(
+                    connection,
+                    project_id=project_id,
+                    attempt_id=attempt_id,
+                    stage="recognition",
+                    event_type="stage_view_divergence",
+                    from_state=str(row["state"]),
+                    to_state=derived_state,
+                    detail={"mode": "shadow"},
+                )
+        except Exception:
+            return
+
     def _project(
         self,
         jobs: Any,
@@ -2205,6 +2255,12 @@ class AdmissionMappingPipeline:
             and all(value in _TERMINAL for value in states)
             and any(value in _FAILED for value in states)
             else "generating"
+        )
+        self._shadow_compare_recognition_state(
+            jobs=jobs,
+            attempt_id=attempt_id,
+            cohort=cohort,
+            derived_state=state,
         )
         completed_count = sum(value == "completed" for value in states)
         return {

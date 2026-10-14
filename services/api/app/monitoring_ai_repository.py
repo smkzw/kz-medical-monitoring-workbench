@@ -15,6 +15,7 @@ from .monitoring_admission_stage_store import (
     EVENT_FAILURE_RECORDED,
     EVENT_RECOVERY_ACTION,
     EVENT_STATE_CHANGED,
+    aggregate_recognition_state,
     failure_class_for,
     recognition_attempt_id,
 )
@@ -654,17 +655,18 @@ class MonitoringAiRepository:
         reason_code: str = "",
         actor: str = "system",
         detail: Mapping[str, Any] | None = None,
-    ) -> None:
+    ) -> str:
         """识别链作业状态跨越→recognition阶段事件留痕（02_DESIGN §3.2）。
 
         非识别链business_key（文档权威VLM等）不落recognition事件；
         attempt_id自business_key前缀解析；与作业状态写同一事务（外层
         conn，不自行提交）。detail只落摘要级计数，禁止作业身份/载荷。
+        返回解析出的attempt_id（非识别链为空串），供调用方接着物化。
         """
 
         attempt_id = recognition_attempt_id(business_key)
         if not attempt_id:
-            return
+            return ""
         self.stage_store.append_event(
             connection,
             project_id=str(project_id),
@@ -678,6 +680,48 @@ class MonitoringAiRepository:
             actor=actor,
             detail=detail,
         )
+        return attempt_id
+
+    def _materialize_recognition_stage(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        project_id: str,
+        attempt_id: str,
+    ) -> str:
+        """S2影子期（02_DESIGN §7）：primary cohort聚合态物化。
+
+        与作业状态写同一事务：事务内读到的即本事务写入后的权威值。
+        聚合口径=aggregate_recognition_state（与B1派生逐字一致）。
+        全库扫描限本项目行（idx_monitoring_ai_jobs_project），业务键
+        前缀过滤在Python侧做（LIKE会把attempt里的_当通配符）。
+        ponytail: 项目作业数达到万级时改前缀范围扫描。
+        """
+
+        attempt = str(attempt_id or "").strip()
+        if not attempt:
+            return ""
+        rows = connection.execute(
+            "SELECT business_key, status FROM monitoring_ai_jobs"
+            " WHERE project_id = ?",
+            (str(project_id),),
+        ).fetchall()
+        prefix = f"listing-field-mapping:{attempt}:"
+        statuses = [
+            str(row["status"])
+            for row in rows
+            if str(row["business_key"]).startswith(prefix)
+        ]
+        state = aggregate_recognition_state(statuses)
+        self.stage_store.bump_stage(
+            connection,
+            project_id=str(project_id),
+            attempt_id=attempt,
+            stage=STAGE_RECOGNITION,
+            state=state,
+            detail={"job_count": len(statuses)},
+        )
+        return state
 
     def create_or_get(
         self,
@@ -723,7 +767,7 @@ class MonitoringAiRepository:
                     ),
                 )
                 # 状态机专项（02_DESIGN §3.2）：cohort分片入队→事件留痕。
-                self._record_recognition_event(
+                recognized_attempt = self._record_recognition_event(
                     connection,
                     project_id=request.project_id,
                     business_key=request.business_key,
@@ -731,6 +775,11 @@ class MonitoringAiRepository:
                     from_state="",
                     to_state=MonitoringAiJobStatus.QUEUED.value,
                     detail={"event": "recognition_shard_created"},
+                )
+                self._materialize_recognition_stage(
+                    connection,
+                    project_id=request.project_id,
+                    attempt_id=recognized_attempt,
                 )
                 existing = connection.execute(
                     "SELECT * FROM monitoring_ai_jobs WHERE job_id = ?",
@@ -1032,6 +1081,12 @@ class MonitoringAiRepository:
                         current["job_id"],
                     ),
                 )
+                # S2物化：隔离进入聚合口径失败终态，刷新识别聚合态。
+                self._materialize_recognition_stage(
+                    connection,
+                    project_id=str(current["project_id"]),
+                    attempt_id=recognition_attempt_id(str(current["business_key"])),
+                )
                 connection.commit()
             return None
 
@@ -1073,6 +1128,13 @@ class MonitoringAiRepository:
             parameters.append(project_id.strip())
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            # S2物化：先取命中行（同一IMMEDIATE事务内无竞态），更新后
+            # 逐attempt物化识别聚合态（租约耗尽是聚合口径内的失败终态）。
+            expired_rows = connection.execute(
+                "SELECT project_id, business_key FROM monitoring_ai_jobs WHERE "
+                + " AND ".join(clauses),
+                tuple(parameters),
+            ).fetchall()
             updated = connection.execute(
                 """
                 UPDATE monitoring_ai_jobs
@@ -1093,6 +1155,22 @@ class MonitoringAiRepository:
                     *parameters,
                 ),
             )
+            for expired_project in sorted(
+                {str(row["project_id"]) for row in expired_rows}
+            ):
+                for attempt in sorted(
+                    {
+                        recognition_attempt_id(str(row["business_key"]))
+                        for row in expired_rows
+                        if str(row["project_id"]) == expired_project
+                    }
+                    - {""}
+                ):
+                    self._materialize_recognition_stage(
+                        connection,
+                        project_id=expired_project,
+                        attempt_id=attempt,
+                    )
             connection.commit()
         return int(updated.rowcount)
 
@@ -1251,6 +1329,18 @@ class MonitoringAiRepository:
                         to_state=MonitoringAiJobStatus.FAILED.value,
                         reason_code="queue_dwell_timeout",
                         detail={"reaped_count": int(updated.rowcount)},
+                    )
+                for attempt in sorted(
+                    {
+                        recognition_attempt_id(str(row["business_key"]))
+                        for row in reaped_rows
+                    }
+                    - {""}
+                ):
+                    self._materialize_recognition_stage(
+                        connection,
+                        project_id=str(reaped_rows[0]["project_id"]),
+                        attempt_id=attempt,
                     )
                 connection.commit()
                 total_reaped += int(updated.rowcount)
@@ -2179,13 +2269,18 @@ class MonitoringAiRepository:
                     "monitoring AI completion lost CAS"
                 )
             # 状态机专项（02_DESIGN §3.2）：分片完成→事件留痕。
-            self._record_recognition_event(
+            recognized_attempt = self._record_recognition_event(
                 connection,
                 project_id=job.project_id,
                 business_key=job.business_key,
                 event_type=EVENT_STATE_CHANGED,
                 from_state=MonitoringAiJobStatus.RUNNING.value,
                 to_state=MonitoringAiJobStatus.COMPLETED.value,
+            )
+            self._materialize_recognition_stage(
+                connection,
+                project_id=job.project_id,
+                attempt_id=recognized_attempt,
             )
             connection.commit()
         return self.get(job.project_id, job.job_id)
@@ -2234,7 +2329,7 @@ class MonitoringAiRepository:
                 )
             # 状态机专项（02_DESIGN §3.2）：分片失败→failure_recorded；
             # 预算内可重试回落queued是state_changed，两者都带failure_code。
-            self._record_recognition_event(
+            recognized_attempt = self._record_recognition_event(
                 connection,
                 project_id=job.project_id,
                 business_key=job.business_key,
@@ -2246,6 +2341,11 @@ class MonitoringAiRepository:
                 from_state=MonitoringAiJobStatus.RUNNING.value,
                 to_state=next_status.value,
                 reason_code=failure_code,
+            )
+            self._materialize_recognition_stage(
+                connection,
+                project_id=job.project_id,
+                attempt_id=recognized_attempt,
             )
         return self.get(job.project_id, job.job_id)
 
@@ -2300,6 +2400,12 @@ class MonitoringAiRepository:
                    WHERE project_id = ? AND job_id = ?""",
                 (MonitoringAiJobStatus.BLOCKED.value, "duplicate_unstarted_generation",
                  reason, now, now, project_id, duplicate_job_id),
+            )
+            # S2物化：blocked是聚合口径内的失败终态，退役后刷新识别聚合态。
+            self._materialize_recognition_stage(
+                connection,
+                project_id=project_id,
+                attempt_id=recognition_attempt_id(str(duplicate["business_key"])),
             )
         return self.get(project_id, duplicate_job_id)
 
@@ -2420,7 +2526,7 @@ class MonitoringAiRepository:
             # 状态机专项（02_DESIGN §3.2）：终态失败重排→recovery_action，
             # 显式（actor=user，重置滞留基线）与自动预算（actor=system）
             # 分别留痕。
-            self._record_recognition_event(
+            recognized_attempt = self._record_recognition_event(
                 connection,
                 project_id=project_id,
                 business_key=str(row["business_key"]),
@@ -2433,6 +2539,11 @@ class MonitoringAiRepository:
                 ),
                 actor="user" if explicit_retry else "system",
                 detail={"automatic": automatic_recovery_limit is not None},
+            )
+            self._materialize_recognition_stage(
+                connection,
+                project_id=project_id,
+                attempt_id=recognized_attempt,
             )
             if restore_completed:
                 connection.execute(
@@ -2495,8 +2606,8 @@ class MonitoringAiRepository:
                 raise MonitoringAiStateConflictError(
                     "monitoring AI stale-input update lost lease or CAS"
                 )
-            # 状态机专项（02_DESIGN §3.2）：输入过期终态→failure_recorded。
-            self._record_recognition_event(
+            # 状态机专项（02_DESIGN §3.2）：worker侧输入过期终态→留痕+物化。
+            recognized_attempt = self._record_recognition_event(
                 connection,
                 project_id=job.project_id,
                 business_key=job.business_key,
@@ -2504,6 +2615,11 @@ class MonitoringAiRepository:
                 from_state=MonitoringAiJobStatus.RUNNING.value,
                 to_state=MonitoringAiJobStatus.STALE_INPUT.value,
                 reason_code="stale_input_revision",
+            )
+            self._materialize_recognition_stage(
+                connection,
+                project_id=job.project_id,
+                attempt_id=recognized_attempt,
             )
         return self.get(job.project_id, job.job_id)
 
@@ -2549,7 +2665,7 @@ class MonitoringAiRepository:
                 )
                 # 状态机专项（02_DESIGN §3.2）：输入过期→failure_recorded
                 # （stale_input是pipeline聚合口径中的失败终态）。
-                self._record_recognition_event(
+                recognized_attempt = self._record_recognition_event(
                     connection,
                     project_id=project_id,
                     business_key=business_key,
@@ -2558,6 +2674,11 @@ class MonitoringAiRepository:
                     to_state=MonitoringAiJobStatus.STALE_INPUT.value,
                     reason_code="stale_input_revision",
                     detail={"marked_stale_count": len(job_ids)},
+                )
+                self._materialize_recognition_stage(
+                    connection,
+                    project_id=project_id,
+                    attempt_id=recognized_attempt,
                 )
                 connection.execute(
                     f"""
@@ -2600,12 +2721,13 @@ class MonitoringAiRepository:
         reason_text = (reason.strip() or "已废弃命名空间的未执行工作")[:2_000]
         now = self.clock()
         retired = 0
+        retired_attempts: set[str] = set()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             for job_id in cleaned:
                 row = connection.execute(
                     """
-                    SELECT status, contract_retirement_code
+                    SELECT status, contract_retirement_code, business_key
                     FROM monitoring_ai_jobs
                     WHERE project_id = ? AND job_id = ?
                     """,
@@ -2639,7 +2761,15 @@ class MonitoringAiRepository:
                         job_id,
                     ),
                 )
+                attempt = recognition_attempt_id(str(row["business_key"]))
+                if attempt:
+                    retired_attempts.add(attempt)
                 retired += 1
+            # S2物化：退役行进入聚合口径失败终态，刷新识别聚合态。
+            for attempt in sorted(retired_attempts):
+                self._materialize_recognition_stage(
+                    connection, project_id=project_id, attempt_id=attempt
+                )
             connection.commit()
         return retired
 
@@ -2829,6 +2959,29 @@ class MonitoringAiRepository:
                 MonitoringAiCandidateStatus.PROPOSED.value,
             ),
         )
+        # S2物化：退役行进入聚合口径失败终态，刷新识别聚合态（同一外层
+        # 事务）。退役行可能跨项目，按行携带的project_id分组。
+        retired_rows = connection.execute(
+            f"""
+            SELECT project_id, business_key FROM monitoring_ai_jobs
+            WHERE job_id IN ({retired_placeholders})
+            """,
+            tuple(retired_ids),
+        ).fetchall()
+        for retired_project in sorted(
+            {str(row["project_id"]) for row in retired_rows}
+        ):
+            for attempt in sorted(
+                {
+                    recognition_attempt_id(str(row["business_key"]))
+                    for row in retired_rows
+                    if str(row["project_id"]) == retired_project
+                }
+                - {""}
+            ):
+                self._materialize_recognition_stage(
+                    connection, project_id=retired_project, attempt_id=attempt
+                )
 
     def supersede_payload_workflows_except(
         self,

@@ -167,6 +167,29 @@ def failure_class_for(failure_code: str) -> str:
     return "infra" if code in INFRA_FAILURE_CODES else "content"
 
 
+# 与 mapping_pipeline._project 的派生口径逐字一致（02_DESIGN §3.2：
+# 「三态语义与B1现契约逐字保持」）。行序无关；空cohort→not_started。
+_TERMINAL_STATUSES = frozenset(
+    {"completed", "failed", "blocked", "stale_input", "cancelled"}
+)
+_FAILED_TERMINAL_STATUSES = frozenset({"failed", "blocked", "stale_input", "cancelled"})
+
+
+def aggregate_recognition_state(statuses: Sequence[str]) -> str:
+    """识别cohort聚合态：B1派生契约的唯一权威表达（02_DESIGN §3.2）。"""
+
+    values = [str(status or "") for status in statuses]
+    if not values:
+        return "not_started"
+    if all(value == "completed" for value in values):
+        return "candidates_ready"
+    if all(value in _TERMINAL_STATUSES for value in values) and any(
+        value in _FAILED_TERMINAL_STATUSES for value in values
+    ):
+        return "needs_attention"
+    return "generating"
+
+
 class AdmissionStageStore:
     """入舱阶段事件流与阶段状态行的同库写入/读取。
 
