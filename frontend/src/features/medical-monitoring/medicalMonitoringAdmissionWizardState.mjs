@@ -575,3 +575,77 @@ export async function readAdmissionProfile({ api, projectId, attemptId }) {
     return { ok: false, recovery: admissionRecovery(error) };
   }
 }
+
+// 状态机专项T4（02_DESIGN §5-T4/D6）：死锁哨兵——stage-state blocking[]
+// 的兜底动作源。窄契约：仅当「本地面板无任何可用控件且非busy」而
+// stage-state携带action_available=true条目时产出哨兵动作；健康等待
+// （busy）与complete态一律不产出（不与既有主按钮/细分文案打架，
+// 保四轮验收UX）。handlerKey映射到组件既有onPrimaryAction分支。
+const STAGE_SENTINEL_HANDLER_BY_ACTION_KEY = Object.freeze({
+  upload_documents: "reload-documents",
+  retry_document_check: "reload-documents",
+  resolve_role_adjudication: "reload-documents",
+  confirm_identity: "reload-documents",
+  retry_recognition_failed: "reload",
+  adopt_full: "adopt",
+  adopt_partial: "adopt",
+  adopt_inflight_degraded: "adopt",
+  answer_questions: "reload",
+  resolve_blocked_groups: "reload",
+  confirm_mapping: "confirm",
+  confirm_mapping_degraded: "confirm",
+  generate_facts: "generate-facts",
+  retry_generate_facts: "generate-facts",
+});
+
+const STAGE_SENTINEL_LABEL_BY_ACTION_KEY = Object.freeze({
+  upload_documents: "上传研究文件",
+  retry_document_check: "重读研究文件核对状态",
+  resolve_role_adjudication: "重读文件角色裁决状态",
+  confirm_identity: "重读资料归属确认状态",
+  retry_recognition_failed: "重读识别结果（存在未完成分片）",
+  adopt_full: "采用已识别字段继续",
+  adopt_partial: "采用已识别字段继续（部分）",
+  adopt_inflight_degraded: "采用已识别字段继续（降级）",
+  answer_questions: "重读字段确认问题",
+  resolve_blocked_groups: "重读识别结果（质量门阻断待处理）",
+  confirm_mapping: "确认字段对应关系",
+  confirm_mapping_degraded: "知情确认字段对应关系（降级）",
+  generate_facts: "生成监查数据",
+  retry_generate_facts: "重试生成监查数据",
+});
+
+export function stageSentinelAction(stageState, localPhases = {}) {
+  const currentStage = String(stageState?.current_stage || "");
+  if (!currentStage || currentStage === "complete") return null;
+  // busy=健康等待：导入中/识别轮询中/复核中/监查数据生成中——这些
+  // 形态的禁用主按钮是正常进行时，不是死锁（R3：不误伤）。
+  const wizardPhase = String(localPhases?.wizardPhase || "");
+  const mappingPhase = String(localPhases?.mappingPhase || "");
+  const documentPhase = String(localPhases?.documentPhase || "");
+  const factPhase = String(localPhases?.factPhase || "");
+  const busy =
+    wizardPhase === "creating"
+    || wizardPhase === "reading"
+    || ["loading", "adopting", "adjudicating", "confirming"].includes(mappingPhase)
+    || ["uploading", "analyzing", "reviewing", "adjudicating", "cross_checking"].includes(documentPhase)
+    || factPhase === "generating";
+  if (busy) return null;
+  // 面板存在可用控件（问题卡/裁决卡/降级入口/可用主按钮）→无哨兵。
+  if (localPhases?.hasEnabledControl) return null;
+  if (localPhases?.primaryDisabled === false) return null;
+  const blocking = Array.isArray(stageState?.blocking) ? stageState.blocking : [];
+  const actionable = blocking.find((entry) => (
+    entry
+    && entry.action_available === true
+    && STAGE_SENTINEL_HANDLER_BY_ACTION_KEY[String(entry?.action_key || "")]
+  ));
+  if (!actionable) return null;
+  const actionKey = String(actionable.action_key);
+  return {
+    actionKey,
+    handlerKey: STAGE_SENTINEL_HANDLER_BY_ACTION_KEY[actionKey],
+    stage: String(actionable.stage || currentStage),
+    label: STAGE_SENTINEL_LABEL_BY_ACTION_KEY[actionKey] || "继续",
+  };
+}

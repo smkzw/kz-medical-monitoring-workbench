@@ -11,6 +11,7 @@ import {
   formatAdmissionByteSize,
   projectAdmissionProfile,
   readAdmissionProfile,
+  stageSentinelAction,
   validateAdmissionSourceDir,
 } from "./medicalMonitoringAdmissionWizardState.mjs";
 import { findMonitoringForbiddenTerms } from "./medicalMonitoringProgressProjection.mjs";
@@ -341,6 +342,75 @@ check(stepMid[0].kind === "done" && stepMid[1].kind === "current", "review step 
 
 check(ADMISSION_WIZARD_STEPS.map((step) => step.title).join("/") === "选择数据/查看导入概况/研究文件与字段映射确认",
   "three canonical steps");
+
+// ---------------------------------------------------------------------------
+// 状态机专项T4（02_DESIGN §5-T4/D6）：死锁哨兵——stageSentinelAction窄契约。
+
+const stageStateBlocking = (blocking, currentStage = "mapping_confirmation") => ({
+  current_stage: currentStage,
+  blocking,
+});
+
+// R41实测形态：质量门阻断+本地无控件→哨兵=resolve_blocked_groups入口可用。
+const r41 = stageSentinelAction(
+  stageStateBlocking([
+    { stage: "mapping_confirmation", action_key: "resolve_blocked_groups", action_available: true },
+  ]),
+  { wizardPhase: "ready", mappingPhase: "drafting", documentPhase: "ready", factPhase: "idle", primaryDisabled: true, hasEnabledControl: false },
+);
+check(r41 !== null && r41.actionKey === "resolve_blocked_groups", "R41 deadlock shape yields sentinel");
+check(r41.handlerKey === "reload", "sentinel maps to existing reload handler branch");
+check(typeof r41.label === "string" && r41.label.length > 0, "sentinel carries user-facing label");
+
+// 健康等待：busy（生成监查数据/导入中/复核中）不产哨兵（R3不误伤）。
+check(stageSentinelAction(
+  stageStateBlocking([
+    { stage: "facts", action_key: "generate_facts", action_available: true },
+  ]),
+  { wizardPhase: "done", mappingPhase: "confirmed", documentPhase: "ready", factPhase: "generating", primaryDisabled: true, hasEnabledControl: false },
+) === null, "facts generating (healthy busy) yields no sentinel");
+check(stageSentinelAction(
+  stageStateBlocking([
+    { stage: "recognition", action_key: "retry_recognition_failed", action_available: false },
+  ]),
+  { wizardPhase: "ready", mappingPhase: "ready", documentPhase: "ready", factPhase: "idle", primaryDisabled: true, hasEnabledControl: false },
+) === null, "healthy waiting (action_available=false) yields no sentinel");
+
+// complete态恒无哨兵。
+check(stageSentinelAction(
+  { current_stage: "complete", blocking: [] },
+  { wizardPhase: "done", mappingPhase: "confirmed", documentPhase: "ready", factPhase: "ready", primaryDisabled: false, hasEnabledControl: true },
+) === null, "complete stage yields no sentinel");
+
+// 本地面板有可用控件→无哨兵（不与既有控件打架）。
+check(stageSentinelAction(
+  stageStateBlocking([
+    { stage: "mapping_confirmation", action_key: "confirm_mapping", action_available: true },
+  ]),
+  { wizardPhase: "ready", mappingPhase: "drafting", documentPhase: "ready", factPhase: "idle", primaryDisabled: true, hasEnabledControl: true },
+) === null, "panel with enabled controls yields no sentinel");
+
+// 主按钮可用→无哨兵（主按钮即控件）。
+check(stageSentinelAction(
+  stageStateBlocking([
+    { stage: "mapping_confirmation", action_key: "adopt_full", action_available: true },
+  ]),
+  { wizardPhase: "ready", mappingPhase: "ready", documentPhase: "ready", factPhase: "idle", primaryDisabled: false, hasEnabledControl: true },
+) === null, "enabled primary button yields no sentinel");
+
+// facts死锁形态（done+confirmed但facts未生成且本地busy误判不存在）→
+// generate_facts哨兵可达。
+const factsSentinel = stageSentinelAction(
+  stageStateBlocking([
+    { stage: "facts", action_key: "generate_facts", action_available: true },
+  ], "facts"),
+  { wizardPhase: "done", mappingPhase: "confirmed", documentPhase: "ready", factPhase: "idle", primaryDisabled: true, hasEnabledControl: false },
+);
+check(factsSentinel !== null && factsSentinel.handlerKey === "generate-facts", "facts deadlock yields generate-facts sentinel");
+
+// 无stageState/无blocking→null（缺权威快照=现状行为）。
+check(stageSentinelAction(null, { wizardPhase: "ready", hasEnabledControl: false }) === null, "missing stage state yields no sentinel");
+check(stageSentinelAction({ current_stage: "recognition", blocking: [] }, { wizardPhase: "ready", hasEnabledControl: false }) === null, "empty blocking yields no sentinel");
 
 // ---------------------------------------------------------------------------
 // User-visible copy must stay free of engineering terms.

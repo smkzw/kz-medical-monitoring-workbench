@@ -458,6 +458,19 @@ div.monitoring-admission-manual {
   color: var(--monitoring-orange, #e96828);
 }
 
+/* 状态机专项T4：死锁哨兵入口——恢复动作次按钮，琥珀色描边与主操作
+   区分（不是另一颗主按钮），仅在面板无可用控件时由权威blocking[]点亮。 */
+.monitoring-admission-sentinel {
+  border-color: var(--monitoring-amber, #b7791f);
+  color: var(--monitoring-amber, #b7791f);
+}
+
+.monitoring-admission-sentinel:hover {
+  border-color: var(--monitoring-amber, #b7791f);
+  color: var(--monitoring-amber, #b7791f);
+  background: rgba(183, 121, 31, 0.06);
+}
+
 .monitoring-admission-primary:disabled {
   border-color: var(--monitoring-line, #dce3e9);
   background: #eef1f4;

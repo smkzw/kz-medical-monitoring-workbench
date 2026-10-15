@@ -10,6 +10,7 @@ import {
   createAdmissionWizardState,
   labelSheetName,
   readAdmissionProfile,
+  stageSentinelAction,
   validateAdmissionSourceDir,
 } from "./medicalMonitoringAdmissionWizardState.mjs";
 import {
@@ -1249,6 +1250,7 @@ export function MedicalMonitoringAdmissionWizardView({
   documentState = { phase: "ready", payload: { ready: true, roles: [] }, error: null },
   mappingState = null,
   factState = null,
+  stageSentinel = null,
   onSourceDirChange,
   onSourceFilesChange,
   onPrimaryAction,
@@ -1679,6 +1681,21 @@ export function MedicalMonitoringAdmissionWizardView({
         >
           {primary.label}
         </button>
+        {/* 状态机专项T4（02_DESIGN §5-T4/D6）：死锁哨兵——仅当本地面板
+            无任何可用控件而权威blocking[]携带可用动作键时渲染，消费
+            stage-state作兜底动作源（键→既有onPrimaryAction分支）。不
+            替换既有主按钮文案与逻辑。 */}
+        {stageSentinel ? (
+          <button
+            type="button"
+            className="monitoring-admission-secondary monitoring-admission-sentinel"
+            data-sentinel-action={stageSentinel.actionKey}
+            title="系统检测当前面板暂无可用操作，以下为权威状态提供的恢复入口。"
+            onClick={() => onPrimaryAction?.(stageSentinel.handlerKey)}
+          >
+            {stageSentinel.label}
+          </button>
+        ) : null}
       </footer>
     </section>
   );
@@ -1721,6 +1738,10 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
   const factsRequestGeneration = useRef(0);
   const factsInFlight = useRef(false);
   const [factState, setFactState] = useState({ phase: "idle", payload: null, error: null });
+  // 状态机专项T4（02_DESIGN §5-T4/D6）：stage-state权威快照缓存——
+  // 挂载时一次（S7 F5恢复同源），映射面板静默禁用态补一次重读，
+  // 供死锁哨兵消费blocking[]作兜底动作源。
+  const [stageState, setStageState] = useState(null);
   // R12轮（R12-01）：内容差异确认的逐条进行中/已确认反馈——点击后
   // 立即可见（B实测确认已落台账但界面15分钟零反馈）。
   const [confirmingEntries, setConfirmingEntries] = useState({});
@@ -2270,6 +2291,8 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     api.getDataAdmissionStageState(state.projectId, state.attemptId)
       .then((payload) => {
         if (cancelled) return;
+        // T4：权威快照入state供死锁哨兵消费（current_stage语义不变）。
+        setStageState(payload && typeof payload === "object" ? payload : null);
         const stage = String(payload?.current_stage || "");
         if (
           stage === "recognition"
@@ -2285,6 +2308,34 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       cancelled = true;
     };
   }, [api, state.attemptId, state.phase, state.projectId, state.stepIndex]);
+
+  // 状态机专项T4：映射面板静默禁用态补一次stage-state重读（非轮询—
+  // 端点documents阶段回放成本未收口前不做周期轮询；仅按本组合键变化
+  // 触发，防死锁哨兵消费陈旧权威）。busy态不触发。
+  useEffect(() => {
+    if (state.phase !== "ready" || state.stepIndex !== 2 || !state.attemptId) return undefined;
+    if (documentState?.payload?.ready !== true) return undefined;
+    const mappingPhase = String(mappingState?.phase || "");
+    if (["loading", "adopting", "adjudicating", "confirming"].includes(mappingPhase)) {
+      return undefined;
+    }
+    const primary = admissionMappingPrimaryAction(mappingState || createAdmissionMappingConfirmState());
+    if (primary?.disabled !== true) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      api.getDataAdmissionStageState(state.projectId, state.attemptId)
+        .then((payload) => {
+          if (!cancelled) {
+            setStageState(payload && typeof payload === "object" ? payload : null);
+          }
+        })
+        .catch(() => { /* 哨兵权威重读失败=维持上次快照，不外泄 */ });
+    }, 1500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [api, documentState?.payload?.ready, mappingState, state.attemptId, state.phase, state.stepIndex, state.projectId]);
 
   useEffect(() => {
     if (state.phase !== "ready" || state.stepIndex !== 2) return undefined;
@@ -2585,6 +2636,11 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       await loadMappingCandidates();
       return;
     }
+    if (key === "reload-documents") {
+      // 状态机专项T4：哨兵的文档阶段兜底动作——重读权威readiness。
+      await loadDocumentReadiness();
+      return;
+    }
     if (key === "adopt") {
       await adoptDraft();
       return;
@@ -2607,6 +2663,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     api,
     confirmDraft,
     generateFacts,
+    loadDocumentReadiness,
     loadMappingCandidates,
     mappingState,
     onAdmitted,
@@ -2815,6 +2872,30 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
     await confirmDraft({ allowUnverifiedDualReview: true });
   }, [confirmDraft]);
 
+  // 状态机专项T4（02_DESIGN §5-T4/D6）：死锁哨兵计算——权威blocking[]
+  // ×本地控件态。窄契约见stageSentinelAction：本地busy或有任何可用控件
+  // 时恒为null（健康等待不误伤）；complete态恒null。
+  const wizardPhase = state?.phase || "input";
+  const documentPanelActive =
+    wizardPhase !== "done" && documentState?.payload?.ready !== true;
+  const sentinelPrimary = documentPanelActive
+    ? { disabled: true }
+    : admissionMappingPrimaryAction(mappingState || createAdmissionMappingConfirmState());
+  const stageSentinel = stageSentinelAction(stageState, {
+    wizardPhase,
+    mappingPhase: String(mappingState?.phase || ""),
+    documentPhase: String(documentState?.phase || ""),
+    factPhase: String(factState?.phase || ""),
+    primaryDisabled: sentinelPrimary?.disabled === true,
+    // 文档面板保留四轮验收的自身控件集（上传/重试/裁决/差异确认），
+    // 哨兵不与其打架；映射面板按问题卡/降级入口/可用主按钮判定。
+    hasEnabledControl: documentPanelActive
+      ? true
+      : sentinelPrimary?.disabled !== true
+        || mappingUnansweredCount(mappingState || createAdmissionMappingConfirmState()) > 0
+        || mappingState?.payload?.inflightAdoptionAvailable === true,
+  });
+
   return (
     <>
     {state.projectId && typeof api.getQueueState === "function" ? (
@@ -2825,6 +2906,7 @@ export function MedicalMonitoringAdmissionWizard({ projectId, api: providedApi, 
       documentState={documentState}
       mappingState={mappingState}
       factState={factState}
+      stageSentinel={stageSentinel}
       onSourceDirChange={(value) => dispatch({ type: "source-dir-change", value })}
       onSourceFilesChange={(files) => dispatch({ type: "source-files-change", files })}
       onPrimaryAction={onPrimaryAction}
