@@ -6,6 +6,26 @@
 
 ---
 
+## 0. E2E验收拦截修复（2026-10-15，提交 `1f60d357`）
+
+**卡点**：E2E两轮（MX循SM1/SM2-CSU）均停于数据接入向导第3步字段映射确认，`mapping_bridge_failed`×13次，~50分钟无进展停手。
+
+**取证（本次实际执行）**：
+- 两项目的mapping verifier分片各10片**全部`queue_dwell_timeout`终态失败且attempt_count=0**（sqlite只读查询medical_monitoring_ai.sqlite3）——入队后97分钟从未被认领即被视界收割；
+- 同库历史：同形态早于本次实施即反复存在（`f0cd315ab2bd` 10-14 00:24全灭、10-10~10-12多项目177分片大量失败）——**非S1-S7引入的回归**；根因=单一verifier worker被先到项目（baf07c70c25c，177分片，verifier持续更新至10-15 01:31）独占25+小时，后到项目的零认领分片在自身视界到期后被收割（R42B的跨项目变体：R42-01的「本项目视界内有完成即跳过」保护不了自身零完成、纯排队等待的项目）；
+- 复现核实：确认（confirm）恒409 `mapping_verifier_job_failed`，其409文案承诺「系统已将其重新排队重跑」但**该路径实际无人重排**（R42-01补偿只挂在降级确认路径）——重试死循环无出路；
+- 服务端500零痕迹：mapping桥路由的`except Exception`静默吞栈，E2E期间的500无法取证（已补栈日志，未来必留痕；重放adopt 201/confirm 409无500，历史500最可能是识别刚完成写高峰期的瞬时故障被fail-closed放大，如实标注未能历史复现）。
+
+**修复（最小根因，提交 `1f60d357`）**：
+1. `MonitoringAiRepository.fail_queued_jobs_exceeding_dwell`：**等待≠滞留**——同任务类型存在running行（worker池在推进；过期租约行由claim_next自动回收、终态僵尸由expire_exhausted_leases周期清理，信号有界自愈）时，对`attempt_count=0`的排队行重置dwell_since并跳过收割；worker空闲后整段视界仍无人认领照常收割（真饥饿检测保留）；attempt>0重排循环仍按原视界（R29-01语义不变）。
+2. `AdmissionMappingConfirmationService.confirm_draft`：`mapping_verifier_job_failed`在raise前调`_retry_failed_mapping_jobs`（与二轮复核路径同款有界预算`_ADJUDICATION_AUTO_RECOVERY_LIMIT`）——409文案与行为一致，预算内下次确认进入`mapping_verifier_incomplete`等待（前端adjudication-start自动轮询收敛）。
+3. `admission_stage_view.apply_single_source`：backfill返回值此前被丢弃（row重读入参None），回填成功仍可能误触fail-closed——取回填真值。
+4. mapping桥路由（GET/POST投影、白名单违规）500兜底补`_logger.exception`真栈。
+
+**验证**：新增`tests/test_confirm_verifier_deadlock_fix.py`（4测试：在途豁免+等待钟重置/空闲照常收割/confirm兑现重排/回填值流）；全套件258 passed；回归门151 passed；服务重启后SM2 confirm触发重排→10片queued→verifier worker恢复消费（1 running→逐片完成，存活不收割=修复①生效）。
+
+---
+
 ## 1. 总结论
 
 | 步 | 状态 | 提交 | 新增pytest |
