@@ -735,3 +735,13 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 测试留痕：R44-01共享运行时回归2项新增（advance同绑定直通adjudicating/submit_adjudication_pair显式放行，stash对照修复前红后绿）+test_mm_r44_mapping_generation_pace 5/5+test_mm_r42_rule_pack_label 3/3；回归=doc_jobs+R40共享运行时+pace+规则标注+R32重跑 47 passed；mapping五族102 passed；r7 router+freeze 106 passed/1 failed（late_project_dispatchers 409 result_context_unavailable，stash对照HEAD既有同签名）；data_admission+repository+worker 130 passed；protocol_preparation 54 passed；前端 .mjs 99/99+.jsx 11/11+vite build绿（medical-writing 3项vitest缺依赖失败为HEAD既有）
 - runs/tester_loop_iso_20260928/runtime/{ai_provider_settings,ai_role_bindings}.json 的tracked差异为07:23 API进程自身startup migration的格式化重写（值零变化），本轮未触碰该等运行时数据
 2026-10-15 17:08 用户手动无损暂停：状态机专项run dwfrun-55c94557停于E2E第2轮第2位在途（12/13步零损失）。已完成：考古21源/设计8决策/实施两轮（d2a19628+verifier死锁根治1f60d357）/E2E第1轮1过2停（mapping_bridge_failed）。SM1-3测试项目保留勿删。恢复=ResumeWorkflowRun同run_id，详见PAUSE_HANDOFF_20261015.md
+
+## 2026-10-15 17:50 CST 状态机专项v2（T1-T6）实施后标准重启（改动面：services/api/app/{main,monitoring_admission_stage_store,monitoring_ai_repository,monitoring_document_authority_jobs,monitoring_document_authority_workflow,monitoring_mapping_draft_repository}.py + packages/medical_monitoring/{admission/admission_stage_view,admission/mapping_confirmation,api/r7_product/mapping_candidate_routes}.py + 前端 Wizard/WizardState/css + tests 6个新文件；提交9eee3331..2d411755）：
+- API 重启：lsof -ti:8911 kill → 标准命令拉起，**新增灰度env WORKBENCH_MONITORING_AI_INFRA_RETRY=1（T5 S6灰度开启，回滚=env置空重启）**（pid 20462）
+- vite 重启：lsof -ti:5178 kill → 标准命令拉起（vite启动时指纹按新后端源码重算）
+- 自检1 runtime-readiness：ready:true，backend_build_id=api-2c80589e9f8dfb30（T1-T6新指纹）
+- 自检2 monitoring：5178 /monitoring → HTTP 200；runtime-build.json expectedBackendBuildId=api-2c80589e9f8dfb30 == 8911 backend_build_id 配对一致；前端新代码经vite转换含stageSentinelAction
+- 自检3 env在进程内生效：ps eww 20462 含 WORKBENCH_MONITORING_AI_INFRA_RETRY=1；WORKBENCH_DOCUMENT_VERDICT_CACHE未设（T6缓存默认off=零缓存路径）
+- 界面冒烟（经5178非API）：项目MX循开考-CSU → 医学监查 → 开始一次新的监查 → 四步向导走通（第2步「10表/591行/3038值100%往返校验」、第4步「确认并开始监查」disabled:false）；**未点击最终开始按钮**（常驻项目预置状态保留给E2E验收）
+- 端口纪律：仅触碰8911/5178；8910/5177 curl复核仍DOWN（与实施前一致），未执行任何操作
+- 遗留留痕（如实）：T5 live-fire经服务层重建载荷重发SM3两条infra失败行的尝试被claim侧身份校验正确隔离（monai_b0e1764e108871cf3fb6956c0f4b → monitoring_ai_job_identity_invalid quarantine，终态无害保留作审计；retire_obsolete_generation按设计不触终态行返回0）——R11-01现场点燃未在本窗口完成，行为由env-on单测（7项）锁定

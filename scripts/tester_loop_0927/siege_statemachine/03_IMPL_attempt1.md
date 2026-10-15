@@ -128,3 +128,93 @@
 ## 5. 回滚
 
 权威schema零变更；两张新表`DROP TABLE monitoring_admission_stage_events, monitoring_admission_stage_state`即完全归零。逐步回退：S2/S3的`STAGE_VIEW_MODE=derive`回派生；S6 `WORKBENCH_MONITORING_AI_INFRA_RETRY`默认off；S7端点保留无害；前端C2/C6按组件revert（1b9a84fb单提交）。
+
+---
+
+# 03_IMPL_attempt1（v2续篇）— 02_DESIGN v2剩余收口T1-T6实施记录（2026-10-15）
+
+> 设计底稿：同目录 `02_DESIGN.md` v2（§5分步迁移T1-T8）。本节为v2收口的实施留痕，
+> 追加于v1记录（§0-§5）之后；提交前缀仍为「状态机专项:」。基线（v2设计§5实测）：
+> 专项8文件51 passed / 回归151 passed / 前端confirm-state 33 pass-0 fail（本次实施前复跑逐字一致）。
+
+## 6. 总结论
+
+| 步 | 状态 | 提交 | 新增测试 |
+|---|---|---|---|
+| T1 facts失败时效窗（D5） | ✅完成 | `9eee3331` | tests/test_facts_recent_failure_window.py（7） |
+| T2 documents事件留痕（D1） | ✅完成 | `49f9ad79` | tests/test_admission_stage_documents_events.py（6） |
+| T3 mapping事件留痕（D2） | ✅完成 | `286e037a` | tests/test_admission_stage_draft_events.py（6） |
+| T4 前端死锁哨兵（D6/C7） | ✅完成 | `3e81e2f6` | WizardState.test.mjs新增8断言（模块84 checks） |
+| T5 S6灰度开启（D3） | ✅代码+灰度env已开/⚠️现场点燃未完成 | `454edef0` | tests/test_infra_requeue_dwell_interaction.py（3） |
+| T6 S8 verdict物化缓存（D4） | ✅完成（缓存默认off灰度） | `2d411755` | tests/test_document_authority_verdict_cache.py（9） |
+| T7 E2E三连从零门 | ❌本窗口未执行（见§12如实声明） | — | — |
+| T8 A5入库 | 按v2设计建议不做 | — | — |
+
+**回归门（本次实际执行，ask指定命令）**：`cd implementation/workbench && .venv/bin/python -m pytest tests/medical_monitoring -q -p no:cacheprovider` → **151 passed, 21 warnings**（与实施前基线151逐字一致，0失败，只拦新增=0拦截）。
+
+**专项+邻域套件（最终态实测）**：15个测试文件 → **173 passed**；前端门 `node --test src/features/medical-monitoring/*.test.mjs` → **94 pass / 0 fail**；`npx vite build --logLevel error` 通过。
+
+## 7. 各步实施内容
+
+### T1（9eee3331）
+- `mapping_candidate_routes.py`：新增纯函数 `facts_recent_failure_from_events`（时效窗唯一推导：最近failure_recorded晚于最近ready且24h内→True）；`_assemble_stage_state` 装配侧经 `stage_store.list_events(stage="facts")` 读取并以 `facts_recent_failure` 实参传入 `build_stage_view`——`retry_generate_facts` 动作键真实可达；读取故障best-effort回退False=现状。
+- `main.py _record_facts_stage_state`：`failure_class="content"` 字面量改 `failure_class_for(failure_code)`（infra/content正确分类）。
+- `monitoring_admission_stage_store.list_events` 加可选 `stage=""` 过滤（缺省=原契约；防同attempt的recognition事件挤占limit截断最新facts事件）。
+
+### T2（49f9ad79）
+- workflow增 `_record_stage_event`（best-effort独立事务，attempt_id=''项目级，双保险吞异常）；§2.2 documents表全部变迁埋点：start→analyzing（batch_started；重传重排另记recovery_action actor=user）、advance的分析作业重建/四阶段推进（analyzing→reviewing→adjudicating→cross_checking）/各阶段显式与自动重排（recovery_action）/failed（failure_recorded，failure_class经failure_class_for）/identity门挂起（state_changed→needs_user_input reason=identity）。
+- `monitoring_document_authority_jobs`：promote链A1注册事务提交后→promoted；内容确认挂起→needs_user_input（reason=content）。签名加可选 `stage_event_from_state`（调用方线性阶段提示，缺省''）。
+- store增 `append_event_autonomous`（独立事务+内部吞异常）。不建状态行（§2.5裁决）。
+- 实施事故与修复（如实）：promote函数的annotate循环曾被缩进错改移出A1事务（原测试`test_product_workflow_starts_both_models_and_promotes_direct_agreement`当场红：source registry annotation requires a transaction），已修复为纯附加diff后该测试绿。
+
+### T3（286e037a）
+- `MonitoringMappingDraftRepository` 挂同文件 `AdmissionStageStore`（`_initialize` 幂等补建STAGE_TABLES_DDL——独立文件场景如测试直连也需要事件表落点）；`_record_draft_event` 接draft写的外层conn（**同一sqlite事务**，§2.3纪律）。
+- 四个CAS写点埋事件（attempt键=batch_id）：assemble→no_draft→draft_active(v1)；edit_field/reapply_known_export_context→vN→vN+1；confirm→draft_active→confirmed。部分采纳（域/槽位豁免非空）与降级确认（服务层confirm加可选 `degraded` 实参传入）另记degradation。幂等重放路径提前返回不重复落事件。不建状态行。
+
+### T4（3e81e2f6）
+- `medicalMonitoringAdmissionWizardState.mjs` 新增纯函数 `stageSentinelAction(stageState, localPhases)`：窄契约——仅当「面板无任何可用控件且非busy」而权威blocking[]携带action_available键时产出哨兵；busy（导入/识别轮询/复核/监查数据生成中）与complete态恒null；键→既有onPrimaryAction分支映射（reload-documents/reload/adopt/confirm/generate-facts）。
+- Wizard：stage-state权威快照入state（挂载S7同源一次+映射面板静默禁用态一次1.5s去抖重读，**非周期轮询**——T6缓存灰度off前documents回放成本未收口）；footer哨兵次按钮（琥珀描边，不替换既有主按钮文案与逻辑）；onPrimaryAction加reload-documents分支。
+
+### T5（454edef0+运行时）
+- 前置交互测试3项：重排显式重置dwell基线→视界内不被二次收割；在途豁免=**整轮跳过**（attempt=0等待钟重置，worker空闲下一轮按原视界补收——测试如实记录该语义，与实施注释逐字对齐）；env off复跑零行为差。
+- 隔离runtime灰度开启：8911重启带 `WORKBENCH_MONITORING_AI_INFRA_RETRY=1`（ps eww实测在进程env内）；回滚=env置空重启（代码路径不变）。
+
+### T6（2d411755）
+- A2同库新表 `monitoring_document_authority_verdicts`（key=project+entry+registry_revision+cited_job_digest，verdict 0/1，CHECK约束；`MonitoringAiRepository._initialize` 幂等建表）。
+- `MonitoringDocumentEvidenceResolver` 加 `verdict_store` 注入（main.py接monitoring_ai_repository）：核验链拆分——receipt完整性（廉价哈希/形状检查）永不缓存先判，promoted条目才进verifier重放（指纹命中跳过）；**缓存关闭路径与现状逐字一致**（钩子直调/回退，含测试自定义钩子语义不受影响）；cited_job_digest=被引作业行+候选行内容摘要；读写均env `WORKBENCH_DOCUMENT_VERDICT_CACHE` 门控（默认off=零缓存路径）。
+
+## 8. 验证证据（本次实际执行的命令与结果）
+
+| 验证 | 命令 | 结果 |
+|---|---|---|
+| 回归门（ask指定） | `.venv/bin/python -m pytest tests/medical_monitoring -q -p no:cacheprovider` | **151 passed**（基线151，0失败） |
+| 每步合并门 | 新测试+专项8文件+邻域（draft仓/确认/文档jobs） | 每步全绿（T1 58/T2 91/T3 179/最终态173 passed） |
+| 前端门 | `node --test src/features/medical-monitoring/*.test.mjs` | **94 pass / 0 fail** |
+| 前端构建 | `npx vite build --logLevel error` | 通过 |
+| 服务自检 | 8911 runtime-readiness / 5178 /monitoring / runtime-build.json | ready:true build `api-2c80589e9f8dfb30`；200；指纹配对一致 |
+| 灰度env生效 | `ps eww <8911 pid> \| grep WORKBENCH_MONITORING_AI_INFRA_RETRY` | `WORKBENCH_MONITORING_AI_INFRA_RETRY=1` 在进程env内 |
+| 界面冒烟（经5178非API） | 浏览器驱动 | 见§9 |
+
+## 9. 界面冒烟（本次实际执行，经5178界面非API）
+
+8911/5178按ISO_ENV_LOG标准命令双重启（8910/5177 curl复核仍DOWN与实施前一致，未触碰）后，浏览器经 http://localhost:5178 选择项目「MX循开考-CSU · MG-K10 · 慢性自发性荨麻疹」→ 医学监查 → 点「开始一次新的监查」→ 四步向导完整走通：第1步日常监查（系统推荐）、第2步「数据层事实快照已核验：10表/591行/3038值100%往返校验」（B6 facts门过）、第3步特殊关注规则勾选、第4步「确认并开始监查」按钮 **disabled:false**（前置链校验入口可用）。**未点击最终开始按钮**——常驻项目按预置停在「confirmed+facts ready未启动运行」，实际启动会变更停驻状态（留给E2E验收阶段）。
+
+## 10. 如实偏差与未尽事项（不夸大）
+
+1. **T7未执行**：三连从零E2E门需要上游AI通道稳定窗口（每轮真实建项→上传→核对→识别→确认→事实→运行→发布数分钟到小时级壁钟；04诊断记录的失败形态=上游glm-5.3-flash 429瞬断；fullchain底座为SAR重跑1000+作业量级）。本窗口上游仅经冒烟路径被使用，三连全通无法在诚实前提下完成——**未跑即未跑，不以单轮或回放冒充**。gatePassed按ask定义=回归门+冒烟（均过）。
+2. **T5现场点燃未完成**：经服务层以重建载荷重发SM3两条infra失败行的尝试被claim侧身份校验正确隔离（`monitoring_ai_job_identity_invalid` quarantine，72ms内，终态无害保留作审计行 `monai_b0e1764e108871cf3fb6956c0f4b`；`retire_obsolete_generation`按设计不触终态行返回0）——重建载荷≠管线原始funnel输入本就是预期差异。R11-01行为由env-on单测锁定（`test_infra_failed_hit_requeues_on_resubmit`：infra失败→同请求重发→requeued+actor=user）；现场点燃留待E2E自然触发。「观察一个完整识别周期无收割异常」本窗口无识别运行可观察，未跑。
+3. **T4不做周期轮询**：哨兵权威快照=挂载一次+映射面板静默禁用态一次重读（1.5s去抖、按键变化触发）。原因：T6缓存env off时stage-state的documents回放成本（考古报告19.9s级）不宜引入周期负载；缓存灰度开启后可再评估。
+4. **T4哨兵不覆盖文档面板**：文档面板保留四轮验收的自身控件集（上传/重试/裁决/差异确认），哨兵hasEnabledControl恒真不与其打架（R3）；哨兵实际作用域=映射/事实面板（D6的C7缺口主体）。
+5. **T2的needs_user_input reason族**：两模型工作流无「角色裁决挂起」独立返回点（身份门/内容差异确认是仅有的两个挂起出口）——design表的reason=role在本工作流无对应变迁返回，实际落点为identity与content两类，role类未伪造。
+6. **T6缓存路径语义假设**：缓存开启时按生产registry（SourceRegistryService）标准钩子语义拆分；无钩子registry的回退契约（receipt完整即verified）逐字保留。
+7. **T2/T3事件写入纪律差异（按设计）**：T2跨文件点=独立事务best-effort（权威写后，异常双保险吞）；T3=与draft写同一事务（设计明示同事务，CAS回滚连事件一起回滚，测试锁定）。
+8. **工作树遗留（非本次产生）**：`01_STATEMAP.md`/`02_DESIGN.md` 的未提交修改与 `runs/*/ai_provider_settings.json`、`ai_role_bindings.json` 的tracked差异在本会话开始前已存在（后者为API进程startup migration格式化重写，R44留痕同款），本次未触碰不纳入提交。
+9. **8911灰度env为进程级**：服务若被无该env的命令重启，灰度静默回退off（=设计回滚路径）；ISO_ENV_LOG已留痕标准重启命令含该env。
+
+## 11. 回滚
+
+T1/T2/T3：单提交revert（事件表留存无害，投影/门不读documents与mapping事件）。T4：组件revert（3e81e2f6），哨兵默认不渲染=现状。T5：env置空重启即回滚（代码路径不变）。T6：env off回直连重放；`DROP TABLE monitoring_document_authority_verdicts` 归零。权威schema（drafts/jobs/registry/facts/A5文件态）全程零迁移。
+
+## 12. 一句话结论
+
+v2剩余六缺口中**五个半已收口**——T1/T2/T3/T4/T6完成并各自带锁行为测试，T5代码+交互测试+灰度env已部署（现场点燃留待E2E），T7三连从零门因上游壁钟依赖本窗口未执行（非代码验收步，按04诊断流程另约窗口）；回归门151 passed与基线逐字一致，常驻项目界面冒烟走通四步向导至开始按钮可用。
