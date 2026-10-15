@@ -163,8 +163,10 @@ def apply_single_source(
     if stage_view_mode() == "materialized":
         row = recognition_state_row
         if row is None and recognition_jobs_exist and callable(backfill):
-            backfill()
-            row = recognition_state_row
+            # E2E拦截修复：回填返回值此前被丢弃（row重读入参None），
+            # 回填成功仍会误触fail-closed。取回填真值；回填后仍无行才
+            # 按设计fail-closed。
+            row = backfill()
         if row is not None:
             projected["state"] = str(row["state"])
         elif recognition_jobs_exist:

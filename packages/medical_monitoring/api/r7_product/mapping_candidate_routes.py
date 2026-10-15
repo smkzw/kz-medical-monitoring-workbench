@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -25,6 +26,10 @@ from .errors import _error_response, _run_entry_error_response
 from .admission_routes import _validated_attempt_id
 
 MAPPING_CANDIDATE_SCHEMA_VERSION = "mm-c3-mapping-candidate-v1"
+
+# E2E拦截修复：500兜底（mapping_bridge_failed）此前静默吞栈，服务端
+# 零痕迹；所有未预期异常必须留真栈。
+_logger = logging.getLogger("mm.mapping_candidate_routes")
 MAPPING_CONFIRMATION_SCHEMA_VERSION = "mm-c3-mapping-confirmation-v1"
 
 # R28轮（R28-03）：研究文件核对的上游/基础设施类失败码——与
@@ -812,6 +817,11 @@ def _public_mapping_projection(
         return False
 
     if contains_forbidden_key(public):
+        # E2E拦截修复：白名单违规静默返回500同样零痕迹，留日志。
+        _logger.error(
+            "public mapping projection contained forbidden key: keys=%s",
+            sorted(list(public.keys())),
+        )
         return _mapping_error("mapping_bridge_failed")
     return public
 
@@ -1740,6 +1750,11 @@ def register_mapping_candidate_routes(
         except AdmissionPipelineError:
             return _mapping_error("mapping_admission_not_found")
         except Exception:
+            # E2E拦截修复：mapping_bridge_failed此前静默吞栈（50分钟
+            # 盲试无任何服务端痕迹），500兜底必须留真栈供取证。
+            _logger.exception(
+                "mapping-candidates projection failed (project=%s)", canonical,
+            )
             return _mapping_error("mapping_bridge_failed")
         finally:
             write_permit.release()
@@ -1838,6 +1853,11 @@ def register_mapping_candidate_routes(
         except AdmissionMappingPipelineError as exc:
             return _mapping_error(exc.code)
         except Exception:
+            # E2E拦截修复：GET兜底留真栈（此前零痕迹）。
+            _logger.exception(
+                "mapping-candidates GET failed (project=%s attempt=%s)",
+                canonical, validated_attempt,
+            )
             return _mapping_error("mapping_bridge_failed")
 
     @router.get(
@@ -2243,6 +2263,9 @@ def register_mapping_candidate_routes(
             mapped = _repo_error_code(exc)
             if mapped:
                 return _mapping_error(mapped)
+            _logger.exception(
+                "mapping draft write failed (project=%s)", canonical,
+            )
             return _mapping_error("mapping_bridge_failed")
         finally:
             write_permit.release()

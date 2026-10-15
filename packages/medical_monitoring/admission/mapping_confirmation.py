@@ -2192,10 +2192,19 @@ class AdmissionMappingConfirmationService:
                     workspace_dir=workspace_dir,
                 )["reconciliation"]
             except AdmissionMappingPipelineError as exc:
-                # R36轮（R36-01）：降级确认出口。复核长时间未收敛（验证
-                # 队列仍在排队/分片预算耗尽）且用户已逐条作答完毕时，
-                # 允许显式知情降级确认——降级事实与原因写入确认留痕，
-                # 不静默、不冒充双盲通过。仅由前端降级按钮显式传入。
+                # E2E拦截修复：mapping_verifier_job_failed在非降级路径
+                # 直接raise，409文案承诺「系统已将其重新排队重跑」但实际
+                # 无人重排——用户重试恒定再失败（SM1/SM2实测确认链死锁
+                # ~50分钟）。现与二轮adjudicate路径（_retry_failed_
+                # mapping_jobs，R5冲刺/R36-01同款有界预算）对齐：raise前
+                # 兑现重排，预算内下次确认进入mapping_verifier_incomplete
+                # 等待（前端adjudication-start自动轮询收敛），预算耗尽仍
+                # 如实409；降级确认路径不变。
+                if exc.code == "mapping_verifier_job_failed":
+                    self._retry_failed_mapping_jobs(
+                        project_id=project_id,
+                        attempt_id=attempt_id,
+                    )
                 if not (
                     allow_unverified_dual_review
                     and exc.code in self._DEGRADABLE_DUAL_REVIEW_CODES

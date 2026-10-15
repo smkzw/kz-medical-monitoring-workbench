@@ -1339,6 +1339,51 @@ class MonitoringAiRepository:
                     cutoff,
                 ]
                 connection.execute("BEGIN IMMEDIATE")
+                # E2E拦截修复（R42B跨项目变体，SM1/SM2实测10/10零认领
+                # 全灭→确认链死锁）：单一verifier worker被先到项目的大
+                # cohort连续占用25+小时时，后到项目的零认领分片纯粹在
+                # 排队等待，却在自身视界到期后被收割。等待≠滞留：同任务
+                # 类型存在running行即证明worker池在推进（过期租约行由
+                # claim_next自动回收、终态僵尸由expire_exhausted_leases
+                # 周期清理，running信号有界自愈），本轮对attempt_count=0
+                # 的排队行重置等待钟（语义同「重试重置基线」）并跳过收
+                # 割；worker空闲后若整段视界仍无人认领，下一轮照常收割
+                # （真饥饿检测保留）。attempt>0的重排循环仍按原视界收割
+                # （R29-01语义不变）。
+                inflight = connection.execute(
+                    """
+                    SELECT 1 FROM monitoring_ai_jobs
+                    WHERE status = ?
+                      AND task_type = (
+                        SELECT task_type FROM monitoring_ai_jobs
+                        WHERE project_id = ? AND status = ?
+                          AND attempt_count = 0
+                        ORDER BY created_at LIMIT 1
+                      )
+                    LIMIT 1
+                    """,
+                    (
+                        MonitoringAiJobStatus.RUNNING.value,
+                        str(row["project_id"]),
+                        MonitoringAiJobStatus.QUEUED.value,
+                    ),
+                ).fetchone()
+                if inflight is not None:
+                    connection.execute(
+                        """
+                        UPDATE monitoring_ai_jobs
+                        SET dwell_since = ?
+                        WHERE project_id = ? AND status = ?
+                          AND attempt_count = 0
+                        """,
+                        (
+                            _iso(now),
+                            str(row["project_id"]),
+                            MonitoringAiJobStatus.QUEUED.value,
+                        ),
+                    )
+                    connection.commit()
+                    continue
                 # 状态机专项（02_DESIGN §3.2）：收割前先取命中行（同一
                 # IMMEDIATE事务内无竞态），收割后逐行补事件留痕。
                 reaped_rows = connection.execute(
