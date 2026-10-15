@@ -421,6 +421,7 @@ from .monitoring_batch_service import (
     MonitoringBatchService,
 )
 from .monitoring_batch_rule_runner import MonitoringBatchRuleRunner
+from .monitoring_admission_stage_store import failure_class_for
 from .monitoring_ai_repository import MonitoringAiRepository
 from .monitoring_ai_contracts import (
     MonitoringAiCandidateStatus,
@@ -4365,7 +4366,10 @@ def _record_facts_stage_state(
                     stage="facts",
                     event_type="failure_recorded",
                     reason_code=str(failure_code),
-                    failure_class="content",
+                    # 状态机专项T1（02_DESIGN §5-T1）：failure_class不再
+                    # 硬编码content——经failure_class_for按infra/content
+                    # 分类（提供方瞬断=infra，内容性失败=content）。
+                    failure_class=failure_class_for(failure_code),
                 )
             connection.commit()
     except Exception:

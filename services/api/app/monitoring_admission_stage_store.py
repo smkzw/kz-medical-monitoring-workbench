@@ -319,13 +319,22 @@ class AdmissionStageStore:
         project_id: str,
         attempt_id: str,
         *,
+        stage: str = "",
         after: str = "",
         limit: int = 200,
     ) -> list[dict[str, Any]]:
-        """时序事件读取；``after``=返回created_at严格晚于该ISO串的事件。"""
+        """时序事件读取；``after``=返回created_at严格晚于该ISO串的事件。
+
+        ``stage``=可选阶段过滤（T1时效窗只读facts事件，避免同attempt的
+        recognition事件把limit挤占后截断最新facts事件）；缺省不过滤=
+        原契约。
+        """
 
         clauses = ["project_id = ?", "attempt_id = ?"]
         parameters: list[Any] = [str(project_id), str(attempt_id)]
+        if str(stage or "").strip():
+            clauses.append("stage = ?")
+            parameters.append(str(stage).strip())
         if str(after or "").strip():
             clauses.append("created_at > ?")
             parameters.append(str(after).strip())

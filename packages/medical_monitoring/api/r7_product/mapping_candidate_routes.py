@@ -6,7 +6,8 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Protocol
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol
 
 from fastapi import APIRouter, File, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
@@ -56,6 +57,60 @@ _DOCUMENT_AUTHORITY_INFRA_FAILURE_CODES = frozenset({
 _RESOLVE_INFLIGHT: Dict[str, float] = {}
 _RESOLVE_INFLIGHT_LOCK = threading.Lock()
 _RESOLVE_INFLIGHT_TTL_SECONDS = 120.0
+
+# 状态机专项T1（02_DESIGN §5-T1）：facts失败时效窗——failure_recorded
+# 事件晚于最近一次ready且在24h内→retry_generate_facts动作键真实可达。
+_FACTS_FAILURE_WINDOW = timedelta(hours=24)
+
+
+def _parse_iso_event_time(value: Any) -> Optional[datetime]:
+    try:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except (TypeError, ValueError):
+        return None
+
+
+def facts_recent_failure_from_events(
+    events: Iterable[Mapping[str, Any]],
+    *,
+    now: Optional[datetime] = None,
+) -> bool:
+    """facts失败时效窗唯一推导（02_DESIGN §5-T1；纯函数便于测试）。
+
+    - 无failure_recorded事件→False（现行为回归）；
+    - 最近failure_recorded不晚于最近ready（state_changed→ready）→False
+      （失败已被后续成功覆盖，retry键退回generate_facts）；
+    - 最近failure_recorded超出24h时效窗→False（陈旧失败不再引导重试）。
+    """
+
+    moment = now or datetime.now(timezone.utc)
+    last_ready_at: Optional[datetime] = None
+    last_failure_at: Optional[datetime] = None
+    for event in events:
+        created = _parse_iso_event_time(event.get("created_at"))
+        if created is None:
+            continue
+        event_type = str(event.get("event_type") or "")
+        if event_type == "failure_recorded":
+            if last_failure_at is None or created > last_failure_at:
+                last_failure_at = created
+        elif (
+            event_type == "state_changed"
+            and str(event.get("to_state") or "") == "ready"
+        ):
+            if last_ready_at is None or created > last_ready_at:
+                last_ready_at = created
+    if last_failure_at is None:
+        return False
+    if last_ready_at is not None and last_failure_at <= last_ready_at:
+        return False
+    return (moment - last_failure_at) <= _FACTS_FAILURE_WINDOW
 
 
 def _try_begin_resolve(project_id: str) -> bool:
@@ -960,6 +1015,23 @@ def _assemble_stage_state(
             except Exception:
                 facts_state = "not_generated"
 
+    # 状态机专项T1（02_DESIGN §5-T1）：读stage_events中facts最近的
+    # failure_recorded（时效窗=晚于最近ready事件且24h内），retry键真实
+    # 可达。best-effort：事件读取故障回退False=现状（参数缺省行为）。
+    facts_recent_failure = False
+    if ai_repository is not None:
+        stage_store = getattr(ai_repository, "stage_store", None)
+        events_reader = getattr(stage_store, "list_events", None) if stage_store is not None else None
+        if callable(events_reader):
+            try:
+                facts_recent_failure = facts_recent_failure_from_events(
+                    events_reader(
+                        project_id, attempt_id, stage="facts", limit=500,
+                    )
+                )
+            except Exception:
+                facts_recent_failure = False
+
     return build_stage_view(
         project_id=project_id,
         attempt_id=attempt_id,
@@ -972,6 +1044,7 @@ def _assemble_stage_state(
         recognition_failed_shards=failed_shards,
         blocked_group_count=blocked_group_count,
         unresolved_question_count=unresolved,
+        facts_recent_failure=facts_recent_failure,
     )
 
 
