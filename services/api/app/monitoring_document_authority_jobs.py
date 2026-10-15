@@ -52,6 +52,35 @@ from .monitoring_ai_contracts import (
 )
 from .monitoring_ai_repository import MonitoringAiRepository
 
+
+def _record_promotion_stage_event(
+    repository: MonitoringAiRepository,
+    *,
+    project_id: str,
+    from_state: str,
+    to_state: str,
+    reason_code: str = "",
+) -> None:
+    """状态机专项T2（02_DESIGN §2.2 documents表）：晋升链变迁留痕。
+
+    A1注册事务提交**之后**调用（留痕完整性<权威正确性）；best-effort
+    独立事务，异常静默（append_event_autonomous内吞+此处兜底——留痕
+    故障绝不外泄晋升路径）。attempt_id=''项目级，documents只落事件
+    不建状态行（§2.5裁决）。
+    """
+
+    try:
+        repository.stage_store.append_event_autonomous(
+            project_id=project_id,
+            attempt_id="",
+            stage="documents",
+            event_type="state_changed",
+            from_state=from_state,
+            to_state=to_state,
+            reason_code=reason_code,
+        )
+    except Exception:
+        pass
 PROMOTION_RECEIPT_SCHEMA_VERSION = "monitoring-document-authority-promotion-v5"
 _REPLAY_PROMOTION_RECEIPT_SCHEMA_VERSIONS = frozenset({
     "monitoring-document-authority-promotion-v2",
@@ -957,6 +986,8 @@ def promote_document_authority_from_jobs(
     decision_record: Mapping[str, Any] | None = None,
     # R40轮（R40-01）：同resolve——运维同绑定的知情降级放行开关。
     allow_shared_runtime_identity: bool = False,
+    # 状态机专项T2：事件留痕的from_state提示（调用方线性阶段）。
+    stage_event_from_state: str = "",
 ) -> dict[str, Any]:
     candidate_root = Path(candidate_root)
     frozen_batch = _load_json(
@@ -1194,6 +1225,14 @@ def promote_document_authority_from_jobs(
                     supplement_entry_ids_by_role.get(item["role"], [])
                 )
         if blocked_entries:
+            # T2：内容差异确认挂起→needs_user_input（reason=content）。
+            _record_promotion_stage_event(
+                repository,
+                project_id=project_id,
+                from_state=stage_event_from_state,
+                to_state="needs_user_input",
+                reason_code="content",
+            )
             return {
                 "state": "needs_user_input",
                 "authority_status": "not_promoted",
@@ -1251,6 +1290,14 @@ def promote_document_authority_from_jobs(
                     "document_authority_receipt": receipt,
                 },
             )
+    # T2：A1注册事务已提交、核验通过→promoted（§2.2 documents表末行）。
+    _record_promotion_stage_event(
+        repository,
+        project_id=project_id,
+        from_state=stage_event_from_state,
+        to_state="promoted",
+        reason_code="promotion_receipt_written",
+    )
     return {
         **resolution,
         "authority_status": "promoted",

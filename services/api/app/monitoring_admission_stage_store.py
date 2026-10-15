@@ -256,6 +256,46 @@ class AdmissionStageStore:
         )
         return event_id
 
+    def append_event_autonomous(
+        self,
+        *,
+        project_id: str,
+        attempt_id: str = "",
+        stage: str,
+        event_type: str,
+        from_state: str = "",
+        to_state: str = "",
+        reason_code: str = "",
+        failure_class: str = "",
+        actor: str = "system",
+        detail: Mapping[str, Any] | None = None,
+    ) -> None:
+        """独立事务best-effort事件写入（02_DESIGN §5-T2跨文件权威点）。
+
+        供 A4/A5 跨库/跨文件权威写点在**权威写成功之后**调用（facts先例
+        ``main._record_facts_stage_state``）；任何异常静默吞掉——留痕完整
+        性 < 权威正确性，事件故障绝不外泄到权威路径。
+        """
+
+        try:
+            with self._connect() as connection:
+                self.append_event(
+                    connection,
+                    project_id=project_id,
+                    attempt_id=attempt_id,
+                    stage=stage,
+                    event_type=event_type,
+                    from_state=from_state,
+                    to_state=to_state,
+                    reason_code=reason_code,
+                    failure_class=failure_class,
+                    actor=actor,
+                    detail=detail,
+                )
+                connection.commit()
+        except Exception:
+            pass
+
     def bump_stage(
         self,
         conn: sqlite3.Connection,

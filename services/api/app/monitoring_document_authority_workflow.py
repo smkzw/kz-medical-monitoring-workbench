@@ -19,7 +19,7 @@ from packages.medical_monitoring.admission.document_authority import (
     resolve_document_authority_project_identity,
 )
 
-from .monitoring_admission_stage_store import INFRA_FAILURE_CODES
+from .monitoring_admission_stage_store import INFRA_FAILURE_CODES, failure_class_for
 from .monitoring_ai_contracts import (
     MonitoringAiInputRevision,
     MonitoringAiJobStatus,
@@ -67,6 +67,47 @@ class MonitoringDocumentAuthorityWorkflow:
         self.verifier_service = verifier_service
         self.source_registry = source_registry
         self.worker_wake = worker_wake
+
+    def _record_stage_event(
+        self,
+        *,
+        project_id: str,
+        event_type: str,
+        from_state: str = "",
+        to_state: str = "",
+        reason_code: str = "",
+        failure_class: str = "",
+        actor: str = "system",
+        detail: Mapping[str, Any] | None = None,
+    ) -> None:
+        """状态机专项T2（02_DESIGN §5-T2/§2.2 documents表）：批次变迁留痕。
+
+        best-effort独立事务，attempt_id=''项目级——工作流全程无attempt
+        归属（stage_state主键是project+attempt+stage，attempt键控不了多
+        批次文件态，强行键控必错），documents只落事件不建状态行（§2.5
+        裁决：批次状态是A5文件态的投影，再物化=第二份权威）。事件只在
+        A5/A2权威写成功之后落；append_event_autonomous静默吞掉自身故障
+        ——留痕完整性<权威正确性（facts先例main._record_facts_stage_state）。
+        detail禁作业身份/载荷（§2.3写入纪律）。
+        """
+
+        try:
+            self.repository.stage_store.append_event_autonomous(
+                project_id=project_id,
+                attempt_id="",
+                stage="documents",
+                event_type=event_type,
+                from_state=from_state,
+                to_state=to_state,
+                reason_code=reason_code,
+                failure_class=failure_class,
+                actor=actor,
+                detail=detail,
+            )
+        except Exception:
+            # 双保险：autonomous内已吞异常，此处兜住store本体故障
+            # （如缺stage_store属性）——留痕故障绝不外泄权威路径。
+            pass
 
     def start(
         self,
@@ -185,6 +226,7 @@ class MonitoringDocumentAuthorityWorkflow:
         # 终态失败作业显式重排（不受_automatic_recovery_limit限制——
         # 自动预算只约束advance轮询路径的无感重试，不约束用户动作），
         # 让「重新上传→完整重核」成为真实可用的恢复路径。
+        requeued_existing = 0
         for existing in (existing_primary, existing_verifier):
             if existing is None or existing.contract_retirement_code:
                 continue
@@ -195,7 +237,7 @@ class MonitoringDocumentAuthorityWorkflow:
             }:
                 continue
             try:
-                self.repository.retry_terminal(
+                retried = self.repository.retry_terminal(
                     existing.project_id,
                     existing.job_id,
                     current_input_revision_sha256=existing.input_revision_sha256,
@@ -204,7 +246,31 @@ class MonitoringDocumentAuthorityWorkflow:
                 # 输入版本并发变化等竞态：不阻断本次上传的202响应，
                 # advance轮询会按既有状态机继续处理。
                 continue
+            # T2：仅真实重排（脱离终态）才计入重传重排留痕。
+            if retried.status not in {
+                MonitoringAiJobStatus.FAILED,
+                MonitoringAiJobStatus.BLOCKED,
+                MonitoringAiJobStatus.STALE_INPUT,
+            }:
+                requeued_existing += 1
         self.worker_wake()
+        # T2（02_DESIGN §2.2 documents表）：批次创建/重传→analyzing。
+        self._record_stage_event(
+            project_id=project_id,
+            event_type="state_changed",
+            to_state="analyzing",
+            reason_code="batch_started",
+        )
+        if requeued_existing:
+            # 重传重排（needs_user_input/failed→analyzing的恢复路径）。
+            self._record_stage_event(
+                project_id=project_id,
+                event_type="recovery_action",
+                from_state="failed",
+                to_state="analyzing",
+                reason_code="reupload_requeue",
+                actor="user",
+            )
         result = {"state": "analyzing", "batch_id": batch["batch_id"]}
         if self._shared_runtime_identity():
             # R40轮（R40-01）：运维同绑定（盲核与主分析同通道同模型）时
@@ -277,6 +343,13 @@ class MonitoringDocumentAuthorityWorkflow:
                     "document_authority_submit_unavailable"
                 ) from exc
             self.worker_wake()
+            # T2：批次清单在库但分析作业缺失的就地重建→analyzing。
+            self._record_stage_event(
+                project_id=project_id,
+                event_type="state_changed",
+                to_state="analyzing",
+                reason_code="analysis_jobs_rebuilt",
+            )
             result = {"state": "analyzing", "batch_id": batch_id}
             if shared_runtime:
                 result["shared_runtime_identity"] = True
@@ -296,6 +369,15 @@ class MonitoringDocumentAuthorityWorkflow:
                 (primary_job, verifier_job), list(recovered)
             )
         if recovered:
+            # T2：终态失败重排→analyzing（自动恢复=system/显式重试=user）。
+            self._record_stage_event(
+                project_id=project_id,
+                event_type="recovery_action",
+                from_state="failed",
+                to_state="analyzing",
+                reason_code="explicit_retry" if explicit_retry else "auto_recovery",
+                actor="user" if explicit_retry else "system",
+            )
             result = {
                 "state": "analyzing",
                 "authority_status": "not_promoted",
@@ -311,6 +393,18 @@ class MonitoringDocumentAuthorityWorkflow:
                 result["explicit_retry_receipt"] = analysis_receipt
             if shared_runtime:
                 result["shared_runtime_identity"] = True
+            if result["state"] == "failed":
+                # T2：分析对终态失败→failed（failure_class按码分类）。
+                self._record_stage_event(
+                    project_id=project_id,
+                    event_type="failure_recorded",
+                    from_state="analyzing",
+                    to_state="failed",
+                    reason_code=str(result.get("failure_code") or ""),
+                    failure_class=failure_class_for(
+                        str(result.get("failure_code") or "")
+                    ),
+                )
             return result
 
         primary_run = load_document_authority_analysis_run(
@@ -375,6 +469,14 @@ class MonitoringDocumentAuthorityWorkflow:
                         + "。可在向导第3步人工确认归属或更换文件。"
                     ),
                 )
+                # T2：身份裁决挂起→needs_user_input（reason=identity）。
+                self._record_stage_event(
+                    project_id=project_id,
+                    event_type="state_changed",
+                    from_state="analyzing",
+                    to_state="needs_user_input",
+                    reason_code="identity",
+                )
                 return {
                     "state": (
                         "project_mismatch"
@@ -414,6 +516,7 @@ class MonitoringDocumentAuthorityWorkflow:
                 verifier_analysis_job_id=verifier_job.job_id,
                 decision_record=decision_record,
                 allow_shared_runtime_identity=shared_runtime,
+                stage_event_from_state="analyzing",
             )
 
         packet = build_anonymous_conflict_packet(
@@ -445,6 +548,14 @@ class MonitoringDocumentAuthorityWorkflow:
                 allow_shared_runtime_identity=shared_runtime,
             )
             self.worker_wake()
+            # T2：分析一致提前收敛→review对提交，analyzing→reviewing。
+            self._record_stage_event(
+                project_id=project_id,
+                event_type="state_changed",
+                from_state="analyzing",
+                to_state="reviewing",
+                reason_code="review_pair_submitted",
+            )
             return {"state": "reviewing", "batch_id": batch_id}
         # R43轮（R43-02）：review阶段的显式重试此前连explicit=True都不传
         # （预算约束住了用户显式动作），也不带回执。
@@ -461,6 +572,15 @@ class MonitoringDocumentAuthorityWorkflow:
                 (primary_review, verifier_review), list(review_requeued)
             )
         if review_requeued:
+            # T2：review对终态失败重排→reviewing。
+            self._record_stage_event(
+                project_id=project_id,
+                event_type="recovery_action",
+                from_state="failed",
+                to_state="reviewing",
+                reason_code="explicit_retry" if explicit_retry else "auto_recovery",
+                actor="user" if explicit_retry else "system",
+            )
             result = {
                 "state": "reviewing",
                 "authority_status": "not_promoted",
@@ -477,6 +597,18 @@ class MonitoringDocumentAuthorityWorkflow:
             result = {**pending, "batch_id": batch_id}
             if review_receipt:
                 result["explicit_retry_receipt"] = review_receipt
+            if result["state"] == "failed":
+                # T2：review对终态失败→failed。
+                self._record_stage_event(
+                    project_id=project_id,
+                    event_type="failure_recorded",
+                    from_state="reviewing",
+                    to_state="failed",
+                    reason_code=str(result.get("failure_code") or ""),
+                    failure_class=failure_class_for(
+                        str(result.get("failure_code") or "")
+                    ),
+                )
             return result
         review_resolution = resolve_document_authority_from_jobs(
             self.repository,
@@ -503,6 +635,7 @@ class MonitoringDocumentAuthorityWorkflow:
                 user_role_selections=user_role_selections,
                 decision_record=decision_record,
                 allow_shared_runtime_identity=shared_runtime,
+                stage_event_from_state="reviewing",
             )
 
         primary_adjudication = self._optional_job(
@@ -531,6 +664,14 @@ class MonitoringDocumentAuthorityWorkflow:
                 )
             )
             self.worker_wake()
+            # T2：review未收敛→adjudication对提交，reviewing→adjudicating。
+            self._record_stage_event(
+                project_id=project_id,
+                event_type="state_changed",
+                from_state="reviewing",
+                to_state="adjudicating",
+                reason_code="adjudication_pair_submitted",
+            )
             return {"state": "adjudicating", "batch_id": batch_id}
         # R43轮（R43-02）：adjudication/critique阶段同review——显式重试
         # 传explicit并携带受理回执。
@@ -550,6 +691,15 @@ class MonitoringDocumentAuthorityWorkflow:
                 list(adjudication_requeued),
             )
         if adjudication_requeued:
+            # T2：adjudication对终态失败重排→adjudicating。
+            self._record_stage_event(
+                project_id=project_id,
+                event_type="recovery_action",
+                from_state="failed",
+                to_state="adjudicating",
+                reason_code="explicit_retry" if explicit_retry else "auto_recovery",
+                actor="user" if explicit_retry else "system",
+            )
             result = {
                 "state": "adjudicating",
                 "authority_status": "not_promoted",
@@ -566,6 +716,18 @@ class MonitoringDocumentAuthorityWorkflow:
             result = {**pending, "batch_id": batch_id}
             if adjudication_receipt:
                 result["explicit_retry_receipt"] = adjudication_receipt
+            if result["state"] == "failed":
+                # T2：adjudication对终态失败→failed。
+                self._record_stage_event(
+                    project_id=project_id,
+                    event_type="failure_recorded",
+                    from_state="adjudicating",
+                    to_state="failed",
+                    reason_code=str(result.get("failure_code") or ""),
+                    failure_class=failure_class_for(
+                        str(result.get("failure_code") or "")
+                    ),
+                )
             return result
         adjudication_resolution = resolve_document_authority_from_jobs(
             self.repository,
@@ -596,6 +758,7 @@ class MonitoringDocumentAuthorityWorkflow:
                 user_role_selections=user_role_selections,
                 decision_record=decision_record,
                 allow_shared_runtime_identity=shared_runtime,
+                stage_event_from_state="adjudicating",
             )
 
         primary_critique = self._optional_job(
@@ -626,6 +789,14 @@ class MonitoringDocumentAuthorityWorkflow:
                 )
             )
             self.worker_wake()
+            # T2：adjudication未收敛→critique对提交，adjudicating→cross_checking。
+            self._record_stage_event(
+                project_id=project_id,
+                event_type="state_changed",
+                from_state="adjudicating",
+                to_state="cross_checking",
+                reason_code="critique_pair_submitted",
+            )
             return {"state": "cross_checking", "batch_id": batch_id}
         critique_receipt: dict[str, Any] = {}
         critique_requeued = (
@@ -640,6 +811,15 @@ class MonitoringDocumentAuthorityWorkflow:
                 (primary_critique, verifier_critique), list(critique_requeued)
             )
         if critique_requeued:
+            # T2：critique对终态失败重排→cross_checking。
+            self._record_stage_event(
+                project_id=project_id,
+                event_type="recovery_action",
+                from_state="failed",
+                to_state="cross_checking",
+                reason_code="explicit_retry" if explicit_retry else "auto_recovery",
+                actor="user" if explicit_retry else "system",
+            )
             result = {
                 "state": "cross_checking",
                 "authority_status": "not_promoted",
@@ -655,6 +835,18 @@ class MonitoringDocumentAuthorityWorkflow:
             result = {**pending, "batch_id": batch_id}
             if critique_receipt:
                 result["explicit_retry_receipt"] = critique_receipt
+            if result["state"] == "failed":
+                # T2：critique对终态失败→failed。
+                self._record_stage_event(
+                    project_id=project_id,
+                    event_type="failure_recorded",
+                    from_state="cross_checking",
+                    to_state="failed",
+                    reason_code=str(result.get("failure_code") or ""),
+                    failure_class=failure_class_for(
+                        str(result.get("failure_code") or "")
+                    ),
+                )
             return result
         return promote_document_authority_from_jobs(
             self.repository,
@@ -673,6 +865,7 @@ class MonitoringDocumentAuthorityWorkflow:
             user_role_selections=user_role_selections,
             decision_record=decision_record,
             allow_shared_runtime_identity=shared_runtime,
+            stage_event_from_state="cross_checking",
         )
 
     @classmethod
