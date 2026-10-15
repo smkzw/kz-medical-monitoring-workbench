@@ -1147,7 +1147,11 @@ source_registry.monitoring_authority_receipt_verifier = (
     )
 )
 monitoring_document_evidence_resolver = MonitoringDocumentEvidenceResolver(
-    source_registry
+    source_registry,
+    # 状态机专项T6/S8（02_DESIGN §5-T6/D4）：verdict物化缓存宿主——
+    # env WORKBENCH_DOCUMENT_VERDICT_CACHE默认off=零缓存路径（与直连
+    # 重放零行为差）；开启后A8逐请求receipt重放降为指纹命中。
+    verdict_store=monitoring_ai_repository,
 )
 monitoring_mapping_draft_repository = MonitoringMappingDraftRepository(
     RUNTIME_DIR / "medical_monitoring_ai.sqlite3"

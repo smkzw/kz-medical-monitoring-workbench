@@ -551,6 +551,24 @@ class MonitoringAiRepository:
             # 状态机专项（02_DESIGN §2）：入舱阶段事件流+阶段状态行，
             # 纯附加表，权威schema零变更；DROP即完全回滚。
             connection.executescript(STAGE_TABLES_DDL)
+            # 状态机专项T6/S8（02_DESIGN §5-T6）：文档权威verdict物化
+            # 缓存——纯附加表，key含两个可变源指纹（registry_revision/
+            # cited_job_digest），任一变更即miss重放；env
+            # WORKBENCH_DOCUMENT_VERDICT_CACHE默认off=零缓存路径。
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS monitoring_document_authority_verdicts (
+                    project_id        TEXT NOT NULL,
+                    source_entry_id   TEXT NOT NULL,
+                    registry_revision TEXT NOT NULL,
+                    cited_job_digest  TEXT NOT NULL,
+                    verdict           INTEGER NOT NULL CHECK(verdict IN (0, 1)),
+                    created_at        TEXT NOT NULL,
+                    PRIMARY KEY (project_id, source_entry_id, registry_revision,
+                                 cited_job_digest)
+                );
+                """
+            )
             attempt_columns = {
                 row["name"]
                 for row in connection.execute(
@@ -723,6 +741,141 @@ class MonitoringAiRepository:
             detail={"job_count": len(statuses)},
         )
         return state
+
+    # ------------------------------------------------------------------
+    # 状态机专项T6/S8（02_DESIGN §5-T6/D4）：文档权威verdict物化缓存。
+    # 缓存只加速不改判定：key绑两个可变源（registry_revision=A1台账
+    # 指纹、cited_job_digest=被引作业行+候选指纹），任一变更即miss重
+    # 放；env WORKBENCH_DOCUMENT_VERDICT_CACHE默认off=零缓存路径
+    # （读写均不发生）。等价性（缓存命中≡直连重放）由参数化测试锁。
+    # ------------------------------------------------------------------
+
+    def document_verdict_cache_enabled(self) -> bool:
+        import os
+
+        return str(
+            os.environ.get("WORKBENCH_DOCUMENT_VERDICT_CACHE", "")
+        ).strip() in {"1", "true", "yes", "on"}
+
+    def get_document_verdict(
+        self,
+        project_id: str,
+        source_entry_id: str,
+        registry_revision: str,
+        cited_job_digest: str,
+    ) -> int | None:
+        if not self.document_verdict_cache_enabled():
+            return None
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT verdict FROM monitoring_document_authority_verdicts
+                WHERE project_id = ? AND source_entry_id = ?
+                  AND registry_revision = ? AND cited_job_digest = ?
+                """,
+                (
+                    str(project_id),
+                    str(source_entry_id),
+                    str(registry_revision),
+                    str(cited_job_digest),
+                ),
+            ).fetchone()
+        return int(row["verdict"]) if row is not None else None
+
+    def put_document_verdict(
+        self,
+        project_id: str,
+        source_entry_id: str,
+        registry_revision: str,
+        cited_job_digest: str,
+        *,
+        verdict: bool,
+    ) -> None:
+        if not self.document_verdict_cache_enabled():
+            return
+        try:
+            with self._connect() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO monitoring_document_authority_verdicts(
+                        project_id, source_entry_id, registry_revision,
+                        cited_job_digest, verdict, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(project_id, source_entry_id,
+                                registry_revision, cited_job_digest)
+                    DO UPDATE SET verdict = excluded.verdict,
+                                  created_at = excluded.created_at
+                    """,
+                    (
+                        str(project_id),
+                        str(source_entry_id),
+                        str(registry_revision),
+                        str(cited_job_digest),
+                        1 if verdict else 0,
+                        _iso(self.clock()),
+                    ),
+                )
+                connection.commit()
+        except Exception:
+            # 缓存写入是纯加速路径：任何故障（含表缺失）不影响判定。
+            pass
+
+    def document_cited_jobs_digest(
+        self,
+        project_id: str,
+        receipt: Any,
+    ) -> str:
+        """被引证据指纹：receipt引用的全部作业行+候选行内容摘要。
+
+        A2证据任何变化（作业状态/输入载荷指纹/候选内容）→摘要变化→
+        缓存键失配→重放。作业行缺失也参与摘要（缺证据=不同判定输入）。
+        读故障抛出由调用方回落直连重放（best-effort加速）。
+        """
+
+        job_ids: list[str] = []
+        for key in (
+            "analysis_job_ids",
+            "review_job_ids",
+            "adjudication_job_ids",
+            "critique_job_ids",
+        ):
+            value = receipt.get(key) or () if isinstance(receipt, Mapping) else ()
+            if isinstance(value, (list, tuple)):
+                job_ids.extend(str(item) for item in value)
+        parts: list[dict[str, Any]] = []
+        with self._connect() as connection:
+            for job_id in sorted(set(job_ids)):
+                row = connection.execute(
+                    """
+                    SELECT job_id, status, failure_code, contract_retirement_code,
+                           input_payload_sha256, input_revision_sha256,
+                           response_model, updated_at
+                    FROM monitoring_ai_jobs
+                    WHERE project_id = ? AND job_id = ?
+                    """,
+                    (str(project_id), job_id),
+                ).fetchone()
+                if row is None:
+                    parts.append({"job_id": job_id, "row": None})
+                    continue
+                candidates = connection.execute(
+                    """
+                    SELECT candidate_id, status, input_revision_sha256,
+                           candidate_json
+                    FROM monitoring_ai_candidates
+                    WHERE project_id = ? AND job_id = ?
+                    ORDER BY candidate_id
+                    """,
+                    (str(project_id), job_id),
+                ).fetchall()
+                parts.append(
+                    {
+                        "job_id": job_id,
+                        "row": dict(row),
+                        "candidates": [dict(item) for item in candidates],
+                    }
+                )
+        return content_sha256(parts)
 
     def _infra_failure_requeue_enabled(self) -> bool:
         """S6灰度开关（02_DESIGN §5.1：env默认off，调用点核实后可开）。

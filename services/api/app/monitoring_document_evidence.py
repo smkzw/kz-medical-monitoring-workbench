@@ -50,21 +50,73 @@ _RETRIEVAL_SCHEMA_VERSION = "mm-monitoring-document-retrieval-v1"
 class MonitoringDocumentEvidenceResolver:
     """Select current monitoring-owned documents without clinical inference."""
 
-    def __init__(self, source_registry: Any) -> None:
+    def __init__(self, source_registry: Any, *, verdict_store: Any = None) -> None:
         self.source_registry = source_registry
+        # 状态机专项T6/S8（02_DESIGN §5-T6/D4）：verdict物化缓存宿主
+        # （生产=MonitoringAiRepository）。None或env off=零缓存路径，
+        # 行为与直连重放逐字一致。
+        self.verdict_store = verdict_store
 
-    def _verified_entries(self, project_id: str, roles=DOCUMENT_ROLES) -> list[Any]:
-        project_entries = self.source_registry.list_entries(project_id)
-        return [
-            entry
-            for entry in project_entries
-            if entry.module == "medical_monitoring"
-            and any(
-                entry.source_kind in source_kinds
-                for source_kinds in (_SOURCE_KINDS_BY_ROLE[role] for role in roles)
+    def _verdict_cache_enabled(self) -> bool:
+        return (
+            self.verdict_store is not None
+            and callable(
+                getattr(self.verdict_store, "document_verdict_cache_enabled", None)
             )
-            and (
-                self.source_registry.monitoring_authority_entry_is_verified(entry)
+            and self.verdict_store.document_verdict_cache_enabled()
+        )
+
+    @staticmethod
+    def _registry_fingerprint(project_entries: list[Any]) -> str:
+        """A1台账指纹（缓存键可变源1）：任一条目变化→键失配→重放。"""
+
+        return content_hash([
+            {
+                "entry_id": entry.entry_id,
+                "source_kind": entry.source_kind,
+                "content_hash": entry.content_hash,
+                "parser_status": entry.parser_status,
+                "parser_version": entry.parser_version,
+                "authority_status": str(
+                    (entry.metadata or {}).get(
+                        "monitoring_authority_status", ""
+                    )
+                ),
+                "document_revision": str(
+                    (entry.metadata or {}).get("document_revision", "")
+                ),
+                "receipt_sha256": str(
+                    (entry.metadata or {}).get(
+                        "document_authority_receipt_sha256", ""
+                    )
+                ),
+                "created_at": entry.created_at.isoformat(),
+            }
+            for entry in sorted(project_entries, key=lambda item: item.entry_id)
+        ])
+
+    def _entry_is_verified(
+        self,
+        entry: Any,
+        project_entries: list[Any],
+        *,
+        registry_revision: str,
+    ) -> bool:
+        """单条目核验（T6：把昂贵的receipt重放从逐请求降到指纹命中）。
+
+        缓存关闭时与现状逐字一致（钩子直调/回退）。缓存开启时按生产
+        registry（SourceRegistryService）标准语义拆分：receipt完整性
+        （廉价哈希/形状检查，永不缓存）先判；promoted条目才进verifier
+        重放（指纹命中跳过）。
+        """
+
+        from .source_intake import monitoring_authority_receipt_is_complete
+
+        if not self._verdict_cache_enabled():
+            return (
+                self.source_registry.monitoring_authority_entry_is_verified(
+                    entry
+                )
                 if hasattr(
                     self.source_registry,
                     "monitoring_authority_entry_is_verified",
@@ -73,6 +125,81 @@ class MonitoringDocumentEvidenceResolver:
                     entry,
                     project_entries,
                 )
+            )
+        if not monitoring_authority_receipt_is_complete(
+            entry, project_entries
+        ):
+            return False
+        metadata = dict(entry.metadata or {})
+        if metadata.get("monitoring_authority_status") != "promoted":
+            return True
+        if not hasattr(
+            self.source_registry,
+            "monitoring_authority_entry_is_verified",
+        ):
+            # 无钩子registry的回退契约逐字保留：receipt完整即verified。
+            return True
+        verifier = getattr(
+            self.source_registry,
+            "monitoring_authority_receipt_verifier",
+            None,
+        )
+        if verifier is None:
+            return False
+        receipt = metadata.get("document_authority_receipt")
+        cacheable = callable(
+            getattr(self.verdict_store, "document_cited_jobs_digest", None)
+        )
+        cited_job_digest = ""
+        if cacheable:
+            try:
+                cited_job_digest = self.verdict_store.document_cited_jobs_digest(
+                    entry.project_id, receipt
+                )
+            except Exception:
+                cacheable = False
+        if cacheable:
+            try:
+                cached = self.verdict_store.get_document_verdict(
+                    entry.project_id,
+                    entry.entry_id,
+                    registry_revision,
+                    cited_job_digest,
+                )
+            except Exception:
+                cached = None
+            if cached is not None:
+                return bool(cached)
+        verdict = bool(verifier(entry.project_id, receipt))
+        if cacheable:
+            self.verdict_store.put_document_verdict(
+                entry.project_id,
+                entry.entry_id,
+                registry_revision,
+                cited_job_digest,
+                verdict=verdict,
+            )
+        return verdict
+
+    def _verified_entries(self, project_id: str, roles=DOCUMENT_ROLES) -> list[Any]:
+        project_entries = self.source_registry.list_entries(project_id)
+        registry_revision = (
+            self._registry_fingerprint(project_entries)
+            if self._verdict_cache_enabled()
+            else ""
+        )
+        return [
+            entry
+            for entry in project_entries
+            if entry.module == "medical_monitoring"
+            and any(
+                entry.source_kind in source_kinds
+                for source_kinds in (_SOURCE_KINDS_BY_ROLE[role] for role in roles)
+            )
+            and self._entry_is_verified(
+                entry,
+                project_entries,
+                registry_revision=registry_revision,
             )
         ]
 
