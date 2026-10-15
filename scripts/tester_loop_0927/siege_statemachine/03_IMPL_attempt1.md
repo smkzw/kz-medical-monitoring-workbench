@@ -22,7 +22,7 @@
 3. `admission_stage_view.apply_single_source`：backfill返回值此前被丢弃（row重读入参None），回填成功仍可能误触fail-closed——取回填真值。
 4. mapping桥路由（GET/POST投影、白名单违规）500兜底补`_logger.exception`真栈。
 
-**验证**：新增`tests/test_confirm_verifier_deadlock_fix.py`（4测试：在途豁免+等待钟重置/空闲照常收割/confirm兑现重排/回填值流）；全套件258 passed；回归门151 passed；服务重启后SM2 confirm触发重排→10片queued→verifier worker恢复消费（1 running→逐片完成，存活不收割=修复①生效）。
+**验证**：新增`tests/test_confirm_verifier_deadlock_fix.py`（4测试：在途豁免+等待钟重置/空闲照常收割/confirm兑现重排/回填值流）；全套件258 passed；回归门151 passed；服务重启后SM2/SM1 confirm各触发重排→20片复活为queued→verifier worker恢复逐片消费（≈10分/片，串行池）。**修复①活体取证**（02:34）：两项目18片queued行的dwell_since全部被收割循环重置至02:06-02:11、修复部署后新增收割事件=0（此前同形态全灭）；修复②重排实测生效（409后10片failed→queued）。全量排空为AI执行时长问题（约3小时）在后台自续，不阻塞本修复闭环；E2E三连重跑的新项目将走修复后的完整链路。
 
 ---
 
