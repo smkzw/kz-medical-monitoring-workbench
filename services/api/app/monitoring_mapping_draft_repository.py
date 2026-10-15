@@ -10,6 +10,11 @@ from typing import Any, Callable, Literal, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator, model_serializer
 
+from .monitoring_admission_stage_store import (
+    STAGE_MAPPING_CONFIRMATION,
+    STAGE_TABLES_DDL,
+    AdmissionStageStore,
+)
 from .monitoring_ai_contracts import (
     MonitoringAiCandidate,
     MonitoringAiCandidateStatus,
@@ -905,6 +910,11 @@ class MonitoringMappingDraftRepository:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.clock = clock
         self._initialize()
+        # 状态机专项T3（02_DESIGN §5-T3/§2.2 mapping表）：同文件
+        # AdmissionStageStore——drafts权威行本身即状态行（§2.5裁决：
+        # 再物化=第二份权威），这里只挂事件流写入（append_event接draft
+        # 写的外层conn，同一sqlite事务；self._connect供store读侧）。
+        self.stage_store = AdmissionStageStore(self._connect, clock=clock)
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=30)
@@ -913,8 +923,44 @@ class MonitoringMappingDraftRepository:
         connection.execute("PRAGMA journal_mode = WAL")
         return connection
 
+    def _record_draft_event(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        project_id: str,
+        attempt_id: str,
+        event_type: str,
+        from_state: str = "",
+        to_state: str = "",
+        reason_code: str = "",
+        actor: str = "system",
+        detail: Optional[Mapping[str, Any]] = None,
+    ) -> None:
+        """draft写点的事件埋点（与draft写同一事务，§2.3写入纪律）。
+
+        attempt键=batch_id（drafts权威行的批次归属）；stage_state不建行。
+        事件表DDL由_initialize保证（与MonitoringAiRepository同款幂等）。
+        """
+
+        self.stage_store.append_event(
+            connection,
+            project_id=project_id,
+            attempt_id=attempt_id,
+            stage=STAGE_MAPPING_CONFIRMATION,
+            event_type=event_type,
+            from_state=from_state,
+            to_state=to_state,
+            reason_code=reason_code,
+            actor=actor,
+            detail=detail,
+        )
+
     def _initialize(self) -> None:
         with self._connect() as connection:
+            # 状态机专项T3：本仓与MonitoringAiRepository同文件
+            # （medical_monitoring_ai.sqlite3）时两表已存在；独立文件场景
+            # （测试/工具直连）在此幂等补建，draft写点的事件埋点才有落点。
+            connection.executescript(STAGE_TABLES_DDL)
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS monitoring_mapping_drafts (
@@ -1254,6 +1300,39 @@ class MonitoringMappingDraftRepository:
                 "SELECT * FROM monitoring_mapping_drafts WHERE draft_id = ?",
                 (draft_id,),
             ).fetchone()
+            # 状态机专项T3（§2.2 mapping表）：no_draft→draft_active(v1)
+            # 留痕；部分采纳（域/槽位豁免非空=降级采纳）另记degradation。
+            self._record_draft_event(
+                connection,
+                project_id=project_id,
+                attempt_id=batch_id,
+                event_type="state_changed",
+                from_state="no_draft",
+                to_state="draft_active",
+                actor=decision_actor or "system",
+                detail={
+                    "draft_id": draft_id,
+                    "version": 1,
+                    "batch_id": batch_id,
+                },
+            )
+            if allowed_missing_domains or allowed_missing_slots:
+                self._record_draft_event(
+                    connection,
+                    project_id=project_id,
+                    attempt_id=batch_id,
+                    event_type="degradation",
+                    from_state="no_draft",
+                    to_state="draft_active",
+                    reason_code="partial_adoption",
+                    actor=decision_actor or "system",
+                    detail={
+                        "draft_id": draft_id,
+                        "batch_id": batch_id,
+                        "missing_domains": sorted(allowed_missing_domains),
+                        "missing_slot_count": len(allowed_missing_slots),
+                    },
+                )
             field_sources = self._effective_field_sources(
                 connection, project_id, draft_id
             )
@@ -1623,6 +1702,25 @@ class MonitoringMappingDraftRepository:
                     _iso(now),
                 ),
             )
+            # 状态机专项T3（§2.2 mapping表）：draft_active(vN)→
+            # draft_active(vN+1)逐字段编辑/裁决留痕（CAS成功后、同事务）。
+            self._record_draft_event(
+                connection,
+                project_id=project_id,
+                attempt_id=str(row["batch_id"]),
+                event_type="state_changed",
+                from_state="draft_active",
+                to_state="draft_active",
+                actor=actor,
+                detail={
+                    "draft_id": draft_id,
+                    "version": next_version,
+                    "previous_version": expected_version,
+                    "domain": domain,
+                    "source_field": source_field,
+                    "operation": "edit_field",
+                },
+            )
             refreshed = connection.execute(
                 "SELECT * FROM monitoring_mapping_drafts WHERE draft_id = ?",
                 (draft_id,),
@@ -1788,6 +1886,23 @@ class MonitoringMappingDraftRepository:
                     _iso(now),
                 ),
             )
+            # 状态机专项T3（§2.2 mapping表）：导出上下文规范化同属
+            # edit族CAS写点，vN→vN+1留痕。
+            self._record_draft_event(
+                connection,
+                project_id=project_id,
+                attempt_id=str(row["batch_id"]),
+                event_type="state_changed",
+                from_state="draft_active",
+                to_state="draft_active",
+                actor=actor,
+                detail={
+                    "draft_id": draft_id,
+                    "version": next_version,
+                    "previous_version": expected_version,
+                    "operation": "reapply_known_export_context",
+                },
+            )
             refreshed = connection.execute(
                 "SELECT * FROM monitoring_mapping_drafts WHERE draft_id = ?",
                 (draft_id,),
@@ -1807,6 +1922,9 @@ class MonitoringMappingDraftRepository:
         confirmed_by: str,
         confirmation_reason: str,
         idempotency_key: str,
+        # 状态机专项T3：降级确认（双盲复核未完成/未收敛的知情确认）由
+        # 服务层传入，另记degradation事件（§2.2 mapping表）。
+        degraded: bool = False,
     ) -> MonitoringMappingRevision:
         project_id = _require_safe_identifier(project_id, "project_id")
         draft_id = _require_safe_identifier(draft_id, "draft_id")
@@ -2008,6 +2126,40 @@ class MonitoringMappingDraftRepository:
                 connection.rollback()
                 raise MonitoringMappingStateConflictError(
                     "mapping confirmation lost CAS"
+                )
+            # 状态机专项T3（§2.2 mapping表）：draft_active→confirmed留痕
+            # （CAS成功后、与draft状态写同一事务）；降级确认另记
+            # degradation。幂等重放路径（prior revision命中）在上方提前
+            # 返回，不重复落事件。
+            self._record_draft_event(
+                connection,
+                project_id=project_id,
+                attempt_id=str(row["batch_id"]),
+                event_type="state_changed",
+                from_state="draft_active",
+                to_state="confirmed",
+                actor=confirmed_by,
+                detail={
+                    "draft_id": draft_id,
+                    "version": expected_version,
+                    "mapping_revision": mapping_revision,
+                    "batch_id": str(row["batch_id"]),
+                },
+            )
+            if degraded:
+                self._record_draft_event(
+                    connection,
+                    project_id=project_id,
+                    attempt_id=str(row["batch_id"]),
+                    event_type="degradation",
+                    from_state="draft_active",
+                    to_state="confirmed",
+                    reason_code="dual_review_degraded",
+                    actor=confirmed_by,
+                    detail={
+                        "draft_id": draft_id,
+                        "mapping_revision": mapping_revision,
+                    },
                 )
             revision_row = connection.execute(
                 """

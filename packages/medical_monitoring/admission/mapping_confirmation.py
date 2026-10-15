@@ -2247,6 +2247,10 @@ class AdmissionMappingConfirmationService:
             confirmed_by=confirmed_by,
             confirmation_reason=effective_reason[:2_000],
             idempotency_key=idempotency_key,
+            # 状态机专项T3：降级确认事实传入仓层——事件流另记degradation
+            # （§2.2 mapping表「降级另记degradation」），回执键
+            # dual_review_degraded语义不变。
+            degraded=bool(degraded_note),
         )
         payload = revision.model_dump(mode="json")
         # Confirmation creates a durable mapping revision only. Canonical facts
