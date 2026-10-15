@@ -26,6 +26,18 @@
 
 ---
 
+## 0b. E2E验收拦截修复第二轮（2026-10-15，提交见git log「真栈修复」）
+
+**卡点**：E2E三轮（0/3）从零项目全部确定性停于「生成字段对应建议」`mapping_bridge_failed`×15次（每次20-60秒即失败）。
+
+**真因（上轮部署的栈日志直接抓到）**：`mapping_confirmation.py:2111` `_cohort_candidates_with_progress` 在 `mapping_verifier_incomplete` 分支**裸调** `_cohort_progress(jobs)`，而它是本类 `@staticmethod`（:2117）——方法内裸名只查模块级，**必然NameError**→confirm路由`except Exception`→500 `mapping_bridge_failed`。触发条件=confirm时verifier处于queued/running：从零项目确认时复核必然未完成→**确定性必炸**。该地雷基线（bb7d47ac:2012/2018）即存在；此前未暴露是因为verifier死锁（§0）让项目根本走不到incomplete分支——§0修复解锁链条后立即踩雷。上轮E2E报500而重放只见409的差异由此完全解释：上轮两项目verifier已全灭（job_failed分支不经过NameError行）。
+
+**修复**：`:2111`改`self._cohort_progress(jobs)`（staticmethod经self调用）；ruff F821全量扫描admission包+相关services模块，另发现并修复`monitoring_ai_repository.py:3679`注解`Optional`未导入（lazy注解暂不炸的同族缺陷）——修复后F821全清。
+
+**验证**：新增回归测试`test_verifier_incomplete_annotates_progress_without_name_error`（锁incomplete分支：raise mapping_verifier_incomplete+cohort_progress聚合注释正常）；全套件**259 passed**；回归门**151 passed**；服务重启（build api-2fec4e3fa887808f）后对SM3真实卡死项目（proj_user_4f262469d486，verifier 3完成/5排队/2执行=原NameError触发形态）重放：confirm返回**409 mapping_verifier_incomplete**（非500，文案引导自动等待）、adjudicate 200正常载荷、服务器日志零NameError——UI链（confirm→adjudication-start自动轮询→复核完成后自动继续确认）恢复设计行为。
+
+---
+
 ## 1. 总结论
 
 | 步 | 状态 | 提交 | 新增pytest |

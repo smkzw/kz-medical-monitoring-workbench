@@ -5,7 +5,7 @@ import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Optional
 from uuid import uuid4
 
 from .monitoring_admission_stage_store import (

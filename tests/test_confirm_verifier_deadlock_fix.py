@@ -247,3 +247,53 @@ def test_apply_single_source_uses_backfill_result() -> None:
         backfill=lambda: {"state": "generating"},
     )
     assert projected["state"] == "generating"
+
+
+def test_verifier_incomplete_annotates_progress_without_name_error() -> None:
+    """E2E拦截0/3轮真因回归：verifier未完成时进度注释不再NameError。
+
+    _cohort_candidates_with_progress此前裸调staticmethod _cohort_progress
+    （模块级查找必然NameError）→confirm在verifier排队/执行中时确定性
+    500 mapping_bridge_failed（SM1/SM2/SM3三轮实测）。修复后应正常raise
+    mapping_verifier_incomplete并附cohort_progress聚合。
+    """
+
+    from packages.medical_monitoring.admission.mapping_confirmation import (
+        AdmissionMappingConfirmationService,
+    )
+
+    def _job(status: str, job_id: str):
+        return SimpleNamespace(
+            job_id=job_id,
+            status=SimpleNamespace(value=status),
+            created_at="2026-10-15T00:00:00+00:00",
+        )
+
+    service = AdmissionMappingConfirmationService(
+        mapping_pipeline=SimpleNamespace(),
+        mapping_repository=None,
+        ai_repository=SimpleNamespace(
+            candidates=lambda *_args: [],
+        ),
+        prompt_version="p",
+        accepted_status="accepted",
+        proposed_status="proposed",
+    )
+    jobs = [
+        _job("completed", "job-1"),
+        _job("queued", "job-2"),
+        _job("running", "job-3"),
+    ]
+    with pytest.raises(AdmissionMappingPipelineError) as exc:
+        service._cohort_candidates_with_progress(
+            "proj-rx",
+            jobs,
+            workspace_dir=None,
+        )
+    assert exc.value.code == "mapping_verifier_incomplete"
+    progress = getattr(exc.value, "cohort_progress", None)
+    assert progress is not None
+    assert progress["total_job_count"] == 3
+    assert progress["completed_job_count"] == 1
+    assert progress["pending_queued_count"] == 1
+    assert progress["pending_running_count"] == 1

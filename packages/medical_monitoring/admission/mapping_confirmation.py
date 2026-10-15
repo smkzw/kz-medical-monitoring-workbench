@@ -2108,7 +2108,12 @@ class AdmissionMappingConfirmationService:
             )
         except AdmissionMappingPipelineError as exc:
             if exc.code == "mapping_verifier_incomplete":
-                progress = _cohort_progress(jobs)
+                # E2E拦截修复（0/3轮，SM1/SM2/SM3实测确定性500）：此处
+                # 裸调_name只会查模块级名字，而_cohort_progress是本类
+                # 的staticmethod——verifier未完成（queued/running）时
+                # 必然NameError→路由500 mapping_bridge_failed。经self
+                # 调用修正。
+                progress = self._cohort_progress(jobs)
                 if progress is not None:
                     exc.cohort_progress = progress
             raise
