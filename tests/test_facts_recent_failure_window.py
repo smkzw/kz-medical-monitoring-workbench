@@ -155,6 +155,7 @@ def test_assemble_stage_state_passes_window_flag(tmp_path: Path) -> None:
         build_stage_view=build_stage_view,
         unresolved_question_counter=lambda fields: 0,
         pace_estimator=lambda jobs, total=0, completed=0: None,
+        now=NOW,
     )
     facts_entry = next(
         entry for entry in view["blocking"] if entry["stage"] == "facts"

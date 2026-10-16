@@ -891,12 +891,16 @@ def _assemble_stage_state(
     build_stage_view: Any,
     unresolved_question_counter: Any,
     pace_estimator: Any,
+    now: Optional[datetime] = None,
 ) -> dict[str, Any]:
     """stage-state四阶段权威装配（02_DESIGN §5.4/§3.5）。
 
     每阶段读各自权威：documents←document_readiness（A1/A3/A5投影）；
     recognition←物化行（缺失回填，S2写点同源）；mapping_confirmation←
     drafts权威行；facts←A4直查。轻量聚合，不取候选载荷。
+
+    状态机专项M1（02_DESIGN §四-M1）：可选`now`时钟注入口，仅测试
+    消费——缺省None=真钟=现状，生产调用零变化。
     """
 
     documents_state = "not_started"
@@ -1027,7 +1031,8 @@ def _assemble_stage_state(
                 facts_recent_failure = facts_recent_failure_from_events(
                     events_reader(
                         project_id, attempt_id, stage="facts", limit=500,
-                    )
+                    ),
+                    now=now,
                 )
             except Exception:
                 facts_recent_failure = False
