@@ -20,6 +20,7 @@ import {
   protocolPreparationVersionDisplayKey,
   resolveProtocolCandidateInputRevision,
   shouldPollProtocolPreparation,
+  protocolPreparationAiStatus,
 } from "./medicalMonitoringProtocolPreparation.mjs";
 
 const versions = confirmedProtocolVersions({
@@ -360,4 +361,26 @@ assert.deepEqual(
   },
 );
 
-console.log("medicalMonitoringProtocolPreparation: 32 passed");
+// E2E拦截修复（事实准备一键准备恒禁用）：protocolPreparationAiStatus归一契约。
+{
+  // /api/ai-gateway/status真实载荷形状（多余键共存）→enabled=true。
+  const live = protocolPreparationAiStatus({
+    configured: true,
+    provider: "cms-router",
+    model: "glm-5.3-flash",
+    deployment_profile_approved: true,
+    semantic_ai_tasks_enabled: true,
+  });
+  assert.equal(live.semantic_ai_tasks_enabled, true, "gateway ready payload normalizes to enabled");
+
+  assert.equal(protocolPreparationAiStatus({}).semantic_ai_tasks_enabled, false,
+    "missing flag normalizes to disabled (fail-closed)");
+  assert.equal(protocolPreparationAiStatus(null).semantic_ai_tasks_enabled, false,
+    "null payload normalizes to disabled");
+  assert.equal(protocolPreparationAiStatus({ semantic_ai_tasks_enabled: "yes" }).semantic_ai_tasks_enabled, false,
+    "non-boolean flag normalizes to disabled (strict boolean)");
+  assert.equal(protocolPreparationAiStatus({ semantic_ai_tasks_enabled: false }).semantic_ai_tasks_enabled, false,
+    "explicit false stays disabled");
+}
+
+console.log("medicalMonitoringProtocolPreparation: 37 passed");

@@ -37,6 +37,7 @@ import {
   protocolPreparationTopicDisplayKey,
   protocolPreparationTopicTone,
   protocolPreparationVersionDisplayKey,
+  protocolPreparationAiStatus,
   normalizeProtocolPreparationStatus,
   resolveProtocolCandidateInputRevision,
   shouldPollProtocolPreparation,
@@ -582,7 +583,32 @@ function MedicalMonitoringProtocolPreparationPanelForProject({
   const [error, setError] = useState("");
   const [candidateDecisions, setCandidateDecisions] = useState({});
   const [ruleTemplateStates, setRuleTemplateStates] = useState({});
-  const independentAiReady = aiStatus?.semantic_ai_tasks_enabled === true;
+  // E2E拦截修复（事实准备一键准备恒禁用）：W04引入的aiStatus prop从未
+  // 被任何父级传入（ProductLoop挂载只给projectId/onClose/onOpenRuleRelease）
+  // →independentAiReady恒false→canStart恒false→「一键准备全部主题」永远
+  // 禁用且主题恒显「独立AI当前不可运行」，与角色配置「当前可用」同屏矛盾
+  // （E2E实测43分钟15次刷新全部prepareDisabled）。修复=面板自取
+  // /api/ai-gateway/status（与角色配置「当前可用」同一权威面）经
+  // protocolPreparationAiStatus归一；prop保留为注入出口（测试/上层覆盖）。
+  const [aiStatusState, setAiStatusState] = useState(aiStatus);
+  const independentAiReady =
+    protocolPreparationAiStatus(aiStatusState).semantic_ai_tasks_enabled;
+  const readAiStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/ai-gateway/status", { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = await response.json().catch(() => null);
+      if (payload && typeof payload === "object") {
+        setAiStatusState(payload);
+      }
+    } catch {
+      // 读取失败=维持上次结论（fail-closed：不可运行文案如实保留）。
+    }
+  }, []);
+
+  useEffect(() => {
+    readAiStatus();
+  }, [readAiStatus]);
 
   // R9轮（R9-04）：Escape关闭抽屉——键盘用户的标准退出路径。
   useEffect(() => {
@@ -1157,7 +1183,12 @@ function MedicalMonitoringProtocolPreparationPanelForProject({
                   type="button"
                   title="刷新状态"
                   disabled={loadingStatus}
-                  onClick={() => readStatus({ resumePolling: true })}
+                  onClick={() => {
+                    // E2E拦截修复：刷新状态同时重读独立AI就绪面——
+                    // 用户配置AI后无需重开面板即可解锁一键准备。
+                    readAiStatus();
+                    readStatus({ resumePolling: true });
+                  }}
                 >
                   <RefreshCw size={15} />
                 </button>
@@ -1205,7 +1236,10 @@ function MedicalMonitoringProtocolPreparationPanelForProject({
               {selectedVersionId && (
                 <button
                   type="button"
-                  onClick={() => readStatus({ resumePolling: true })}
+                  onClick={() => {
+                    readAiStatus();
+                    readStatus({ resumePolling: true });
+                  }}
                 >
                   重新读取
                 </button>

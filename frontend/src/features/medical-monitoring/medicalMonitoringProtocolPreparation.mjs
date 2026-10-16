@@ -468,3 +468,15 @@ export function acceptedProtocolFacts(payload) {
     return true;
   });
 }
+
+// E2E拦截修复（事实准备一键准备恒禁用）：独立AI就绪口径唯一归一。
+// 面板历史缺陷=W04引入的aiStatus prop从未被任何父级传入（默认{}），
+// independentAiReady恒false→canStart恒false→「一键准备全部主题」永远
+// 禁用且8主题恒显「独立AI当前不可运行」，与角色配置「当前可用」同屏
+// 矛盾。修复=面板自取/api/ai-gateway/status（与角色配置「当前可用」
+// 同一权威面，role-aware激活档位）后经本函数归一。
+export function protocolPreparationAiStatus(payload) {
+  return {
+    semantic_ai_tasks_enabled: payload?.semantic_ai_tasks_enabled === true,
+  };
+}

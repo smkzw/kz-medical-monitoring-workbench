@@ -745,3 +745,10 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 界面冒烟（经5178非API）：项目MX循开考-CSU → 医学监查 → 开始一次新的监查 → 四步向导走通（第2步「10表/591行/3038值100%往返校验」、第4步「确认并开始监查」disabled:false）；**未点击最终开始按钮**（常驻项目预置状态保留给E2E验收）
 - 端口纪律：仅触碰8911/5178；8910/5177 curl复核仍DOWN（与实施前一致），未执行任何操作
 - 遗留留痕（如实）：T5 live-fire经服务层重建载荷重发SM3两条infra失败行的尝试被claim侧身份校验正确隔离（monai_b0e1764e108871cf3fb6956c0f4b → monitoring_ai_job_identity_invalid quarantine，终态无害保留作审计；retire_obsolete_generation按设计不触终态行返回0）——R11-01现场点燃未在本窗口完成，行为由env-on单测（7项）锁定
+
+## 2026-10-16 E2E验收拦截修复（2/3卡点：事实准备一键准备恒禁用）——纯前端修复无需重启：
+- 根因（代码考古）：MedicalMonitoringProtocolPreparationPanel.jsx的aiStatus prop（W04 051f8f86引入，默认{}）从未被任何父级传入——全前端0个aiStatus生产者（rg实测），independentAiReady=aiStatus?.semantic_ai_tasks_enabled===true恒false→canStart恒false→「一键准备全部主题」永久disabled且8主题恒显「独立AI当前不可运行，配置后再一键准备」，与角色配置「当前可用」（/api/ai-gateway/status同源semantic_ai_tasks_enabled=true）同屏矛盾。E2E实测43分钟15次刷新全部prepareDisabled。
+- 修复（最小根因，前端only）：panel挂载时自取/api/ai-gateway/status（与角色配置「当前可用」同一权威面、role-aware激活档位）经新增纯函数protocolPreparationAiStatus归一；「刷新状态」与「重新读取」联动重读AI就绪面；fetch失败fail-closed维持不可运行文案。vite dev即时生效，**无需重启8911/5178**。
+- 线上验证（浏览器经5178，MX循SM1-CSU→方案事实与规则发布）：一键准备全部主题 disabled=false（修复前恒true）；主题文案改「该主题尚未核对方案原文；点击「一键准备全部主题」后系统会检索原文并生成结构化监查候选。」（截图在案）。
+- 测试：medicalMonitoringProtocolPreparation.test.mjs新增归一契约5断言（真实载荷形状/缺省fail-closed/null/非布尔/false）37 checks全过；前端全量94/94；vite build绿；回归门151 passed（0失败）。
+- 8911/5178全程未重启未触碰；8910/5177未触碰。
