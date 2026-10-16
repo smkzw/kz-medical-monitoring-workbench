@@ -458,6 +458,21 @@ div.monitoring-admission-manual {
   color: var(--monitoring-orange, #e96828);
 }
 
+/* E2E拦截修复（2/3）：纯文本aria-live状态段不参与命中测试。矮视口+
+   降级卡可见布局下，<p role=status>状态段曾遮挡失败分片重跑按钮
+   （ego-browser实测「<p role=status>/<div> intercepts pointer events」
+   ＝重跑入口死路）。状态段均为纯文本无交互子元素，点击穿透不影响
+   任何交互；真正可交互的浮层（吸底操作栏）不受本条影响。 */
+.monitoring-admission p[role="status"],
+.monitoring-admission span[role="status"] {
+  pointer-events: none;
+}
+
+/* 失败分片清单展开时预留吸底操作栏高度，scrollIntoView落在栏上方。 */
+.monitoring-admission-table-details {
+  scroll-margin-bottom: 76px;
+}
+
 /* 状态机专项T4：死锁哨兵入口——恢复动作次按钮，琥珀色描边与主操作
    区分（不是另一颗主按钮），仅在面板无可用控件时由权威blocking[]点亮。 */
 .monitoring-admission-sentinel {

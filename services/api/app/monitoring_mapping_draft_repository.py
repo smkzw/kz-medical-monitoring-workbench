@@ -2960,7 +2960,22 @@ class MonitoringMappingDraftRepository:
             )
         expected_domains = next(iter(expected_domain_sets))
         missing = sorted(set(expected_domains).difference(domain_totals))
-        if missing and not set(missing).issubset(allowed_missing_domains):
+        # E2E拦截修复（2/3，20261016）：整域缺口在再校验路径按装配时
+        # 豁免口径放行。部分采纳的整域缺口（该域全部分片装配时终态失败、
+        # allowed_missing_domains已豁免并物化domain_gaps）此前在
+        # edit/confirm的再校验里被本门重判为missing→SourceStateError→
+        # 知情降级确认确定性失败（mapping_draft_source_unavailable
+        # 「本次结果未保存」，E2E实测降级×2同错）。槽位级缺席门已按
+        # revalidating_persisted_draft放行（「作业状态在装配后可能变化
+        # ——重试收割行复活——不能拿新状态推翻已持久身份」，R31-02），
+        # 域级缺口同源同权：持久化草稿的接受分片集由source_set_sha256
+        # 内容钉死，缺口是装配时已合法化的形态。装配路径（assemble）
+        # 不传该开关，缺口仍必须显式携带豁免集，绝不凭空放宽。
+        if (
+            missing
+            and not set(missing).issubset(allowed_missing_domains)
+            and not revalidating_persisted_draft
+        ):
             raise MonitoringMappingSourceStateError(
                 "expected field mapping domains are missing: " + ", ".join(missing)
             )

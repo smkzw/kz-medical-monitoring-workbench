@@ -1691,15 +1691,56 @@ class AdmissionMappingConfirmationService:
             hasattr(self.ai_repository, name)
             for name in ("list_jobs", "candidates")
         )
+        # E2E拦截修复（2/3，20261016）：缺口域计算前置。部分采纳的整域
+        # 缺口（该域全部主分片终态失败，装配时已豁免并物化domain_gaps）
+        # 此前在主cohort候选装载时被_completed_candidates按「cohort存在
+        # 终态失败分片」确定性抛mapping_verifier_job_failed——缺口豁免
+        # （R10/R31）与对账exempt_domains（R11）都没有机会生效，部分
+        # 采纳的确认链被锁死（E2E实测：确认重试×5同错、知情降级×2随后
+        # 仍被同一故障堵死，45分钟无出路）。现在先算缺口再装载候选：
+        # 缺口域的终态失败分片按缺口语义跳过（对齐verifier侧缺席域
+        # 「单侧结果不构成双模型比对」的既有跳过），非缺口域的失败分片
+        # 照旧硬失败不放松。
+        gap_domains: tuple[str, ...] = ()
+        _gap_reasons: list[dict[str, str]] = []
+        _gap_slots: frozenset[tuple[str, int]] = frozenset()
         if can_load_cohorts:
             primary_jobs = self._mapping_jobs(
                 project_id,
                 attempt_id,
                 MONITORING_C3_PRIMARY_BUSINESS_KEY_PREFIX,
             )
+            accepted_ids = {
+                str(job.job_id)
+                for job in primary_jobs
+                if str(_value(job.status)) == "completed"
+            }
+            gap_domains, _gap_reasons, _gap_slots = (
+                self._terminal_failure_domain_gaps(
+                    project_id=project_id,
+                    jobs=primary_jobs,
+                    accepted_job_ids=accepted_ids,
+                    include_inflight=True,
+                )
+            )
+            primary_jobs_for_candidates = primary_jobs
+            if gap_domains:
+                gap_failed_job_ids = {
+                    str(getattr(job, "job_id", "") or "")
+                    for job in primary_jobs
+                    if str(_value(job.status)) != "completed"
+                    and self._job_profile_slot(project_id, job)[0] in gap_domains
+                }
+                if gap_failed_job_ids:
+                    primary_jobs_for_candidates = tuple(
+                        job
+                        for job in primary_jobs
+                        if str(getattr(job, "job_id", "") or "")
+                        not in gap_failed_job_ids
+                    )
             primary_candidates = self._cohort_candidates_with_progress(
                 project_id,
-                primary_jobs,
+                primary_jobs_for_candidates,
                 workspace_dir=workspace_dir,
             )
             primary = cohort_payload_from_candidates(primary_candidates)
@@ -1755,26 +1796,8 @@ class AdmissionMappingConfirmationService:
         # R11预检：部分采纳（domain_gaps）的缺席域传入确定性对账——
         # 对侧该域的completed映射跳过（单侧结果不构成双模型比对），
         # 不再判unexpected硬violation致reconciliation恒blocked。
-        gap_domains: tuple[str, ...] = ()
-        if can_load_cohorts:
-            accepted_ids = {
-                str(job.job_id)
-                for job in primary_jobs
-                if str(_value(job.status)) == "completed"
-            }
-            # R31轮（R31-02）：返回值扩为三元组（全失败域、缺口原因、
-            # 部分覆盖域的终态失败槽位豁免集）；复核豁免只消费域列表。
-            # R35轮（R35-01）：include_inflight=True——知情降级采纳的
-            # 草稿在后续双盲对账时，在途分片覆盖的域同样豁免（单侧
-            # 无completed结果不构成比对分歧；全部完成时本参数无效果）。
-            gap_domains, _gap_reasons, _gap_slots = (
-                self._terminal_failure_domain_gaps(
-                    project_id=project_id,
-                    jobs=primary_jobs,
-                    accepted_job_ids=accepted_ids,
-                    include_inflight=True,
-                )
-            )
+        # E2E拦截修复（2/3）：缺口计算已前置到主cohort候选装载之前
+        # （本方法头部），此处直接消费，不再重复计算。
         report = reconcile_mapping_cohorts(
             profile_fields=profile_fields,
             primary_mappings=primary_mappings,

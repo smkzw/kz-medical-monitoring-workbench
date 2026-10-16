@@ -752,3 +752,15 @@ vite：cd implementation/workbench/frontend && lsof -ti:5178 | xargs kill 2>/dev
 - 线上验证（浏览器经5178，MX循SM1-CSU→方案事实与规则发布）：一键准备全部主题 disabled=false（修复前恒true）；主题文案改「该主题尚未核对方案原文；点击「一键准备全部主题」后系统会检索原文并生成结构化监查候选。」（截图在案）。
 - 测试：medicalMonitoringProtocolPreparation.test.mjs新增归一契约5断言（真实载荷形状/缺省fail-closed/null/非布尔/false）37 checks全过；前端全量94/94；vite build绿；回归门151 passed（0失败）。
 - 8911/5178全程未重启未触碰；8910/5177未触碰。
+
+## 2026-10-17 E2E验收拦截修复（第2轮2/3卡点：字段映射确认确认链死锁）+遗留探测行清理，8911+5178标准重启：
+- 现场取证（sqlite只读，proj_user_e282a7e982b0=10-16新建MX循SM1-CSU）：主cohort 20分片=19完成+EX--试验用药1片invalid_ai_output内容级终态失败（attempt2预算耗尽）；盲核cohort 20/20全完成；02:42部分采纳成功（EX整域豁免、domain_gaps物化，T3事件留痕）；02:42:52确认路径有界重排→02:44:12同因再败（内容级确定性）。
+- 根因#1（mapping_verifier_job_failed确认×5）：reconcile_with_verifier装载主cohort候选时_completed_candidates对「存在终态失败分片」无条件硬抛，缺口豁免（R10/R31）与对账exempt_domains（R11）都没有机会生效——缺口计算前置到候选装载之前，缺口域终态失败分片按缺口语义跳过（对齐盲核侧缺席域跳过），非缺口域失败分片照旧硬失败。
+- 根因#2（mapping_draft_source_unavailable降级×2）：库层域完整性门在edit/confirm再校验路径把装配时已豁免的整域缺口重判missing→SourceStateError。槽位级门本有revalidating_persisted_draft放行（R31-02），域级门同源同权补齐；装配路径不传开关仍必须显式豁免（零放宽）。
+- 修复验证：①离线复放（/tmp副本+新代码）E2E项目confirm_draft(降级)→**confirmed且非降级**（缺口跳过后双盲对账以全完成盲核侧收敛auto_pass）——E2E失败×7的同一操作实测通过；②新增tests/test_confirm_whole_domain_gap_partial_adoption.py 3测试（整域缺口confirm/edit不再SourceStateError/装配无豁免照旧硬拒/对账跳过缺口分片+domain_gaps透出）。
+- UI#3：失败分片重跑按钮被状态段遮挡（ego-browser报<p role=status>/<div> intercepts pointer events）→纯文本aria-live状态段pointer-events:none+details scroll-margin-bottom 76px（吸底操作栏预留）。
+- 遗留清理（本会话自惹自查自纠）：10-15 T5现场点燃探测产生的重建载荷行monai_b0e1764e（SM3）被_validated_job_inputs逐行校验判定payload hash mismatch→SM3 mapping-candidates GET确定性失败（/tmp/mm_api_8911.log在案）。已DELETE该行（审计事件流保留），SM3 GET实测200/0.1s恢复。
+- 重启：8911标准命令（保留WORKBENCH_MONITORING_AI_INFRA_RETRY=1灰度）→build **api-4ca198219617fc39** ready:true；5178标准命令重启→指纹配对一致；8910/5177未触碰。
+- 线上验证（浏览器经5178，SM1 E2E项目第3步）：面板加载后确认链推进过原死锁点（无409/无错误横幅），进入复核收尾「系统正在复核少量疑点…」正常流程；重跑分片按钮enabled可见（截图在案）。
+- 回归门：tests/medical_monitoring **151 passed**（0失败）；映射族定向套件（gap/slot/inflight/deadlock/draft-events/confirmation/draft-repo）**139 passed**。
+- 如实声明：①项目列表20s级超时（09:24/10:21/10:35）未定位修复——伴生于20+AI作业高峰期，疑FastAPI线程池被长同步请求占满（R7-01已知架构压力），本轮未改码；②「后台标签页自动刷新不生效（DOM冻结）」为浏览器后台节流行为，未改码；③面板复核收尾（adjudication收敛）需真实AI分钟级时长，确认落库未在本验证窗口等待完成（离线复放已证明同一操作确定性成功）。
