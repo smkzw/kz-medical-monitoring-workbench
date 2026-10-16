@@ -1175,7 +1175,7 @@ def _r7_mapping_confirmation_gate(project_id: str):
     ) == "confirmed":
         return None
     if draft is None:
-        return {
+        blocked = {
             "code": "mapping_confirmation_required",
             "message": (
                 "先完成字段映射确认：本项目尚未进行字段对应关系确认，"
@@ -1183,16 +1183,39 @@ def _r7_mapping_confirmation_gate(project_id: str):
                 "请进入数据接入向导第3步完成确认。"
             ),
         }
-    return {
-        "code": "mapping_confirmation_required",
-        "message": (
-            "先完成字段映射确认：最近一次导入的字段对应关系尚未确认"
-            f"（草稿 {draft.draft_id}，状态 "
-            f"{str(getattr(draft.status, 'value', draft.status))}），"
-            "确认完成前不会启动医学监查（未确认的映射不产出医学结论）。"
-            "请进入数据接入向导第3步完成确认。"
-        ),
-    }
+    else:
+        blocked = {
+            "code": "mapping_confirmation_required",
+            "message": (
+                "先完成字段映射确认：最近一次导入的字段对应关系尚未确认"
+                f"（草稿 {draft.draft_id}，状态 "
+                f"{str(getattr(draft.status, 'value', draft.status))}），"
+                "确认完成前不会启动医学监查（未确认的映射不产出医学结论）。"
+                "请进入数据接入向导第3步完成确认。"
+            ),
+        }
+    # 状态机专项M2（02_DESIGN §四-M2/N4）：运行启动被阻断在事件史里
+    # 可查——门是求值不是变迁，每次阻断如实留痕（允许同请求多条）。
+    # best-effort：append_event_autonomous独立事务+吞异常，门判定路径
+    # 零变化、永不读物化行（R18-03保护不变）。
+    try:
+        monitoring_ai_repository.stage_store.append_event_autonomous(
+            project_id=project_id,
+            attempt_id="",
+            stage="mapping_confirmation",
+            event_type="gate_blocked",
+            reason_code="mapping_confirmation_required",
+            detail={
+                "draft_status": (
+                    str(getattr(draft.status, "value", draft.status))
+                    if draft is not None
+                    else "no_draft"
+                )
+            },
+        )
+    except Exception:
+        pass
+    return blocked
 
 
 def _auto_register_confirmed_protocol_version(project_id: str):
