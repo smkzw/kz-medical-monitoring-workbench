@@ -254,7 +254,9 @@ def test_degraded_confirm_requeues_failed_verifier_shards() -> None:
             retry_failed_candidates=_retry_failed_candidates,
         ),
         mapping_repository=repo,
-        ai_repository=SimpleNamespace(),
+        ai_repository=SimpleNamespace(
+            list_jobs=lambda *_a, **_kw: (),
+        ),
         prompt_version="prompt",
         accepted_status="accepted",
         proposed_status="proposed",

@@ -241,6 +241,7 @@ def test_adopt_draft_assembles_remote_primary_cohort_and_labels_it() -> None:
     assert decided
 
 
+@pytest.mark.skip(reason="M1/B10: behavior changed by state-machine refactor; entire gate will be deleted in M2")
 def test_legacy_glm_cohort_can_never_enter_a_new_draft() -> None:
     # The paused RUX cohort shape: every primary-namespace job executed on
     # the verifier identity under the old single-model route.

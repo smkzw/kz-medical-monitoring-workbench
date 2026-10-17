@@ -465,7 +465,8 @@ def test_pipeline_submits_existing_harness_jobs_with_glm_identity(tmp_path: Path
         workspace_dir=workspace,
     )
     assert result["state"] == "generating"
-    assert result["confirmation_status"] == "pending_confirmation"
+    # confirmation_status was moved to the route layer (single-source projection);
+    # the pipeline layer now only returns state/summary/execution.
     assert result["summary"]["job_count"] >= 2
     assert result["summary"]["candidate_count"] == 0
     assert result["execution"] == {
