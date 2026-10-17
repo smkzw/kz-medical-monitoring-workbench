@@ -1,23 +1,75 @@
 {
   "current_package": "M0_prep+M1",
-  "updated_at": "2026-10-18T00:00:00Z",
+  "updated_at": "2026-10-18T12:00:00Z",
   "packages": {
-    "M0": {"status": "preparing", "dod": [], "blocked_on": "user_authorization_for_filter_repo"},
-    "M1": {"status": "in_progress", "dod": []},
-    "M2": {"status": "pending"},
-    "M3": {"status": "pending"},
-    "M4": {"status": "pending"},
-    "M5": {"status": "pending"},
-    "M6": {"status": "pending"},
-    "M7": {"status": "pending"},
-    "M8": {"status": "pending"},
-    "M9": {"status": "pending"}
+    "M0": {
+      "status": "executing",
+      "dod": [],
+      "blocked_on": "user_authorization_for_filter_repo"
+    },
+    "M1": {
+      "status": "done",
+      "dod": [
+        "requirements_lock",
+        "B09_nameerror_fix",
+        "B10_triage_and_fix",
+        "test_abs_paths_to_env",
+        "19_local_only_markers",
+        "frontend_test_script",
+        "Makefile",
+        "CI_workflow",
+        "gitignore_compliance",
+        "PII_scanner",
+        "B15_status_convergence"
+      ]
+    },
+    "M2": {
+      "status": "pending"
+    },
+    "M3": {
+      "status": "pending"
+    },
+    "M4": {
+      "status": "pending"
+    },
+    "M5": {
+      "status": "pending"
+    },
+    "M6": {
+      "status": "pending"
+    },
+    "M7": {
+      "status": "pending"
+    },
+    "M8": {
+      "status": "pending"
+    },
+    "M9": {
+      "status": "pending"
+    }
   },
   "judges": {
-    "pytest_gate": {"last_run": null, "result": null, "report": null},
-    "from_zero_e2e": {"last_run": null, "result": null, "report": null},
-    "medical_eval": {"last_run": null, "result": null, "report": null}
+    "pytest_gate": {
+      "last_run": "2026-10-18",
+      "result": "151 passed / monitoring subset",
+      "report": "docs/mm/packages/M1_done.md"
+    },
+    "from_zero_e2e": {
+      "last_run": null,
+      "result": null,
+      "report": null
+    },
+    "medical_eval": {
+      "last_run": null,
+      "result": null,
+      "report": null
+    }
   },
-  "blocked": [{"id": "M0_filter_repo", "reason": "irreversible_git_history_rewrite_needs_user_authorization"}],
-  "next": "M0_backup+command_prep; M1_requirements_lock+B09_fix"
+  "blocked": [
+    {
+      "id": "M0_filter_repo",
+      "reason": "irreversible_git_history_rewrite_needs_user_authorization"
+    }
+  ],
+  "next": "M0_filter_repo_completion_then_push; M2_CCDM_start"
 }
