@@ -1,0 +1,39 @@
+name: CI
+on:
+  push:
+    branches: [main, "mm/**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -r services/api/requirements.txt -r services/api/requirements-dev.txt
+      - name: Lint (F821 must be 0)
+        run: |
+          ruff check --select F821 packages/ services/
+      - name: PII scan
+        run: |
+          python scripts/ci/pii_scan.py
+      - name: Run tests (skip local_only)
+        run: |
+          python -m pytest tests/ -q -p no:cacheprovider --timeout=300 --skip-local-only
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install & test
+        run: |
+          cd frontend
+          npm ci || npm install
+          npm test
