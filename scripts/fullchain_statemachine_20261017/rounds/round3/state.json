@@ -1,0 +1,12 @@
+{
+ "idem": "m4-round3-4d5cc9424607",
+ "project_id": "proj_user_57fe3b136c9a",
+ "stages": {
+  "create": "done",
+  "upload": "done",
+  "documents": "done",
+  "mapping": "done"
+ },
+ "attempt_id": "stg-d46c7798b54440cbb2dd29f359481ae0",
+ "mapping_state": "candidates_ready"
+}

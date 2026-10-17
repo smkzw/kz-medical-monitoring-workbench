@@ -1,0 +1,19 @@
+{
+ "idem": "m4-round2-6558b2bb20e5",
+ "project_id": "proj_user_4403e7ad1d7a",
+ "stages": {
+  "create": "done",
+  "upload": "done",
+  "documents": "done",
+  "mapping": "done",
+  "confirm": "done",
+  "facts": "done",
+  "run": "done",
+  "publish": "done"
+ },
+ "attempt_id": "stg-c961dea0903e440bbb52c34ada498de1",
+ "mapping_state": "candidates_ready",
+ "degraded": false,
+ "public_run_token": "run:b9f6ff152bae4463ebb9e645",
+ "result_context_token": "result-context:89bbacb8dc3a406c90547fb45f089fe4"
+}

@@ -1,0 +1,22 @@
+{"ts": "2026-10-16T23:47:49.313698+00:00", "round": "round3", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-16T23:47:50.089225+00:00", "round": "round3", "event": "create_project", "code": 201, "keys": ["authoring_journey", "entry_mode", "next_route", "project"]}
+{"ts": "2026-10-16T23:47:52.709747+00:00", "round": "round3", "event": "bootstrap", "code": 200}
+{"ts": "2026-10-16T23:47:56.029553+00:00", "round": "round3", "event": "upload_listing", "code": 200, "attempt": "stg-d46c7798b54440cbb2dd29f359481ae0", "state": "profile_ready"}
+{"ts": "2026-10-16T23:47:58.863083+00:00", "round": "round3", "event": "analyze", "code": 202, "state": "analyzing", "token": "mmbatch_2d871214a3b1a52820a0f188"}
+{"ts": "2026-10-16T23:56:28.772940+00:00", "round": "round3", "event": "identity_gate_hit", "note": "resolve返回project_mismatch，走用户确认归属分支"}
+{"ts": "2026-10-17T01:18:18.403374+00:00", "round": "round3", "event": "round_blocked", "error": "TimeoutError: documents timeout after 5400s: {\"project_id\": \"proj_user_57fe3b136c9a\", \"state\": \"needs_user_input\", \"analysis_token\": \"mmbatch_2d871214a3b1a52820a0f188\", \"headline\": \"还差一项关键信息\", \"guidance\": \"请对下列每个文件角色作出裁决：选择它对应的文件，或标记该角色缺失。\", \"files\": [\"MG-K10-CSU-001_eCRF填写指南_V1.0.docx\"], \"user_choices\": [{\"role\": \"ecrf\", \"options\": [{\"candidate_id\": \"mmcandidate_203abafc8771b5d46541745a\", \"filename\": \"MG-K10-CSU-001_eCRF填写指南_V1.0.docx\", \"se"}
+{"ts": "2026-10-17T02:20:02.293797+00:00", "round": "round3", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-17T02:20:04.681333+00:00", "round": "round3", "event": "analyze", "code": 202, "state": "analyzing", "token": "mmbatch_2d871214a3b1a52820a0f188"}
+{"ts": "2026-10-17T02:21:59.473850+00:00", "round": "round3", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-17T02:22:03.542666+00:00", "round": "round3", "event": "analyze", "code": 202, "state": "analyzing", "token": "mmbatch_2d871214a3b1a52820a0f188"}
+{"ts": "2026-10-17T02:22:10.465031+00:00", "round": "round3", "event": "role_adjudication", "selections": [{"role": "ecrf", "candidate_id": "mmcandidate_203abafc8771b5d46541745a"}]}
+{"ts": "2026-10-17T02:26:02.992094+00:00", "round": "round3", "event": "documents_resolved", "state": null}
+{"ts": "2026-10-17T02:27:42.076061+00:00", "round": "round3", "event": "mapping_start", "code": 201, "state": "generating"}
+{"ts": "2026-10-17T03:12:34.456483+00:00", "round": "round3", "event": "mapping_ready", "state": "candidates_ready", "critical": 2, "pending": 60, "table_failures": 0}
+{"ts": "2026-10-17T03:14:04.346016+00:00", "round": "round3", "event": "adopt", "code": 201, "draft": "monmapdraft_355cd8b077c2cde3782f83d713fa"}
+{"ts": "2026-10-17T03:14:08.446850+00:00", "round": "round3", "event": "answered", "count": 2, "version": 3}
+{"ts": "2026-10-17T03:16:29.523067+00:00", "round": "round3", "event": "adjudicate", "state": "running", "calls": 1, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 0, \"total_job_count\": 10, \"completed_job_count\": 7, \"pending_job_count\": 3, \"pending_runni"}
+{"ts": "2026-10-17T03:28:51.062284+00:00", "round": "round3", "event": "adjudicate", "state": "running", "calls": 6, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 46}"}
+{"ts": "2026-10-17T03:41:42.665757+00:00", "round": "round3", "event": "adjudicate", "state": "running", "calls": 11, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 46}"}
+{"ts": "2026-10-17T03:54:30.797686+00:00", "round": "round3", "event": "adjudicate", "state": "running", "calls": 16, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 46}"}
+{"ts": "2026-10-17T04:11:58.570095+00:00", "round": "round3", "event": "adjudicate", "state": "running", "calls": 21, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 46}"}

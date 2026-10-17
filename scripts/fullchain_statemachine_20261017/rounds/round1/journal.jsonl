@@ -1,0 +1,118 @@
+{"ts": "2026-10-16T18:10:51.078775+00:00", "round": "round1", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-16T18:10:51.107519+00:00", "round": "round1", "event": "create_project", "code": 201, "keys": ["authoring_journey", "entry_mode", "next_route", "project"]}
+{"ts": "2026-10-16T18:10:51.117550+00:00", "round": "round1", "event": "bootstrap", "code": 200}
+{"ts": "2026-10-16T18:10:51.294962+00:00", "round": "round1", "event": "upload_listing", "code": 200, "attempt": "stg-f729c319db104805bf0f970987f42117", "state": "profile_ready"}
+{"ts": "2026-10-16T18:10:51.539139+00:00", "round": "round1", "event": "analyze", "code": 202, "state": "analyzing", "token": "mmbatch_cd1a3276d7fc90b440d6c750"}
+{"ts": "2026-10-16T18:10:51.539257+00:00", "round": "round1", "event": "round_blocked", "error": "RuntimeError: analyze failed 202: {\"project_id\": \"proj_user_2edc1e9be2cd\", \"state\": \"analyzing\", \"analysis_token\": \"mmbatch_cd1a3276d7fc90b440d6c750\", \"headline\": \"系统正在识别并交叉核对研究文件\", \"guidance\": \"当前无需逐项确认，完成后会自动更新研究文件状态。注：当前盲核与主分析由运维绑定为同一通道同一模型（如额度所限的临时安排），本次核对以「双通道复诵＋您的人工归属确认」推进，模型间独立性弱于常态；恢复独立盲核通道后可重新核对。\", \"shared_runtime_identity\""}
+{"ts": "2026-10-16T18:11:36.703566+00:00", "round": "round1", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-16T18:11:37.080117+00:00", "round": "round1", "event": "analyze", "code": 202, "state": "analyzing", "token": "mmbatch_cd1a3276d7fc90b440d6c750"}
+{"ts": "2026-10-16T18:16:55.078286+00:00", "round": "round1", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-16T18:16:55.306141+00:00", "round": "round1", "event": "analyze", "code": 202, "state": "analyzing", "token": "mmbatch_cd1a3276d7fc90b440d6c750"}
+{"ts": "2026-10-16T18:16:55.333307+00:00", "round": "round1", "event": "identity_gate_hit", "note": "resolve返回project_mismatch，走用户确认归属分支"}
+{"ts": "2026-10-16T18:33:05.240575+00:00", "round": "round1", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-16T18:33:06.988201+00:00", "round": "round1", "event": "analyze", "code": 202, "state": "analyzing", "token": "mmbatch_cd1a3276d7fc90b440d6c750"}
+{"ts": "2026-10-16T18:35:43.005069+00:00", "round": "round1", "event": "documents_resolved", "state": null}
+{"ts": "2026-10-16T18:36:05.113142+00:00", "round": "round1", "event": "mapping_start", "code": 201, "state": "generating"}
+{"ts": "2026-10-16T18:36:06.697170+00:00", "round": "round1", "event": "round_blocked", "error": "RuntimeError: mapping blocked: blocked:http_422:{\"_code\": 422, \"code\": \"mapping_focus_invalid\", \"message\": \"\\u7b5b\\u9009\\u6761\\u4ef6\\u65e0\\u6548\\u3002\\u8bf7\\u4f7f\\u7528\\u201c\\u91cd\\u70b9\\u4f18\\u5148\\u201d\\u6216\\u201c\\u5168\\u90e8\\u5efa\\u8bae\\u201d\\u"}
+{"ts": "2026-10-16T18:39:05.915904+00:00", "round": "round1", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-16T18:39:27.173205+00:00", "round": "round1", "event": "mapping_start", "code": 201, "state": "generating"}
+{"ts": "2026-10-16T18:54:46.330833+00:00", "round": "round1", "event": "mapping_ready", "state": "needs_attention", "critical": 0, "pending": 55}
+{"ts": "2026-10-16T18:55:03.894089+00:00", "round": "round1", "event": "adopt", "code": 201, "draft": "monmapdraft_8af1d2e0679c1662020f551e4755"}
+{"ts": "2026-10-16T18:55:03.894293+00:00", "round": "round1", "event": "answered", "count": 0, "version": 1}
+{"ts": "2026-10-16T18:55:37.526020+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 1, "degraded": false}
+{"ts": "2026-10-16T18:56:40.427601+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 2, "degraded": false}
+{"ts": "2026-10-16T18:58:21.361598+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 3, "degraded": false}
+{"ts": "2026-10-16T18:59:39.389668+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 4, "degraded": false}
+{"ts": "2026-10-16T19:00:57.852246+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 5, "degraded": false}
+{"ts": "2026-10-16T19:02:00.054386+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 6, "degraded": false}
+{"ts": "2026-10-16T19:03:44.668285+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 7, "degraded": false}
+{"ts": "2026-10-16T19:05:00.982152+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 8, "degraded": false}
+{"ts": "2026-10-16T19:07:30.306228+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 9, "degraded": false}
+{"ts": "2026-10-16T19:09:04.898879+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 10, "degraded": false}
+{"ts": "2026-10-16T19:11:29.695837+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 11, "degraded": false}
+{"ts": "2026-10-16T19:13:31.986113+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 12, "degraded": false}
+{"ts": "2026-10-16T19:15:19.392168+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 13, "degraded": false}
+{"ts": "2026-10-16T19:18:45.910525+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_verifier_incomplete", "attempt": 14, "degraded": false}
+{"ts": "2026-10-16T19:21:04.994807+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_reconciliation_required", "attempt": 15, "degraded": false}
+{"ts": "2026-10-16T19:24:45.628657+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_reconciliation_required", "attempt": 16, "degraded": false}
+{"ts": "2026-10-16T19:26:16.356911+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_reconciliation_required", "attempt": 17, "degraded": false}
+{"ts": "2026-10-16T19:27:42.167614+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_reconciliation_required", "attempt": 18, "degraded": false}
+{"ts": "2026-10-16T19:30:08.005528+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_reconciliation_required", "attempt": 19, "degraded": false}
+{"ts": "2026-10-16T19:30:46.930671+00:00", "round": "round1", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-16T19:31:07.613901+00:00", "round": "round1", "event": "adopt", "code": 201, "draft": "monmapdraft_8af1d2e0679c1662020f551e4755"}
+{"ts": "2026-10-16T19:31:07.614193+00:00", "round": "round1", "event": "answered", "count": 0, "version": 1}
+{"ts": "2026-10-16T19:36:55.215565+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_reconciliation_required", "attempt": 1, "degraded": false}
+{"ts": "2026-10-16T19:40:14.245419+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_reconciliation_required", "attempt": 2, "degraded": false}
+{"ts": "2026-10-16T19:41:21.146330+00:00", "round": "round1", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-16T19:41:25.578650+00:00", "round": "round1", "event": "adopt", "code": 201, "draft": "monmapdraft_8af1d2e0679c1662020f551e4755"}
+{"ts": "2026-10-16T19:42:53.839089+00:00", "round": "round1", "event": "adjudicate", "state": "running", "calls": 1, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 42}"}
+{"ts": "2026-10-16T19:54:46.117077+00:00", "round": "round1", "event": "adjudicate", "state": "running", "calls": 6, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 42}"}
+{"ts": "2026-10-16T20:08:39.947768+00:00", "round": "round1", "event": "adjudicate", "state": "running", "calls": 11, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 42}"}
+{"ts": "2026-10-16T20:28:50.816786+00:00", "round": "round1", "event": "adjudicate", "state": "running", "calls": 16, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 42}"}
+{"ts": "2026-10-16T20:50:00.530765+00:00", "round": "round1", "event": "adjudicate", "state": "blocked", "calls": 20, "remaining": null, "detail": "{\"state\": \"blocked\", \"resolved_count\": 0, \"remaining_question_count\": 42}"}
+{"ts": "2026-10-16T21:01:50.583100+00:00", "round": "round1", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-16T21:01:57.625987+00:00", "round": "round1", "event": "adopt", "code": 201, "draft": "monmapdraft_8af1d2e0679c1662020f551e4755"}
+{"ts": "2026-10-16T21:16:57.635220+00:00", "round": "round1", "event": "round_blocked", "error": "timeout: timed out"}
+{"ts": "2026-10-16T21:20:01.353588+00:00", "round": "round1", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-16T21:20:08.303953+00:00", "round": "round1", "event": "adopt", "code": 201, "draft": "monmapdraft_8af1d2e0679c1662020f551e4755"}
+{"ts": "2026-10-16T21:31:39.072441+00:00", "round": "round1", "event": "adjudicate", "state": "blocked", "calls": 1, "remaining": null, "detail": "{\"state\": \"blocked\", \"resolved_count\": 0, \"remaining_question_count\": 42}"}
+{"ts": "2026-10-16T21:46:28.952036+00:00", "round": "round1", "event": "adjudicate", "state": "blocked", "calls": 2, "remaining": null, "detail": "{\"state\": \"blocked\", \"resolved_count\": 0, \"remaining_question_count\": 35}"}
+{"ts": "2026-10-16T21:46:28.952452+00:00", "round": "round1", "event": "adjudicate_blocked_terminal", "calls": 2, "note": "无可答题+连续blocked，转confirm（409→知情降级）"}
+{"ts": "2026-10-16T21:47:23.942283+00:00", "round": "round1", "event": "confirm_retry", "code": 409, "err": "mapping_reconciliation_required", "attempt": 1, "degraded": false}
+{"ts": "2026-10-16T21:47:23.942441+00:00", "round": "round1", "event": "confirm_degrade", "err": "mapping_reconciliation_required", "note": "复核终态不收敛（分片预算耗尽），转知情降级确认（R36-01出口，如实留痕）"}
+{"ts": "2026-10-16T21:57:37.061316+00:00", "round": "round1", "event": "adjudicate", "state": "running", "calls": 6, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 35}"}
+{"ts": "2026-10-16T22:10:15.783982+00:00", "round": "round1", "event": "adjudicate", "state": "running", "calls": 11, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 35}"}
+{"ts": "2026-10-16T22:22:19.878690+00:00", "round": "round1", "event": "adjudicate", "state": "running", "calls": 16, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 35}"}
+{"ts": "2026-10-16T22:41:16.071509+00:00", "round": "round1", "event": "adjudicate", "state": "running", "calls": 21, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 35}"}
+{"ts": "2026-10-16T23:29:54.623458+00:00", "round": "round1", "event": "adjudicate", "state": "running", "calls": 26, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 35}"}
+{"ts": "2026-10-17T00:00:49.652370+00:00", "round": "round1", "event": "adjudicate", "state": "blocked", "calls": 29, "remaining": null, "detail": "{\"state\": \"blocked\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:02:38.874735+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 30, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:02:39.881427+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 2, "degraded": true}
+{"ts": "2026-10-17T00:05:04.401933+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 31, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:05:04.942755+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 3, "degraded": true}
+{"ts": "2026-10-17T00:06:51.728059+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 32, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:06:51.746278+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 4, "degraded": true}
+{"ts": "2026-10-17T00:09:06.991137+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 33, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:09:08.014043+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 5, "degraded": true}
+{"ts": "2026-10-17T00:10:13.350636+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 34, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:10:13.363233+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 6, "degraded": true}
+{"ts": "2026-10-17T00:12:02.339058+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 35, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:12:02.356460+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 7, "degraded": true}
+{"ts": "2026-10-17T00:13:47.291589+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 36, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:13:47.306154+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 8, "degraded": true}
+{"ts": "2026-10-17T00:15:52.129421+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 37, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:15:52.153044+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 9, "degraded": true}
+{"ts": "2026-10-17T00:17:09.141911+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 38, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:17:09.156417+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 10, "degraded": true}
+{"ts": "2026-10-17T00:19:31.537485+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 39, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:19:32.833375+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 11, "degraded": true}
+{"ts": "2026-10-17T00:21:22.759031+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 40, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:21:23.664787+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 12, "degraded": true}
+{"ts": "2026-10-17T00:21:23.665055+00:00", "round": "round1", "event": "round_blocked", "error": "RuntimeError: confirm failed persistently: mapping_questions_unresolved"}
+{"ts": "2026-10-17T00:35:01.743560+00:00", "round": "round1", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-17T00:35:08.718346+00:00", "round": "round1", "event": "adopt", "code": 201, "draft": "monmapdraft_8af1d2e0679c1662020f551e4755"}
+{"ts": "2026-10-17T00:36:51.902272+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 1, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:36:52.691192+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 1, "degraded": false}
+{"ts": "2026-10-17T00:38:40.362754+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 2, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:38:40.950775+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 2, "degraded": false}
+{"ts": "2026-10-17T00:40:16.564101+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 3, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:40:16.582704+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 3, "degraded": false}
+{"ts": "2026-10-17T00:41:31.408269+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 4, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:41:31.433629+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 4, "degraded": false}
+{"ts": "2026-10-17T00:43:33.887220+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 5, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:43:35.040662+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 5, "degraded": false}
+{"ts": "2026-10-17T00:45:47.106280+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 6, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:45:47.123610+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 6, "degraded": false}
+{"ts": "2026-10-17T00:47:31.510978+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 7, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:47:31.526936+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 7, "degraded": false}
+{"ts": "2026-10-17T00:48:56.546994+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 8, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:48:56.571467+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 8, "degraded": false}
+{"ts": "2026-10-17T00:51:18.723639+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 9, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 19, \"remaining_question_count\": 23}"}
+{"ts": "2026-10-17T00:51:20.146470+00:00", "round": "round1", "event": "confirm_retry", "code": 422, "err": "mapping_questions_unresolved", "attempt": 9, "degraded": false}
+{"ts": "2026-10-17T00:52:09.599903+00:00", "round": "round1", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-17T00:52:14.267246+00:00", "round": "round1", "event": "adopt", "code": 201, "draft": "monmapdraft_8af1d2e0679c1662020f551e4755"}
+{"ts": "2026-10-17T00:52:36.530042+00:00", "round": "round1", "event": "answered", "count": 23, "version": 66}
+{"ts": "2026-10-17T00:52:39.013758+00:00", "round": "round1", "event": "adjudicate", "state": "running", "calls": 1, "remaining": null, "detail": "{\"state\": \"running\"}"}
+{"ts": "2026-10-17T00:56:19.020221+00:00", "round": "round1", "event": "adjudicate", "state": "complete", "calls": 2, "remaining": null, "detail": "{\"state\": \"complete\", \"resolved_count\": 42, \"remaining_question_count\": 0}"}
+{"ts": "2026-10-17T00:59:05.921999+00:00", "round": "round1", "event": "confirmed", "attempt": 1, "degraded": false, "revision": ""}
+{"ts": "2026-10-17T00:59:11.542203+00:00", "round": "round1", "event": "facts_start", "code": 409, "state": null}

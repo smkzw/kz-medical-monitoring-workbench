@@ -1,0 +1,14 @@
+{
+ "idem": "m4-round1-ebfb02ca308c",
+ "project_id": "proj_user_2edc1e9be2cd",
+ "stages": {
+  "create": "done",
+  "upload": "done",
+  "documents": "done",
+  "mapping": "done",
+  "confirm": "done"
+ },
+ "attempt_id": "stg-f729c319db104805bf0f970987f42117",
+ "mapping_state": "needs_attention",
+ "degraded": false
+}

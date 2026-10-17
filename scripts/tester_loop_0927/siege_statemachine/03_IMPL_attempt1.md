@@ -218,3 +218,100 @@ T1/T2/T3：单提交revert（事件表留存无害，投影/门不读documents�
 ## 12. 一句话结论
 
 v2剩余六缺口中**五个半已收口**——T1/T2/T3/T4/T6完成并各自带锁行为测试，T5代码+交互测试+灰度env已部署（现场点燃留待E2E），T7三连从零门因上游壁钟依赖本窗口未执行（非代码验收步，按04诊断流程另约窗口）；回归门151 passed与基线逐字一致，常驻项目界面冒烟走通四步向导至开始按钮可用。
+
+---
+
+# 03_IMPL_attempt1（v3续篇）— 02_DESIGN v3剩余收口M1-M4实施记录（2026-10-17）
+
+> 设计底稿：同目录 `02_DESIGN.md` v3（§四-M1~M4，git工作区版本，本会话实读）。
+> 提交前缀仍为「状态机专项:」。实施前基线（本会话实跑，与v3设计§四基线逐字一致）：
+> 专项13文件套件 **81 passed / 1 failed**（红=N1定时炸弹）· 回归门 **151 passed** · 前端node --test **34 pass / 0 fail**。
+
+## 13. 总结论
+
+| 步 | 内容 | 状态 | 提交/产物 | 验证 |
+|---|---|---|---|---|
+| M1 | 修N1红测试（`_assemble_stage_state`时钟注入口） | ✅完成 | `d00a5a49` | 13文件套件 **82 passed / 0 failed**（生产调用零变化，缺省None=真钟） |
+| M2 | gate_blocked留痕（N4） | ✅完成 | `3fd773bd` | 新增tests/test_gate_blocked_event.py 5测试；14文件 **87 passed**；回归 **151 passed** |
+| M3 | S8 verdict缓存启用（N2） | ✅启用，⚠️延迟预算未达标（如实） | 纯env，无代码提交；ISO_ENV_LOG已记 | 前置① 9/9；前置② 三端点语义等价；前置③ 活体失效链在案；剖析归因在档 |
+| M4 | E2E三连从零门（N3） | ⏳部分完成（详见§16，如实） | 驱动脚本+证据入库 | Round2全链从零✅；Round1确认✅但事实门产品断点；Round3/Round1b对账中 |
+| 不做 | A5入库/C7整体接管/B5门键合并 | 维持v3裁决 | — | — |
+
+**回归门（本次实际执行，ask指定命令）**：`.venv/bin/python -m pytest tests/medical_monitoring -q -p no:cacheprovider` → **151 passed**（M2后终态，与基线逐字一致，0失败）。
+
+## 14. M1/M2 实施内容（改了什么）
+
+### M1（d00a5a49）
+- `packages/medical_monitoring/api/r7_product/mapping_candidate_routes.py:884`：`_assemble_stage_state` 增可选kwarg `now: Optional[datetime] = None`，docstring注明「仅测试消费——缺省None=真钟=现状」；
+- `:1027-1031`：`facts_recent_failure_from_events(..., now=now)` 实参透传（生产调用点:1981 不传=零变化）；
+- `tests/test_facts_recent_failure_window.py:106`：`test_assemble_stage_state_passes_window_flag` 改传 `now=NOW`（固定钟2026-10-15T12:00Z）。
+
+### M2（3fd773bd）
+- `services/api/app/main.py:1161` `_r7_mapping_confirmation_gate`：两个阻断return改为先组装 `blocked` dict→**落gate_blocked事件**→再return。事件经 `monitoring_ai_repository.stage_store.append_event_autonomous`（attempt_id=''项目级、stage=mapping_confirmation、reason_code=mapping_confirmation_required、detail.draft_status=草稿状态或no_draft）；外层try+append_event_autonomous内层吞异常双保险；门判定路径零变化、永不读物化行（R18-03保护不变）；门是求值不是变迁，每次阻断如实留痕（同请求多条允许）。
+- `tests/test_gate_blocked_event.py`（新增5测试）：未确认draft调门→事件六字段正确；no_draft→draft_status=no_draft；事件写故障（BrokenStore）→门仍返回409详情不外泄；重复触发→多条事件；confirmed放行→零事件。
+- 端点唯一消费点核实：`run_routes.py:131`（POST /runs/prepare-and-start，用户动作非轮询路径），无写放大风险。
+
+## 15. M3 实施与验证（env=1，零代码改动）
+
+### 前置① 等价性单测
+`tests/test_document_authority_verdict_cache.py` 独立实跑 **9 passed**。
+
+### 前置② 隔离runtime A/B（同项目 MX循开考-CSU attempt stg-cd69899943…）
+采样 off×2（env off现进程）→ env=1重启 → cold×1 + warm×2，三端点响应体全部留档（`scripts/fullchain_statemachine_20261017/m3_ab_samples/`）：
+- **语义等价**：三端点off/on序无关JSON比较全等（stage-state/study-documents md5逐字节相同；mapping-candidates仅跨进程JSON键序不同，语义等价）。
+- **缓存写/命中**：verdicts表0行→重启采样后4行（两项目各2条目）→多次热控行数稳定=命中。
+- **延迟（如实：预算未达标）**：stage-state off 17.0/17.6s → on cold/warm 14.5s±0.1；study-documents off 17.6/17.4s → on 14.2-14.6s；mapping-candidates 0.28s（不动）。预算「P95个位数秒级」**未达成**。
+
+### 前置③ 失效链
+- 单测在档：registry失效/digest失效（9测试内）。
+- **活体实证**（M4期间自然发生）：round1项目（2edc1e9be2cd）文档角色裁决/重晋升使A1指纹变化，verdicts表该两条目累积**12个registry_revision**、round3项目（57fe3b136c9a）2个——每次指纹变化=旧键失配miss重算+新键落行，失效语义在生产负载下逐字生效；34行/5项目在案。
+
+### 延迟未达标的剖析归因（按设计R4：不放松fail-closed、不改超时，转剖析）
+独立进程cProfile（同env导入main跑document_readiness，脚本+结果在档 `m3_profile_docreadiness.py`）：verifier重放已被缓存消掉（profile不可见）；剩余成本在S8范围外——`source_intake._read_all`×10 **22.1s cum**（A1 JSONL全量重读）、`build_manifest→latest_fact_materialization_ready→graph store_base.__init__`×27 **13.9s cum**（反复开图库）、`_monitoring_entry_validation_is_usable` **11.1s cum**（A3复查）、pydantic校验7.4s。回滚=env置空即回直连重放（A/B实测零缓存路径行为不变）。
+
+### 重启与配对
+8911标准重启（pid 36398，01:52:13 CST，env按ps eww实读逐字保留+新增缓存env）→ build `api-817b6b45dc710ed1` ready:true；5178 vite同步重启→指纹配对一致；8910/5177 lsof复核0监听未触碰。详见ISO_ENV_LOG 2026-10-17 01:52节。
+
+## 16. M4 E2E从零门（部分完成，如实分项）
+
+驱动：`scripts/fullchain_statemachine_20261017/e2e_round.py`（幂等stage断点续跑+journal+事件流导出；底座模式沿fullchain_sar_rerun_20260926；链路=向导同源r7端点：建项→上传→核对→识别→采纳/答题/对账/确认→事实→run-setup/prepare-and-start→progress→publish→results）。证据：`rounds/<round>/{journal.jsonl,state.json,stage_events_export.jsonl}`。
+
+| 轮 | 项目/attempt | 结果 |
+|---|---|---|
+| Round1 | 2edc1e9be2cd / stg-f729c319… | ⚠️**走至确认✅、事实门产品断点**：EX主分片invalid_ai_output内容级失败→部分采纳（EX整域豁免，T3 degradation事件在档）→23个双盲分歧题作答→对账收敛42/0→**确认成功且非降级**（6a3d4c3d修复链实证）→事实POST 409 `facts_mapping_incomplete`×3（T1时效窗机制现场生效：stage-state出`retry_generate_facts`可用键）→R32-04重跑EX（第2次尝试）成功→事实仍409：**事实门按已确认修订字段判全表列覆盖，整域缺口不被容忍；已确认草稿不可变；重新采纳409 mapping_draft_conflict（源集已变须新批次）**。SM1(10-16)同点停滞，系同因。驱动已改按正确用户流：确认前先重跑失败分片 |
+| Round2 | 4403e7ad1d7a / stg-c961dea0… | ✅**全链从零走通**：建项19:35→上传→身份门(用户确认归属)→文档链ready 20:08→识别20:09-20:53（candidates_ready，0失败，60字段）→采纳→对账（46分歧题逐个AI复核作业）→16题作答→对账收敛46/0→**确认非降级02:52**→事实201 ready 02:53→运行(daily/full)02:56→发布200→结果entry/overview 200→stage-state `current_stage=complete, blocking=[]`。事件流125条导出 |
+| Round3 | 57fe3b136c9a / stg-d46c7798… | ⏳进行中：身份门+**角色裁决needs_user_input**（ecrf角色用户选文件，§1.2变迁现场首次出现）→文档ready→识别candidates_ready（0失败）→采纳→2题作答→对账46疑点推进中（记录时点02:31启动） |
+| Round1b | 2edc1e9be2cd / stg-ce0d34e1…（round1项目新批次，产品出口路径） | ⏳进行中：文档复用已晋升→识别candidates_ready（0失败，retry-before-adopt生效）→采纳→2题作答→对账中 |
+
+### M4覆盖项实测
+- R11-01（infra失败→同请求重发→requeued）：**现场未自然发生**（三轮全部失败均为内容级invalid_ai_output，按设计不自动重排）——该行为由env-on单测锁定，本窗口无活体点燃，如实记录。
+- facts失败→retry_generate_facts可达（T1/M1修复链）：✅round1现场观测（stage-state blocking出可用键）。
+- F5恢复+哨兵不误伤：✅（见§17）。
+- M2 gate_blocked活体写入：未触发（本窗口无「映射未确认即点开始运行」动作），5/5单测在档，如实记录。
+
+### M4过程发现（只记录，不在本专项修）
+1. **身份门确定性命中**：三件套在新项目上无论项目名是否与方案一致，首次resolve恒`project_mismatch`→「确认属于当前项目并继续」是真实用户路径（三轮同此）。
+2. **部分采纳死链**（round1，产品级断点）：见上表。
+3. **对账重算CPU饱和**：并发两轮adjudicate时8911进程CPU 97-102%（GIL单核），单次confirm/adjudicate POST可达15分钟+（客户端超时两次）——R7-01线程池压力的CPU级佐证；缓解=轮次串行化，未改码。
+4. **分歧题文本写入user_action**：双盲分歧卡的问题文本存于字段`user_action`（前缀`系统两轮独立复核对本字段结论仍不一致…`），未决判定必须用「用户已确认：/用户已核对：」前缀规则（与confirm侧`_decision_recorded`同源）——API消费方不能把「有文本」当「已作答」（驱动初期bug，修正后round1/2/3全通）。
+5. 项目列表「读取失败」一次（AI高峰期已知现象，重载恢复）。
+
+## 17. 界面冒烟（经5178界面非API，ego-browser实测）
+- 常驻项目 MX循开考-CSU → 医学监查 → 开始一次新的监查 → 四步向导走通：第2步「10表/591行/3038值100%往返校验」、第4步「确认并开始监查」**disabled:false**（可点）；**未点击最终开始按钮**（常驻项目预置态保留，与既往冒烟纪律一致）。
+- F5恢复+哨兵（round1项目界面）：向导挂载→stage-state权威恢复直落第3步「研究文件与字段映射确认」、忙态「正在确认字段对应关系…」无哨兵按钮；页面reload后重开向导仍恢复第3步，哨兵零误伤。
+- 如实：项目列表首载一次「读取失败」（重载成功）；截图CDP超时未取得，DOM断言为证。
+
+## 18. 回滚
+
+M1/M2：单提交revert。M3：env置空重启=零缓存路径逐字还原（A/B实测）；可选`DROP TABLE monitoring_document_authority_verdicts`归零。M4：非代码步；驱动/证据为增量文件可整体移除。权威schema依旧零迁移。已落地回滚面与v2§11一致。
+
+## 19. 如实偏差与未尽事项
+1. M3延迟预算未达标（14.5s vs 个位数秒级）：归因在案（A1全量重读+manifest/图库churn+A3复查），按设计R4如实记录不放松，缓存保留启用。
+2. M4三连未在本窗口完成3/3：round2全通✅，round1确认后卡事实门（产品断点，非状态机回归），round3/1b对账进行中（journal留痕可续证）。专项完成定义（M4三连全通）未达成，不得宣称「专项完成」。
+3. R11-01与gate_blocked无活体点燃（见§16覆盖项）。
+4. 本会话未改M3归因指向的S8范围外热点（A1重读等）——超出状态机专项最小根因边界，另行立项。
+5. `01_STATEMAP.md`/`02_DESIGN.md`工作区v3覆写与runs/*运行时json差异均为会话前已存在，本次未触碰不纳入提交（沿v2留痕惯例）。
+
+## 20. 一句话结论
+
+v3四步中M1（红测试修复）/M2（gate_blocked留痕）/M3（缓存启用+等价性+活体失效链+延迟不达标如实归因）三步完成并各自可回滚，M4以幂等驱动跑通**首个全链从零E2E（round2：确认非降级→事实→运行→发布→结果视图）**并暴露两个真实产品断点（部分采纳死链/身份门必经用户确认）；回归门151 passed与基线逐字一致，常驻项目冒烟+F5+哨兵全过——「单一权威状态模型」在真实从零负载上的行为与设计一致，E2E三连收官仍差round3/1b对账收敛（留痕可续）。

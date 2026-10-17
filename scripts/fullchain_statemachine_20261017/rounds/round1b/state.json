@@ -1,0 +1,13 @@
+{
+ "idem": "m4-round1b-reuse-project-2edc1e9be2cd",
+ "project_id": "proj_user_2edc1e9be2cd",
+ "stages": {
+  "create": "done",
+  "upload": "done",
+  "documents": "done",
+  "mapping": "done"
+ },
+ "note": "round1b=round1项目新attempt：round1部分采纳确认后事实门facts_mapping_incomplete（EX整域缺口），已确认草稿不可变，产品出口=新批次；本轮按正确用户流（确认前先重跑失败分片）重走",
+ "attempt_id": "stg-ce0d34e19e1944708bac8c5b6dd4c318",
+ "mapping_state": "candidates_ready"
+}

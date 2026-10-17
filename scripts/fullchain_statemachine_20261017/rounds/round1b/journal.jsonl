@@ -1,0 +1,12 @@
+{"ts": "2026-10-17T02:32:51.770526+00:00", "round": "round1b", "event": "round_begin", "assets_exist": true}
+{"ts": "2026-10-17T02:32:54.243109+00:00", "round": "round1b", "event": "upload_listing", "code": 200, "attempt": "stg-ce0d34e19e1944708bac8c5b6dd4c318", "state": "profile_ready"}
+{"ts": "2026-10-17T02:32:54.803874+00:00", "round": "round1b", "event": "analyze", "code": 202, "state": "analyzing", "token": "mmbatch_cd1a3276d7fc90b440d6c750"}
+{"ts": "2026-10-17T02:39:39.932590+00:00", "round": "round1b", "event": "documents_resolved", "state": null}
+{"ts": "2026-10-17T02:40:09.407386+00:00", "round": "round1b", "event": "mapping_start", "code": 201, "state": "generating"}
+{"ts": "2026-10-17T03:23:53.783567+00:00", "round": "round1b", "event": "mapping_ready", "state": "candidates_ready", "critical": 2, "pending": 60, "table_failures": 0}
+{"ts": "2026-10-17T03:24:14.015533+00:00", "round": "round1b", "event": "adopt", "code": 201, "draft": "monmapdraft_b1e0ed44da22bd29555306368344"}
+{"ts": "2026-10-17T03:24:14.056000+00:00", "round": "round1b", "event": "answered", "count": 2, "version": 3}
+{"ts": "2026-10-17T03:24:27.902648+00:00", "round": "round1b", "event": "adjudicate", "state": "running", "calls": 1, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 0, \"total_job_count\": 10, \"completed_job_count\": 0, \"pending_job_count\": 10, \"pending_runn"}
+{"ts": "2026-10-17T03:32:39.919286+00:00", "round": "round1b", "event": "adjudicate", "state": "running", "calls": 6, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 0, \"total_job_count\": 10, \"completed_job_count\": 1, \"pending_job_count\": 9, \"pending_runni"}
+{"ts": "2026-10-17T03:46:38.148760+00:00", "round": "round1b", "event": "adjudicate", "state": "running", "calls": 11, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 0, \"total_job_count\": 10, \"completed_job_count\": 3, \"pending_job_count\": 7, \"pending_runni"}
+{"ts": "2026-10-17T03:59:30.804562+00:00", "round": "round1b", "event": "adjudicate", "state": "running", "calls": 16, "remaining": null, "detail": "{\"state\": \"running\", \"resolved_count\": 0, \"remaining_question_count\": 0, \"total_job_count\": 10, \"completed_job_count\": 6, \"pending_job_count\": 4, \"pending_runni"}
