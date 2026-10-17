@@ -19,7 +19,7 @@ from services.api.app.writing_reference_repository import _payload_hash
 
 
 REAL_NCT02290613_SAP = Path(
-    "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/runtime/"
+    "${MM_PROJECT_ROOT:-.}/runtime/"
     "writing_reference_artifacts/b18d0f5682fe9b4e/"
     "wref_doc_e4358e70a88df5bb4d6f/"
     "c59410de222bb43a7951f9802253ad6dcface748c4513df0b21b7a1ed80126fe.pdf"

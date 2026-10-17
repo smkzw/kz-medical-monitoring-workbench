@@ -46,11 +46,11 @@ from services.api.app.protocol_text_extractor import parse_protocol_docx
 
 
 MY008_V3_AMENDMENT = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY008治疗PNH/2-03/研究方案/3.0/研究方案/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY008211A-PNH-2-03-V3.0版方案修订说明（2.0到3.0）.docx"
 )
 MY008_V4_AMENDMENT = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY008治疗PNH/2-03/研究方案/4.0/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY008211A-PNH-2-03-V4.0版方案修订说明（3.0到4.0）.docx"
 )
 

@@ -123,7 +123,7 @@ def startup_process_receipt(target: Path, **overrides):
 def test_default_source_runtime_is_product_runtime_not_workbench_runtime() -> None:
     resolved = BASELINE.resolve_source_runtime()
     expected = Path(
-        "/Users/smkzw/Documents/康哲项目资料/AI/医学经理工作台/runtime"
+        "${MM_PROJECT_ROOT:-.}/runtime"
     )
     assert resolved == expected
     assert resolved != ROOT / "runtime"

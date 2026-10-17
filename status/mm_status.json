@@ -1,0 +1,23 @@
+{
+  "current_package": "M0_prep+M1",
+  "updated_at": "2026-10-18T00:00:00Z",
+  "packages": {
+    "M0": {"status": "preparing", "dod": [], "blocked_on": "user_authorization_for_filter_repo"},
+    "M1": {"status": "in_progress", "dod": []},
+    "M2": {"status": "pending"},
+    "M3": {"status": "pending"},
+    "M4": {"status": "pending"},
+    "M5": {"status": "pending"},
+    "M6": {"status": "pending"},
+    "M7": {"status": "pending"},
+    "M8": {"status": "pending"},
+    "M9": {"status": "pending"}
+  },
+  "judges": {
+    "pytest_gate": {"last_run": null, "result": null, "report": null},
+    "from_zero_e2e": {"last_run": null, "result": null, "report": null},
+    "medical_eval": {"last_run": null, "result": null, "report": null}
+  },
+  "blocked": [{"id": "M0_filter_repo", "reason": "irreversible_git_history_rewrite_needs_user_authorization"}],
+  "next": "M0_backup+command_prep; M1_requirements_lock+B09_fix"
+}

@@ -16,20 +16,23 @@ sys.path.insert(0, str(ROOT))
 from services.api.app.main import app  # noqa: E402
 from services.api.app.monitoring_identity_authorization import MonitoringRole  # noqa: E402
 from services.api.app.monitoring_runtime_principal import (  # noqa: E402
+import pytest
     MonitoringAuthenticatedPrincipal,
 )
 from services.api.app.mgk10_sar_monitoring_service import (  # noqa: E402
+
+pytestmark = pytest.mark.local_only
     MGK10_SAR_PROJECT_ID,
     Mgk10SarMonitoringService,
 )
 
 
 LISTING_PATH = Path(
-    "/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/13. CFDI核查/自查/评分SDV/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} CFDI核查/自查/评分SDV/"
     "【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx"
 )
 PROTOCOL_PATH = Path(
-    "/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/4. Protocol/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Protocol/"
     "MG-K10-SAR-001_临床研究方案_ V2.1_20250919_clean版 .docx"
 )
 

@@ -15,19 +15,22 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from services.api.app.protocol_text_extractor import parse_protocol_docx  # noqa: E402
+import pytest
+
+pytestmark = pytest.mark.local_only
 
 
 MGK10_PROTOCOL = Path(
-    "/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/4. Protocol/MG-K10-SAR-001_临床研究方案_ V2.1_20250919_clean版 .docx"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Protocol/MG-K10-SAR-001_临床研究方案_ V2.1_20250919_clean版 .docx"
 )
 RUX_PROTOCOL = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/RUX-03-002-自查文件包-20260107/10-临床试验重要文件/1-临床试验方案/V1.3版-2024.8.14/磷酸芦可替尼乳膏-AD3期临床研究方案V1.3-clean-20240814.docx"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/RUX-03-002-自查文件包-20260107/10-临床试验重要文件/1-临床试验方案/V1.3版-2024.8.14/磷酸芦可替尼乳膏-AD3期临床研究方案V1.3-clean-20240814.docx"
 )
 D001_PROTOCOL = Path(
-    "/Users/smkzw/Documents/康哲项目资料/AI/入排/test-D001项目/CMS-D001 银屑病2、3期临床方案 v1.0-2025.12.21.docx"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} 银屑病2、3期临床方案 v1.0-2025.12.21.docx"
 )
 PNH_PROTOCOL = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY008治疗PNH/3-01（MM外包）/方案/V1.1方案/"
+    "${MM_PROJECT_ROOT:-.}"
     "（缺含研究者签字页方案）MY008211A-PNH-3-01-V1.1-通用版-2024.11.24-clean/研究方案/"
     "MY008211A-PNH-3-01_研究方案_V1.1_2025.1.7clean.docx"
 )

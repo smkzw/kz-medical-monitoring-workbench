@@ -52,22 +52,24 @@ from services.api.app.monitoring_source_fragment import (
 )
 from services.api.app.protocol_text_extractor import parse_protocol_docx
 
+pytestmark = pytest.mark.local_only
+
 
 RUX_LISTING = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/准备阶段/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/准备阶段/"
     "RUX-03-002_列表_数据集_Excel_20250612_处理后.xlsx"
 )
 MY009_LISTING = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/S1安全性评价-202604/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY009-UC-2-01-MM Listing_20260408(已自动还原).xlsx"
 )
 RUX_PROTOCOL = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/"
     "RUX-03-002-自查文件包-20260107/10-临床试验重要文件/1-临床试验方案/"
     "V1.3版-2024.8.14/磷酸芦可替尼乳膏-AD3期临床研究方案V1.3-clean-20240814.docx"
 )
 MY009_PROTOCOL = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/方案及配套资料/3.0/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY009-UC-Ⅱa期-临床研究方案-V3.0 20250926-clean (1).docx"
 )
 

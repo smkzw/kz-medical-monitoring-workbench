@@ -18,8 +18,11 @@ from services.api.app.ai_gateway import (  # noqa: E402
     PromptRegistry,
 )
 from services.api.app.protocol_text_extractor import parse_protocol_docx  # noqa: E402
+import pytest
 from services.api.app.raw_subject_bundle import inventory_subject_bundle  # noqa: E402
 from services.api.app.source_intake import (  # noqa: E402
+
+pytestmark = pytest.mark.local_only
     SourceRegistryService,
     SourceRegistryStore,
     protocol_document_to_ai_sources,
@@ -28,10 +31,10 @@ from services.api.app.source_intake import (  # noqa: E402
 
 
 MGK10_PROTOCOL = Path(
-    "/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/4. Protocol/MG-K10-SAR-001_临床研究方案_ V2.1_20250919_clean版 .docx"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Protocol/MG-K10-SAR-001_临床研究方案_ V2.1_20250919_clean版 .docx"
 )
 D001_SUBJECT_DIR = Path(
-    "/Users/smkzw/Documents/康哲项目资料/AI/入排/test-D001项目/全量-入组/白铭江/0316-SA07005"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private}"
 )
 
 

@@ -17,6 +17,9 @@ sys.path.insert(0, str(ROOT))
 
 from services.api.app.main import app  # noqa: E402
 from services.api.app.safety_pv_manifest import (  # noqa: E402
+import pytest
+
+pytestmark = pytest.mark.local_only
     MY009_LISTING,
     RUX_274_ROOT,
     RUX_PV_ROOT,
@@ -25,7 +28,7 @@ from services.api.app.safety_pv_manifest import (  # noqa: E402
 )
 
 RUX_LISTING = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/准备阶段/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/准备阶段/"
     "RUX-03-002_列表_数据集_Excel_20250612_处理后.xlsx"
 )
 

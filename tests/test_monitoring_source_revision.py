@@ -14,23 +14,26 @@ from services.api.app.monitoring_source_revision import (
 from services.api.app.monitoring_project_registry import BoundMonitoringProjectAdapter
 from services.api.app.my009_monitoring_service import My009MonitoringService
 from services.api.app.rux_monitoring_service import RuxMonitoringService, SUBJ_SHEET
+import pytest
+
+pytestmark = pytest.mark.local_only
 
 
 RUX_LISTING_PATH = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/准备阶段/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/准备阶段/"
     "RUX-03-002_列表_数据集_Excel_20250612_处理后.xlsx"
 )
 RUX_PROTOCOL_PATH = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/RUX-03-002-自查文件包-20260107/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/RUX-03-002-自查文件包-20260107/"
     "10-临床试验重要文件/1-临床试验方案/V1.3版-2024.8.14/"
     "磷酸芦可替尼乳膏-AD3期临床研究方案V1.3-clean-20240814.docx"
 )
 MY009_LISTING_PATH = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/S1安全性评价-202604/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY009-UC-2-01-MM Listing_20260408(已自动还原).xlsx"
 )
 MY009_PROTOCOL_PATH = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/方案及配套资料/3.0/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY009-UC-Ⅱa期-临床研究方案-V3.0 20250926-clean (1).docx"
 )
 PUBLIC_REVISION = re.compile(r"^monsrcv_[0-9a-f]{24}$")

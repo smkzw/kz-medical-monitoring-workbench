@@ -15,6 +15,9 @@ import services.api.app.main as main_module  # noqa: E402
 from services.api.app.main import app  # noqa: E402
 from services.api.app.monitoring_identity_authorization import MonitoringRole  # noqa: E402
 from services.api.app.monitoring_runtime_principal import (  # noqa: E402
+import pytest
+
+pytestmark = pytest.mark.local_only
     MonitoringAuthenticatedPrincipal,
 )
 
@@ -28,11 +31,11 @@ else:
 
 
 LISTING_PATH = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/准备阶段/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/准备阶段/"
     "RUX-03-002_列表_数据集_Excel_20250612_处理后.xlsx"
 )
 PROTOCOL_PATH = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/RUX-03-002-自查文件包-20260107/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/RUX-03-002-自查文件包-20260107/"
     "10-临床试验重要文件/1-临床试验方案/V1.3版-2024.8.14/"
     "磷酸芦可替尼乳膏-AD3期临床研究方案V1.3-clean-20240814.docx"
 )

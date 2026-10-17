@@ -8,6 +8,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from services.api.app.raw_subject_bundle import (  # noqa: E402
+import pytest
+
+pytestmark = pytest.mark.local_only
     inventory_subject_bundle,
     needs_ocr_vlm_for_source_type,
     source_type_for_suffix,
@@ -15,13 +18,13 @@ from services.api.app.raw_subject_bundle import (  # noqa: E402
 
 
 D001_PASS_DIR = Path(
-    "/Users/smkzw/Documents/康哲项目资料/AI/入排/test-D001项目/全量-入组/白铭江/0316-SA07005"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private}"
 )
 D001_FAIL_DIR = Path(
-    "/Users/smkzw/Documents/康哲项目资料/AI/入排/test-D001项目/全量-入组/白铭江/0316-SA07007-T-SPOT阳性导致筛败"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private}"
 )
 MGK10_RAW_DIR = Path(
-    "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/projects/MG-K10-SAR-III/subjects/31001/raw"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private}"
 )
 
 

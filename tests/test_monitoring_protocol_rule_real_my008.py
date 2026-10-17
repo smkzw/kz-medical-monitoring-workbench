@@ -30,11 +30,11 @@ from tests.test_monitoring_protocol_rules import _start_shadow_pack
 
 
 MY008_V3 = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY008治疗PNH/2-03/研究方案/3.0/研究方案/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY008211A片-PNH-II&III期-长期安全性研究方案-V3.0-clean-20250530.docx"
 )
 MY008_V4 = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY008治疗PNH/2-03/研究方案/4.0/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY008211A片-PNH-II&III期-长期安全性研究方案-V4.0-clean-20260313.docx"
 )
 

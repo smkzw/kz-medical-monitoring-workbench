@@ -12,39 +12,42 @@ from services.api.app.monitoring_batch_diff import (
     normalize_listing_sheets,
 )
 from services.api.app.listing_file_parser import parse_listing_file
+import pytest
+
+pytestmark = pytest.mark.local_only
 
 
 MY009_20260408 = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/S1安全性评价-202604/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY009-UC-2-01-MM Listing_20260408(已自动还原).xlsx"
 )
 MY009_20260410 = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/S1安全性评价-202604/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY009-UC-2-01-MM Listing_20260410_Comparison.xlsx"
 )
 RUX_20250612 = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/准备阶段/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/准备阶段/"
     "RUX-03-002_列表_数据集_Excel_20250612_处理后.xlsx"
 )
 RUX_20250416 = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private}"
     "2-RUX-03-002-现场核查项目层面文件目录-20260424/"
     "21.医学监查计划/21.2-医学监查报告/9-第九次/"
     "附件1：RUX-03-002_data listing_20250416_附量表间评分变化比较.xlsx"
 )
 MGK10_20260120 = Path(
-    "/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/13. CFDI核查/自查/评分SDV/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} CFDI核查/自查/评分SDV/"
     "【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx"
 )
 MY008_2_03_20250417 = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY008治疗PNH/交接资料/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY008 长期安全性研究/医学监查/"
     "回复_ MY008211A-PNH-2-03项目_34例受试者_数据列表_20250417的全部附件20250421/"
     "MY008211A-PNH-2-03_数据列表_20250417/"
     "MY008211A-PNH-2-03_数据列表_20250417.xlsx"
 )
 MY008_2_03_20251202 = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY008治疗PNH/2-03/阶段性数据/"
+    "${MM_PROJECT_ROOT:-.}"
     "【251202cut】MY008211A-PNH-2-03_冻结后数据列表_20251202_23_22.xlsx"
 )
 

@@ -16,6 +16,9 @@ from services.api.app.eligibility_protocol_rules import (
     _source_number_identity,
 )
 from services.api.app.protocol_text_extractor import (
+import pytest
+
+pytestmark = pytest.mark.local_only
     ProtocolParagraph,
     ProtocolTextDocument,
     parse_protocol_docx,
@@ -23,15 +26,15 @@ from services.api.app.protocol_text_extractor import (
 
 
 D001_PROTOCOL = Path(
-    "/Users/smkzw/Documents/康哲项目资料/AI/入排/test-D001项目/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private}"
     "CMS-D001 银屑病2、3期临床方案 v1.0-2025.12.21.docx"
 )
 MY009_PROTOCOL = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/方案及配套资料/3.0/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY009-UC-Ⅱa期-临床研究方案-V3.0 20250926-clean (1).docx"
 )
 RUX_PROTOCOL = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/"
     "RUX-03-002-自查文件包-20260107/10-临床试验重要文件/1-临床试验方案/"
     "V1.3版-2024.8.14/磷酸芦可替尼乳膏-AD3期临床研究方案V1.3-clean-20240814.docx"
 )

@@ -1,0 +1,18 @@
+# Medical monitoring API - core runtime dependencies
+# Locked versions from working venv (2026-10-18)
+aiofiles==23.2.1
+annotated-types==0.7.0
+anyio==4.12.1
+certifi==2026.4.22
+click==8.1.8
+fastapi==0.128.8
+h11==0.16.0
+httpx==0.28.1
+idna==3.18
+openpyxl==3.1.5
+pydantic==2.13.4
+pydantic_core==2.46.4
+python-multipart==0.0.20
+sniffio==1.3.1
+typing_extensions==4.16.0
+uvicorn==0.39.0

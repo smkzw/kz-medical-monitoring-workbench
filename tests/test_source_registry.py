@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 import docx
 import openpyxl
 from fastapi.testclient import TestClient
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT.parents[1]
@@ -29,6 +30,8 @@ from services.api.app.monitoring_identity_authorization import MonitoringRole  #
 from services.api.app.monitoring_runtime_principal import MonitoringAuthenticatedPrincipal  # noqa: E402
 from services.api.app.source_intake import SourceRegistryService, SourceRegistryStore  # noqa: E402
 from services.api.app.source_content_validation import (  # noqa: E402
+
+pytestmark = pytest.mark.local_only
     SourceContentValidationService,
     SourceContentValidationStore,
     SourceExpectedContext,
@@ -36,13 +39,13 @@ from services.api.app.source_content_validation import (  # noqa: E402
 
 
 RUX_LISTING = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/准备阶段/RUX-03-002_列表_数据集_Excel_20250612_处理后.xlsx"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/准备阶段/RUX-03-002_列表_数据集_Excel_20250612_处理后.xlsx"
 )
 RUX_PROTOCOL = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/RUX-03-002-自查文件包-20260107/10-临床试验重要文件/1-临床试验方案/V1.3版-2024.8.14/磷酸芦可替尼乳膏-AD3期临床研究方案V1.3-clean-20240814.docx"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/RUX-03-002-自查文件包-20260107/10-临床试验重要文件/1-临床试验方案/V1.3版-2024.8.14/磷酸芦可替尼乳膏-AD3期临床研究方案V1.3-clean-20240814.docx"
 )
 D001_RAW_SUBJECT = Path(
-    "/Users/smkzw/Documents/康哲项目资料/AI/入排/test-D001项目/全量-入组/白铭江/0316-SA07007-T-SPOT阳性导致筛败"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private}"
 )
 
 
@@ -901,7 +904,7 @@ def _xlsx_with_local_path_cell() -> bytes:
     sheet.append(
         [
             "TRIAL-001",
-            "/Users/smkzw/Documents/康哲项目资料/竞品调研/CRSwNP/03_Protocols/source.pdf",
+            "${MM_PRIVATE_ROOT:-/tmp/mm_private}",
             "long evidence note " * 200,
         ]
     )

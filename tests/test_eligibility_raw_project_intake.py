@@ -6,6 +6,9 @@ import unittest
 from pathlib import Path
 
 from services.api.app.eligibility_raw_intake import (
+import pytest
+
+pytestmark = pytest.mark.local_only
     EligibilityRawProjectIntakeService,
     RawEligibilityProjectConfig,
 )
@@ -17,16 +20,16 @@ except ModuleNotFoundError:  # pragma: no cover - exercised in minimal runtimes.
 
 
 D001_PROTOCOL = Path(
-    "/Users/smkzw/Documents/康哲项目资料/AI/入排/test-D001项目/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private}"
     "CMS-D001 银屑病2、3期临床方案 v1.0-2025.12.21.docx"
 )
-D001_SUBJECT_ROOT = Path("/Users/smkzw/Documents/康哲项目资料/AI/入排/test-D001项目/全量-入组")
+D001_SUBJECT_ROOT = Path("${MM_PRIVATE_ROOT:-/tmp/mm_private}")
 
 MY009_PROTOCOL = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/方案及配套资料/3.0/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY009-UC-Ⅱa期-临床研究方案-V3.0 20250926-clean (1).docx"
 )
-MY009_SUBJECT_ROOT = Path("/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/EVF审核")
+MY009_SUBJECT_ROOT = Path("${MM_PROJECT_ROOT:-.}")
 
 
 class EligibilityRawProjectIntakeTests(unittest.TestCase):

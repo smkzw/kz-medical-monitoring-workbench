@@ -35,11 +35,11 @@ else:
 
 PROJECT_ID = "proj_my009_uc"
 LISTING_PATH = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/S1安全性评价-202604/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY009-UC-2-01-MM Listing_20260408(已自动还原).xlsx"
 )
 PROTOCOL_PATH = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/方案及配套资料/3.0/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY009-UC-Ⅱa期-临床研究方案-V3.0 20250926-clean (1).docx"
 )
 ANCHOR_SUBJECTS = {"SYN-001-0013", "SYN-001-0016", "SYN-001-0017", "SYN-001-0071", "SYN-001-0061"}

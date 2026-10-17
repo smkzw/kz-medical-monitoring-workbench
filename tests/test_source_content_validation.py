@@ -12,6 +12,7 @@ import docx
 from fastapi.testclient import TestClient
 
 from packages.contracts.workbench_contracts import (
+import pytest
     AiTaskFromRegistryRequest,
     ListingSheetPayload,
     SourceContentValidationCheck,
@@ -34,17 +35,19 @@ from services.api.app.ai_execution_policy import AiExecutionPolicyResolver
 from services.api.app.protocol_text_extractor import parse_protocol_docx
 from services.api.app.source_intake import SourceRegistryService, SourceRegistryStore
 
+pytestmark = pytest.mark.local_only
+
 
 RUX_LISTING = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/准备阶段/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/准备阶段/"
     "RUX-03-002_列表_数据集_Excel_20250612_处理后.xlsx"
 )
 MY009_LISTING = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/S1安全性评价-202604/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY009-UC-2-01-MM Listing_20260408(已自动还原).xlsx"
 )
 D001_PROTOCOL = Path(
-    "/Users/smkzw/Documents/康哲项目资料/AI/入排/test-D001项目/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private}"
     "CMS-D001 银屑病2、3期临床方案 v1.0-2025.12.21.docx"
 )
 
@@ -921,8 +924,8 @@ class SourceContentValidationTests(unittest.TestCase):
         registry = SourceRegistryService(
             SourceRegistryStore(root / "eligibility_sources.jsonl"),
             allowed_roots=[
-                Path("/Users/smkzw/Documents/康哲项目资料"),
-                Path("/Users/smkzw/Documents/朗来项目资料"),
+                Path("${MM_PRIVATE_ROOT:-/tmp/mm_private}"),
+                Path("${MM_PROJECT_ROOT:-.}"),
             ],
             content_validation_service=SourceContentValidationService(
                 SourceContentValidationStore(root / "eligibility_validations.sqlite3")
@@ -988,7 +991,7 @@ class SourceContentValidationTests(unittest.TestCase):
         root = Path(self.tmp.name)
         registry = SourceRegistryService(
             SourceRegistryStore(root / "eligibility_guard_sources.jsonl"),
-            allowed_roots=[Path("/Users/smkzw/Documents/康哲项目资料")],
+            allowed_roots=[Path("${MM_PRIVATE_ROOT:-/tmp/mm_private}")],
             content_validation_service=SourceContentValidationService(
                 SourceContentValidationStore(root / "eligibility_guard_validations.sqlite3")
             ),

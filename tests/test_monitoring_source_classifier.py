@@ -6,18 +6,21 @@ import unittest
 
 from services.api.app.listing_file_parser import parse_listing_file
 from services.api.app.monitoring_source_classifier import classify_monitoring_listing
+import pytest
+
+pytestmark = pytest.mark.local_only
 
 
 MY009_COMPARISON = Path(
-    "/Users/smkzw/Documents/朗来项目资料/MY009治疗UC/S1安全性评价-202604/"
+    "${MM_PROJECT_ROOT:-.}"
     "MY009-UC-2-01-MM Listing_20260410_Comparison.xlsx"
 )
 RUX_PROCESSED = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/准备阶段/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/准备阶段/"
     "RUX-03-002_列表_数据集_Excel_20250612_处理后.xlsx"
 )
 RUX_RAW_DIMENSION_DEFECT = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/"
     "RUX-03-002-自查文件包-20260107/1-RUX-03-002_列表_数据集_压缩包_20250612/"
     "RUX-03-002_列表_数据集_Excel_20250612.xlsx"
 )

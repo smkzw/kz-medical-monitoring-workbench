@@ -13,3 +13,18 @@ _ROOT = Path(__file__).resolve().parents[1]
 for _p in (str(_ROOT), str(_ROOT / "tests")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "local_only: requires local files/env (skipped in clean clone CI)")
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--skip-local-only", default=False):
+        skip = pytest.mark.skip(reason="local_only skipped by --skip-local-only")
+        for item in items:
+            if "local_only" in item.keywords:
+                item.add_marker(skip)
+
+
+import pytest  # noqa: E402 (needed for the marker functions above)

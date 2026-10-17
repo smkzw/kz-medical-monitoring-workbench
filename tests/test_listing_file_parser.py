@@ -13,19 +13,22 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from services.api.app.listing_file_parser import parse_listing_file  # noqa: E402
+import pytest
+
+pytestmark = pytest.mark.local_only
 
 
 MGK10_LISTING = Path(
-    "/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/13. CFDI核查/自查/评分SDV/【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} CFDI核查/自查/评分SDV/【锁库后Data Listing】MG-K10-SAR-001_FormExcelAllVersion_202601201126.xlsx"
 )
 RUX_LISTING = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/准备阶段/RUX-03-002_列表_数据集_Excel_20250612_处理后.xlsx"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/准备阶段/RUX-03-002_列表_数据集_Excel_20250612_处理后.xlsx"
 )
 RUX_SUBJECT_REPORT = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/准备阶段/RUX-03-002_受试者报表_20250613.xls"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/准备阶段/RUX-03-002_受试者报表_20250613.xls"
 )
 RUX_RAW_DIMENSION_DEFECT = Path(
-    "/Users/smkzw/Documents/康哲项目资料/Ruxolitinib-AD/CFDI Inspection/"
+    "${MM_PRIVATE_ROOT:-/tmp/mm_private} Inspection/"
     "RUX-03-002-自查文件包-20260107/1-RUX-03-002_列表_数据集_压缩包_20250612/"
     "RUX-03-002_列表_数据集_Excel_20250612.xlsx"
 )
