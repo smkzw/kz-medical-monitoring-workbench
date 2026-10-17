@@ -59,3 +59,20 @@ k3*.png
 tester_staging_0927/
 scripts/tester_loop_0927/r12d_provider_config_backup/
 scripts/tester_loop_0927/r*d_provider_config_backup/
+
+# M0 合规规则：真实数据/大文件/运行时产物不入库
+*.xlsx
+*.xls
+*.pdf
+*.docx
+*.doc
+!tests/fixtures/synthetic/**
+!protocol-corpus/**/*.md
+backups/
+source_backups/
+runtime/*.log
+screenlog.*
+*.zip
+*_evidence.jsonl
+*_state_checkpoint.json
+mm_private/
